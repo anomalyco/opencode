@@ -24,6 +24,8 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    stepsExpanded?: boolean
+    onStepsExpandedChange?: (expanded: boolean) => void
     classes?: {
       root?: string
       content?: string
@@ -222,8 +224,15 @@ export function SessionTurn(
 
               const [store, setStore] = createStore({
                 status: rawStatus(),
-                stepsExpanded: working(),
+                stepsExpanded: props.stepsExpanded ?? working(),
                 duration: duration(),
+              })
+
+              // Sync with controlled prop
+              createEffect(() => {
+                if (props.stepsExpanded !== undefined) {
+                  setStore("stepsExpanded", props.stepsExpanded)
+                }
               })
 
               createEffect(() => {
@@ -262,6 +271,7 @@ export function SessionTurn(
                 const isWorking = working()
                 if (prev && !isWorking && !state.userScrolled) {
                   setStore("stepsExpanded", false)
+                  props.onStepsExpandedChange?.(false)
                 }
                 return isWorking
               }, working())
@@ -278,7 +288,7 @@ export function SessionTurn(
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
-                          <Match when={working()}>
+                          <Match when={working() && message().id === userMessages().at(-1)?.id}>
                             <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
                           </Match>
                           <Match when={true}>
@@ -298,7 +308,11 @@ export function SessionTurn(
                       data-slot="session-turn-collapsible-trigger-content"
                       variant="ghost"
                       size="small"
-                      onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
+                      onClick={() => {
+                        const next = !store.stepsExpanded
+                        setStore("stepsExpanded", next)
+                        props.onStepsExpandedChange?.(next)
+                      }}
                     >
                       <Show when={working()}>
                         <Spinner />
