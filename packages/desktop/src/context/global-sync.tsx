@@ -100,7 +100,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
     async function loadSessions(directory: string) {
       globalSDK.client.session.list({ directory }).then((x) => {
-        const oneHourAgo = Date.now() - 60 * 60 * 1000
+        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         const nonArchived = (x.data ?? [])
           .slice()
           .filter((s) => !s.time.archived)
@@ -109,7 +109,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         const sessions = nonArchived.filter((s, i) => {
           if (i < 5) return true
           const updated = new Date(s.time.updated).getTime()
-          return updated > oneHourAgo
+          return updated > fourHoursAgo
         })
         const [, setStore] = child(directory)
         setStore("session", sessions)
