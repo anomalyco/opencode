@@ -13,11 +13,10 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
   const local = useLocal()
   const dialog = useDialog()
 
-  let closeButton!: HTMLButtonElement
   const models = createMemo(() =>
     local.model
       .list()
-      .filter((m) => m.visible)
+      .filter((m) => local.model.visible({ modelID: m.id, providerID: m.provider.id }))
       .filter((m) => (props.provider ? m.provider.id === props.provider : true)),
   )
 
@@ -58,7 +57,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
           local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
             recent: true,
           })
-          closeButton.click()
+          dialog.clear()
         }}
       >
         {(i) => (

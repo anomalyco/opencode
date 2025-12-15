@@ -1,4 +1,4 @@
-import { createEffect, Show, For, type JSX, createSignal } from "solid-js"
+import { createEffect, on, Show, For, type JSX, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
 import { Icon, IconProps } from "./icon"
@@ -32,24 +32,34 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     mouseActive: false,
   })
 
-  const { filter, grouped, flat, reset, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
+  const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
-  const hasSearch = () => !!props.search
 
   createEffect(() => {
     if (props.filter !== undefined) {
       onInput(props.filter)
-    } else if (hasSearch()) {
-      onInput(internalFilter())
     }
   })
 
-  createEffect(() => {
-    filter()
-    scrollRef()?.scrollTo(0, 0)
-    reset()
-  })
+  createEffect((prev) => {
+    if (!props.search) return
+    const current = internalFilter()
+    if (prev !== current) {
+      onInput(current)
+    }
+    return current
+  }, "")
+
+  createEffect(
+    on(
+      filter,
+      () => {
+        scrollRef()?.scrollTo(0, 0)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     if (!scrollRef()) return
@@ -100,7 +110,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
-      <Show when={hasSearch()}>
+      <Show when={!!props.search}>
         <div data-slot="list-search">
           <div data-slot="list-search-container">
             <Icon name="magnifying-glass" />

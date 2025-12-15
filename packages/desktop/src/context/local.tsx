@@ -132,10 +132,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           Object.values(p.models).map((m) => ({
             ...m,
             provider: p,
-            user: store.user.find((x) => x.modelID === m.id && x.providerID === p.id),
           })),
         ),
       )
+
       const latest = createMemo(() =>
         pipe(
           available(),
@@ -163,10 +163,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           ...m,
           name: m.name.replace("(latest)", "").trim(),
           latest: m.name.includes("(latest)"),
-          visible:
-            m.user?.visibility !== "hide" &&
-            (latest().find((x) => x.modelID === m.id && x.providerID === m.provider.id) ||
-              store.user.find((x) => x.modelID === m.id && x.providerID === m.provider.id)?.visibility === "show"),
         })),
       )
 
@@ -241,7 +237,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (index >= 0) {
           setStore("user", index, { visibility })
         } else {
-          setStore("user", (prev) => [...prev, { ...model, visibility }])
+          setStore("user", store.user.length, { ...model, visibility })
         }
       }
 
@@ -260,11 +256,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
           })
         },
-        show(model: ModelKey) {
-          updateVisibility(model, "show")
-        },
-        hide(model: ModelKey) {
-          updateVisibility(model, "hide")
+        visible(model: ModelKey) {
+          const user = store.user.find((x) => x.modelID === model.modelID && x.providerID === model.providerID)
+          return (
+            user?.visibility !== "hide" &&
+            (latest().find((x) => x.modelID === model.modelID && x.providerID === model.providerID) ||
+              user?.visibility === "show")
+          )
         },
         setVisibility(model: ModelKey, visible: boolean) {
           updateVisibility(model, visible ? "show" : "hide")
