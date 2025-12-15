@@ -496,11 +496,10 @@ export default function Layout(props: ParentProps) {
   }
 
   const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
-    const notification = useNotification()
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
-    const [store, setStore] = globalSync.child(props.project.worktree)
+    const [store] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session ?? [])
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const childSessionsByParent = createMemo(() => {
