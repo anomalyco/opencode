@@ -61,6 +61,7 @@ interface SlashCommand {
   title: string
   description?: string
   keybind?: string
+  type: "builtin" | "custom"
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -208,8 +209,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   // Get slash commands from registered commands (only those with explicit slash trigger)
-  const slashCommands = createMemo<SlashCommand[]>(() =>
-    command.options
+  const slashCommands = createMemo<SlashCommand[]>(() => {
+    const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
       .map((opt) => ({
         id: opt.id,
@@ -217,15 +218,46 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         title: opt.title,
         description: opt.description,
         keybind: opt.keybind,
-      })),
-  )
+        type: "builtin" as const,
+      }))
+
+    const custom = sync.data.command.map((cmd) => ({
+      id: `custom.${cmd.name}`,
+      trigger: cmd.name,
+      title: cmd.name,
+      description: cmd.description,
+      type: "custom" as const,
+    }))
+
+    return [...custom, ...builtin]
+  })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
-    // Since slash commands only trigger from start, just clear the input
+    setStore("popover", null)
+
+    if (cmd.type === "custom") {
+      // For custom commands, insert the command text so user can add arguments
+      const text = `/${cmd.trigger} `
+      editorRef.innerHTML = ""
+      editorRef.textContent = text
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      // Set cursor at end
+      requestAnimationFrame(() => {
+        editorRef.focus()
+        const range = document.createRange()
+        const sel = window.getSelection()
+        range.selectNodeContents(editorRef)
+        range.collapse(false)
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      })
+      return
+    }
+
+    // For built-in commands, clear input and execute immediately
     editorRef.innerHTML = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
-    setStore("popover", null)
     command.trigger(cmd.id, "slash")
   }
 
@@ -571,6 +603,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     editorRef.innerHTML = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
 
+    // Check if this is a custom command
+    if (text.startsWith("/")) {
+      const [cmdName, ...args] = text.split(" ")
+      const commandName = cmdName.slice(1) // Remove leading "/"
+      const customCommand = sync.data.command.find((c) => c.name === commandName)
+      if (customCommand) {
+        sdk.client.session.command({
+          sessionID: existing.id,
+          command: commandName,
+          arguments: args.join(" "),
+          agent: local.agent.current()!.name,
+          model: `${local.model.current()!.provider.id}/${local.model.current()!.id}`,
+        })
+        return
+      }
+    }
+
     sdk.client.session.prompt({
       sessionID: existing.id,
       agent: local.agent.current()!.name,
@@ -641,9 +690,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           <span class="text-14-regular text-text-weak truncate">{cmd.description}</span>
                         </Show>
                       </div>
-                      <Show when={cmd.keybind}>
-                        <span class="text-12-regular text-text-subtle shrink-0">{formatKeybind(cmd.keybind!)}</span>
-                      </Show>
+                      <div class="flex items-center gap-2 shrink-0">
+                        <Show when={cmd.type === "custom"}>
+                          <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
+                            custom
+                          </span>
+                        </Show>
+                        <Show when={cmd.keybind}>
+                          <span class="text-12-regular text-text-subtle">{formatKeybind(cmd.keybind!)}</span>
+                        </Show>
+                      </div>
                     </button>
                   )}
                 </For>
