@@ -19,8 +19,6 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
-import { Code } from "./code"
-import { checksum } from "@opencode-ai/util/encode"
 
 export interface MessageProps {
   message: MessageType
@@ -509,19 +507,19 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={props.input.content}>
-          <div data-component="write-content">
-            <Code
-              file={{
-                name: props.input.filePath,
-                contents: props.input.content,
-                cacheKey: checksum(props.input.content),
-              }}
-              overflow="scroll"
-              class="pb-40"
-            />
-          </div>
-        </Show>
+        {/* <Show when={props.input.content}> */}
+        {/*   <div data-component="write-content"> */}
+        {/*     <Code */}
+        {/*       file={{ */}
+        {/*         name: props.input.filePath, */}
+        {/*         contents: props.input.content, */}
+        {/*         cacheKey: checksum(props.input.content), */}
+        {/*       }} */}
+        {/*       overflow="scroll" */}
+        {/*       class="pb-40" */}
+        {/*     /> */}
+        {/*   </div> */}
+        {/* </Show> */}
       </BasicTool>
     )
   },

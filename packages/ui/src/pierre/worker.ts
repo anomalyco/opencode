@@ -1,5 +1,5 @@
-import { getOrCreateWorkerPoolSingleton } from "@pierre/precision-diffs/worker"
-import ShikiWorkerUrl from "@pierre/precision-diffs/worker/worker.js?worker&url"
+import { getOrCreateWorkerPoolSingleton } from "@pierre/diffs/worker"
+import ShikiWorkerUrl from "@pierre/diffs/worker/worker.js?worker&url"
 
 export function workerFactory(): Worker {
   return new Worker(ShikiWorkerUrl, { type: "module" })
