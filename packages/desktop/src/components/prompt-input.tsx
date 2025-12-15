@@ -93,13 +93,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
-    slashFilter: string
   }>({
     popover: null,
     historyIndex: -1,
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
-    slashFilter: "",
   })
 
   const MAX_HISTORY = 100
@@ -237,23 +235,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onInput: slashOnInput,
     onKeyDown: slashOnKeyDown,
   } = useFilteredList<SlashCommand>({
-    items: () => {
-      const filter = store.slashFilter.toLowerCase()
-      return slashCommands().filter(
-        (cmd) =>
-          cmd.trigger.toLowerCase().includes(filter) ||
-          cmd.title.toLowerCase().includes(filter) ||
-          cmd.description?.toLowerCase().includes(filter) ||
-          false,
-      )
-    },
+    items: slashCommands,
     key: (x) => x?.id,
+    filterKeys: ["trigger", "title", "description"],
     onSelect: handleSlashSelect,
-  })
-
-  // Update slash filter when store changes
-  createEffect(() => {
-    slashOnInput(store.slashFilter)
   })
 
   createEffect(
@@ -337,7 +322,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       onInput(atMatch[1])
       setStore("popover", "file")
     } else if (slashMatch) {
-      setStore("slashFilter", slashMatch[1])
+      slashOnInput(slashMatch[1])
       setStore("popover", "slash")
     } else {
       setStore("popover", null)
