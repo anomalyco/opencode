@@ -15,7 +15,6 @@ import { Code } from "@opencode-ai/ui/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -33,15 +32,17 @@ import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectFile } from "@/components/dialog-select-file"
 
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
   const sync = useSync()
   const session = useSession()
+  const dialog = useDialog()
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
-    fileSelectOpen: false,
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
   })
@@ -72,7 +73,7 @@ export default function Page() {
     }
     if (event.getModifierState(MOD) && event.key.toLowerCase() === "p") {
       event.preventDefault()
-      setStore("fileSelectOpen", true)
+      dialog.replace(() => <DialogSelectFile />)
       return
     }
     if (event.ctrlKey && event.key.toLowerCase() === "t") {
@@ -279,7 +280,11 @@ export default function Page() {
         <div class="relative h-full">
           <Tabs.Trigger
             value={props.tab}
-            closeButton={<IconButton icon="close" variant="ghost" onClick={() => props.onTabClose(props.tab)} />}
+            closeButton={
+              <Tooltip value="Close tab" placement="bottom">
+                <IconButton icon="close" variant="ghost" onClick={() => props.onTabClose(props.tab)} />
+              </Tooltip>
+            }
             hideCloseButton
             onClick={() => props.onTabClick(props.tab)}
           >
@@ -357,7 +362,9 @@ export default function Page() {
                   <Tabs.Trigger
                     value="review"
                     closeButton={
-                      <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
+                      <Tooltip value="Close tab" placement="bottom">
+                        <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
+                      </Tooltip>
                     }
                   >
                     <div class="flex items-center gap-3">
@@ -388,7 +395,7 @@ export default function Page() {
                       icon="plus-small"
                       variant="ghost"
                       iconSize="large"
-                      onClick={() => setStore("fileSelectOpen", true)}
+                      onClick={() => dialog.replace(() => <DialogSelectFile />)}
                     />
                   </Tooltip>
                 </div>
@@ -610,42 +617,6 @@ export default function Page() {
             </ul>
           </Show>
         </div>
-        <Show when={store.fileSelectOpen}>
-          <SelectDialog
-            defaultOpen
-            title="Select file"
-            placeholder="Search files"
-            emptyMessage="No files found"
-            items={local.file.searchFiles}
-            key={(x) => x}
-            onOpenChange={(open) => setStore("fileSelectOpen", open)}
-            onSelect={(x) => {
-              if (x) {
-                return session.layout.openTab("file://" + x)
-              }
-              return undefined
-            }}
-          >
-            {(i) => (
-              <div
-                classList={{
-                  "w-full flex items-center justify-between rounded-md": true,
-                }}
-              >
-                <div class="flex items-center gap-x-2 grow min-w-0">
-                  <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular">
-                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}
-                    </span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-              </div>
-            )}
-          </SelectDialog>
-        </Show>
       </div>
       <Show when={layout.terminal.opened()}>
         <div

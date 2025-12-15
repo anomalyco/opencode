@@ -9,6 +9,7 @@
   user-select: none;
   cursor: default;
   outline: none;
+  white-space: nowrap;
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);
@@ -148,7 +149,7 @@
       padding: 0 12px 0 8px;
     }
 
-    gap: 4px;
+    gap: 8px;
 
     /* text-14-medium */
     font-family: var(--font-family-sans);

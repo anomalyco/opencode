@@ -668,10 +668,16 @@ export namespace Config {
         .describe("@deprecated Use `agent` field instead."),
       agent: z
         .object({
+          // primary
           plan: Agent.optional(),
           build: Agent.optional(),
+          // subagent
           general: Agent.optional(),
           explore: Agent.optional(),
+          // specialized
+          title: Agent.optional(),
+          summary: Agent.optional(),
+          compaction: Agent.optional(),
         })
         .catchall(Agent)
         .optional()
@@ -783,6 +789,7 @@ export namespace Config {
             .array(z.string())
             .optional()
             .describe("Tools that should only be available to primary agents."),
+          continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
         })
         .optional(),
     })

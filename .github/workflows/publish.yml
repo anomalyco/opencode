@@ -102,7 +102,7 @@ jobs:
             target: aarch64-apple-darwin
           - host: blacksmith-4vcpu-windows-2025
             target: x86_64-pc-windows-msvc
-          - host: blacksmith-4vcpu-ubuntu-2404
+          - host: blacksmith-4vcpu-ubuntu-2204
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -166,10 +166,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
-      - run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage
+      - name: Install tauri-cli from portable appimage branch
         if: contains(matrix.settings.host, 'ubuntu')
+        run: |
+          cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage --force
+          echo "Installed tauri-cli version:"
+          cargo tauri --version
 
       - name: Build and upload artifacts
+        timeout-minutes: 10
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
