@@ -64,13 +64,27 @@ async function getAllSessions(): Promise<Session.Info[]> {
   const sessions: Session.Info[] = []
 
   const projectKeys = await Storage.list(["project"])
-  const projects = await Promise.all(projectKeys.map((key) => Storage.read<Project.Info>(key)))
+  const projects = await Promise.all(
+    projectKeys.map((key) =>
+      Storage.read<Project.Info>(key).catch((e) => {
+        console.error(`Skipping corrupted project ${key.join("/")}:`, e)
+        return null
+      }),
+    ),
+  )
 
   for (const project of projects) {
     if (!project) continue
 
     const sessionKeys = await Storage.list(["session", project.id])
-    const projectSessions = await Promise.all(sessionKeys.map((key) => Storage.read<Session.Info>(key)))
+    const projectSessions = await Promise.all(
+      sessionKeys.map((key) =>
+        Storage.read<Session.Info>(key).catch((e) => {
+          console.error(`Skipping corrupted session ${key.join("/")}:`, e)
+          return null
+        }),
+      ),
+    )
 
     for (const session of projectSessions) {
       if (session) {

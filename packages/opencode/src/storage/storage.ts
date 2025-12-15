@@ -170,8 +170,15 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
-      return result as T
+      try {
+        const result = await Bun.file(target).json()
+        return result as T
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          throw new Error(`Failed to parse JSON in file ${target}: ${e.message}`)
+        }
+        throw e
+      }
     })
   }
 
@@ -180,7 +187,17 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      const content = await Bun.file(target).json()
+      let content: T
+      try {
+        content = await Bun.file(target).json()
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          console.error(`Corrupted JSON in ${target}, resetting to empty object:`, e.message)
+          content = {} as T
+        } else {
+          throw e
+        }
+      }
       fn(content)
       await Bun.write(target, JSON.stringify(content, null, 2))
       return content as T

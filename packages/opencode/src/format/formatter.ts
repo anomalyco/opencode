@@ -66,9 +66,13 @@ export const prettier: Info = {
   async enabled() {
     const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
-      const json = await Bun.file(item).json()
-      if (json.dependencies?.prettier) return true
-      if (json.devDependencies?.prettier) return true
+      try {
+        const json = await Bun.file(item).json()
+        if (json.dependencies?.prettier) return true
+        if (json.devDependencies?.prettier) return true
+      } catch (e) {
+        console.error(`Skipping corrupted package.json ${item}:`, e)
+      }
     }
     return false
   },
