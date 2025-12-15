@@ -591,8 +591,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       {/* Popover for file mentions and slash commands */}
       <Show when={store.popover}>
         <div
-          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-[252px] min-h-10
-                 overflow-auto no-scrollbar flex flex-col p-2 pb-0 rounded-md
+          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10
+                 overflow-auto no-scrollbar flex flex-col p-2 rounded-md
                  border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
         >
           <Switch>
@@ -602,7 +602,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   {(i) => (
                     <button
                       classList={{
-                        "w-full flex items-center gap-x-2 rounded-md px-2 py-1": true,
+                        "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
                         "bg-surface-raised-base-hover": active() === i,
                       }}
                       onClick={() => handleFileSelect(i)}

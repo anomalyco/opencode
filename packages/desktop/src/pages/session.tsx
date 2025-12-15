@@ -29,15 +29,13 @@ import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
-import { usePrompt } from "@/context/prompt"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { useCommand } from "@/context/command"
-import { useParams } from "@solidjs/router"
-import { pipe, sumBy } from "remeda"
+import { useNavigate, useParams } from "@solidjs/router"
 import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 
 export default function Page() {
@@ -45,10 +43,10 @@ export default function Page() {
   const local = useLocal()
   const sync = useSync()
   const terminal = useTerminal()
-  const prompt = usePrompt()
   const dialog = useDialog()
   const command = useCommand()
   const params = useParams()
+  const navigate = useNavigate()
 
   // Session-specific derived state
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -71,25 +69,6 @@ export default function Page() {
   const setActiveMessage = (message: UserMessage | undefined) => {
     setMessageStore("messageId", message?.id)
   }
-
-  const status = createMemo(
-    () =>
-      sync.data.session_status[params.id ?? ""] ?? {
-        type: "idle",
-      },
-  )
-  const working = createMemo(() => status()?.type !== "idle")
-
-  const cost = createMemo(() => {
-    const total = pipe(
-      messages(),
-      sumBy((x) => (x.role === "assistant" ? x.cost : 0)),
-    )
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
-  })
 
   const last = createMemo(
     () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
@@ -135,6 +114,15 @@ export default function Page() {
   // Register commands for this page
   command.register(() => [
     {
+      id: "session.new",
+      title: "New session",
+      description: "Create a new session",
+      category: "Session",
+      keybind: "mod+n",
+      slash: "new",
+      onSelect: () => navigate(`/${params.dir}/session`),
+    },
+    {
       id: "file.open",
       title: "Open file",
       description: "Search and open a file",
@@ -143,21 +131,21 @@ export default function Page() {
       slash: "open",
       onSelect: () => dialog.replace(() => <DialogSelectFile />),
     },
-    {
-      id: "theme.toggle",
-      title: "Toggle theme",
-      description: "Switch between themes",
-      category: "View",
-      keybind: "ctrl+t",
-      slash: "theme",
-      onSelect: () => {
-        const currentTheme = localStorage.getItem("theme") ?? "oc-1"
-        const themes = ["oc-1", "oc-2-paper"]
-        const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
-        localStorage.setItem("theme", nextTheme)
-        document.documentElement.setAttribute("data-theme", nextTheme)
-      },
-    },
+    // {
+    //   id: "theme.toggle",
+    //   title: "Toggle theme",
+    //   description: "Switch between themes",
+    //   category: "View",
+    //   keybind: "ctrl+t",
+    //   slash: "theme",
+    //   onSelect: () => {
+    //     const currentTheme = localStorage.getItem("theme") ?? "oc-1"
+    //     const themes = ["oc-1", "oc-2-paper"]
+    //     const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
+    //     localStorage.setItem("theme", nextTheme)
+    //     document.documentElement.setAttribute("data-theme", nextTheme)
+    //   },
+    // },
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
