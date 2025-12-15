@@ -174,7 +174,7 @@ jobs:
           cargo tauri --version
 
       - name: Build and upload artifacts
-        timeout-minutes: 10
+        timeout-minutes: 20
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
