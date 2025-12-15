@@ -155,8 +155,14 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
       <DialogQuestionComment
         value={comment()}
         onSave={(c) => {
-          setComment(c)
-          dialog.pop()
+          const trimmedComment = c.trim() || undefined
+          setComment(trimmedComment)
+          // Save comment to store immediately, keeping current value
+          props.onAnswer({
+            value: props.currentAnswer?.value ?? null,
+            comment: trimmedComment,
+          })
+          // dialog.pop()
         }}
         onCancel={() => dialog.pop()}
       />
@@ -255,8 +261,14 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
       <DialogQuestionComment
         value={comment()}
         onSave={(c) => {
-          setComment(c)
-          dialog.pop()
+          const trimmedComment = c.trim() || undefined
+          setComment(trimmedComment)
+          // Update comment in store without closing the question dialog
+          props.onAnswer({
+            value: props.currentAnswer?.value ?? [],
+            comment: trimmedComment,
+          })
+          // dialog.pop()
         }}
         onCancel={() => dialog.pop()}
       />
@@ -344,8 +356,14 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
       <DialogQuestionComment
         value={comment()}
         onSave={(c) => {
-          setComment(c)
-          dialog.pop()
+          const trimmedComment = c.trim() || undefined
+          setComment(trimmedComment)
+          // Update comment in store without closing the question dialog
+          props.onAnswer({
+            value: props.currentAnswer?.value ?? null,
+            comment: trimmedComment,
+          })
+          // dialog.pop()
         }}
         onCancel={() => dialog.pop()}
       />
