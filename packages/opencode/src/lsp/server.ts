@@ -420,7 +420,7 @@ export namespace LSPServer {
           Global.Path.bin,
           "elixir-ls-master",
           "release",
-          process.platform === "win32" ? "language_server.bar" : "language_server.sh",
+          process.platform === "win32" ? "language_server.bat" : "language_server.sh",
         )
 
         if (!(await Bun.file(binary).exists())) {
