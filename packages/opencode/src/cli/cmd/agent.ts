@@ -227,8 +227,8 @@ const AgentListCommand = cmd({
       async fn() {
         const agents = await Agent.list()
         const sortedAgents = agents.sort((a, b) => {
-          if (a.builtIn !== b.builtIn) {
-            return a.builtIn ? -1 : 1
+          if (a.native !== b.native) {
+            return a.native ? -1 : 1
           }
           return a.name.localeCompare(b.name)
         })

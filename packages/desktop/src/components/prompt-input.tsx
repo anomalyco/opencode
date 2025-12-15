@@ -1,18 +1,7 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import {
-  createEffect,
-  on,
-  Component,
-  Show,
-  For,
-  onMount,
-  onCleanup,
-  Switch,
-  Match,
-  createSignal,
-  createMemo,
-} from "solid-js"
+import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
+import { makePersisted } from "@solid-primitives/storage"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, useSession } from "@/context/session"
@@ -20,21 +9,16 @@ import { useSDK } from "@/context/sdk"
 import { useNavigate } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
-import { Tag } from "@opencode-ai/ui/tag"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { useLayout } from "@/context/layout"
-import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List, ListRef } from "@opencode-ai/ui/list"
-import { iife } from "@opencode-ai/util/iife"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { IconName } from "@opencode-ai/ui/icons/provider"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectModel } from "@/components/dialog-select-model"
+import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
+import { useProviders } from "@/hooks/use-providers"
 
 interface PromptInputProps {
   class?: string
@@ -75,28 +59,91 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const sync = useSync()
   const local = useLocal()
   const session = useSession()
-  const layout = useLayout()
+  const dialog = useDialog()
   const providers = useProviders()
   let editorRef!: HTMLDivElement
 
   const [store, setStore] = createStore<{
     popoverIsOpen: boolean
+    historyIndex: number
+    savedPrompt: Prompt | null
+    placeholder: number
   }>({
     popoverIsOpen: false,
+    historyIndex: -1,
+    savedPrompt: null,
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
   })
 
-  const [placeholder, setPlaceholder] = createSignal(Math.floor(Math.random() * PLACEHOLDERS.length))
+  const MAX_HISTORY = 100
+  const [history, setHistory] = makePersisted(
+    createStore<{
+      entries: Prompt[]
+    }>({
+      entries: [],
+    }),
+    {
+      name: "prompt-history.v1",
+    },
+  )
 
-  onMount(() => {
-    const interval = setInterval(() => {
-      setPlaceholder((prev) => (prev + 1) % PLACEHOLDERS.length)
-    }, 6500)
-    onCleanup(() => clearInterval(interval))
-  })
+  const clonePromptParts = (prompt: Prompt): Prompt =>
+    prompt.map((part) =>
+      part.type === "text"
+        ? { ...part }
+        : {
+            ...part,
+            selection: part.selection ? { ...part.selection } : undefined,
+          },
+    )
+
+  const promptLength = (prompt: Prompt) => prompt.reduce((len, part) => len + part.content.length, 0)
+
+  const applyHistoryPrompt = (prompt: Prompt, position: "start" | "end") => {
+    const length = position === "start" ? 0 : promptLength(prompt)
+    session.prompt.set(prompt, length)
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, length)
+    })
+  }
+
+  const getCaretLineState = () => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return { collapsed: false, onFirstLine: false, onLastLine: false }
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    const editorRect = editorRef.getBoundingClientRect()
+    const style = window.getComputedStyle(editorRef)
+    const paddingTop = parseFloat(style.paddingTop) || 0
+    const paddingBottom = parseFloat(style.paddingBottom) || 0
+    let lineHeight = parseFloat(style.lineHeight)
+    if (!Number.isFinite(lineHeight)) lineHeight = parseFloat(style.fontSize) || 16
+    const scrollTop = editorRef.scrollTop
+    let relativeTop = rect.top - editorRect.top - paddingTop + scrollTop
+    if (!Number.isFinite(relativeTop)) relativeTop = scrollTop
+    relativeTop = Math.max(0, relativeTop)
+    let caretHeight = rect.height
+    if (!caretHeight || !Number.isFinite(caretHeight)) caretHeight = lineHeight
+    const relativeBottom = relativeTop + caretHeight
+    const contentHeight = Math.max(caretHeight, editorRef.scrollHeight - paddingTop - paddingBottom)
+    const threshold = Math.max(2, lineHeight / 2)
+
+    return {
+      collapsed: selection.isCollapsed,
+      onFirstLine: relativeTop <= threshold,
+      onLastLine: contentHeight - relativeBottom <= threshold,
+    }
+  }
 
   createEffect(() => {
     session.id
     editorRef.focus()
+    if (session.id) return
+    const interval = setInterval(() => {
+      setStore("placeholder", (prev) => (prev + 1) % PLACEHOLDERS.length)
+    }, 6500)
+    onCleanup(() => clearInterval(interval))
   })
 
   const isFocused = createFocusSignal(() => editorRef)
@@ -129,15 +176,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
   }
 
-  const { flat, active, onInput, onKeyDown, refetch } = useFilteredList<string>({
+  const { flat, active, onInput, onKeyDown } = useFilteredList<string>({
     items: local.file.searchFilesAndDirectories,
     key: (x) => x,
     onSelect: handleFileSelect,
-  })
-
-  createEffect(() => {
-    local.model.recent()
-    refetch()
   })
 
   createEffect(
@@ -221,6 +263,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("popoverIsOpen", false)
     }
 
+    if (store.historyIndex >= 0) {
+      setStore("historyIndex", -1)
+      setStore("savedPrompt", null)
+    }
+
     session.prompt.set(rawParts, cursorPosition)
   }
 
@@ -296,12 +343,100 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sessionID: session.id!,
     })
 
+  const addToHistory = (prompt: Prompt) => {
+    const text = prompt
+      .map((p) => p.content)
+      .join("")
+      .trim()
+    if (!text) return
+
+    const entry = clonePromptParts(prompt)
+    const lastEntry = history.entries[0]
+    if (lastEntry) {
+      const lastText = lastEntry.map((p) => p.content).join("")
+      if (lastText === text) return
+    }
+
+    setHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
+  }
+
+  const navigateHistory = (direction: "up" | "down") => {
+    const entries = history.entries
+    const current = store.historyIndex
+
+    if (direction === "up") {
+      if (entries.length === 0) return false
+      if (current === -1) {
+        setStore("savedPrompt", clonePromptParts(session.prompt.current()))
+        setStore("historyIndex", 0)
+        applyHistoryPrompt(entries[0], "start")
+        return true
+      }
+      if (current < entries.length - 1) {
+        const next = current + 1
+        setStore("historyIndex", next)
+        applyHistoryPrompt(entries[next], "start")
+        return true
+      }
+      return false
+    }
+
+    if (current > 0) {
+      const next = current - 1
+      setStore("historyIndex", next)
+      applyHistoryPrompt(entries[next], "end")
+      return true
+    }
+    if (current === 0) {
+      setStore("historyIndex", -1)
+      const saved = store.savedPrompt
+      if (saved) {
+        applyHistoryPrompt(saved, "end")
+        setStore("savedPrompt", null)
+        return true
+      }
+      applyHistoryPrompt(DEFAULT_PROMPT, "end")
+      return true
+    }
+
+    return false
+  }
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (store.popoverIsOpen && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       onKeyDown(event)
       event.preventDefault()
       return
     }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      const { collapsed, onFirstLine, onLastLine } = getCaretLineState()
+      if (!collapsed) return
+      const cursorPos = getCursorPosition(editorRef)
+      const textLength = promptLength(session.prompt.current())
+      const inHistory = store.historyIndex >= 0
+      const isStart = cursorPos === 0
+      const isEnd = cursorPos === textLength
+      const atAbsoluteStart = onFirstLine && isStart
+      const atAbsoluteEnd = onLastLine && isEnd
+      const allowUp = (inHistory && isEnd) || atAbsoluteStart
+      const allowDown = (inHistory && isStart) || atAbsoluteEnd
+
+      if (event.key === "ArrowUp") {
+        if (!allowUp) return
+        if (navigateHistory("up")) {
+          event.preventDefault()
+        }
+        return
+      }
+
+      if (!allowDown) return
+      if (navigateHistory("down")) {
+        event.preventDefault()
+      }
+      return
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -322,6 +457,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (session.working()) abort()
       return
     }
+
+    addToHistory(prompt)
+    setStore("historyIndex", -1)
+    setStore("savedPrompt", null)
 
     let existing = session.info()
     if (!existing) {
@@ -441,7 +580,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSubmit={handleSubmit}
         classList={{
           "bg-surface-raised-stronger-non-alpha border border-border-strong-base": true,
-          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border-select": true,
+          "rounded-md overflow-clip focus-within:border-transparent focus-within:shadow-xs-border": true,
           [props.class ?? ""]: !!props.class,
         }}
       >
@@ -461,7 +600,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
           <Show when={!session.prompt.dirty()}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
-              Ask anything... "{PLACEHOLDERS[placeholder()]}"
+              Ask anything... "{PLACEHOLDERS[store.placeholder]}"
             </div>
           </Show>
         </div>
@@ -474,210 +613,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               class="capitalize"
               variant="ghost"
             />
-            <Button as="div" variant="ghost" onClick={() => layout.dialog.open("model")}>
+            <Button
+              as="div"
+              variant="ghost"
+              onClick={() =>
+                dialog.push(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
+              }
+            >
               {local.model.current()?.name ?? "Select model"}
               <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
               <Icon name="chevron-down" size="small" />
             </Button>
-            <Show when={layout.dialog.opened() === "model"}>
-              <Switch>
-                <Match when={providers.paid().length > 0}>
-                  {iife(() => {
-                    const models = createMemo(() =>
-                      local.model
-                        .list()
-                        .filter((m) =>
-                          layout.connect.state() === "complete" ? m.provider.id === layout.connect.provider() : true,
-                        ),
-                    )
-                    return (
-                      <SelectDialog
-                        defaultOpen
-                        onOpenChange={(open) => {
-                          if (open) {
-                            layout.dialog.open("model")
-                          } else {
-                            layout.dialog.close("model")
-                          }
-                        }}
-                        title="Select model"
-                        placeholder="Search models"
-                        emptyMessage="No model results"
-                        key={(x) => `${x.provider.id}:${x.id}`}
-                        items={models}
-                        current={local.model.current()}
-                        filterKeys={["provider.name", "name", "id"]}
-                        // groupBy={(x) => (local.model.recent().includes(x) ? "Recent" : x.provider.name)}
-                        groupBy={(x) => x.provider.name}
-                        sortGroupsBy={(a, b) => {
-                          if (a.category === "Recent" && b.category !== "Recent") return -1
-                          if (b.category === "Recent" && a.category !== "Recent") return 1
-                          const aProvider = a.items[0].provider.id
-                          const bProvider = b.items[0].provider.id
-                          if (popularProviders.includes(aProvider) && !popularProviders.includes(bProvider)) return -1
-                          if (!popularProviders.includes(aProvider) && popularProviders.includes(bProvider)) return 1
-                          return popularProviders.indexOf(aProvider) - popularProviders.indexOf(bProvider)
-                        }}
-                        onSelect={(x) =>
-                          local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
-                            recent: true,
-                          })
-                        }
-                        actions={
-                          <Button
-                            class="h-7 -my-1 text-14-medium"
-                            icon="plus-small"
-                            tabIndex={-1}
-                            onClick={() => layout.dialog.open("provider")}
-                          >
-                            Connect provider
-                          </Button>
-                        }
-                      >
-                        {(i) => (
-                          <div class="w-full flex items-center gap-x-2.5">
-                            <span>{i.name}</span>
-                            <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
-                              <Tag>Free</Tag>
-                            </Show>
-                            <Show when={i.latest}>
-                              <Tag>Latest</Tag>
-                            </Show>
-                          </div>
-                        )}
-                      </SelectDialog>
-                    )
-                  })}
-                </Match>
-                <Match when={true}>
-                  {iife(() => {
-                    let listRef: ListRef | undefined
-                    const handleKey = (e: KeyboardEvent) => {
-                      if (e.key === "Escape") return
-                      listRef?.onKeyDown(e)
-                    }
-
-                    onMount(() => {
-                      document.addEventListener("keydown", handleKey)
-                      onCleanup(() => {
-                        document.removeEventListener("keydown", handleKey)
-                      })
-                    })
-
-                    return (
-                      <Dialog
-                        modal
-                        defaultOpen
-                        onOpenChange={(open) => {
-                          if (open) {
-                            layout.dialog.open("model")
-                          } else {
-                            layout.dialog.close("model")
-                          }
-                        }}
-                      >
-                        <Dialog.Header>
-                          <Dialog.Title>Select model</Dialog.Title>
-                          <Dialog.CloseButton tabIndex={-1} />
-                        </Dialog.Header>
-                        <Dialog.Body>
-                          <div class="flex flex-col gap-3 px-2.5">
-                            <div class="text-14-medium text-text-base px-2.5">Free models provided by OpenCode</div>
-                            <List
-                              ref={(ref) => (listRef = ref)}
-                              items={local.model.list}
-                              current={local.model.current()}
-                              key={(x) => `${x.provider.id}:${x.id}`}
-                              onSelect={(x) => {
-                                local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
-                                  recent: true,
-                                })
-                                layout.dialog.close("model")
-                              }}
-                            >
-                              {(i) => (
-                                <div class="w-full flex items-center gap-x-2.5">
-                                  <span>{i.name}</span>
-                                  <Tag>Free</Tag>
-                                  <Show when={i.latest}>
-                                    <Tag>Latest</Tag>
-                                  </Show>
-                                </div>
-                              )}
-                            </List>
-                            <div />
-                            <div />
-                          </div>
-                          <div class="px-1.5 pb-1.5">
-                            <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
-                              <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
-                                <div class="px-2 text-14-medium text-text-base">
-                                  Add more models from popular providers
-                                </div>
-                                <div class="w-full">
-                                  <List
-                                    class="w-full"
-                                    key={(x) => x?.id}
-                                    items={providers.popular}
-                                    activeIcon="plus-small"
-                                    sortBy={(a, b) => {
-                                      if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
-                                        return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
-                                      return a.name.localeCompare(b.name)
-                                    }}
-                                    onSelect={(x) => {
-                                      if (!x) return
-                                      layout.dialog.connect(x.id)
-                                    }}
-                                  >
-                                    {(i) => (
-                                      <div class="w-full flex items-center gap-x-4">
-                                        <ProviderIcon
-                                          data-slot="list-item-extra-icon"
-                                          id={i.id as IconName}
-                                          // TODO: clean this up after we update icon in models.dev
-                                          classList={{
-                                            "text-icon-weak-base": true,
-                                            "size-4 mx-0.5": i.id === "opencode",
-                                            "size-5": i.id !== "opencode",
-                                          }}
-                                        />
-                                        <span>{i.name}</span>
-                                        <Show when={i.id === "opencode"}>
-                                          <Tag>Recommended</Tag>
-                                        </Show>
-                                        <Show when={i.id === "anthropic"}>
-                                          <div class="text-14-regular text-text-weak">
-                                            Connect with Claude Pro/Max or API key
-                                          </div>
-                                        </Show>
-                                      </div>
-                                    )}
-                                  </List>
-                                  <Button
-                                    variant="ghost"
-                                    class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
-                                    icon="dot-grid"
-                                    onClick={() => {
-                                      layout.dialog.open("provider")
-                                    }}
-                                  >
-                                    View all providers
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </Dialog.Body>
-                      </Dialog>
-                    )
-                  })}
-                </Match>
-              </Switch>
-            </Show>
           </div>
           <Tooltip
             placement="top"
+            inactive={!session.prompt.dirty() && !session.working()}
             value={
               <Switch>
                 <Match when={session.working()}>

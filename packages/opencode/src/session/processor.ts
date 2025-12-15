@@ -1,5 +1,4 @@
 import { MessageV2 } from "./message-v2"
-import { streamText } from "ai"
 import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
 import { Session } from "."
@@ -12,6 +11,8 @@ import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
+import { LLM } from "./llm"
+import { Config } from "@/config/config"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -19,15 +20,6 @@ export namespace SessionProcessor {
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
-
-  export type StreamInput = Parameters<typeof streamText>[0]
-
-  export type TBD = {
-    model: {
-      modelID: string
-      providerID: string
-    }
-  }
 
   export function create(input: {
     assistantMessage: MessageV2.Assistant
@@ -47,13 +39,14 @@ export namespace SessionProcessor {
       partFromToolCall(toolCallID: string) {
         return toolcalls[toolCallID]
       },
-      async process(streamInput: StreamInput) {
+      async process(streamInput: LLM.StreamInput) {
         log.info("process")
+        const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
-            const stream = streamText(streamInput)
+            const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
               input.abort.throwIfAborted()
@@ -228,7 +221,7 @@ export namespace SessionProcessor {
                     })
 
                     if (value.error instanceof Permission.RejectedError) {
-                      blocked = true
+                      blocked = shouldBreak
                     }
                     delete toolcalls[value.toolCallId]
                   }
