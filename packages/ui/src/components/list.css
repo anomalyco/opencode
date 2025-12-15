@@ -2,6 +2,43 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  overflow: hidden;
+
+  [data-slot="list-search"] {
+    display: flex;
+    height: 40px;
+    flex-shrink: 0;
+    padding: 4px 10px 4px 16px;
+    align-items: center;
+    gap: 12px;
+    align-self: stretch;
+
+    border-radius: var(--radius-md);
+    background: var(--surface-base);
+
+    [data-slot="list-search-container"] {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 1 0 0;
+
+      [data-slot="list-search-input"] {
+        width: 100%;
+      }
+    }
+  }
+
+  [data-slot="list-scroll"] {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
 
   [data-slot="list-empty-state"] {
     display: flex;
@@ -41,6 +78,7 @@
 
     [data-slot="list-header"] {
       display: flex;
+      z-index: 10;
       height: 28px;
       padding: 0 10px;
       justify-content: space-between;

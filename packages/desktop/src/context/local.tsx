@@ -239,7 +239,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       function updateVisibility(model: ModelKey, visibility: "show" | "hide") {
         const index = store.user.findIndex((x) => x.modelID === model.modelID && x.providerID === model.providerID)
         if (index >= 0) {
-          setStore("user", index, { visibility: visibility })
+          setStore("user", index, { visibility })
+        } else {
+          setStore("user", (prev) => [...prev, { ...model, visibility }])
         }
       }
 
@@ -263,6 +265,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         hide(model: ModelKey) {
           updateVisibility(model, "hide")
+        },
+        setVisibility(model: ModelKey, visible: boolean) {
+          updateVisibility(model, visible ? "show" : "hide")
         },
       }
     })()

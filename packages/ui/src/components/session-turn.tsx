@@ -60,6 +60,8 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef) return
+    // prevents scroll loops
+    if (working() && scrollRef.scrollTop < 100) return
     setState("scrollY", scrollRef.scrollTop)
     if (state.autoScrolling) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
@@ -79,7 +81,7 @@ export function SessionTurn(
     if (!scrollRef || state.userScrolled || !working() || state.autoScrolling) return
     setState("autoScrolling", true)
     requestAnimationFrame(() => {
-      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "auto" })
+      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "instant" })
       requestAnimationFrame(() => {
         setState("autoScrolling", false)
       })

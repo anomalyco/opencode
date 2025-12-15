@@ -37,7 +37,6 @@
     top: 0;
     background-color: var(--background-stronger);
     z-index: 21;
-    /* padding-bottom: clamp(0px, calc(8px - var(--scroll-y) * 0.16), 8px); */
   }
 
   [data-slot="session-turn-response-trigger"] {
@@ -297,7 +296,6 @@
   [data-slot="session-turn-collapsible"] {
     gap: 32px;
     overflow: visible;
-    /* margin-top: clamp(8px, calc(24px - var(--scroll-y) * 0.32), 24px); */
   }
 
   [data-slot="session-turn-collapsible-trigger-content"] {

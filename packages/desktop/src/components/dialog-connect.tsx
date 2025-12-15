@@ -117,7 +117,7 @@ export const DialogConnect: Component<{ provider: string }> = (props) => {
         title: `${provider().name} connected`,
         description: `${provider().name} models are now available to use.`,
       })
-      dialog.replace(() => <DialogModel connectedProvider={props.provider} />)
+      dialog.replace(() => <DialogModel provider={props.provider} />)
     }, 500)
   }
 

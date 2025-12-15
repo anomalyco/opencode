@@ -17,6 +17,8 @@ import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@/context/dialog"
 import { DialogModel } from "@/components/dialog-model"
+import { DialogModelUnpaid } from "@/components/dialog-model-unpaid"
+import { useProviders } from "@/hooks/use-providers"
 
 interface PromptInputProps {
   class?: string
@@ -58,6 +60,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const local = useLocal()
   const session = useSession()
   const dialog = useDialog()
+  const providers = useProviders()
   let editorRef!: HTMLDivElement
 
   const [store, setStore] = createStore<{
@@ -610,7 +613,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               class="capitalize"
               variant="ghost"
             />
-            <Button as="div" variant="ghost" onClick={() => dialog.push(() => <DialogModel />)}>
+            <Button
+              as="div"
+              variant="ghost"
+              onClick={() => dialog.push(() => (providers.paid().length > 0 ? <DialogModel /> : <DialogModelUnpaid />))}
+            >
               {local.model.current()?.name ?? "Select model"}
               <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
               <Icon name="chevron-down" size="small" />
