@@ -1,7 +1,9 @@
 import {
   createContext,
+  createEffect,
   createMemo,
   createSignal,
+  For,
   getOwner,
   Owner,
   ParentProps,
@@ -11,6 +13,7 @@ import {
   type JSX,
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
+import { iife } from "@opencode-ai/util/iife"
 
 type DialogElement = () => JSX.Element
 
@@ -25,23 +28,49 @@ function init() {
     }[]
   >([])
 
-  return {
+  const result = {
     get stack() {
       return store()
     },
-    push(element: DialogElement, owner: Owner, onClose?: () => void) {
-      setStore((s) => [...s, { element, onClose, owner }])
-    },
     pop() {
       const current = store().at(-1)
+      if (!current) return
       current?.onClose?.()
-      setStore((stack) => stack.slice(0, -1))
+      setStore((stack) => {
+        stack.pop()
+        return [...stack]
+      })
     },
     replace(element: DialogElement, owner: Owner, onClose?: () => void) {
       for (const item of store()) {
         item.onClose?.()
       }
-      setStore([{ element, onClose, owner }])
+      setStore([
+        {
+          element: () =>
+            runWithOwner(owner, () => (
+              <Show when={result.stack.at(-1)?.owner === owner}>
+                <Kobalte
+                  modal
+                  defaultOpen
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      onClose?.()
+                      result.pop()
+                    }
+                  }}
+                >
+                  <Kobalte.Portal>
+                    <Kobalte.Overlay data-component="dialog-overlay" />
+                    {element()}
+                  </Kobalte.Portal>
+                </Kobalte>
+              </Show>
+            )),
+          onClose,
+          owner,
+        },
+      ])
     },
     clear() {
       for (const item of store()) {
@@ -50,38 +79,16 @@ function init() {
       setStore([])
     },
   }
+  return result
 }
 
 export function DialogProvider(props: ParentProps) {
   const ctx = init()
-  const last = createMemo(() => ctx.stack.at(-1))
   return (
     <Context.Provider value={ctx}>
       {props.children}
       <div data-component="dialog-stack">
-        <Show when={last()}>
-          {(item) =>
-            runWithOwner(item().owner, () => {
-              return (
-                <Kobalte
-                  modal
-                  defaultOpen
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      item().onClose?.()
-                      ctx.pop()
-                    }
-                  }}
-                >
-                  <Kobalte.Portal>
-                    <Kobalte.Overlay data-component="dialog-overlay" />
-                    {item().element()}
-                  </Kobalte.Portal>
-                </Kobalte>
-              )
-            })
-          }
-        </Show>
+        <For each={ctx.stack}>{(item) => <>{item.element()}</>}</For>
       </div>
     </Context.Provider>
   )
@@ -102,9 +109,6 @@ export function useDialog() {
     },
     replace(element: DialogElement, onClose?: () => void) {
       ctx.replace(element, owner, onClose)
-    },
-    push(element: DialogElement, onClose?: () => void) {
-      ctx.push(element, owner, onClose)
     },
     pop() {
       ctx.pop()

@@ -58,6 +58,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         time: Date.now(),
         viewed: false,
       }
+      console.log(event)
       switch (event.type) {
         case "session.idle": {
           const sessionID = event.properties.sessionID
