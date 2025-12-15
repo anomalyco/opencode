@@ -8681,9 +8681,24 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "release_date": {
+            "type": "string"
           }
         },
-        "required": ["id", "providerID", "api", "name", "capabilities", "cost", "limit", "status", "options", "headers"]
+        "required": [
+          "id",
+          "providerID",
+          "api",
+          "name",
+          "capabilities",
+          "cost",
+          "limit",
+          "status",
+          "options",
+          "headers",
+          "release_date"
+        ]
       },
       "Provider": {
         "type": "object",
