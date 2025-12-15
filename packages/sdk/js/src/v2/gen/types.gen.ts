@@ -476,6 +476,46 @@ export type EventPermissionReplied = {
   }
 }
 
+export type Question = {
+  id: string
+  sessionID: string
+  messageID: string
+  callID?: string
+  questions: Array<{
+    id: string
+    type: "select" | "multi-select" | "confirm" | "text"
+    question: string
+    options?: Array<{
+      value: string
+      label: string
+      recommended?: boolean
+    }>
+    default?: string | Array<string> | boolean
+  }>
+  time: {
+    created: number
+  }
+}
+
+export type EventQuestionUpdated = {
+  type: "question.updated"
+  properties: Question
+}
+
+export type EventQuestionReplied = {
+  type: "question.replied"
+  properties: {
+    sessionID: string
+    questionID: string
+    answers: {
+      [key: string]: {
+        value: string | Array<string> | boolean | null
+        comment?: string
+      }
+    }
+  }
+}
+
 export type EventFileEdited = {
   type: "file.edited"
   properties: {
@@ -746,6 +786,8 @@ export type Event =
   | EventMessagePartRemoved
   | EventPermissionUpdated
   | EventPermissionReplied
+  | EventQuestionUpdated
+  | EventQuestionReplied
   | EventFileEdited
   | EventTodoUpdated
   | EventSessionStatus
@@ -3134,6 +3176,81 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
+
+export type QuestionRespondData = {
+  body?: {
+    answers: {
+      [key: string]: {
+        value: string | Array<string> | boolean | null
+        comment?: string
+      }
+    }
+  }
+  path: {
+    sessionID: string
+    questionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/questions/{questionID}"
+}
+
+export type QuestionRespondErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type QuestionRespondError = QuestionRespondErrors[keyof QuestionRespondErrors]
+
+export type QuestionRespondResponses = {
+  /**
+   * Question answered successfully
+   */
+  200: boolean
+}
+
+export type QuestionRespondResponse = QuestionRespondResponses[keyof QuestionRespondResponses]
+
+export type QuestionRejectData = {
+  body?: never
+  path: {
+    sessionID: string
+    questionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/questions/{questionID}/reject"
+}
+
+export type QuestionRejectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type QuestionRejectError = QuestionRejectErrors[keyof QuestionRejectErrors]
+
+export type QuestionRejectResponses = {
+  /**
+   * Question rejected successfully
+   */
+  200: boolean
+}
+
+export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
 
 export type CommandListData = {
   body?: never

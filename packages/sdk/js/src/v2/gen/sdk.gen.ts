@@ -71,6 +71,10 @@ import type {
   PtyRemoveResponses,
   PtyUpdateErrors,
   PtyUpdateResponses,
+  QuestionRejectErrors,
+  QuestionRejectResponses,
+  QuestionRespondErrors,
+  QuestionRespondResponses,
   SessionAbortErrors,
   SessionAbortResponses,
   SessionChildrenErrors,
@@ -1527,6 +1531,84 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Question extends HeyApiClient {
+  /**
+   * Respond to question
+   *
+   * Submit answers to a question asked by the AI assistant.
+   */
+  public respond<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      questionID: string
+      directory?: string
+      answers?: {
+        [key: string]: {
+          value: string | Array<string> | boolean | null
+          comment?: string
+        }
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "questionID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "answers" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<QuestionRespondResponses, QuestionRespondErrors, ThrowOnError>({
+      url: "/session/{sessionID}/questions/{questionID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reject question
+   *
+   * Cancel a question asked by the AI assistant.
+   */
+  public reject<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      questionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "questionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<QuestionRejectResponses, QuestionRejectErrors, ThrowOnError>({
+      url: "/session/{sessionID}/questions/{questionID}/reject",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Command extends HeyApiClient {
   /**
    * List commands
@@ -2589,6 +2671,8 @@ export class OpencodeClient extends HeyApiClient {
   session = new Session({ client: this.client })
 
   permission = new Permission({ client: this.client })
+
+  question = new Question({ client: this.client })
 
   command = new Command({ client: this.client })
 
