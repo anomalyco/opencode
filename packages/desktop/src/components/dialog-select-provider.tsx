@@ -6,7 +6,7 @@ import { List } from "@opencode-ai/ui/list"
 import { Tag } from "@opencode-ai/ui/tag"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
-import { DialogConnect } from "./dialog-connect"
+import { DialogConnectProvider } from "./dialog-connect-provider"
 
 export const DialogSelectProvider: Component = () => {
   const dialog = useDialog()
@@ -34,7 +34,7 @@ export const DialogSelectProvider: Component = () => {
         }}
         onSelect={(x) => {
           if (!x) return
-          dialog.replace(() => <DialogConnect provider={x.id} />)
+          dialog.replace(() => <DialogConnectProvider provider={x.id} />)
         }}
       >
         {(i) => (
