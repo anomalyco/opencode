@@ -185,6 +185,12 @@ export interface Hooks {
       }[]
     },
   ) => Promise<void>
+  "experimental.chat.system.transform"?: (
+    input: {},
+    output: {
+      system: string[]
+    },
+  ) => Promise<void>
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
