@@ -1,0 +1,26 @@
+name = "Fast Agent"
+description = "Framework for multimodal agents with ACP support (requires Python 3.13+)"
+command = "fast-agent"
+args = ["acp"]
+install_guide = "https://github.com/evalstate/fast-agent"
+color = "#888888"
+
+[[install_commands.unix]]
+method = "uv"
+command = "uv tool install --python 3.13 fast-agent-mcp"
+description = "Install via uv tool (global)"
+
+[[install_commands.windows]]
+method = "uv"
+command = "uv tool install --python 3.13 fast-agent-mcp"
+description = "Install via uv tool (global)"
+
+[[uninstall_commands.unix]]
+method = "uv"
+command = "uv tool uninstall fast-agent-mcp"
+description = "Uninstall via uv tool"
+
+[[uninstall_commands.windows]]
+method = "uv"
+command = "uv tool uninstall fast-agent-mcp"
+description = "Uninstall via uv tool"

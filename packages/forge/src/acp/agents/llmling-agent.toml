@@ -1,0 +1,46 @@
+name = "LLMling-Agent"
+description = "Python-based agent framework with file and terminal access"
+command = "llmling-agent"
+args = ["serve-acp", "config.yml", "--file-access", "--terminal-access"]
+install_guide = "https://phil65.github.io/llmling-agent/cli/"
+color = "#888888"
+
+[[install_commands.unix]]
+method = "uv"
+command = "uv tool install --python 3.13 'llmling-agent[default]@latest'"
+description = "Install via uv (requires Python 3.13)"
+
+[[install_commands.unix]]
+method = "pip"
+command = "pip install 'llmling-agent[default]'"
+description = "Install via pip"
+
+[[install_commands.windows]]
+method = "uv"
+command = "uv tool install --python 3.13 'llmling-agent[default]@latest'"
+description = "Install via uv (requires Python 3.13)"
+
+[[install_commands.windows]]
+method = "pip"
+command = "pip install 'llmling-agent[default]'"
+description = "Install via pip"
+
+[[uninstall_commands.unix]]
+method = "uv"
+command = "uv tool uninstall llmling-agent"
+description = "Uninstall via uv tool"
+
+[[uninstall_commands.unix]]
+method = "pip"
+command = "pip uninstall llmling-agent"
+description = "Uninstall via pip"
+
+[[uninstall_commands.windows]]
+method = "uv"
+command = "uv tool uninstall llmling-agent"
+description = "Uninstall via uv tool"
+
+[[uninstall_commands.windows]]
+method = "pip"
+command = "pip uninstall llmling-agent"
+description = "Uninstall via pip"

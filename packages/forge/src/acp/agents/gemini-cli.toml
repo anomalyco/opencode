@@ -1,0 +1,31 @@
+name = "Gemini CLI"
+description = "Google's Gemini code assistant (recommended for ACP testing)"
+command = "gemini"
+args = ["--experimental-acp"]
+install_guide = "https://github.com/google-gemini/gemini-cli"
+color = "#cda9fc"
+
+[[install_commands.unix]]
+method = "brew"
+command = "brew install gemini-cli"
+description = "Install via Homebrew (macOS/Linux)"
+
+[[install_commands.unix]]
+method = "npm"
+command = "npm install -g @google/gemini-cli"
+description = "Install via npm (global)"
+
+[[install_commands.windows]]
+method = "npm"
+command = "npm install -g @google/gemini-cli"
+description = "Install via npm (global)"
+
+[[uninstall_commands.unix]]
+method = "npm"
+command = "npm uninstall -g @google/gemini-cli"
+description = "Uninstall via npm (global)"
+
+[[uninstall_commands.windows]]
+method = "npm"
+command = "npm uninstall -g @google/gemini-cli"
+description = "Uninstall via npm (global)"

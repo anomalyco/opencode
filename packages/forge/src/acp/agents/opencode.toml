@@ -1,0 +1,61 @@
+name = "OpenCode"
+description = "SST's open-source code agent"
+command = "opencode"
+args = ["acp"]
+install_guide = "https://github.com/sst/opencode"
+color = "#ffba88"
+
+[[install_commands.unix]]
+method = "brew"
+command = "brew install opencode"
+description = "Install via Homebrew"
+
+[[install_commands.unix]]
+method = "curl"
+command = "curl -fsSL https://opencode.ai/install | bash"
+description = "Install via official installer"
+
+[[install_commands.unix]]
+method = "npm"
+command = "npm install -g opencode-ai@latest"
+description = "Install via npm (global)"
+
+[[install_commands.windows]]
+method = "scoop"
+command = "scoop bucket add extras && scoop install extras/opencode"
+description = "Install via Scoop"
+
+[[install_commands.windows]]
+method = "choco"
+command = "choco install opencode"
+description = "Install via Chocolatey"
+
+[[install_commands.windows]]
+method = "npm"
+command = "npm install -g opencode-ai@latest"
+description = "Install via npm (global)"
+
+[[uninstall_commands.unix]]
+method = "brew"
+command = "brew uninstall opencode"
+description = "Uninstall via Homebrew"
+
+[[uninstall_commands.unix]]
+method = "npm"
+command = "npm uninstall -g opencode-ai"
+description = "Uninstall via npm (global)"
+
+[[uninstall_commands.windows]]
+method = "scoop"
+command = "scoop uninstall opencode"
+description = "Uninstall via Scoop"
+
+[[uninstall_commands.windows]]
+method = "choco"
+command = "choco uninstall opencode"
+description = "Uninstall via Chocolatey"
+
+[[uninstall_commands.windows]]
+method = "npm"
+command = "npm uninstall -g opencode-ai"
+description = "Uninstall via npm (global)"

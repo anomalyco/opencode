@@ -1,0 +1,26 @@
+name = "Auggie"
+description = "Augment Code's AI coding assistant"
+command = "auggie"
+args = ["--acp"]
+install_guide = "https://docs.augmentcode.com/cli/acp"
+color = "#888888"
+
+[[install_commands.unix]]
+method = "npm"
+command = "npm install -g @augmentcode/auggie@latest"
+description = "Install via npm (requires Node.js 22+)"
+
+[[install_commands.windows]]
+method = "npm"
+command = "npm install -g @augmentcode/auggie@latest"
+description = "Install via npm (requires Node.js 22+)"
+
+[[uninstall_commands.unix]]
+method = "npm"
+command = "npm uninstall -g @augmentcode/auggie"
+description = "Uninstall via npm (global)"
+
+[[uninstall_commands.windows]]
+method = "npm"
+command = "npm uninstall -g @augmentcode/auggie"
+description = "Uninstall via npm (global)"

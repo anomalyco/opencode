@@ -1,0 +1,26 @@
+name = "OpenHands"
+description = "All-Hands AI's autonomous coding agent (experimental ACP)"
+command = "openhands"
+args = ["acp"]
+install_guide = "https://docs.openhands.dev/openhands/usage/run-openhands/acp"
+color = "#feff8c"
+
+[[install_commands.unix]]
+method = "uv"
+command = "uv tool install openhands"
+description = "Install OpenHands CLI via uv (requires LLM configuration)"
+
+[[install_commands.windows]]
+method = "uv"
+command = "uv tool install openhands"
+description = "Install OpenHands CLI via uv (requires LLM configuration)"
+
+[[uninstall_commands.unix]]
+method = "uv"
+command = "uv tool uninstall openhands"
+description = "Uninstall via uv tool"
+
+[[uninstall_commands.windows]]
+method = "uv"
+command = "uv tool uninstall openhands"
+description = "Uninstall via uv tool"
