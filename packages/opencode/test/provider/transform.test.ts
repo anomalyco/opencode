@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ProviderTransform } from "../../src/provider/transform"
+import type { Provider } from "../../src/provider/provider"
 
 const OUTPUT_TOKEN_MAX = 32000
 
@@ -257,5 +258,180 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
+// Helper function to create a minimal model for testing
+function createModel(overrides: Partial<Provider.Model>): Provider.Model {
+  return {
+    id: "test-model",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Test Model",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    ...overrides,
+  }
+}
+
+describe("ProviderTransform.buildToolCacheOptions", () => {
+  describe("Anthropic provider", () => {
+    test("returns anthropic cacheControl for direct Anthropic", () => {
+      const model = createModel({
+        providerID: "anthropic",
+        api: {
+          id: "claude-3-5-sonnet",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(result.anthropic).toBeDefined()
+      expect(result.anthropic.cacheControl).toEqual({ type: "ephemeral" })
+    })
+
+    test("returns anthropic cacheControl for Claude models on other providers", () => {
+      const model = createModel({
+        providerID: "openrouter",
+        api: {
+          id: "anthropic/claude-3-5-sonnet",
+          url: "https://openrouter.ai/api",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(result.anthropic).toBeDefined()
+      expect(result.anthropic.cacheControl).toEqual({ type: "ephemeral" })
+      expect(result.openrouter).toBeDefined()
+      expect(result.openrouter.cache_control).toEqual({ type: "ephemeral" })
+    })
+  })
+
+  describe("Amazon Bedrock provider", () => {
+    test("returns bedrock cachePoint for Bedrock", () => {
+      const model = createModel({
+        providerID: "amazon-bedrock",
+        api: {
+          id: "anthropic.claude-3-5-sonnet",
+          url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+          npm: "@ai-sdk/amazon-bedrock",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(result.bedrock).toBeDefined()
+      expect(result.bedrock.cachePoint).toEqual({ type: "ephemeral" })
+    })
+  })
+
+  describe("OpenRouter provider", () => {
+    test("returns openrouter cache_control for OpenRouter", () => {
+      const model = createModel({
+        providerID: "openrouter",
+        api: {
+          id: "meta-llama/llama-3-70b",
+          url: "https://openrouter.ai/api",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(result.openrouter).toBeDefined()
+      expect(result.openrouter.cache_control).toEqual({ type: "ephemeral" })
+    })
+  })
+
+  describe("Google Vertex Anthropic provider", () => {
+    test("returns anthropic cacheControl for Google Vertex Anthropic", () => {
+      const model = createModel({
+        providerID: "google-vertex-anthropic",
+        api: {
+          id: "claude-3-5-sonnet",
+          url: "https://us-central1-aiplatform.googleapis.com",
+          npm: "@ai-sdk/google-vertex-anthropic",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(result.anthropic).toBeDefined()
+      expect(result.anthropic.cacheControl).toEqual({ type: "ephemeral" })
+    })
+  })
+
+  describe("Providers without explicit caching", () => {
+    test("returns empty object for OpenAI", () => {
+      const model = createModel({
+        providerID: "openai",
+        api: {
+          id: "gpt-4-turbo",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(Object.keys(result)).toHaveLength(0)
+    })
+
+    test("returns empty object for Google Gemini", () => {
+      const model = createModel({
+        providerID: "google",
+        api: {
+          id: "gemini-2.5-pro",
+          url: "https://generativelanguage.googleapis.com",
+          npm: "@ai-sdk/google",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(Object.keys(result)).toHaveLength(0)
+    })
+
+    test("returns empty object for Mistral", () => {
+      const model = createModel({
+        providerID: "mistral",
+        api: {
+          id: "mistral-large",
+          url: "https://api.mistral.ai",
+          npm: "@ai-sdk/mistral",
+        },
+      })
+
+      const result = ProviderTransform.buildToolCacheOptions(model)
+
+      expect(Object.keys(result)).toHaveLength(0)
+    })
   })
 })

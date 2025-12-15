@@ -373,6 +373,20 @@ export namespace Config {
   export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
+  /**
+   * Cache TTL options for provider caching
+   */
+  export const CacheTTL = z
+    .enum(["5m", "1h", "auto"])
+    .describe("Cache time-to-live: '5m' for 5 minutes, '1h' for 1 hour, 'auto' for provider default")
+  export type CacheTTL = z.infer<typeof CacheTTL>
+
+  /**
+   * Prompt section identifiers for ordering
+   */
+  export const PromptSection = z.enum(["tools", "instructions", "environment", "system", "messages"])
+  export type PromptSection = z.infer<typeof PromptSection>
+
   export const Command = z.object({
     template: z.string(),
     description: z.string().optional(),
@@ -381,6 +395,36 @@ export namespace Config {
     subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
+
+  /**
+   * Agent-specific cache configuration (can override provider defaults)
+   */
+  export const AgentCacheConfig = z
+    .object({
+      enabled: z.boolean().optional().describe("Enable or disable caching for this agent"),
+      ttl: CacheTTL.optional().describe("Cache time-to-live for this agent"),
+      minTokens: z.number().int().nonnegative().optional().describe("Minimum tokens required for content to be cached"),
+      maxBreakpoints: z.number().int().nonnegative().optional().describe("Maximum number of cache breakpoints"),
+    })
+    .strict()
+    .meta({
+      ref: "AgentCacheConfig",
+    })
+  export type AgentCacheConfig = z.infer<typeof AgentCacheConfig>
+
+  /**
+   * Agent-specific prompt ordering configuration (can override provider defaults)
+   */
+  export const AgentPromptOrderConfig = z
+    .object({
+      ordering: z.array(PromptSection).optional().describe("Order of prompt sections for this agent"),
+      cacheBreakpoints: z.array(PromptSection).optional().describe("Sections that should have cache breakpoints"),
+    })
+    .strict()
+    .meta({
+      ref: "AgentPromptOrderConfig",
+    })
+  export type AgentPromptOrderConfig = z.infer<typeof AgentPromptOrderConfig>
 
   export const Agent = z
     .object({
@@ -403,6 +447,8 @@ export namespace Config {
         .positive()
         .optional()
         .describe("Maximum number of agentic iterations before forcing text-only response"),
+      cache: AgentCacheConfig.optional().describe("Agent-specific cache configuration (overrides provider defaults)"),
+      promptOrder: AgentPromptOrderConfig.optional().describe("Agent-specific prompt ordering configuration"),
       permission: z
         .object({
           edit: Permission.optional(),
@@ -575,11 +621,51 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  /**
+   * User-configurable cache settings for a provider
+   */
+  export const ProviderCacheConfig = z
+    .object({
+      enabled: z.boolean().optional().describe("Enable or disable caching for this provider"),
+      ttl: CacheTTL.optional().describe("Cache time-to-live"),
+      minTokens: z.number().int().nonnegative().optional().describe("Minimum tokens required for content to be cached"),
+      maxBreakpoints: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe("Maximum number of cache breakpoints (for explicit caching providers)"),
+    })
+    .strict()
+    .meta({
+      ref: "ProviderCacheConfig",
+    })
+  export type ProviderCacheConfig = z.infer<typeof ProviderCacheConfig>
+
+  /**
+   * User-configurable prompt ordering settings for a provider
+   */
+  export const ProviderPromptOrderConfig = z
+    .object({
+      ordering: z.array(PromptSection).optional().describe("Order of prompt sections for optimal caching"),
+      cacheBreakpoints: z
+        .array(PromptSection)
+        .optional()
+        .describe("Sections that should have cache breakpoints applied"),
+    })
+    .strict()
+    .meta({
+      ref: "ProviderPromptOrderConfig",
+    })
+  export type ProviderPromptOrderConfig = z.infer<typeof ProviderPromptOrderConfig>
+
   export const Provider = ModelsDev.Provider.partial()
     .extend({
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
       models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      cache: ProviderCacheConfig.optional().describe("Provider-specific cache configuration"),
+      promptOrder: ProviderPromptOrderConfig.optional().describe("Provider-specific prompt ordering configuration"),
       options: z
         .object({
           apiKey: z.string().optional(),

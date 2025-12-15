@@ -23,6 +23,7 @@ import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
+import { ProviderConfig } from "../provider/config"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
 
@@ -478,7 +479,12 @@ export namespace SessionPrompt {
         model,
         abort,
       })
-      const system = await resolveSystemPrompt({
+      // Get user configs for provider-specific caching
+      const userProviderConfig = ProviderConfig.fromUserProviderConfig(cfg.provider?.[model.providerID])
+      const userAgentConfig = ProviderConfig.fromUserProviderConfig(cfg.agent?.[agent.name])
+
+      // Resolve system prompt sections for provider-specific ordering
+      const systemSections = await resolveSystemPromptSections({
         model,
         agent,
         system: lastUser.system,
@@ -490,6 +496,8 @@ export namespace SessionPrompt {
         model,
         tools: lastUser.tools,
         processor,
+        userProviderConfig,
+        userAgentConfig,
       })
       const provider = await Provider.getProvider(model.providerID)
       const params = await Plugin.trigger(
@@ -542,13 +550,10 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      // Build messages with provider-specific system prompt ordering
+      const systemMessages = buildSystemMessages(systemSections, model, userProviderConfig, agent.name, userAgentConfig)
       const messages: ModelMessage[] = [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
+        ...systemMessages,
         ...MessageV2.toModelMessage(sessionMessages),
         ...(isLastStep
           ? [
@@ -627,14 +632,32 @@ export namespace SessionPrompt {
                 }
                 // Transform tool schemas for provider compatibility
                 if (args.params.tools && Array.isArray(args.params.tools)) {
-                  args.params.tools = args.params.tools.map((tool: any) => {
+                  const providerConfig = ProviderConfig.getConfig(
+                    model.providerID,
+                    model,
+                    agent.name,
+                    userProviderConfig,
+                    userAgentConfig,
+                  )
+                  const shouldCacheTools = providerConfig.promptOrder.toolCaching && providerConfig.cache.enabled
+
+                  args.params.tools = args.params.tools.map((tool: any, index: number) => {
                     // Tools at middleware level have inputSchema, not parameters
                     if (tool.inputSchema && typeof tool.inputSchema === "object") {
-                      // Transform the inputSchema for provider compatibility
-                      return {
+                      const transformed = {
                         ...tool,
                         inputSchema: ProviderTransform.schema(model, tool.inputSchema),
                       }
+
+                      // Add cache control to the last tool for explicit breakpoint providers
+                      if (shouldCacheTools && index === args.params.tools!.length - 1) {
+                        transformed.providerOptions = {
+                          ...transformed.providerOptions,
+                          ...ProviderTransform.buildToolCacheOptions(model),
+                        }
+                      }
+
+                      return transformed
                     }
                     // If no inputSchema, return tool unchanged
                     return tool
@@ -675,39 +698,162 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
-  async function resolveSystemPrompt(input: {
+  /**
+   * Prompt sections for provider-specific ordering
+   */
+  interface PromptSections {
+    /** Provider header (e.g., anthropic spoof) - most stable */
+    header: string[]
+    /** Agent/system instructions - stable per agent */
+    instructions: string[]
+    /** Environment info (cwd, files, etc.) - stable per session */
+    environment: string[]
+    /** Custom instructions (AGENTS.md, etc.) - stable per project */
+    custom: string[]
+    /** Max steps warning if applicable */
+    maxSteps: string[]
+  }
+
+  /**
+   * Resolve system prompt into separate sections for provider-specific ordering
+   */
+  async function resolveSystemPromptSections(input: {
     system?: string
     agent: Agent.Info
     model: Provider.Model
     isLastStep?: boolean
-  }) {
-    let system = SystemPrompt.header(input.model.providerID)
-    system.push(
-      ...(() => {
-        if (input.system) return [input.system]
-        if (input.agent.prompt) return [input.agent.prompt]
-        return SystemPrompt.provider(input.model)
-      })(),
-    )
-    system.push(...(await SystemPrompt.environment()))
-    system.push(...(await SystemPrompt.custom()))
+  }): Promise<PromptSections> {
+    const header = SystemPrompt.header(input.model.providerID)
+    const instructions = (() => {
+      if (input.system) return [input.system]
+      if (input.agent.prompt) return [input.agent.prompt]
+      return SystemPrompt.provider(input.model)
+    })()
+    const environment = await SystemPrompt.environment()
+    const custom = await SystemPrompt.custom()
+    const maxSteps = input.isLastStep ? [MAX_STEPS] : []
 
-    if (input.isLastStep) {
-      system.push(MAX_STEPS)
-    }
-
-    // max 2 system prompt messages for caching purposes
-    const [first, ...rest] = system
-    system = [first, rest.join("\n")]
-    return system
+    return { header, instructions, environment, custom, maxSteps }
   }
 
+  /**
+   * Build system messages with provider-specific ordering and caching
+   *
+   * This function respects:
+   * - Provider-specific prompt ordering for cache efficiency
+   * - combineSystemMessages: whether to merge all system content into one message
+   * - User provider config overrides (from opencode.json provider section)
+   * - User agent config overrides (from opencode.json agent section)
+   *
+   * Config priority (highest last): Provider defaults → User provider config → User agent config
+   */
+  function buildSystemMessages(
+    sections: PromptSections,
+    model: Provider.Model,
+    userProviderConfig?: ProviderConfig.UserConfig,
+    agentID?: string,
+    userAgentConfig?: ProviderConfig.UserConfig,
+  ): ModelMessage[] {
+    const config = ProviderConfig.getConfig(model.providerID, model, agentID, userProviderConfig, userAgentConfig)
+    const ordering = config.promptOrder.ordering
+    const combineSystemMessages = config.promptOrder.combineSystemMessages
+
+    // Map section names to content
+    // Note: header is NOT included here - it must always come first (e.g., "You are Claude Code...")
+    const sectionContent: Record<string, string[]> = {
+      instructions: sections.instructions,
+      environment: sections.environment,
+      system: sections.custom,
+      // tools and messages are handled separately
+      tools: [],
+      messages: [],
+    }
+
+    // Build ordered system content - header MUST come first (required by some APIs)
+    const orderedContent: string[] = [...sections.header]
+    for (const section of ordering) {
+      if (section === "tools" || section === "messages") continue
+      const content = sectionContent[section]
+      if (content?.length) {
+        orderedContent.push(...content)
+      }
+    }
+
+    // Add max steps if present
+    if (sections.maxSteps.length) {
+      orderedContent.push(...sections.maxSteps)
+    }
+
+    // If no content, return empty
+    if (!orderedContent.length) return []
+
+    // Most providers require a single system message
+    if (combineSystemMessages) {
+      return [
+        {
+          role: "system",
+          content: orderedContent.join("\n\n"),
+        },
+      ]
+    }
+
+    // For providers that support multiple system messages (Anthropic, Bedrock),
+    // split into: 1) header alone, 2) everything else
+    // This matches the original behavior where header is always the first system message
+    // (required for API authorization, e.g., "You are Claude Code...")
+    const result: ModelMessage[] = []
+
+    // Header MUST be its own message first
+    if (sections.header.length) {
+      result.push({
+        role: "system",
+        content: sections.header.join("\n"),
+      })
+    }
+
+    // Build remaining content in order
+    const remainingContent: string[] = []
+    for (const section of ordering) {
+      if (section === "tools" || section === "messages") continue
+      const content = sectionContent[section]
+      if (content?.length) {
+        remainingContent.push(...content)
+      }
+    }
+
+    // Add max steps if present
+    if (sections.maxSteps.length) {
+      remainingContent.push(...sections.maxSteps)
+    }
+
+    // Add remaining content as second message
+    if (remainingContent.length) {
+      result.push({
+        role: "system",
+        content: remainingContent.join("\n"),
+      })
+    }
+
+    return result
+  }
+
+  /**
+   * Resolve tools for the current session with provider-specific optimizations
+   *
+   * This function:
+   * - Sorts tools alphabetically when sortTools is enabled (for cache consistency)
+   * - Respects user provider and agent config overrides
+   *
+   * Config priority (highest last): Provider defaults → User provider config → User agent config
+   */
   async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
     sessionID: string
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
+    userProviderConfig?: ProviderConfig.UserConfig
+    userAgentConfig?: ProviderConfig.UserConfig
   }) {
     const tools: Record<string, AITool> = {}
     const enabledTools = pipe(
@@ -715,7 +861,24 @@ export namespace SessionPrompt {
       mergeDeep(await ToolRegistry.enabled(input.agent)),
       mergeDeep(input.tools ?? {}),
     )
-    for (const item of await ToolRegistry.tools(input.model.providerID)) {
+
+    // Get provider config for tool ordering and caching
+    const config = ProviderConfig.getConfig(
+      input.model.providerID,
+      input.model,
+      input.agent.name,
+      input.userProviderConfig,
+      input.userAgentConfig,
+    )
+    const shouldSortTools = config.promptOrder.sortTools
+
+    // Get registry tools and optionally sort them for cache consistency
+    let registryTools = await ToolRegistry.tools(input.model.providerID)
+    if (shouldSortTools) {
+      registryTools = [...registryTools].sort((a, b) => a.id.localeCompare(b.id))
+    }
+
+    for (const item of registryTools) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
@@ -779,7 +942,13 @@ export namespace SessionPrompt {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools())) {
+    // Get MCP tools and optionally sort them for cache consistency
+    let mcpToolEntries = Object.entries(await MCP.tools())
+    if (shouldSortTools) {
+      mcpToolEntries = mcpToolEntries.sort(([a], [b]) => a.localeCompare(b))
+    }
+
+    for (const [key, item] of mcpToolEntries) {
       if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue

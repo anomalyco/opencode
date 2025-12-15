@@ -3,6 +3,7 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
+import { ProviderConfig } from "./config"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -122,27 +123,90 @@ export namespace ProviderTransform {
     return msgs
   }
 
-  function applyCaching(msgs: ModelMessage[], providerID: string): ModelMessage[] {
+  /**
+   * Build provider options object for cache control based on provider type
+   */
+  function buildCacheProviderOptions(model: Provider.Model): Record<string, Record<string, any>> {
+    return buildCacheOptionsInternal(model)
+  }
+
+  /**
+   * Build cache control options for tools (exported for use in prompt.ts)
+   */
+  export function buildToolCacheOptions(model: Provider.Model): Record<string, Record<string, any>> {
+    return buildCacheOptionsInternal(model)
+  }
+
+  /**
+   * Internal function to build cache control options
+   */
+  function buildCacheOptionsInternal(model: Provider.Model): Record<string, Record<string, any>> {
+    const config = ProviderConfig.getConfig(model.providerID, model)
+
+    if (!config.cache.enabled || !config.cache.property) return {}
+
+    const cacheValue = ProviderConfig.buildCacheControl(model.providerID, config.cache.ttl)
+    if (!Object.keys(cacheValue).length) return {}
+
+    // Build provider options for all supported providers
+    // This ensures cache control works regardless of which provider is being used
+    const result: Record<string, Record<string, any>> = {}
+
+    // Always include anthropic cacheControl for Claude models
+    if (model.api.id.includes("claude") || model.providerID === "anthropic") {
+      result.anthropic = { cacheControl: cacheValue }
+    }
+
+    // Include bedrock cachePoint for Bedrock provider
+    if (model.providerID === "amazon-bedrock" || model.api.npm === "@ai-sdk/amazon-bedrock") {
+      result.bedrock = { cachePoint: cacheValue }
+    }
+
+    // Include openrouter cache_control for OpenRouter
+    if (model.providerID === "openrouter" || model.api.npm === "@openrouter/ai-sdk-provider") {
+      result.openrouter = { cache_control: cacheValue }
+    }
+
+    // Include openaiCompatible for compatible providers
+    if (model.api.npm?.includes("openai-compatible")) {
+      result.openaiCompatible = { cache_control: cacheValue }
+    }
+
+    // Include google-vertex-anthropic
+    if (model.providerID === "google-vertex-anthropic") {
+      result.anthropic = { cacheControl: cacheValue }
+    }
+
+    return result
+  }
+
+  /**
+   * Apply caching based on provider configuration
+   * Uses ProviderConfig to determine caching strategy
+   */
+  function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+    const config = ProviderConfig.getConfig(model.providerID, model)
+
+    // Skip if caching is disabled or provider doesn't support explicit caching
+    if (!config.cache.enabled) return msgs
+    if (config.cache.type !== "explicit-breakpoint" && config.cache.type !== "passthrough") return msgs
+
+    const providerOptions = buildCacheProviderOptions(model)
+    if (!Object.keys(providerOptions).length) return msgs
+
+    // Get messages to cache based on hierarchy
     const system = msgs.filter((msg) => msg.role === "system").slice(0, 2)
     const final = msgs.filter((msg) => msg.role !== "system").slice(-2)
 
-    const providerOptions = {
-      anthropic: {
-        cacheControl: { type: "ephemeral" },
-      },
-      openrouter: {
-        cache_control: { type: "ephemeral" },
-      },
-      bedrock: {
-        cachePoint: { type: "ephemeral" },
-      },
-      openaiCompatible: {
-        cache_control: { type: "ephemeral" },
-      },
-    }
+    // Track breakpoints applied (respect maxBreakpoints)
+    let breakpointsApplied = 0
+    const maxBreakpoints = config.cache.maxBreakpoints
 
     for (const msg of unique([...system, ...final])) {
-      const shouldUseContentOptions = providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
+      if (maxBreakpoints > 0 && breakpointsApplied >= maxBreakpoints) break
+
+      const shouldUseContentOptions =
+        model.providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
@@ -151,6 +215,7 @@ export namespace ProviderTransform {
             ...lastContent.providerOptions,
             ...providerOptions,
           }
+          breakpointsApplied++
           continue
         }
       }
@@ -159,6 +224,7 @@ export namespace ProviderTransform {
         ...msg.providerOptions,
         ...providerOptions,
       }
+      breakpointsApplied++
     }
 
     return msgs
@@ -191,8 +257,11 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model)
-    if (model.providerID === "anthropic" || model.api.id.includes("anthropic") || model.api.id.includes("claude")) {
-      msgs = applyCaching(msgs, model.providerID)
+
+    // Use ProviderConfig to determine if caching should be applied
+    const config = ProviderConfig.getConfig(model.providerID, model)
+    if (config.cache.enabled && ProviderConfig.supportsExplicitCaching(model.providerID)) {
+      msgs = applyCaching(msgs, model)
     }
 
     return msgs
