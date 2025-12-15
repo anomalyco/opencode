@@ -15,7 +15,7 @@ import { Code } from "@opencode-ai/ui/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { SelectDialog } from "@opencode-ai/ui/select-dialog"
+import { DialogFileSelect } from "@/components/dialog-file-select"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -611,40 +611,10 @@ export default function Page() {
           </Show>
         </div>
         <Show when={store.fileSelectOpen}>
-          <SelectDialog
-            defaultOpen
-            title="Select file"
-            placeholder="Search files"
-            emptyMessage="No files found"
-            items={local.file.searchFiles}
-            key={(x) => x}
+          <DialogFileSelect
             onOpenChange={(open) => setStore("fileSelectOpen", open)}
-            onSelect={(x) => {
-              if (x) {
-                return session.layout.openTab("file://" + x)
-              }
-              return undefined
-            }}
-          >
-            {(i) => (
-              <div
-                classList={{
-                  "w-full flex items-center justify-between rounded-md": true,
-                }}
-              >
-                <div class="flex items-center gap-x-2 grow min-w-0">
-                  <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular">
-                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}
-                    </span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-              </div>
-            )}
-          </SelectDialog>
+            onSelect={(path) => session.layout.openTab("file://" + path)}
+          />
         </Show>
       </div>
       <Show when={layout.terminal.opened()}>

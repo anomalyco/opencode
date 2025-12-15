@@ -59,9 +59,7 @@
 
       [data-slot="dialog-header"] {
         display: flex;
-        /* height: 40px; */
-        /* padding: 4px 4px 4px 8px; */
-        padding: 20px;
+        padding: 16px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
@@ -80,7 +78,28 @@
         }
         /* [data-slot="dialog-close-button"] {} */
       }
-      /* [data-slot="dialog-description"] {} */
+
+      [data-slot="dialog-description"] {
+        display: flex;
+        padding: 16px;
+        padding-top: 0;
+        margin-top: -8px;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+        align-self: stretch;
+
+        color: var(--text-base);
+
+        /* text-14-regular */
+        font-family: var(--font-family-sans);
+        font-size: 14px;
+        font-style: normal;
+        font-weight: var(--font-weight-regular);
+        line-height: var(--line-height-large); /* 142.857% */
+        letter-spacing: var(--letter-spacing-normal);
+      }
+
       [data-slot="dialog-body"] {
         width: 100%;
         position: relative;
