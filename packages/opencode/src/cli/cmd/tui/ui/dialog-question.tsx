@@ -152,6 +152,7 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
   function openComment() {
     dialog.push(() => (
       <DialogQuestionComment
+        question={props.item.question}
         value={comment()}
         onSave={(c) => {
           const trimmedComment = c.trim() || undefined
@@ -180,22 +181,8 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
     })),
   )
 
-  // Show default as hint if present
-  const defaultHint = createMemo(() => {
-    if (typeof props.item.default === "string") {
-      const opt = props.item.options?.find((o) => o.value === props.item.default)
-      return opt?.label
-    }
-    return undefined
-  })
-
   return (
     <>
-      <Show when={defaultHint()}>
-        <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-          <text fg={theme.textMuted}>Default: {defaultHint()}</text>
-        </box>
-      </Show>
       <DialogSelect
         title={props.item.question}
         options={selectOptions()}
@@ -210,7 +197,7 @@ function DialogQuestionSelect(props: SingleQuestionProps) {
         ]}
       />
       <Show when={comment()}>
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
           <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
         </box>
       </Show>
@@ -247,6 +234,7 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
   function openComment() {
     dialog.push(() => (
       <DialogQuestionComment
+        question={props.item.question}
         value={comment()}
         onSave={(c) => {
           const trimmedComment = c.trim() || undefined
@@ -281,13 +269,8 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
     })),
   )
 
-  const selectedCount = createMemo(() => getSelectedValues().length)
-
   return (
     <>
-      <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-        <text fg={theme.textMuted}>{selectedCount()} selected</text>
-      </box>
       <DialogSelect
         title={props.item.question}
         options={selectOptions()}
@@ -307,7 +290,7 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
         ]}
       />
       <Show when={comment()}>
-        <box paddingLeft={4} paddingRight={4}>
+        <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
           <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
         </box>
       </Show>
@@ -319,10 +302,10 @@ function DialogQuestionMultiSelect(props: SingleQuestionProps) {
 function DialogQuestionConfirm(props: SingleQuestionProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
-  const [selected, setSelected] = createSignal<boolean | null>(
-    typeof props.currentAnswer?.value === "boolean" ? props.currentAnswer.value : null,
-  )
   const [comment, setComment] = createSignal<string | undefined>(props.currentAnswer?.comment)
+
+  // Find current selection value
+  const currentValue = createMemo(() => props.currentAnswer?.value)
 
   onMount(() => {
     dialog.setSize("medium")
@@ -331,6 +314,7 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
   function openComment() {
     dialog.push(() => (
       <DialogQuestionComment
+        question={props.item.question}
         value={comment()}
         onSave={(c) => {
           const trimmedComment = c.trim() || undefined
@@ -344,118 +328,46 @@ function DialogQuestionConfirm(props: SingleQuestionProps) {
     ))
   }
 
-  function confirmSelection() {
-    if (selected() !== null) {
-      props.onAnswer({ value: selected() })
-      dialog.pop()
-    }
+  function confirmSelection(value: boolean) {
+    props.onAnswer({ value })
+    dialog.pop()
   }
 
-  useKeyboard((evt) => {
-    if (evt.name === "up" || evt.name === "left" || (evt.ctrl && evt.name === "p")) {
-      setSelected(true)
-      evt.preventDefault()
-    } else if (evt.name === "down" || evt.name === "right" || (evt.ctrl && evt.name === "n")) {
-      setSelected(false)
-      evt.preventDefault()
-    } else if (evt.name === "return" && !evt.ctrl) {
-      confirmSelection()
-      evt.preventDefault()
-    } else if (evt.name === "c" && !evt.ctrl) {
-      openComment()
-      evt.preventDefault()
-    } else if (evt.name === "y") {
-      setSelected(true)
-      evt.preventDefault()
-    } else if (evt.name === "n") {
-      setSelected(false)
-      evt.preventDefault()
-    }
-  })
-
-  // Show default as hint
-  const defaultHint = createMemo(() => {
-    if (typeof props.item.default === "boolean") {
-      return props.item.default ? "Yes" : "No"
-    }
-    return undefined
-  })
+  // Yes/No options
+  const options = createMemo<DialogSelectOption<boolean>[]>(() => [
+    {
+      title: "Yes",
+      value: true,
+      onSelect: () => confirmSelection(true),
+    },
+    {
+      title: "No",
+      value: false,
+      onSelect: () => confirmSelection(false),
+    },
+  ])
 
   return (
-    <box gap={1} paddingBottom={1}>
-      <box paddingLeft={4} paddingRight={4}>
-        <box flexDirection="row" justifyContent="space-between">
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            {props.item.question}
-          </text>
-          <text fg={theme.textMuted}>esc</text>
-        </box>
-        <Show when={defaultHint()}>
-          <text fg={theme.textMuted}>Default: {defaultHint()}</text>
-        </Show>
-      </box>
-      <box paddingLeft={3} paddingRight={3} flexDirection="row" gap={2}>
-        <box
-          paddingLeft={2}
-          paddingRight={2}
-          backgroundColor={selected() === true ? theme.primary : undefined}
-          onMouseUp={() => {
-            setSelected(true)
-            confirmSelection()
-          }}
-        >
-          <text
-            fg={selected() === true ? selectedForeground(theme) : theme.text}
-            attributes={selected() === true ? TextAttributes.BOLD : undefined}
-          >
-            Yes
-          </text>
-        </box>
-        <box
-          paddingLeft={2}
-          paddingRight={2}
-          backgroundColor={selected() === false ? theme.primary : undefined}
-          onMouseUp={() => {
-            setSelected(false)
-            confirmSelection()
-          }}
-        >
-          <text
-            fg={selected() === false ? selectedForeground(theme) : theme.text}
-            attributes={selected() === false ? TextAttributes.BOLD : undefined}
-          >
-            No
-          </text>
-        </box>
-      </box>
+    <>
+      <DialogSelect
+        title={props.item.question}
+        options={options()}
+        current={typeof currentValue() === "boolean" ? currentValue() : undefined}
+        hideSearch={true}
+        keybind={[
+          {
+            keybind: { name: "c", ctrl: false, meta: false, shift: false, super: false, leader: false },
+            title: "add comment",
+            onTrigger: () => openComment(),
+          },
+        ]}
+      />
       <Show when={comment()}>
-        <box paddingLeft={4} paddingRight={4}>
-          <text fg={theme.textMuted}>
-            {"\uD83D\uDCAC"} "{truncate(comment()!, 40)}"
-          </text>
+        <box paddingLeft={4} paddingRight={4} paddingTop={1} paddingBottom={1}>
+          <text fg={theme.textMuted}>💬 "{truncate(comment()!, 40)}"</text>
         </box>
       </Show>
-      <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
-        <text>
-          <span style={{ fg: theme.text }}>
-            <b>y/n</b>{" "}
-          </span>
-          <span style={{ fg: theme.textMuted }}>select</span>
-        </text>
-        <text>
-          <span style={{ fg: theme.text }}>
-            <b>enter</b>{" "}
-          </span>
-          <span style={{ fg: theme.textMuted }}>confirm</span>
-        </text>
-        <text>
-          <span style={{ fg: theme.text }}>
-            <b>c</b>{" "}
-          </span>
-          <span style={{ fg: theme.textMuted }}>comment</span>
-        </text>
-      </box>
-    </box>
+    </>
   )
 }
 
@@ -481,13 +393,18 @@ function DialogQuestionText(props: SingleQuestionProps) {
 }
 
 // Comment Dialog (nested)
-function DialogQuestionComment(props: { value?: string; onSave: (comment: string) => void; onCancel: () => void }) {
+function DialogQuestionComment(props: {
+  question: string
+  value?: string
+  onSave: (comment: string) => void
+  onCancel: () => void
+}) {
   const { theme } = useTheme()
 
   return (
     <DialogPrompt
-      title="Add Comment"
-      description={() => <text fg={theme.textMuted}>Add additional context to your answer:</text>}
+      title={props.question}
+      description={() => <text fg={theme.textMuted}>Add comment</text>}
       placeholder="Optional comment..."
       value={props.value}
       onConfirm={(value) => props.onSave(value)}
