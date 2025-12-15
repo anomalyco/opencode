@@ -22,6 +22,7 @@ const Context = createContext<ReturnType<typeof init>>()
 function init() {
   const [store, setStore] = createSignal<
     {
+      id: string
       element: DialogElement
       onClose?: () => void
       owner: Owner
@@ -45,11 +46,13 @@ function init() {
       for (const item of store()) {
         item.onClose?.()
       }
+      const id = Math.random().toString(36)
       setStore([
         {
+          id,
           element: () =>
             runWithOwner(owner, () => (
-              <Show when={result.stack.at(-1)?.owner === owner}>
+              <Show when={result.stack.at(-1)?.id === id}>
                 <Kobalte
                   modal
                   defaultOpen
@@ -79,11 +82,15 @@ function init() {
       setStore([])
     },
   }
+
   return result
 }
 
 export function DialogProvider(props: ParentProps) {
   const ctx = init()
+  createEffect(() => {
+    console.log("store", ctx.stack.length)
+  })
   return (
     <Context.Provider value={ctx}>
       {props.children}
