@@ -222,7 +222,7 @@ export function SessionTurn(
 
               const [store, setStore] = createStore({
                 status: rawStatus(),
-                stepsExpanded: true,
+                stepsExpanded: working(),
                 duration: duration(),
               })
 
