@@ -5,6 +5,7 @@ import { useGlobalSDK } from "./global-sdk"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { makeAudioPlayer } from "@solid-primitives/audio"
 import idleSound from "@opencode-ai/ui/audio/staplebops-01.aac"
+import errorSound from "@opencode-ai/ui/audio/error-3.aac"
 
 type NotificationBase = {
   directory?: string
@@ -29,6 +30,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
   name: "Notification",
   init: () => {
     const idlePlayer = makeAudioPlayer(idleSound)
+    const errorPlayer = makeAudioPlayer(errorSound)
     const globalSDK = useGlobalSDK()
 
     const [store, setStore] = makePersisted(
@@ -65,8 +67,8 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           break
         }
         case "session.error": {
+          errorPlayer.play()
           const session = event.properties.sessionID ?? "global"
-          // errorPlayer.play()
           setStore("list", store.list.length, {
             ...base,
             type: "error",
