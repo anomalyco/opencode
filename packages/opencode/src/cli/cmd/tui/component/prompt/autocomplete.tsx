@@ -363,6 +363,14 @@ export function Autocomplete(props: {
     if (!currentFilter) return mixed
     const result = fuzzysort.go(currentFilter, mixed, {
       keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+      limit: 10,
+      scoreFn: (objResults) => {
+        const displayResult = objResults[0]
+        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+          return objResults.score * 2
+        }
+        return objResults.score
+      },
     })
     return result.map((arr) => arr.obj)
   })
