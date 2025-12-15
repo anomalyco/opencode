@@ -858,7 +858,7 @@ export namespace Provider {
     return info
   }
 
-  export async function getLanguage(model: Model) {
+  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
     const s = await state()
     const key = `${model.providerID}/${model.id}`
     if (s.models.has(key)) return s.models.get(key)!
