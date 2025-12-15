@@ -1,10 +1,10 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createMemo } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { makePersisted } from "@solid-primitives/storage"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, usePrompt } from "@/context/prompt"
+import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, usePrompt, ImageAttachmentPart } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useNavigate, useParams } from "@solidjs/router"
@@ -21,6 +21,9 @@ import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand, formatKeybind } from "@/context/command"
+
+const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
+const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
 
 interface PromptInputProps {
   class?: string
@@ -93,11 +96,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
+    dragging: boolean
+    imageAttachments: ImageAttachmentPart[]
   }>({
     popover: null,
     historyIndex: -1,
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
+    dragging: false,
+    imageAttachments: [],
   })
 
   const MAX_HISTORY = 100
@@ -113,16 +120,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const clonePromptParts = (prompt: Prompt): Prompt =>
-    prompt.map((part) =>
-      part.type === "text"
-        ? { ...part }
-        : {
-            ...part,
-            selection: part.selection ? { ...part.selection } : undefined,
-          },
-    )
+    prompt.map((part) => {
+      if (part.type === "text") return { ...part }
+      if (part.type === "image") return { ...part }
+      return {
+        ...part,
+        selection: part.selection ? { ...part.selection } : undefined,
+      }
+    })
 
-  const promptLength = (prompt: Prompt) => prompt.reduce((len, part) => len + part.content.length, 0)
+  const promptLength = (prompt: Prompt) =>
+    prompt.reduce((len, part) => len + ("content" in part ? part.content.length : 0), 0)
 
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
@@ -162,12 +170,87 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const isFocused = createFocusSignal(() => editorRef)
 
-  const handlePaste = (event: ClipboardEvent) => {
+  const addImageAttachment = async (file: File) => {
+    if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      const attachment: ImageAttachmentPart = {
+        type: "image",
+        id: crypto.randomUUID(),
+        filename: file.name,
+        mime: file.type,
+        dataUrl,
+      }
+      setStore(
+        produce((draft) => {
+          draft.imageAttachments.push(attachment)
+        }),
+      )
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeImageAttachment = (id: string) => {
+    setStore(
+      produce((draft) => {
+        draft.imageAttachments = draft.imageAttachments.filter((a) => a.id !== id)
+      }),
+    )
+  }
+
+  const handlePaste = async (event: ClipboardEvent) => {
+    const clipboardData = event.clipboardData
+    if (!clipboardData) return
+
+    const items = Array.from(clipboardData.items)
+    const imageItems = items.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
+
+    if (imageItems.length > 0) {
+      event.preventDefault()
+      event.stopPropagation()
+      for (const item of imageItems) {
+        const file = item.getAsFile()
+        if (file) await addImageAttachment(file)
+      }
+      return
+    }
+
     event.preventDefault()
     event.stopPropagation()
-    // @ts-expect-error
-    const plainText = (event.clipboardData || window.clipboardData)?.getData("text/plain") ?? ""
+    const plainText = clipboardData.getData("text/plain") ?? ""
     addPart({ type: "text", content: plainText, start: 0, end: 0 })
+  }
+
+  const handleDragOver = (event: DragEvent) => {
+    event.preventDefault()
+    const hasFiles = event.dataTransfer?.types.includes("Files")
+    if (hasFiles) {
+      setStore("dragging", true)
+    }
+  }
+
+  const handleDragLeave = (event: DragEvent) => {
+    const related = event.relatedTarget as Node | null
+    const form = event.currentTarget as HTMLElement
+    if (!related || !form.contains(related)) {
+      setStore("dragging", false)
+    }
+  }
+
+  const handleDrop = async (event: DragEvent) => {
+    event.preventDefault()
+    setStore("dragging", false)
+
+    const files = event.dataTransfer?.files
+    if (!files) return
+
+    for (const file of Array.from(files)) {
+      if (ACCEPTED_FILE_TYPES.includes(file.type)) {
+        await addImageAttachment(file)
+      }
+    }
   }
 
   onMount(() => {
@@ -328,7 +411,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleInput = () => {
     const rawParts = parseFromDOM()
     const cursorPosition = getCursorPosition(editorRef)
-    const rawText = rawParts.map((p) => p.content).join("")
+    const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
 
     const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
     // Slash commands only trigger when / is at the start of input
@@ -358,7 +441,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const cursorPosition = getCursorPosition(editorRef)
     const currentPrompt = prompt.current()
-    const rawText = currentPrompt.map((p) => p.content).join("")
+    const rawText = currentPrompt.map((p) => ("content" in p ? p.content : "")).join("")
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
@@ -424,7 +507,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const addToHistory = (prompt: Prompt) => {
     const text = prompt
-      .map((p) => p.content)
+      .map((p) => ("content" in p ? p.content : ""))
       .join("")
       .trim()
     if (!text) return
@@ -432,7 +515,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const entry = clonePromptParts(prompt)
     const lastEntry = history.entries[0]
     if (lastEntry) {
-      const lastText = lastEntry.map((p) => p.content).join("")
+      const lastText = lastEntry.map((p) => ("content" in p ? p.content : "")).join("")
       if (lastText === text) return
     }
 
@@ -532,8 +615,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
     const currentPrompt = prompt.current()
-    const text = currentPrompt.map((part) => part.content).join("")
-    if (text.trim().length === 0) {
+    const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+    const hasImageAttachments = store.imageAttachments.length > 0
+    if (text.trim().length === 0 && !hasImageAttachments) {
       if (working()) abort()
       return
     }
@@ -555,7 +639,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       (part) => part.type === "file",
     ) as import("@/context/prompt").FileAttachmentPart[]
 
-    const attachmentParts = attachments.map((attachment) => {
+    const fileAttachmentParts = attachments.map((attachment) => {
       const absolute = toAbsolutePath(attachment.path)
       const query = attachment.selection
         ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
@@ -577,9 +661,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     })
 
+    const imageAttachmentParts = store.imageAttachments.map((attachment) => ({
+      type: "file" as const,
+      mime: attachment.mime,
+      url: attachment.dataUrl,
+      filename: attachment.filename,
+    }))
+
     tabs().setActive(undefined)
     editorRef.innerHTML = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
+    setStore("imageAttachments", [])
 
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
@@ -609,7 +701,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           type: "text",
           text,
         },
-        ...attachmentParts,
+        ...fileAttachmentParts,
+        ...imageAttachmentParts,
       ],
     })
   }
@@ -686,12 +779,58 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </Show>
       <form
         onSubmit={handleSubmit}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         classList={{
-          "bg-surface-raised-stronger-non-alpha shadow-xs-border": true,
+          "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-md overflow-clip focus-within:shadow-xs-border": true,
+          "border-icon-info-active border-dashed": store.dragging,
           [props.class ?? ""]: !!props.class,
         }}
       >
+        <Show when={store.dragging}>
+          <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 pointer-events-none">
+            <div class="flex flex-col items-center gap-2 text-text-weak">
+              <Icon name="plus" class="size-8" />
+              <span class="text-14-regular">Drop images or PDFs here</span>
+            </div>
+          </div>
+        </Show>
+        <Show when={store.imageAttachments.length > 0}>
+          <div class="flex flex-wrap gap-2 px-3 pt-3">
+            <For each={store.imageAttachments}>
+              {(attachment) => (
+                <div class="relative group">
+                  <Show
+                    when={attachment.mime.startsWith("image/")}
+                    fallback={
+                      <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
+                        <Icon name="folder" class="size-6 text-text-weak" />
+                      </div>
+                    }
+                  >
+                    <img
+                      src={attachment.dataUrl}
+                      alt={attachment.filename}
+                      class="size-16 rounded-md object-cover border border-border-base"
+                    />
+                  </Show>
+                  <button
+                    type="button"
+                    onClick={() => removeImageAttachment(attachment.id)}
+                    class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-stronger-non-alpha border border-border-base flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-raised-base-hover"
+                  >
+                    <Icon name="close" class="size-3 text-text-weak" />
+                  </button>
+                  <div class="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 rounded-b-md">
+                    <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
         <div class="relative max-h-[240px] overflow-y-auto">
           <div
             ref={(el) => {
@@ -706,7 +845,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "[&>[data-type=file]]:text-icon-info-active": true,
             }}
           />
-          <Show when={!prompt.dirty()}>
+          <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
               Ask anything... "{PLACEHOLDERS[store.placeholder]}"
             </div>
@@ -735,7 +874,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </div>
           <Tooltip
             placement="top"
-            inactive={!session.prompt.dirty() && !session.working()}
+            inactive={!prompt.dirty() && !working()}
             value={
               <Switch>
                 <Match when={working()}>
@@ -755,7 +894,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           >
             <IconButton
               type="submit"
-              disabled={!prompt.dirty() && !working()}
+              disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
               icon={working() ? "stop" : "arrow-up"}
               variant="primary"
               class="h-10 w-8 absolute right-2 bottom-2"

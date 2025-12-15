@@ -55,10 +55,32 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
 
+  function flattenSessions(sessions: Session[]): Session[] {
+    const childrenMap = new Map<string, Session[]>()
+    for (const session of sessions) {
+      if (session.parentID) {
+        const children = childrenMap.get(session.parentID) ?? []
+        children.push(session)
+        childrenMap.set(session.parentID, children)
+      }
+    }
+    const result: Session[] = []
+    function visit(session: Session) {
+      result.push(session)
+      for (const child of childrenMap.get(session.id) ?? []) {
+        visit(child)
+      }
+    }
+    for (const session of sessions) {
+      if (!session.parentID) visit(session)
+    }
+    return result
+  }
+
   const currentSessions = createMemo(() => {
     if (!params.dir) return []
     const directory = base64Decode(params.dir)
-    return globalSync.child(directory)[0].session ?? []
+    return flattenSessions(globalSync.child(directory)[0].session ?? [])
   })
 
   function navigateSessionByOffset(offset: number) {
@@ -98,7 +120,7 @@ export default function Layout(props: ParentProps) {
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
-    const nextProjectSessions = globalSync.child(nextProject.worktree)[0].session ?? []
+    const nextProjectSessions = flattenSessions(globalSync.child(nextProject.worktree)[0].session ?? [])
     if (nextProjectSessions.length === 0) {
       // Navigate to the project's new session page if no sessions
       navigateToProject(nextProject.worktree)
@@ -375,6 +397,98 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  const SessionItem = (props: {
+    session: Session
+    slug: string
+    project: Project
+    depth?: number
+    childrenMap: Map<string, Session[]>
+  }): JSX.Element => {
+    const notification = useNotification()
+    const depth = props.depth ?? 0
+    const children = createMemo(() => props.childrenMap.get(props.session.id) ?? [])
+    const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
+    const notifications = createMemo(() => notification.session.unseen(props.session.id))
+    const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const isWorking = createMemo(
+      () =>
+        props.session.id !== params.id &&
+        globalSync.child(props.project.worktree)[0].session_status[props.session.id]?.type === "busy",
+    )
+    return (
+      <>
+        <div
+          class="group/session relative w-full pr-2 py-1 rounded-md cursor-default transition-colors
+                 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
+          style={{ "padding-left": `${16 + depth * 12}px` }}
+        >
+          <Tooltip placement="right" value={props.session.title} gutter={10}>
+            <A
+              href={`${props.slug}/session/${props.session.id}`}
+              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
+            >
+              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
+                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                  {props.session.title}
+                </span>
+                <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                  <Switch>
+                    <Match when={isWorking()}>
+                      <Spinner class="size-2.5 mr-0.5" />
+                    </Match>
+                    <Match when={hasError()}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
+                    </Match>
+                    <Match when={notifications().length > 0}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
+                    </Match>
+                    <Match when={true}>
+                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                        {Math.abs(updated().diffNow().as("seconds")) < 60
+                          ? "Now"
+                          : updated()
+                              .toRelative({
+                                style: "short",
+                                unit: ["days", "hours", "minutes"],
+                              })
+                              ?.replace(" ago", "")
+                              ?.replace(/ days?/, "d")
+                              ?.replace(" min.", "m")
+                              ?.replace(" hr.", "h")}
+                      </span>
+                    </Match>
+                  </Switch>
+                </div>
+              </div>
+              <Show when={props.session.summary?.files}>
+                <div class="flex justify-between items-center self-stretch">
+                  <span class="text-12-regular text-text-weak">{`${props.session.summary?.files || "No"} file${props.session.summary?.files !== 1 ? "s" : ""} changed`}</span>
+                  <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+                </div>
+              </Show>
+            </A>
+          </Tooltip>
+          <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
+            <Tooltip placement="right" value="Archive session">
+              <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
+            </Tooltip>
+          </div>
+        </div>
+        <For each={children()}>
+          {(child) => (
+            <SessionItem
+              session={child}
+              slug={props.slug}
+              project={props.project}
+              depth={depth + 1}
+              childrenMap={props.childrenMap}
+            />
+          )}
+        </For>
+      </>
+    )
+  }
+
   const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
     const notification = useNotification()
     const sortable = createSortable(props.project.worktree)
@@ -382,6 +496,18 @@ export default function Layout(props: ParentProps) {
     const name = createMemo(() => getFilename(props.project.worktree))
     const [store, setStore] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session ?? [])
+    const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
+    const childSessionsByParent = createMemo(() => {
+      const map = new Map<string, Session[]>()
+      for (const session of sessions()) {
+        if (session.parentID) {
+          const children = map.get(session.parentID) ?? []
+          children.push(session)
+          map.set(session.parentID, children)
+        }
+      }
+      return map
+    })
     const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
@@ -421,78 +547,17 @@ export default function Layout(props: ParentProps) {
               </Button>
               <Collapsible.Content>
                 <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
-                  <For each={sessions()}>
-                    {(session) => {
-                      const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
-                      const notifications = createMemo(() => notification.session.unseen(session.id))
-                      const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-                      const isWorking = createMemo(
-                        () =>
-                          session.id !== params.id &&
-                          globalSync.child(props.project.worktree)[0].session_status[session.id]?.type === "busy",
-                      )
-                      return (
-                        <div
-                          class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
-                                 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
-                        >
-                          <Tooltip placement="right" value={session.title} gutter={10}>
-                            <A
-                              href={`${slug()}/session/${session.id}`}
-                              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
-                            >
-                              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
-                                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                                  {session.title}
-                                </span>
-                                <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-                                  <Switch>
-                                    <Match when={isWorking()}>
-                                      <Spinner class="size-2.5 mr-0.5" />
-                                    </Match>
-                                    <Match when={hasError()}>
-                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
-                                    </Match>
-                                    <Match when={notifications().length > 0}>
-                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
-                                    </Match>
-                                    <Match when={true}>
-                                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                                        {Math.abs(updated().diffNow().as("seconds")) < 60
-                                          ? "Now"
-                                          : updated()
-                                              .toRelative({
-                                                style: "short",
-                                                unit: ["days", "hours", "minutes"],
-                                              })
-                                              ?.replace(" ago", "")
-                                              ?.replace(/ days?/, "d")
-                                              ?.replace(" min.", "m")
-                                              ?.replace(" hr.", "h")}
-                                      </span>
-                                    </Match>
-                                  </Switch>
-                                </div>
-                              </div>
-                              <Show when={session.summary?.files}>
-                                <div class="flex justify-between items-center self-stretch">
-                                  <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                                  <Show when={session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
-                                </div>
-                              </Show>
-                            </A>
-                          </Tooltip>
-                          <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
-                            {/* <IconButton icon="dot-grid" variant="ghost" /> */}
-                            <Tooltip placement="right" value="Archive session">
-                              <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(session)} />
-                            </Tooltip>
-                          </div>
-                        </div>
-                      )
-                    }}
+                  <For each={rootSessions()}>
+                    {(session) => (
+                      <SessionItem
+                        session={session}
+                        slug={slug()}
+                        project={props.project}
+                        childrenMap={childSessionsByParent()}
+                      />
+                    )}
                   </For>
-                  <Show when={sessions().length === 0}>
+                  <Show when={rootSessions().length === 0}>
                     <div
                       class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
                              hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
