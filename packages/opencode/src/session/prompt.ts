@@ -396,6 +396,30 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
+
+        // Add synthetic user message to prevent certain reasoning models from erroring
+        // If we create assistant messages w/ out user ones following mid loop thinking signatures
+        // will be missing and it can cause errors for models like gemini for example
+        const summaryUserMsg: MessageV2.User = {
+          id: Identifier.ascending("message"),
+          sessionID,
+          role: "user",
+          time: {
+            created: Date.now(),
+          },
+          agent: lastUser.agent,
+          model: lastUser.model,
+        }
+        await Session.updateMessage(summaryUserMsg)
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: summaryUserMsg.id,
+          sessionID,
+          type: "text",
+          text: "Summarize the task tool output above and continue with your task.",
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+
         continue
       }
 
