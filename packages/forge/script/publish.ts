@@ -41,12 +41,12 @@ for (const [name] of Object.entries(binaries)) {
     if (process.platform !== "win32") {
       await $`chmod -R 755 .`
     }
-    await $`bun publish --access public --tag ${Script.channel} --provenance`
+    await $`bun publish --access public --tag ${Script.channel}`
   } finally {
     process.chdir(dir)
   }
 }
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel} --provenance`
+await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
 if (!Script.preview) {
   const major = Script.version.split(".")[0]

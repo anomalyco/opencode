@@ -49,3 +49,4 @@ jobs:
           FORGE_VERSION: ${{ inputs.version }}
           FORGE_CHANNEL: latest
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
