@@ -7,6 +7,8 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   init: (input: { onExit?: () => Promise<void> }) => {
     const renderer = useRenderer()
     return async (reason?: any) => {
+      // Reset window title before destroying renderer
+      renderer.setTerminalTitle("")
       renderer.destroy()
       await input.onExit?.()
       if (reason) {

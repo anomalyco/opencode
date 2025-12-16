@@ -1,4 +1,4 @@
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk/client"
+import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { onCleanup } from "solid-js"
@@ -19,7 +19,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     sdk.global.event().then(async (events) => {
       for await (const event of events.stream) {
         // console.log("event", event)
-        emitter.emit(event.directory, event.payload)
+        emitter.emit(event.directory ?? "global", event.payload)
       }
     })
 

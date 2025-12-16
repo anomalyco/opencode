@@ -21,8 +21,11 @@ import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
+import { Log } from "@/util/log"
 
 export namespace ToolRegistry {
+  const log = Log.create({ service: "tool.registry" })
+
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("tool/*.{js,ts}")
@@ -108,27 +111,29 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(providerID: string, _modelID: string) {
+  export async function tools(providerID: string) {
     const tools = await all()
     const result = await Promise.all(
       tools
         .filter((t) => {
-          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          // Enable websearch/codesearch for zen users OR via enable flag
+          if (t.id === "codesearch" || t.id === "websearch") {
+            return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
           return true
         })
-        .map(async (t) => ({
-          id: t.id,
-          ...(await t.init()),
-        })),
+        .map(async (t) => {
+          using _ = log.time(t.id)
+          return {
+            id: t.id,
+            ...(await t.init()),
+          }
+        }),
     )
     return result
   }
 
-  export async function enabled(
-    _providerID: string,
-    _modelID: string,
-    agent: Agent.Info,
-  ): Promise<Record<string, boolean>> {
+  export async function enabled(agent: Agent.Info): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
 
     if (agent.permission.edit === "deny") {

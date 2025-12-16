@@ -19,7 +19,7 @@ export function DialogStatus() {
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
-      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text>No MCP Servers</text>}>
+      <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
           <For each={Object.entries(sync.data.mcp)}>
@@ -28,11 +28,15 @@ export function DialogStatus() {
                 <text
                   flexShrink={0}
                   style={{
-                    fg: {
-                      connected: theme.success,
-                      failed: theme.error,
-                      disabled: theme.textMuted,
-                    }[item.status],
+                    fg: (
+                      {
+                        connected: theme.success,
+                        failed: theme.error,
+                        disabled: theme.textMuted,
+                        needs_auth: theme.warning,
+                        needs_client_registration: theme.error,
+                      } as Record<string, typeof theme.success>
+                    )[item.status],
                   }}
                 >
                   •
@@ -40,10 +44,16 @@ export function DialogStatus() {
                 <text fg={theme.text} wrapMode="word">
                   <b>{key}</b>{" "}
                   <span style={{ fg: theme.textMuted }}>
-                    <Switch>
+                    <Switch fallback={item.status}>
                       <Match when={item.status === "connected"}>Connected</Match>
                       <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
                       <Match when={item.status === "disabled"}>Disabled in configuration</Match>
+                      <Match when={(item.status as string) === "needs_auth"}>
+                        Needs authentication (run: opencode mcp auth {key})
+                      </Match>
+                      <Match when={(item.status as string) === "needs_client_registration" && item}>
+                        {(val) => (val() as { error: string }).error}
+                      </Match>
                     </Switch>
                   </span>
                 </text>

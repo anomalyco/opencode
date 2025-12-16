@@ -15,7 +15,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
-} from "@opencode-ai/sdk"
+} from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
@@ -24,6 +24,7 @@ import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
+import type { Path } from "@opencode-ai/sdk"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -62,6 +63,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
+      path: Path
     }>({
       provider_next: {
         all: [],
@@ -86,6 +88,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       formatter: [],
       vcs: undefined,
+      path: { state: "", config: "", worktree: "", directory: "" },
     })
 
     const sdk = useSDK()
@@ -255,19 +258,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     async function bootstrap() {
       // blocking
       await Promise.all([
-        sdk.client.config.providers({ throwOnError: true }).then((x) => {
+        sdk.client.config.providers({}, { throwOnError: true }).then((x) => {
           batch(() => {
             setStore("provider", x.data!.providers)
             setStore("provider_default", x.data!.default)
           })
         }),
-        sdk.client.provider.list({ throwOnError: true }).then((x) => {
+        sdk.client.provider.list({}, { throwOnError: true }).then((x) => {
           batch(() => {
             setStore("provider_next", x.data!)
           })
         }),
-        sdk.client.app.agents({ throwOnError: true }).then((x) => setStore("agent", x.data ?? [])),
-        sdk.client.config.get({ throwOnError: true }).then((x) => setStore("config", x.data!)),
+        sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", x.data ?? [])),
+        sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", x.data!)),
       ])
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
@@ -286,6 +289,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
             sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
+            sdk.client.path.get().then((x) => setStore("path", x.data!)),
           ]).then(() => {
             setStore("status", "complete")
           })
@@ -333,10 +337,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
           const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ path: { id: sessionID }, throwOnError: true }),
-            sdk.client.session.messages({ path: { id: sessionID }, query: { limit: 100 } }),
-            sdk.client.session.todo({ path: { id: sessionID } }),
-            sdk.client.session.diff({ path: { id: sessionID } }),
+            sdk.client.session.get({ sessionID }, { throwOnError: true }),
+            sdk.client.session.messages({ sessionID, limit: 100 }),
+            sdk.client.session.todo({ sessionID }),
+            sdk.client.session.diff({ sessionID }),
           ])
           setStore(
             produce((draft) => {

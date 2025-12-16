@@ -8,6 +8,8 @@ interface AdvancedGradientOptions {
   defaultColor?: ColorInput
   direction?: "forward" | "backward" | "bidirectional"
   holdFrames?: { start?: number; end?: number }
+  enableFading?: boolean
+  minAlpha?: number
 }
 
 interface ScannerState {
@@ -137,12 +139,15 @@ function calculateColorIndex(
 }
 
 function createKnightRiderTrail(options: AdvancedGradientOptions): ColorGenerator {
-  const { colors, defaultColor } = options
+  const { colors, defaultColor, enableFading = true, minAlpha = 0 } = options
 
   // Use the provided defaultColor if it's an RGBA instance, otherwise convert/default
   // We use RGBA.fromHex for the fallback to ensure we have an RGBA object.
   // Note: If defaultColor is a string, we convert it once here.
   const defaultRgba = defaultColor instanceof RGBA ? defaultColor : RGBA.fromHex((defaultColor as string) || "#000000")
+
+  // Store the base alpha from the inactive factor
+  const baseInactiveAlpha = defaultRgba.a
 
   let cachedFrameIndex = -1
   let cachedState: ScannerState | null = null
@@ -160,22 +165,22 @@ function createKnightRiderTrail(options: AdvancedGradientOptions): ColorGenerato
     // Calculate global fade for inactive dots during hold or movement
     const { isHolding, holdProgress, holdTotal, movementProgress, movementTotal } = state
 
-    let alpha = 1.0
-    if (isHolding && holdTotal > 0) {
-      // Fade out linearly
-      const progress = Math.min(holdProgress / holdTotal, 1)
-      alpha = Math.max(0, 1 - progress)
-    } else if (!isHolding && movementTotal > 0) {
-      // Fade in linearly during movement
-      const progress = Math.min(movementProgress / Math.max(1, movementTotal - 1), 1)
-      alpha = progress
+    let fadeFactor = 1.0
+    if (enableFading) {
+      if (isHolding && holdTotal > 0) {
+        // Fade out linearly to minAlpha
+        const progress = Math.min(holdProgress / holdTotal, 1)
+        fadeFactor = Math.max(minAlpha, 1 - progress * (1 - minAlpha))
+      } else if (!isHolding && movementTotal > 0) {
+        // Fade in linearly from minAlpha during movement
+        const progress = Math.min(movementProgress / Math.max(1, movementTotal - 1), 1)
+        fadeFactor = minAlpha + progress * (1 - minAlpha)
+      }
     }
 
-    // Mutate the alpha of the default RGBA object
-    // This assumes single-threaded, synchronous rendering per frame
-    // where we can modify the state for the current frame.
-    // Since this is run for every char in the frame, setting it repeatedly to the same value is fine.
-    defaultRgba.a = alpha
+    // Combine base inactive alpha with the fade factor
+    // This ensures inactiveFactor is respected while still allowing fading animation
+    defaultRgba.a = baseInactiveAlpha * fadeFactor
 
     if (index === -1) {
       return defaultRgba
@@ -186,10 +191,10 @@ function createKnightRiderTrail(options: AdvancedGradientOptions): ColorGenerato
 }
 
 /**
- * Derives a gradient of tail colors from a single bright color
+ * Derives a gradient of tail colors from a single bright color using alpha falloff
  * @param brightColor The brightest color (center/head of the scanner)
  * @param steps Number of gradient steps (default: 6)
- * @returns Array of RGBA colors from brightest to darkest
+ * @returns Array of RGBA colors with alpha-based trail fade (background-independent)
  */
 export function deriveTrailColors(brightColor: ColorInput, steps: number = 6): RGBA[] {
   const baseRgba = brightColor instanceof RGBA ? brightColor : RGBA.fromHex(brightColor as string)
@@ -197,45 +202,45 @@ export function deriveTrailColors(brightColor: ColorInput, steps: number = 6): R
   const colors: RGBA[] = []
 
   for (let i = 0; i < steps; i++) {
-    // Progressive darkening:
-    // i=0: 100% brightness (original color)
-    // i=1: add slight bloom/glare (lighten)
-    // i=2+: progressively darken
-    let factor: number
+    // Alpha-based falloff with optional bloom effect
+    let alpha: number
+    let brightnessFactor: number
 
     if (i === 0) {
-      factor = 1.0 // Original brightness
+      // Lead position: full brightness and opacity
+      alpha = 1.0
+      brightnessFactor = 1.0
     } else if (i === 1) {
-      factor = 1.2 // Slight bloom/glare effect
+      // Slight bloom/glare effect: brighten color but reduce opacity slightly
+      alpha = 0.9
+      brightnessFactor = 1.15
     } else {
-      // Exponential decay for natural-looking trail fade
-      factor = Math.pow(0.6, i - 1)
+      // Exponential alpha decay for natural-looking trail fade
+      alpha = Math.pow(0.65, i - 1)
+      brightnessFactor = 1.0
     }
 
-    const r = Math.min(1.0, baseRgba.r * factor)
-    const g = Math.min(1.0, baseRgba.g * factor)
-    const b = Math.min(1.0, baseRgba.b * factor)
+    const r = Math.min(1.0, baseRgba.r * brightnessFactor)
+    const g = Math.min(1.0, baseRgba.g * brightnessFactor)
+    const b = Math.min(1.0, baseRgba.b * brightnessFactor)
 
-    colors.push(RGBA.fromValues(r, g, b, 1.0))
+    colors.push(RGBA.fromValues(r, g, b, alpha))
   }
 
   return colors
 }
 
 /**
- * Derives the inactive/default color from a bright color
+ * Derives the inactive/default color from a bright color using alpha
  * @param brightColor The brightest color (center/head of the scanner)
- * @param factor Brightness factor for inactive color (default: 0.2)
- * @returns A much darker version suitable for inactive dots
+ * @param factor Alpha factor for inactive color (default: 0.2, range: 0-1)
+ * @returns The same color with reduced alpha for background-independent dimming
  */
 export function deriveInactiveColor(brightColor: ColorInput, factor: number = 0.2): RGBA {
   const baseRgba = brightColor instanceof RGBA ? brightColor : RGBA.fromHex(brightColor as string)
 
-  const r = baseRgba.r * factor
-  const g = baseRgba.g * factor
-  const b = baseRgba.b * factor
-
-  return RGBA.fromValues(r, g, b, 1.0)
+  // Use the full color brightness but adjust alpha for background-independent dimming
+  return RGBA.fromValues(baseRgba.r, baseRgba.g, baseRgba.b, factor)
 }
 
 export type KnightRiderStyle = "blocks" | "diamonds"
@@ -251,8 +256,12 @@ export interface KnightRiderOptions {
   /** Number of trail steps when using single color (default: 6) */
   trailSteps?: number
   defaultColor?: ColorInput
-  /** Brightness factor for inactive color when using single color (default: 0.2) */
+  /** Alpha factor for inactive color when using single color (default: 0.2, range: 0-1) */
   inactiveFactor?: number
+  /** Enable fading of inactive dots during hold and movement (default: true) */
+  enableFading?: boolean
+  /** Minimum alpha value when fading (default: 0, range: 0-1) */
+  minAlpha?: number
 }
 
 /**
@@ -289,6 +298,8 @@ export function createFrames(options: KnightRiderOptions = {}): string[] {
     defaultColor,
     direction: "bidirectional" as const,
     holdFrames: { start: holdStart, end: holdEnd },
+    enableFading: options.enableFading,
+    minAlpha: options.minAlpha,
   }
 
   // Bidirectional cycle: Forward (width) + Hold End + Backward (width-1) + Hold Start
@@ -349,6 +360,8 @@ export function createColors(options: KnightRiderOptions = {}): ColorGenerator {
     defaultColor,
     direction: "bidirectional" as const,
     holdFrames: { start: holdStart, end: holdEnd },
+    enableFading: options.enableFading,
+    minAlpha: options.minAlpha,
   }
 
   return createKnightRiderTrail(trailOptions)
