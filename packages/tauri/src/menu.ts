@@ -4,7 +4,7 @@ import { type as ostype } from "@tauri-apps/plugin-os"
 import { runUpdater, UPDATER_ENABLED } from "./updater"
 
 export async function createMenu() {
-  if (ostype() !== "macos") return;
+  if (ostype() !== "macos") return
 
   const menu = await Menu.new({
     items: [
