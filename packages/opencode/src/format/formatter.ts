@@ -74,6 +74,24 @@ export const prettier: Info = {
   },
 }
 
+export const oxfmt: Info = {
+  name: "oxfmt",
+  command: [BunProc.which(), "x", "oxfmt", "$FILE"],
+  environment: {
+    BUN_BE_BUN: "1",
+  },
+  extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
+  async enabled() {
+    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.dependencies?.oxfmt) return true
+      if (json.devDependencies?.oxfmt) return true
+    }
+    return false
+  },
+}
+
 export const biome: Info = {
   name: "biome",
   command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
