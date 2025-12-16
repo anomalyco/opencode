@@ -238,6 +238,10 @@
     justify-content: space-between;
     width: 100%;
     gap: 20px;
+
+    [data-expandable="false"] {
+      pointer-events: none;
+    }
   }
 
   [data-slot="session-turn-file-info"] {
@@ -322,6 +326,16 @@
       width: 14px;
       height: 14px;
     }
+  }
+  [data-slot="session-turn-retry-message"] {
+    font-weight: 500;
+    color: var(--syntax-critical);
+  }
+  [data-slot="session-turn-retry-seconds"] {
+    color: var(--text-weak);
+  }
+  [data-slot="session-turn-retry-attempt"] {
+    color: var(--text-weak);
   }
 
   [data-slot="session-turn-details-text"] {

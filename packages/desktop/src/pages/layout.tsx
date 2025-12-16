@@ -413,11 +413,11 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-    const isWorking = createMemo(
-      () =>
-        props.session.id !== params.id &&
-        globalSync.child(props.project.worktree)[0].session_status[props.session.id]?.type === "busy",
-    )
+    const isWorking = createMemo(() => {
+      if (props.session.id === params.id) return false
+      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      return status?.type === "busy" || status?.type === "retry"
+    })
     return (
       <>
         <div

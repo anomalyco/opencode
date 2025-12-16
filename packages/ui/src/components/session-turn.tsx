@@ -3,7 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -49,6 +49,29 @@ export function SessionTurn(
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
+  const retry = createMemo(() => {
+    const s = status()
+    if (s.type !== "retry") return
+    return s
+  })
+  const [retrySeconds, setRetrySeconds] = createSignal(0)
+
+  createEffect(() => {
+    const r = retry()
+    if (!r) {
+      setRetrySeconds(0)
+      return
+    }
+
+    const updateSeconds = () => {
+      const next = r.next
+      if (next) setRetrySeconds(Math.max(0, Math.round((next - Date.now()) / 1000)))
+    }
+    updateSeconds()
+
+    const timer = setInterval(updateSeconds, 1000)
+    onCleanup(() => clearInterval(timer))
+  })
 
   let scrollRef: HTMLDivElement | undefined
   const [state, setState] = createStore({
@@ -300,10 +323,12 @@ export function SessionTurn(
                   {/* Trigger (sticky) */}
                   <div ref={(el) => setState("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
                     <Button
+                      data-expandable={assistantMessages().length > 0}
                       data-slot="session-turn-collapsible-trigger-content"
                       variant="ghost"
                       size="small"
                       onClick={() => {
+                        if (assistantMessages().length === 0) return
                         const next = !store.stepsExpanded
                         setStore("stepsExpanded", next)
                         props.onStepsExpandedChange?.(next)
@@ -313,17 +338,32 @@ export function SessionTurn(
                         <Spinner />
                       </Show>
                       <Switch>
+                        <Match when={retry()}>
+                          <span data-slot="session-turn-retry-message">
+                            {(() => {
+                              const r = retry()
+                              if (!r) return ""
+                              return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                            })()}
+                          </span>
+                          <span data-slot="session-turn-retry-seconds">
+                            · retrying {retrySeconds() > 0 ? `in ${retrySeconds()}s ` : ""}
+                          </span>
+                          <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                        </Match>
                         <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                         <Match when={store.stepsExpanded}>Hide steps</Match>
                         <Match when={!store.stepsExpanded}>Show steps</Match>
                       </Switch>
                       <span>·</span>
                       <span>{store.duration}</span>
-                      <Icon name="chevron-grabber-vertical" size="small" />
+                      <Show when={assistantMessages().length > 0}>
+                        <Icon name="chevron-grabber-vertical" size="small" />
+                      </Show>
                     </Button>
                   </div>
                   {/* Response */}
-                  <Show when={store.stepsExpanded}>
+                  <Show when={store.stepsExpanded && assistantMessages().length > 0}>
                     <div data-slot="session-turn-collapsible-content-inner">
                       <For each={assistantMessages()}>
                         {(assistantMessage) => {
