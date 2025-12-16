@@ -176,7 +176,7 @@ export default function Page() {
       category: "File",
       keybind: "mod+p",
       slash: "open",
-      onSelect: () => dialog.replace(() => <DialogSelectFile />),
+      onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
     // {
     //   id: "theme.toggle",
@@ -245,7 +245,7 @@ export default function Page() {
       category: "Model",
       keybind: "mod+'",
       slash: "model",
-      onSelect: () => dialog.replace(() => <DialogSelectModel />),
+      onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
       id: "agent.cycle",
@@ -320,7 +320,7 @@ export default function Page() {
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if ((document.activeElement as HTMLElement)?.dataset?.component === "terminal") return
-    if (dialog.stack.length > 0) return
+    if (dialog.active) return
 
     if (event.key === "PageUp" || event.key === "PageDown") {
       const scrollContainer = document.querySelector('[data-slot="session-turn-content"]') as HTMLElement
@@ -613,7 +613,7 @@ export default function Page() {
                       icon="plus-small"
                       variant="ghost"
                       iconSize="large"
-                      onClick={() => dialog.replace(() => <DialogSelectFile />)}
+                      onClick={() => dialog.show(() => <DialogSelectFile />)}
                     />
                   </Tooltip>
                 </div>

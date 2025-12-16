@@ -128,7 +128,7 @@ function DialogCommand(props: { options: CommandOption[] }) {
         groupBy={(x) => x.category ?? ""}
         onSelect={(option) => {
           if (option) {
-            dialog.clear()
+            dialog.close()
             option.onSelect?.("palette")
           }
         }}
@@ -174,8 +174,8 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const suspended = () => suspendCount() > 0
 
     const showPalette = () => {
-      if (dialog.stack.length === 0) {
-        dialog.replace(() => <DialogCommand options={options().filter((x) => !x.disabled)} />)
+      if (!dialog.active) {
+        dialog.show(() => <DialogCommand options={options().filter((x) => !x.disabled)} />)
       }
     }
 

@@ -108,20 +108,18 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   async function complete() {
     await globalSDK.client.global.dispose()
-    setTimeout(() => {
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: `${provider().name} connected`,
-        description: `${provider().name} models are now available to use.`,
-      })
-      dialog.replace(() => <DialogSelectModel provider={props.provider} />)
-    }, 1000)
+    dialog.close()
+    showToast({
+      variant: "success",
+      icon: "circle-check",
+      title: `${provider().name} connected`,
+      description: `${provider().name} models are now available to use.`,
+    })
   }
 
   function goBack() {
     if (methods().length === 1) {
-      dialog.replace(() => <DialogSelectProvider />)
+      dialog.show(() => <DialogSelectProvider />)
       return
     }
     if (store.authorization) {
@@ -133,7 +131,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       setStore("methodIndex", undefined)
       return
     }
-    dialog.replace(() => <DialogSelectProvider />)
+    dialog.show(() => <DialogSelectProvider />)
   }
 
   return (
@@ -352,7 +350,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                       })
                       if (result.error) {
                         // TODO: show error
-                        dialog.clear()
+                        dialog.close()
                         return
                       }
                       await complete()
