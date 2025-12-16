@@ -492,7 +492,7 @@ export namespace SessionPrompt {
         system: [
           ...(await SystemPrompt.environment()),
           ...(await SystemPrompt.custom()),
-          ...[lastUser.system].filter(Boolean),
+          ...(lastUser.system ? [lastUser.system] : []),
         ],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
