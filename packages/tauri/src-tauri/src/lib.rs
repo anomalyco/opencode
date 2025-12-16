@@ -49,7 +49,12 @@ fn get_sidecar_port() -> u16 {
         })
 }
 
+fn get_user_shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
+}
+
 fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
+    #[cfg(target_os = "windows")]
     let (mut rx, child) = app
         .shell()
         .sidecar("opencode-cli")
@@ -59,6 +64,20 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
         .args(["serve", &format!("--port={port}")])
         .spawn()
         .expect("Failed to spawn opencode");
+
+    #[cfg(not(target_os = "windows"))]
+    let (mut rx, child) = {
+        let sidecar = app.shell().sidecar("opencode-cli").unwrap();
+        let sidecar_path = sidecar.get_program().to_string_lossy();
+        let shell = get_user_shell();
+        app.shell()
+            .command(&shell)
+            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("OPENCODE_CLIENT", "desktop")
+            .args(["-l", "-c", &format!("{} serve --port={}", sidecar_path, port)])
+            .spawn()
+            .expect("Failed to spawn opencode")
+    };
 
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
