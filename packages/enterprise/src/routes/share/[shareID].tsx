@@ -327,13 +327,13 @@ export default function () {
                               <div
                                 classList={{
                                   "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full": true,
-                                  "mx-auto max-w-146": !wide(),
+                                  "mx-auto max-w-200": !wide(),
                                 }}
                               >
                                 <div
                                   classList={{
                                     "w-full flex justify-start items-start min-w-0": true,
-                                    "max-w-146 mx-auto px-6": wide(),
+                                    "max-w-200 mx-auto px-6": wide(),
                                     "pr-6 pl-18": !wide() && messages().length > 1,
                                     "px-6": !wide() && messages().length === 1,
                                   }}
@@ -356,7 +356,7 @@ export default function () {
                                       container:
                                         "w-full pb-20 " +
                                         (wide()
-                                          ? "max-w-146 mx-auto px-6"
+                                          ? "max-w-200 mx-auto px-6"
                                           : messages().length > 1
                                             ? "pr-6 pl-18"
                                             : "px-6"),
