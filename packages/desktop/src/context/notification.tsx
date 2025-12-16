@@ -68,7 +68,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
           const isChild = match.found && syncStore.session[match.index].parentID
           if (isChild) break
-          idlePlayer?.play()
+          try {
+            idlePlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "turn-complete",
@@ -84,7 +86,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             const isChild = match.found && syncStore.session[match.index].parentID
             if (isChild) break
           }
-          errorPlayer?.play()
+          try {
+            errorPlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "error",
