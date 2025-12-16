@@ -24,6 +24,8 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    stepsExpanded?: boolean
+    onStepsExpandedChange?: (expanded: boolean) => void
     classes?: {
       root?: string
       content?: string
@@ -50,7 +52,6 @@ export function SessionTurn(
 
   let scrollRef: HTMLDivElement | undefined
   const [state, setState] = createStore({
-    contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
     userScrolled: false,
@@ -61,9 +62,12 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef) return
-    setState("scrollY", scrollRef.scrollTop)
     if (state.autoScrolling) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
+    const scrollRoom = scrollHeight - clientHeight
+    if (scrollRoom > 100) {
+      setState("scrollY", scrollTop)
+    }
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
       setState("userScrolled", true)
@@ -80,7 +84,7 @@ export function SessionTurn(
     if (!scrollRef || state.userScrolled || !working() || state.autoScrolling) return
     setState("autoScrolling", true)
     requestAnimationFrame(() => {
-      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "auto" })
+      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "instant" })
       requestAnimationFrame(() => {
         setState("autoScrolling", false)
       })
@@ -92,13 +96,6 @@ export function SessionTurn(
       setState("userScrolled", false)
     }
   })
-
-  createResizeObserver(
-    () => state.contentRef,
-    () => {
-      scrollToBottom()
-    },
-  )
 
   createResizeObserver(
     () => state.stickyTitleRef,
@@ -119,7 +116,7 @@ export function SessionTurn(
   return (
     <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${state.scrollY}px` }}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div ref={(el) => setState("contentRef", el)} onClick={handleInteraction}>
+        <div onClick={handleInteraction}>
           <Show when={message()}>
             {(message) => {
               const assistantMessages = createMemo(() => {
@@ -221,10 +218,21 @@ export function SessionTurn(
                 })
               }
 
+              createEffect(() => {
+                lastPart()
+                scrollToBottom()
+              })
+
               const [store, setStore] = createStore({
                 status: rawStatus(),
-                stepsExpanded: true,
+                stepsExpanded: props.stepsExpanded ?? working(),
                 duration: duration(),
+              })
+
+              createEffect(() => {
+                if (props.stepsExpanded !== undefined) {
+                  setStore("stepsExpanded", props.stepsExpanded)
+                }
               })
 
               createEffect(() => {
@@ -261,8 +269,13 @@ export function SessionTurn(
 
               createEffect((prev) => {
                 const isWorking = working()
+                if (!prev && isWorking) {
+                  setStore("stepsExpanded", true)
+                  props.onStepsExpandedChange?.(true)
+                }
                 if (prev && !isWorking && !state.userScrolled) {
                   setStore("stepsExpanded", false)
+                  props.onStepsExpandedChange?.(false)
                 }
                 return isWorking
               }, working())
@@ -279,7 +292,7 @@ export function SessionTurn(
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
-                          <Match when={working()}>
+                          <Match when={working() && message().id === userMessages().at(-1)?.id}>
                             <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
                           </Match>
                           <Match when={true}>
@@ -299,7 +312,11 @@ export function SessionTurn(
                       data-slot="session-turn-collapsible-trigger-content"
                       variant="ghost"
                       size="small"
-                      onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
+                      onClick={() => {
+                        const next = !store.stepsExpanded
+                        setStore("stepsExpanded", next)
+                        props.onStepsExpandedChange?.(next)
+                      }}
                     >
                       <Show when={working()}>
                         <Spinner />

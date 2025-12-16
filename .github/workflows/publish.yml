@@ -21,7 +21,7 @@ on:
         required: false
         type: string
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
 
 permissions:
   id-token: write
@@ -109,6 +109,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          ref: ${{ needs.publish.outputs.tagName }}
 
       - uses: apple-actions/import-codesign-certs@v2
         if: ${{ runner.os == 'macOS' }}
@@ -164,12 +165,18 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
+          OPENCODE_RELEASE_TAG: ${{ needs.publish.outputs.tagName }}
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
-      - run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage
+      - name: Install tauri-cli from portable appimage branch
         if: contains(matrix.settings.host, 'ubuntu')
+        run: |
+          cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage --force
+          echo "Installed tauri-cli version:"
+          cargo tauri --version
 
       - name: Build and upload artifacts
+        timeout-minutes: 20
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -191,3 +198,19 @@ jobs:
           releaseId: ${{ needs.publish.outputs.releaseId }}
           tagName: ${{ needs.publish.outputs.tagName }}
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
+          releaseDraft: true
+
+  publish-release:
+    needs:
+      - publish
+      - publish-tauri
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.publish.outputs.tagName }}
+
+      - run: gh release edit ${{ steps.publish.outputs.tagName }} --draft=false
+        env:
+          GH_TOKEN: ${{ github.token }}

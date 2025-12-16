@@ -218,7 +218,9 @@ function App() {
   let continued = false
   createEffect(() => {
     if (continued || sync.status !== "complete" || !args.continue) return
-    const match = sync.data.session.find((x) => x.parentID === undefined)?.id
+    const match = sync.data.session
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
       route.navigate({ type: "session", sessionID: match })
@@ -293,6 +295,24 @@ function App() {
       category: "Agent",
       onSelect: () => {
         local.model.cycle(-1)
+      },
+    },
+    {
+      title: "Favorite cycle",
+      value: "model.cycle_favorite",
+      keybind: "model_cycle_favorite",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(1)
+      },
+    },
+    {
+      title: "Favorite cycle reverse",
+      value: "model.cycle_favorite_reverse",
+      keybind: "model_cycle_favorite_reverse",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(-1)
       },
     },
     {
