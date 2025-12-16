@@ -63,13 +63,13 @@ For a deeper dive, see Viv Trivedy's great article: [Agents Should Be More Opini
 
 ## Managing Agents
 
+> Note: Forge has install instructions for all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents), but note that not all of them are running yet. Please file an issue for any agents you have trouble running!
+
 To view available agents, run:
 
 ```sh
 forge agents
 ```
-
-> Forge has install instructions for all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents), but note that not all of them are running yet. Please file an issue for any agents you have trouble running!
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) (via Zed's SDK adapter)
 - [Codex CLI](https://developers.openai.com/codex/cli) (via Zed's adapter)
@@ -78,7 +78,6 @@ forge agents
 - [Code Assistant](https://github.com/stippi/code-assistant?tab=readme-ov-file#configuration)
 - [fast-agent](https://fast-agent.ai/acp)
 - [Goose](https://block.github.io/goose/docs/guides/acp-clients)
-- [JetBrains Junie](https://www.jetbrains.com/junie/) (coming soon)
 - [Kimi CLI](https://github.com/MoonshotAI/kimi-cli)
 - [LLMling-Agent](https://phil65.github.io/llmling-agent/advanced/acp_integration/)
 - [Mistral Vibe](https://github.com/mistralai/mistral-vibe)
