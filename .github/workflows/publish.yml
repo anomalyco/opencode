@@ -41,6 +41,10 @@ jobs:
           git config --global user.email "forge@forge-agents.dev"
           git config --global user.name "forge-bot"
 
+      - name: Setup npm authentication
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
+
       - name: Publish
         run: |
           ./script/publish.ts

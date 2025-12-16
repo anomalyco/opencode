@@ -144,24 +144,26 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
               <!-- Single Command Block -->
               <div class="space-y-2 max-w-lg mx-auto mt-10">
                 <div class="text-xs text-zinc-400 mb-1 text-center">
-                  Install forge and run&nbsp;<ExecutableShimmer
+                  Install forge
+                  <!-- Install forge and run&nbsp;<ExecutableShimmer
                     id="executable-shimmer-mobile"
                     initialAgents={[{ name: 'claude', color: '#da7756' }]}
                     className="font-mono"
                     client:load
-                  />
+                  /> -->
                 </div>
                 <div class="command-block">
-                  <div class="command-container relative px-3 py-2 bg-zinc-900 rounded-lg border border-zinc-700 group">
-                    <div class="flex items-start justify-between gap-3">
+                  <div class="command-container relative px-3 py-1.5 bg-zinc-900 rounded-lg border border-zinc-700 group">
+                    <div class="flex items-center justify-between gap-3">
                       <div
                         id="install-run-command"
                         class="command-text text-xs font-mono text-zinc-500 select-all break-words min-w-0 flex-1"
                       >
-                        curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh && forge <span
+                        curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh
+                        <!-- && forge <span
                           id="agent-name-mobile"
                           class="text-zinc-300">claude</span
-                        >
+                        > -->
                       </div>
                       <button
                         class="copy-btn rounded-lg p-1.5 transition-all duration-200 flex-shrink-0 flex items-center hover:bg-zinc-800"
@@ -191,7 +193,7 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
                 </div>
 
                 <!-- Agent chips under the command -->
-                <div class="w-full overflow-x-auto scrollbar-hide">
+                <!-- <div class="w-full overflow-x-auto scrollbar-hide">
                   <div class="flex gap-1.5 min-w-max justify-center">
                     {
                       allAgents.map((agentCommand) => {
@@ -219,7 +221,7 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
                       })
                     }
                   </div>
-                </div>
+                </div> -->
               </div>
             </div>
           </div>
@@ -338,24 +340,26 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
             <!-- Single Command Block -->
             <div class="space-y-2 mt-6">
               <div class="text-xs text-zinc-400 mb-1">
-                Install forge and run&nbsp;<ExecutableShimmer
+                Install forge
+                <!-- Install forge and run&nbsp;<ExecutableShimmer
                   id="executable-shimmer-desktop"
                   initialAgents={[{ name: 'claude', color: '#da7756' }]}
                   className="font-mono"
                   client:load
-                />
+                /> -->
               </div>
               <div class="command-block">
-                <div class="command-container relative px-3 py-2 bg-zinc-900 rounded-lg border border-zinc-700 group">
-                  <div class="flex items-start justify-between gap-3">
+                <div class="command-container relative px-3 py-1.5 bg-zinc-900 rounded-lg border border-zinc-700 group">
+                  <div class="flex items-center justify-between gap-3">
                     <div
                       id="install-run-command-desktop"
                       class="command-text text-xs font-mono text-zinc-500 select-all break-words min-w-0 flex-1"
                     >
-                      curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh && forge <span
+                      curl -fsSL https://<span class="text-zinc-300">forgeagents.dev/install</span> | sh
+                      <!-- && forge <span
                         id="agent-name-desktop"
                         class="text-zinc-300">claude</span
-                      >
+                      > -->
                     </div>
                     <button
                       class="copy-btn rounded-lg p-1.5 transition-all duration-200 flex-shrink-0 flex items-center hover:bg-zinc-800"
@@ -385,7 +389,7 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
               </div>
 
               <!-- Agent chips under the command -->
-              <div class="w-full overflow-x-auto scrollbar-hide">
+              <!-- <div class="w-full overflow-x-auto scrollbar-hide">
                 <div class="flex gap-1.5 min-w-max">
                   {
                     allAgents.map((agentCommand) => {
@@ -413,7 +417,7 @@ const getAgentByCommand = (command: string) => agents.find((agent) => agent.comm
                     })
                   }
                 </div>
-              </div>
+              </div> -->
             </div>
           </div>
 

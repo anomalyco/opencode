@@ -31,10 +31,30 @@ export interface ACPAgentDefinition {
 }
 
 /**
- * All available ACP agents, sorted by name for consistent ordering.
+ * All available ACP agents, with priority agents first (Claude, Codex, Gemini),
+ * followed by the rest alphabetically.
  * Agent definitions are imported from agent-definitions.ts.
  */
-export const ACP_AGENTS: ACPAgentDefinition[] = [...AGENT_DEFINITIONS].sort((a, b) => a.name.localeCompare(b.name))
+const PRIORITY_ORDER = ["Claude Code ACP", "Codex ACP", "Gemini CLI"]
+
+export const ACP_AGENTS: ACPAgentDefinition[] = [...AGENT_DEFINITIONS].sort((a, b) => {
+  const aIndex = PRIORITY_ORDER.indexOf(a.name)
+  const bIndex = PRIORITY_ORDER.indexOf(b.name)
+
+  // If both are priority agents, sort by their priority order
+  if (aIndex !== -1 && bIndex !== -1) {
+    return aIndex - bIndex
+  }
+
+  // If only a is a priority agent, it comes first
+  if (aIndex !== -1) return -1
+
+  // If only b is a priority agent, it comes first
+  if (bIndex !== -1) return 1
+
+  // Neither are priority agents, sort alphabetically
+  return a.name.localeCompare(b.name)
+})
 
 export function getAgent(name: string): ACPAgentDefinition | undefined {
   return ACP_AGENTS.find((agent) => agent.name === name)

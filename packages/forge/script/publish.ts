@@ -30,6 +30,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
       },
       version: Script.version,
       optionalDependencies: binaries,
+      preferGlobal: true,
     },
     null,
     2,

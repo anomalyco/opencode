@@ -407,9 +407,9 @@ export const AGENT_DEFINITIONS: ACPAgentDefinition[] = [
   {
     name: "Mistral Vibe",
     description: "CLI coding assistant powered by Mistral's models",
-    command: "vibe",
-    acpStartupArgs: ["--acp"],
-    args: ["--acp"],
+    command: "vibe-acp",
+    acpStartupArgs: [],
+    args: [],
     installGuide: "https://github.com/mistralai/mistral-vibe",
     color: "#FA520F",
     installCommands: {
@@ -542,21 +542,21 @@ export const AGENT_DEFINITIONS: ACPAgentDefinition[] = [
     command: "openhands",
     acpStartupArgs: ["acp"],
     args: ["acp"],
-    installGuide: "https://docs.openhands.dev/openhands/usage/run-openhands/acp",
+    installGuide: "https://github.com/OpenHands/OpenHands-CLI",
     color: "#feff8c",
     installCommands: {
       unix: [
         {
           method: "uv",
-          command: "uv tool install openhands",
-          description: "Install OpenHands CLI via uv (requires LLM configuration)",
+          command: "uv tool install git+https://github.com/OpenHands/OpenHands-CLI",
+          description: "Install OpenHands CLI from GitHub (not available on PyPI)",
         },
       ],
       windows: [
         {
           method: "uv",
-          command: "uv tool install openhands",
-          description: "Install OpenHands CLI via uv (requires LLM configuration)",
+          command: "uv tool install git+https://github.com/OpenHands/OpenHands-CLI",
+          description: "Install OpenHands CLI from GitHub (not available on PyPI)",
         },
       ],
     },
