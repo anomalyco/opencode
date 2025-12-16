@@ -154,8 +154,9 @@ if (!Script.preview) {
   await $`git tag -f latest`
   await $`git fetch origin`
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
-  await $`git push origin HEAD --tags --no-verify --force-with-lease`
-  await $`git push origin latest --force`
+  await $`git push origin HEAD --no-verify --force-with-lease`
+  await $`git push origin v${Script.version} --no-verify`
+  await $`git push origin latest --no-verify --force`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
   const release = await $`gh release view v${Script.version} --json id,tagName`.json()
