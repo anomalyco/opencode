@@ -48,7 +48,7 @@ export function SessionTurn(
         type: "idle",
       },
   )
-  const working = createMemo(() => status()?.type !== "idle")
+  const working = createMemo(() => status()?.type !== "idle" && message()?.id === userMessages().at(-1)?.id)
   const retry = createMemo(() => {
     const s = status()
     if (s.type !== "retry") return
@@ -306,7 +306,7 @@ export function SessionTurn(
                     <div data-slot="session-turn-message-header">
                       <div data-slot="session-turn-message-title">
                         <Switch>
-                          <Match when={working() && message().id === userMessages().at(-1)?.id}>
+                          <Match when={working()}>
                             <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
                           </Match>
                           <Match when={true}>
