@@ -17,7 +17,7 @@
   display: none;
 }
 
-@container (min-width: 84.75rem) {
+@container (min-width: 72rem) {
   [data-slot="session-message-rail-compact"] {
     display: none;
   }
@@ -32,7 +32,7 @@
 
 [data-component="session-message-rail"][data-wide] [data-slot="session-message-rail-full"] {
   margin-top: 0.125rem;
-  left: calc(((100% - min(100%, 800px)) / 2) - 1.5rem);
+  left: calc(((100% - min(100%, 36.5rem)) / 2) - 1.5rem);
   transform: translateX(-100%);
 }
 
