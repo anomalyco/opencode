@@ -1,5 +1,5 @@
-import { exists, realpath } from "fs/promises"
 import { realpathSync } from "fs"
+import { exists } from "fs/promises"
 import { dirname, join, normalize, relative } from "path"
 import { tmpdir } from "os"
 
@@ -21,6 +21,20 @@ export namespace Filesystem {
     if (contains("/tmp", normalized)) return true
     if (tmpDirResolved && contains(tmpDirResolved, normalized)) return true
     return false
+  }
+
+  /**
+   * On Windows, normalize a path to its canonical casing using the filesystem.
+   * This is needed because Windows paths are case-insensitive but LSP servers
+   * may return paths with different casing than what we send them.
+   */
+  export function normalizePath(p: string): string {
+    if (process.platform !== "win32") return p
+    try {
+      return realpathSync.native(p)
+    } catch {
+      return p
+    }
   }
   export function overlaps(a: string, b: string) {
     const relA = relative(a, b)
