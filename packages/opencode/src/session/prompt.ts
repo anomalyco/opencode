@@ -683,6 +683,7 @@ export namespace SessionPrompt {
       tools: input.tools,
       agent: agent.name,
       model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      system: input.system,
     }
 
     const parts = await Promise.all(
