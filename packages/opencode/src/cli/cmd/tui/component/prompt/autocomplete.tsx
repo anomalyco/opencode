@@ -383,23 +383,21 @@ export function Autocomplete(props: {
   function move(direction: -1 | 1) {
     if (!store.visible) return
     if (!options().length) return
-    let next = store.selected + direction  
+    let next = store.selected + direction
     if (next < 0) next = options().length - 1
     if (next >= options().length) next = 0
     moveTo(next)
   }
 
- function moveTo(next: number) {
-    setStore("selected", next);
-    if (!scroll) return;
-    
-    const viewportHeight = Math.min(height(), options().length);
-    const scrollBottom = scroll.scrollTop + viewportHeight;
-    
+  function moveTo(next: number) {
+    setStore("selected", next)
+    if (!scroll) return
+    const viewportHeight = Math.min(height(), options().length)
+    const scrollBottom = scroll.scrollTop + viewportHeight
     if (next < scroll.scrollTop) {
-      scroll.scrollBy(next - scroll.scrollTop);
+      scroll.scrollBy(next - scroll.scrollTop)
     } else if (next + 1 > scrollBottom) {
-      scroll.scrollBy((next + 1) - scrollBottom);
+      scroll.scrollBy((next + 1) - scrollBottom)
     }
   }
  
