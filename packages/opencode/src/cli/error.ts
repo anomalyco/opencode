@@ -4,9 +4,11 @@ import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
 import { UI } from "./ui"
 
+const SAFE_MODE_HINT = "\n\nTip: Run 'opencode --safe' to start without loading any config files."
+
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
-    return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
+    return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.` + SAFE_MODE_HINT
   if (Provider.ModelNotFoundError.isInstance(input)) {
     const { providerID, modelID, suggestions } = input.data
     return [
@@ -17,23 +19,24 @@ export function FormatError(input: unknown) {
     ].join("\n")
   }
   if (Provider.InitError.isInstance(input)) {
-    return `Failed to initialize provider "${input.data.providerID}". Check credentials and configuration.`
+    return `Failed to initialize provider "${input.data.providerID}". Check credentials and configuration.` + SAFE_MODE_HINT
   }
   if (Config.JsonError.isInstance(input)) {
     return (
-      `Config file at ${input.data.path} is not valid JSON(C)` + (input.data.message ? `: ${input.data.message}` : "")
+      `Config file at ${input.data.path} is not valid JSON(C)` + (input.data.message ? `: ${input.data.message}` : "") + SAFE_MODE_HINT
     )
   }
   if (Config.ConfigDirectoryTypoError.isInstance(input)) {
-    return `Directory "${input.data.dir}" in ${input.data.path} is not valid. Rename the directory to "${input.data.suggestion}" or remove it. This is a common typo.`
+    return `Directory "${input.data.dir}" in ${input.data.path} is not valid. Rename the directory to "${input.data.suggestion}" or remove it. This is a common typo.` + SAFE_MODE_HINT
   }
   if (ConfigMarkdown.FrontmatterError.isInstance(input)) {
-    return `Failed to parse frontmatter in ${input.data.path}:\n${input.data.message}`
+    return `Failed to parse frontmatter in ${input.data.path}:\n${input.data.message}` + SAFE_MODE_HINT
   }
   if (Config.InvalidError.isInstance(input))
     return [
       `Config file at ${input.data.path} is invalid` + (input.data.message ? `: ${input.data.message}` : ""),
       ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
+      SAFE_MODE_HINT,
     ].join("\n")
 
   if (UI.CancelledError.isInstance(input)) return ""

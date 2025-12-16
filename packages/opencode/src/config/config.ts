@@ -33,7 +33,30 @@ export namespace Config {
     return merged
   }
 
+  /**
+   * Returns a minimal safe configuration when running in safe mode.
+   * This bypasses all user configuration files to allow recovery from bad configs.
+   */
+  function getMinimalSafeConfig(): Info {
+    return {
+      keybinds: Info.shape.keybinds.parse({}),
+      agent: {},
+      mode: {},
+      plugin: [],
+      username: os.userInfo().username,
+    }
+  }
+
   export const state = Instance.state(async () => {
+    // Safe mode: bypass all user configuration
+    if (Flag.OPENCODE_SAFE_MODE) {
+      log.info("safe mode enabled: using minimal configuration")
+      return {
+        config: getMinimalSafeConfig(),
+        directories: [],
+      }
+    }
+
     const auth = await Auth.all()
     let result = await global()
 

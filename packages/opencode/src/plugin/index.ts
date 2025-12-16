@@ -12,6 +12,15 @@ export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
   const state = Instance.state(async () => {
+    // Safe mode: skip all plugin loading
+    if (Flag.OPENCODE_SAFE_MODE) {
+      log.info("safe mode enabled: skipping plugin loading")
+      return {
+        hooks: [],
+        input: undefined as unknown as PluginInput,
+      }
+    }
+
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility

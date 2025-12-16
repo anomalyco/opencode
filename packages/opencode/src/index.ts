@@ -57,7 +57,16 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("safe", {
+    describe: "start in safe mode (ignore all user configuration)",
+    type: "boolean",
+    alias: "s",
+  })
   .middleware(async (opts) => {
+    // Set safe mode env var before any config loading
+    if (opts.safe) {
+      process.env.OPENCODE_SAFE_MODE = "true"
+    }
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),

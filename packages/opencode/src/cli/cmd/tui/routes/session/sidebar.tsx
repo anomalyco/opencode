@@ -10,6 +10,7 @@ import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
+import { Flag } from "@/flag/flag"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -282,6 +283,22 @@ export function Sidebar(props: { sessionID: string }) {
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
+            </box>
+          </Show>
+          <Show when={Flag.OPENCODE_SAFE_MODE}>
+            <box
+              backgroundColor={theme.warning}
+              paddingTop={1}
+              paddingBottom={1}
+              paddingLeft={2}
+              paddingRight={2}
+            >
+              <text fg={theme.background}>
+                <b>Safe Mode</b>
+              </text>
+              <text fg={theme.background}>
+                Config files are not loaded
+              </text>
             </box>
           </Show>
           <text>
