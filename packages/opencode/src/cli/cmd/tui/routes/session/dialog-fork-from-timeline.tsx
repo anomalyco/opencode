@@ -49,5 +49,5 @@ export function DialogForkFromTimeline(props: {
     return result
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork Timeline" options={options()} />
+  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork from message" options={options()} />
 }
