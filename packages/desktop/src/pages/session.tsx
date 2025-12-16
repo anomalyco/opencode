@@ -630,7 +630,7 @@ export default function Page() {
                 <div
                   classList={{
                     "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
-                    "max-w-146 mx-auto": !wide(),
+                    "max-w-[800px] mx-auto": !wide(),
                   }}
                 >
                   <Switch>
@@ -654,7 +654,7 @@ export default function Page() {
                               container:
                                 "w-full " +
                                 (wide()
-                                  ? "max-w-146 mx-auto px-6"
+                                  ? "max-w-[800px] mx-auto px-6"
                                   : visibleUserMessages().length > 1
                                     ? "pr-6 pl-18"
                                     : "px-6"),
@@ -690,7 +690,7 @@ export default function Page() {
                     </Match>
                   </Switch>
                   <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
-                    <div class="w-full max-w-146 px-6">
+                    <div class="w-full max-w-[800px] px-6">
                       <PromptInput
                         ref={(el) => {
                           inputRef = el
@@ -803,7 +803,7 @@ export default function Page() {
           </DragOverlay>
         </DragDropProvider>
         <Show when={tabs().active()}>
-          <div class="absolute inset-x-0 px-6 max-w-146 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+          <div class="absolute inset-x-0 px-6 max-w-[800px] flex flex-col justify-center items-center z-50 mx-auto bottom-8">
             <PromptInput
               ref={(el) => {
                 inputRef = el
