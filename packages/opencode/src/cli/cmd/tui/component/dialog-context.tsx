@@ -1,15 +1,14 @@
-import { createMemo, createSignal, For } from "solid-js"
+import { createMemo, For } from "solid-js"
+import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
 import { useLocal } from "@tui/context/local"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 
 interface ContextItem {
-  type: "system" | "instruction" | "file" | "message"
+  type: "system" | "instruction" | "message"
   name: string
   tokens: number
-  content?: string
-  enabled: boolean
 }
 
 export function DialogContext(props: { sessionID: string }) {
@@ -19,160 +18,126 @@ export function DialogContext(props: { sessionID: string }) {
 
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
-  // Calculate context breakdown
-  const contextItems = createMemo((): ContextItem[] => {
-    const items: ContextItem[] = []
+  const contextBreakdown = createMemo(() => {
+    const breakdown: ContextItem[] = []
 
-    // Get last assistant message for token info
+    // Get last assistant message for actual token info
     const lastAssistant = messages().findLast(
       (x) => x.role === "assistant" && (x as AssistantMessage).tokens?.output > 0
     ) as AssistantMessage | undefined
 
-    // System prompt estimate (varies by provider)
     const model = local.model.current()
+
+    // System prompt (varies by provider)
     if (model) {
-      items.push({
+      breakdown.push({
         type: "system",
-        name: `System Prompt (${model.providerID})`,
-        tokens: 8000, // Approximate
-        enabled: true,
+        name: `System prompt (${model.providerID})`,
+        tokens: lastAssistant?.tokens?.cache?.write ?? 8000,
       })
     }
 
-    // Environment context
-    items.push({
+    // Environment & file tree
+    breakdown.push({
       type: "system",
-      name: "Environment & File Tree",
-      tokens: 2000, // Approximate
-      enabled: true,
+      name: "Environment & file tree",
+      tokens: 2000,
     })
 
-    // Instructions files
-    const instructionFiles = [
-      "~/context/PROMPT_TEMPLATE.md",
-      "~/context/README.md",
-      "AGENTS.md",
-      "CLAUDE.md",
-    ]
-    for (const file of instructionFiles) {
-      items.push({
-        type: "instruction",
-        name: file,
-        tokens: 1500, // Approximate per file
-        enabled: true,
-      })
-    }
+    // Instructions from config
+    breakdown.push({
+      type: "instruction",
+      name: "Custom instructions",
+      tokens: 4000,
+    })
 
-    // Session messages
-    let messageTokens = 0
+    // Conversation history
+    let conversationTokens = 0
     for (const msg of messages()) {
       if (msg.role === "assistant") {
         const assistant = msg as AssistantMessage
-        messageTokens += assistant.tokens?.input ?? 0
-        messageTokens += assistant.tokens?.output ?? 0
+        conversationTokens += assistant.tokens?.input ?? 0
       }
     }
-    if (messageTokens > 0) {
-      items.push({
+
+    if (conversationTokens > 0) {
+      breakdown.push({
         type: "message",
-        name: `Conversation History (${messages().length} messages)`,
-        tokens: messageTokens,
-        enabled: true,
+        name: `Messages (${messages().length} total)`,
+        tokens: conversationTokens,
       })
     }
 
-    return items
+    return breakdown
   })
 
   const totalTokens = createMemo(() => {
-    return contextItems().reduce((sum, item) => sum + (item.enabled ? item.tokens : 0), 0)
+    return contextBreakdown().reduce((sum, item) => sum + item.tokens, 0)
   })
 
-  const [filter, setFilter] = createSignal("")
-
-  const filteredItems = createMemo(() => {
-    const f = filter().toLowerCase()
-    if (!f) return contextItems()
-    return contextItems().filter((item) => item.name.toLowerCase().includes(f))
+  const context = createMemo(() => {
+    const last = messages().findLast(
+      (x) => x.role === "assistant" && (x as AssistantMessage).tokens?.output > 0
+    ) as AssistantMessage | undefined
+    if (!last) return undefined
+    const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    return {
+      tokens: totalTokens(),
+      percentage: model?.limit.context ? Math.round((totalTokens() / model.limit.context) * 100) : null,
+    }
   })
 
   return (
-    <box
-      flexDirection="column"
-      borderStyle="rounded"
-      borderColor={theme.border}
-      backgroundColor={theme.backgroundPanel}
-      padding={1}
-      gap={1}
-      width="80%"
-      height="70%"
-    >
+    <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          Context Preview
+        </text>
+        <text fg={theme.textMuted}>esc</text>
+      </box>
+
+      <box>
         <text fg={theme.text}>
-          <b>Context Preview</b>
+          <b>Total Context</b>
         </text>
         <text fg={theme.textMuted}>
-          Total: {totalTokens().toLocaleString()} tokens
+          {context()?.tokens.toLocaleString() ?? "0"} tokens
+          {context()?.percentage ? ` (${context()?.percentage}% of limit)` : ""}
         </text>
       </box>
 
-      <box flexDirection="row" gap={1}>
-        <text fg={theme.textMuted}>Filter:</text>
-        <text fg={theme.text}>{filter() || "(type to filter)"}</text>
-      </box>
-
-      <box height={1} />
-
-      <scrollbox flexGrow={1}>
-        <box flexDirection="column" gap={1}>
-          <For each={filteredItems()}>
-            {(item) => (
-              <box
-                flexDirection="row"
-                justifyContent="space-between"
-                paddingLeft={1}
-                paddingRight={1}
-              >
-                <box flexDirection="row" gap={1}>
-                  <text
-                    fg={
-                      item.type === "system"
-                        ? theme.primary
-                        : item.type === "instruction"
-                        ? theme.warning
-                        : item.type === "file"
-                        ? theme.success
-                        : theme.textMuted
-                    }
-                  >
-                    {item.type === "system"
-                      ? "[SYS]"
+      <box>
+        <text fg={theme.text}>
+          <b>Breakdown</b>
+        </text>
+        <For each={contextBreakdown()}>
+          {(item) => (
+            <box flexDirection="row" justifyContent="space-between">
+              <box flexDirection="row" gap={1}>
+                <text
+                  flexShrink={0}
+                  fg={
+                    item.type === "system"
+                      ? theme.success
                       : item.type === "instruction"
-                      ? "[INS]"
-                      : item.type === "file"
-                      ? "[FILE]"
-                      : "[MSG]"}
-                  </text>
-                  <text fg={item.enabled ? theme.text : theme.textMuted}>
-                    {item.name}
-                  </text>
-                </box>
-                <text fg={theme.textMuted}>
-                  {item.tokens.toLocaleString()} tokens
+                      ? theme.warning
+                      : theme.primary
+                  }
+                >
+                  •
                 </text>
+                <text fg={theme.text}>{item.name}</text>
               </box>
-            )}
-          </For>
-        </box>
-      </scrollbox>
+              <text fg={theme.textMuted}>{item.tokens.toLocaleString()}</text>
+            </box>
+          )}
+        </For>
+      </box>
 
-      <box height={1} />
-
-      <box flexDirection="row" justifyContent="space-between">
+      <box paddingTop={1}>
         <text fg={theme.textMuted}>
-          [SYS] System | [INS] Instructions | [FILE] Files | [MSG] Messages
+          This is an estimate of the context sent to the model. Actual token count may vary based on tokenization.
         </text>
-        <text fg={theme.textMuted}>Press Esc to close</text>
       </box>
     </box>
   )
