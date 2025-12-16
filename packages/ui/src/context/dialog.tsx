@@ -1,9 +1,7 @@
 import {
   createContext,
   createEffect,
-  createMemo,
   createSignal,
-  For,
   getOwner,
   Owner,
   ParentProps,
@@ -13,73 +11,58 @@ import {
   type JSX,
 } from "solid-js"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
-import { iife } from "@opencode-ai/util/iife"
 
 type DialogElement = () => JSX.Element
 
 const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
-  const [store, setStore] = createSignal<
-    {
-      id: string
-      element: DialogElement
-      onClose?: () => void
-      owner: Owner
-    }[]
-  >([])
+  const [active, setActive] = createSignal<
+    | {
+        id: string
+        element: DialogElement
+        onClose?: () => void
+        owner: Owner
+      }
+    | undefined
+  >()
 
   const result = {
-    get stack() {
-      return store()
+    get active() {
+      return active()
     },
-    pop() {
-      const current = store().at(-1)
-      if (!current) return
-      current?.onClose?.()
-      setStore((stack) => {
-        stack.pop()
-        return [...stack]
+    close() {
+      active()?.onClose?.()
+      setActive(undefined)
+    },
+    show(element: DialogElement, owner: Owner, onClose?: () => void) {
+      active()?.onClose?.()
+      const id = Math.random().toString(36).slice(2)
+      setActive({
+        id,
+        element: () =>
+          runWithOwner(owner, () => (
+            <Show when={active()?.id === id}>
+              <Kobalte
+                modal
+                open={true}
+                onOpenChange={(open) => {
+                  if (!open) {
+                    console.log("closing")
+                    result.close()
+                  }
+                }}
+              >
+                <Kobalte.Portal>
+                  <Kobalte.Overlay data-component="dialog-overlay" />
+                  {element()}
+                </Kobalte.Portal>
+              </Kobalte>
+            </Show>
+          )),
+        onClose,
+        owner,
       })
-    },
-    replace(element: DialogElement, owner: Owner, onClose?: () => void) {
-      for (const item of store()) {
-        item.onClose?.()
-      }
-      const id = Math.random().toString(36)
-      setStore([
-        {
-          id,
-          element: () =>
-            runWithOwner(owner, () => (
-              <Show when={result.stack.at(-1)?.id === id}>
-                <Kobalte
-                  modal
-                  defaultOpen
-                  onOpenChange={(open) => {
-                    if (!open) {
-                      onClose?.()
-                      result.pop()
-                    }
-                  }}
-                >
-                  <Kobalte.Portal>
-                    <Kobalte.Overlay data-component="dialog-overlay" />
-                    {element()}
-                  </Kobalte.Portal>
-                </Kobalte>
-              </Show>
-            )),
-          onClose,
-          owner,
-        },
-      ])
-    },
-    clear() {
-      for (const item of store()) {
-        item.onClose?.()
-      }
-      setStore([])
     },
   }
 
@@ -89,14 +72,12 @@ function init() {
 export function DialogProvider(props: ParentProps) {
   const ctx = init()
   createEffect(() => {
-    console.log("store", ctx.stack.length)
+    console.log("active", ctx.active)
   })
   return (
     <Context.Provider value={ctx}>
       {props.children}
-      <div data-component="dialog-stack">
-        <For each={ctx.stack}>{(item) => <>{item.element()}</>}</For>
-      </div>
+      <div data-component="dialog-stack">{ctx.active?.element?.()}</div>
     </Context.Provider>
   )
 }
@@ -111,17 +92,14 @@ export function useDialog() {
     throw new Error("useDialog must be used within a DialogProvider")
   }
   return {
-    get stack() {
-      return ctx.stack
+    get active() {
+      return ctx.active
     },
-    replace(element: DialogElement, onClose?: () => void) {
-      ctx.replace(element, owner, onClose)
+    show(element: DialogElement, onClose?: () => void) {
+      ctx.show(element, owner, onClose)
     },
-    pop() {
-      ctx.pop()
-    },
-    clear() {
-      ctx.clear()
+    close() {
+      ctx.close()
     },
   }
 }
