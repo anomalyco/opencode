@@ -7,6 +7,12 @@ function strip(text: string): string {
   return match ? match[2] : text
 }
 
+function removeParensAroundFileRefs(text: string): string {
+  // Remove parentheses around inline code that looks like a file reference
+  // Matches: (`path/to/file.ext`) or (`path/to/file.ext:1-10`) or (`file.ext:42`)
+  return text.replace(/\(\s*(`[^`]+\.[a-zA-Z0-9]+(?::\d+(?:-\d+)?)?`)\s*\)/g, "$1")
+}
+
 export function Markdown(
   props: ComponentProps<"div"> & {
     text: string
@@ -17,7 +23,7 @@ export function Markdown(
   const [local, others] = splitProps(props, ["text", "class", "classList"])
   const marked = useMarked()
   const [html] = createResource(
-    () => strip(local.text),
+    () => removeParensAroundFileRefs(strip(local.text)),
     async (markdown) => {
       return marked.parse(markdown)
     },
