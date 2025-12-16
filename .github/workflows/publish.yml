@@ -211,6 +211,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.publish.outputs.tagName }}
 
-      - run: gh release edit ${{ steps.publish.outputs.tagName }} --draft=false
+      - run: gh release edit ${{ needs.publish.outputs.tagName }} --draft=false
         env:
           GH_TOKEN: ${{ github.token }}
