@@ -64,7 +64,7 @@
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@octokit/graphql": "9.0.2",
-    "@octokit/rest": "22.0.0",
+    "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",

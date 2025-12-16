@@ -8,7 +8,7 @@
 
 [data-component="user-message"] {
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-base);
   font-style: normal;
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-large);
@@ -93,6 +93,7 @@
 
   [data-component="markdown"] {
     margin-top: 32px;
+    font-size: var(--font-size-base);
   }
 }
 
@@ -124,7 +125,7 @@
 
   [data-slot="message-part-tool-error-title"] {
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -188,7 +189,7 @@
   [data-slot="message-part-title"] {
     flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);

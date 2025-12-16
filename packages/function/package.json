@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@octokit/auth-app": "8.0.1",
-    "@octokit/rest": "22.0.0",
+    "@octokit/rest": "catalog:",
     "hono": "catalog:",
     "jose": "6.0.11"
   }

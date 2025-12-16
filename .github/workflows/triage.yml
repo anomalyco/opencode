@@ -24,9 +24,11 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           opencode run --agent triage "The following issue was just opened, triage it:
 
-          Title: ${{ github.event.issue.title }}
+          Title: $ISSUE_TITLE
 
-          ${{ github.event.issue.body }}"
+          $ISSUE_BODY"

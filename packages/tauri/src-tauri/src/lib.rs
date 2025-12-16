@@ -1,19 +1,39 @@
 use std::{
     net::{SocketAddr, TcpListener},
-    process::Command,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
-use tauri::{AppHandle, LogicalSize, Manager, Monitor, RunEvent, WebviewUrl, WebviewWindow};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
 
 #[derive(Clone)]
 struct ServerState(Arc<Mutex<Option<CommandChild>>>);
+
+#[tauri::command]
+fn kill_sidecar(app: AppHandle) {
+    let Some(server_state) = app.try_state::<ServerState>() else {
+        println!("Server not running");
+        return;
+    };
+
+    let Some(server_state) = server_state
+        .0
+        .lock()
+        .expect("Failed to acquire mutex lock")
+        .take()
+    else {
+        println!("Server state missing");
+        return;
+    };
+
+    let _ = server_state.kill();
+
+    println!("Killed server");
+}
 
 fn get_sidecar_port() -> u16 {
     option_env!("OPENCODE_PORT")
@@ -27,40 +47,6 @@ fn get_sidecar_port() -> u16 {
                 .expect("Failed to get local address")
                 .port()
         })
-}
-
-fn find_and_kill_process_on_port(port: u16) -> Result<(), Box<dyn std::error::Error>> {
-    // Find all listeners on the specified port
-    let listeners = listeners::get_processes_by_port(port)?;
-
-    if listeners.is_empty() {
-        println!("No processes found listening on port {}", port);
-        return Ok(());
-    }
-
-    for listener in listeners {
-        let pid = listener.pid;
-        println!("Found process {} listening on port {}", pid, port);
-
-        // Kill the process using platform-appropriate command
-        #[cfg(target_os = "windows")]
-        {
-            Command::new("taskkill")
-                .args(["/F", "/PID", &pid.to_string()])
-                .output()?;
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            Command::new("kill")
-                .args(["-9", &pid.to_string()])
-                .output()?;
-        }
-
-        println!("Killed process {}", pid);
-    }
-
-    Ok(())
 }
 
 fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
@@ -116,6 +102,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![kill_sidecar])
         .setup(move |app| {
             let app = app.handle().clone();
 
@@ -123,28 +110,6 @@ pub fn run() {
                 let port = get_sidecar_port();
 
                 let should_spawn_sidecar = !is_server_running(port).await;
-
-                // if server_running {
-                //     let res = app
-                //         .dialog()
-                //         .message(
-                //             "OpenCode Server is already running, would you like to restart it?",
-                //         )
-                //         .buttons(MessageDialogButtons::YesNo)
-                //         .blocking_show_with_result();
-
-                //     match res {
-                //         MessageDialogResult::Yes => {
-                //             if let Err(e) = find_and_kill_process_on_port(port) {
-                //                 eprintln!("Failed to kill process on port {}: {}", port, e);
-                //             }
-                //             true
-                //         }
-                //         _ => false,
-                //     }
-                // } else {
-                //     true
-                // };
 
                 let child = if should_spawn_sidecar {
                     let child = spawn_sidecar(&app, port);
@@ -218,24 +183,7 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 println!("Received Exit");
 
-                let Some(server_state) = app.try_state::<ServerState>() else {
-                    println!("Server not running");
-                    return;
-                };
-
-                let Some(server_state) = server_state
-                    .0
-                    .lock()
-                    .expect("Failed to acquire mutex lock")
-                    .take()
-                else {
-                    println!("Server state missing");
-                    return;
-                };
-
-                let _ = server_state.kill();
-
-                println!("Killed server");
+                kill_sidecar(app.clone());
             }
         });
 }

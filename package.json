@@ -21,6 +21,7 @@
     ],
     "catalog": {
       "@types/bun": "1.3.4",
+      "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.11",
