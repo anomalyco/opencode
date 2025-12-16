@@ -1,8 +1,9 @@
-import { FileDiff } from "@pierre/diffs"
+import { DIFFS_TAG_NAME, FileDiff } from "@pierre/diffs"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { onCleanup, onMount, Show, splitProps } from "solid-js"
-import { isServer } from "solid-js/web"
+import { Dynamic, isServer } from "solid-js/web"
 import { createDefaultOptions, styleVariables, type DiffProps } from "../pierre"
+import { workerPool } from "../pierre/worker"
 
 export type SSRDiffProps<T = {}> = DiffProps<T> & {
   preloadedDiff: PreloadMultiFileDiffResult<T>
@@ -18,11 +19,14 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
   onMount(() => {
     if (isServer || !props.preloadedDiff) return
-    fileDiffInstance = new FileDiff<T>({
-      ...createDefaultOptions(props.diffStyle),
-      ...others,
-      ...props.preloadedDiff,
-    })
+    fileDiffInstance = new FileDiff<T>(
+      {
+        ...createDefaultOptions(props.diffStyle),
+        ...others,
+        ...props.preloadedDiff,
+      },
+      workerPool,
+    )
     // @ts-expect-error - fileContainer is private but needed for SSR hydration
     fileDiffInstance.fileContainer = fileDiffRef
     fileDiffInstance.hydrate({
@@ -65,11 +69,11 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
   return (
     <div data-component="diff" style={styleVariables} ref={container}>
-      <diffs-container ref={fileDiffRef} id="ssr-diff">
+      <Dynamic component={DIFFS_TAG_NAME} ref={fileDiffRef} id="ssr-diff" class="contain-layout contain-paint">
         <Show when={isServer}>
           <template shadowrootmode="open" innerHTML={props.preloadedDiff.prerenderedHTML} />
         </Show>
-      </diffs-container>
+      </Dynamic>
     </div>
   )
 }
