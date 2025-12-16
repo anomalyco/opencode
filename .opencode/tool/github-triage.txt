@@ -42,13 +42,11 @@ Jay is responsible for documentation. If there is an issue relating to documenta
 
 ### kommander
 
-Sebastian is responsible for managing an OpenTUI (a library for building terminal user interfaces). OpenCode's TUI is built with OpenTUI. If there are issues abou:
+Sebastian is responsible for managing an OpenTUI (a library for building terminal user interfaces). OpenCode's TUI is built with OpenTUI. If there are issues about:
 - random characters on screen
 - keybinds not working on different terminals
 - general terminal stuff
 Then assign the issue to Him.
-
-(anything that should have opentui label basically)
 
 ### rekram1-node
 
