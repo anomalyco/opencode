@@ -26,6 +26,8 @@ export namespace Snapshot {
         .nothrow()
       // Configure git to not convert line endings on Windows
       await $`git --git-dir ${git} config core.autocrlf false`.quiet().nothrow()
+      // Disable fsmonitor to avoid hangs when worktree is a linked git worktree
+      await $`git --git-dir ${git} config core.fsmonitor false`.quiet().nothrow()
       log.info("initialized")
     }
     await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()

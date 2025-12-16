@@ -32,12 +32,48 @@ describe("Project.fromDirectory", () => {
 
     expect(project).toBeDefined()
     expect(project.id).not.toBe("global")
+    expect(project.id).not.toContain("|") // main worktree uses root commit only
     expect(project.vcs).toBe("git")
     expect(project.worktree).toBe(tmp.path)
 
     const opencodeFile = path.join(tmp.path, ".git", "opencode")
     const fileExists = await Bun.file(opencodeFile).exists()
     expect(fileExists).toBe(true)
+
+    // Should not create opencode-worktree file for main worktree
+    const worktreeFile = path.join(tmp.path, ".git", "opencode-worktree")
+    const worktreeFileExists = await Bun.file(worktreeFile).exists()
+    expect(worktreeFileExists).toBe(false)
+  })
+
+  test("should use different ID format for linked worktrees", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const worktreePath = `${tmp.path}-worktree`
+    await $`git worktree add ${worktreePath} HEAD`.cwd(tmp.path).quiet()
+
+    try {
+      const mainProject = await Project.fromDirectory(tmp.path)
+      const linkedProject = await Project.fromDirectory(worktreePath)
+
+      // Main worktree uses root commit only
+      expect(mainProject.id).not.toContain("|")
+
+      // Linked worktree uses root commit + "|" + hash
+      expect(linkedProject.id).toContain("|")
+      expect(linkedProject.id.startsWith(mainProject.id + "|")).toBe(true)
+
+      // Different IDs for different worktrees
+      expect(linkedProject.id).not.toBe(mainProject.id)
+
+      // Linked worktree should have opencode-worktree file
+      const gitDir = await $`git rev-parse --git-dir`.cwd(worktreePath).quiet().text()
+      const worktreeFile = path.join(gitDir.trim(), "opencode-worktree")
+      const worktreeFileExists = await Bun.file(worktreeFile).exists()
+      expect(worktreeFileExists).toBe(true)
+    } finally {
+      await $`git worktree remove --force ${worktreePath}`.cwd(tmp.path).quiet().nothrow()
+      await $`rm -rf ${worktreePath}`.quiet()
+    }
   })
 })
 

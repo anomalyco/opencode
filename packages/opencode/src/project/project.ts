@@ -44,51 +44,102 @@ export namespace Project {
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
 
-    const { id, worktree, vcs } = await iife(async () => {
+    const { id, worktree, vcs, oldProjectID } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
       const git = await matches.next().then((x) => x.value)
       await matches.return()
       if (git) {
         let worktree = path.dirname(git)
-        let id = await Bun.file(path.join(git, "opencode"))
-          .text()
-          .then((x) => x.trim())
-          .catch(() => {})
-        if (!id) {
-          const roots = await $`git rev-list --max-parents=0 --all`
-            .quiet()
-            .nothrow()
-            .cwd(worktree)
-            .text()
-            .then((x) =>
-              x
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
-          id = roots[0]
-          if (id) Bun.file(path.join(git, "opencode")).write(id)
-        }
-        if (!id)
-          return {
-            id: "global",
-            worktree,
-            vcs: "git",
-          }
+        // First resolve the actual worktree path before generating ID
         worktree = await $`git rev-parse --show-toplevel`
           .quiet()
           .nothrow()
           .cwd(worktree)
           .text()
           .then((x) => path.resolve(worktree, x.trim()))
-        return { id, worktree, vcs: "git" }
+
+        // Get the actual git directory (handles worktrees where .git is a file pointing elsewhere)
+        const gitDir = await $`git rev-parse --git-dir`
+          .quiet()
+          .nothrow()
+          .cwd(worktree)
+          .text()
+          .then((x) => path.resolve(worktree, x.trim()))
+
+        // Detect if this is a linked worktree (gitDir contains .git/worktrees/)
+        const isLinkedWorktree = gitDir.includes(".git/worktrees/")
+
+        // Read cached root commit from .git/opencode (backwards compat with old opencode)
+        const cachedRootCommit = await Bun.file(path.join(gitDir, "opencode"))
+          .text()
+          .then((x) => x.trim())
+          .catch(() => {})
+
+        // For linked worktrees, also check for cached worktree hash
+        const cachedWorktreeHash = isLinkedWorktree
+          ? await Bun.file(path.join(gitDir, "opencode-worktree"))
+              .text()
+              .then((x) => x.trim())
+              .catch(() => {})
+          : undefined
+
+        // If we have cached values, construct the ID and return early
+        if (cachedRootCommit) {
+          if (isLinkedWorktree && cachedWorktreeHash) {
+            const id = `${cachedRootCommit}|${cachedWorktreeHash}`
+            return { id, worktree, vcs: "git", oldProjectID: undefined }
+          }
+          if (!isLinkedWorktree) {
+            return { id: cachedRootCommit, worktree, vcs: "git", oldProjectID: undefined }
+          }
+        }
+
+        const roots = await $`git rev-list --max-parents=0 --all`
+          .quiet()
+          .nothrow()
+          .cwd(worktree)
+          .text()
+          .then((x) =>
+            x
+              .split("\n")
+              .filter(Boolean)
+              .map((x) => x.trim())
+              .toSorted(),
+          )
+        const rootCommit = roots[0]
+        if (!rootCommit)
+          return {
+            id: "global",
+            worktree,
+            vcs: "git",
+            oldProjectID: undefined,
+          }
+
+        // For main worktree: use root commit as ID (backwards compat)
+        // For linked worktrees: use root commit + "|" + hash of worktree path
+        let id: string
+        if (isLinkedWorktree) {
+          const worktreeHash = Bun.hash(worktree).toString(16)
+          id = `${rootCommit}|${worktreeHash}`
+          Bun.file(path.join(gitDir, "opencode-worktree")).write(worktreeHash)
+        } else {
+          id = rootCommit
+        }
+
+        // Write root commit to .git/opencode
+        if (!cachedRootCommit) {
+          Bun.file(path.join(gitDir, "opencode")).write(rootCommit)
+        }
+
+        // No migration needed - main worktree keeps same ID format
+        return { id, worktree, vcs: "git", oldProjectID: undefined }
       }
 
       return {
         id: "global",
         worktree: "/",
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+        oldProjectID: undefined,
       }
     })
 
@@ -105,6 +156,10 @@ export namespace Project {
       }
       if (id !== "global") {
         await migrateFromGlobal(id, worktree)
+        // Migrate from old project ID format (root commit only) to new format (hash of root commit + worktree)
+        if (oldProjectID) {
+          await migrateSessions(oldProjectID, id, worktree)
+        }
       }
     }
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
@@ -177,6 +232,31 @@ export namespace Project {
       await Storage.remove(key)
     }).catch((error) => {
       log.error("failed to migrate sessions from global to project", { error, projectId: newProjectID })
+    })
+  }
+
+  async function migrateSessions(oldProjectID: string, newProjectID: string, worktree: string) {
+    const oldProject = await Storage.read<Info>(["project", oldProjectID]).catch(() => undefined)
+    if (!oldProject) return
+    // Only migrate if the old project's worktree matches this worktree
+    if (oldProject.worktree !== worktree) return
+
+    const oldSessions = await Storage.list(["session", oldProjectID]).catch(() => [])
+    if (oldSessions.length === 0) return
+
+    log.info("migrating sessions", { from: oldProjectID, to: newProjectID, worktree, count: oldSessions.length })
+
+    await work(10, oldSessions, async (key) => {
+      const sessionID = key[key.length - 1]
+      const session = await Storage.read<Session.Info>(key).catch(() => undefined)
+      if (!session) return
+
+      session.projectID = newProjectID
+      log.info("migrating session", { sessionID, from: oldProjectID, to: newProjectID })
+      await Storage.write(["session", newProjectID, sessionID], session)
+      await Storage.remove(key)
+    }).catch((error) => {
+      log.error("failed to migrate sessions", { error, from: oldProjectID, to: newProjectID })
     })
   }
 
