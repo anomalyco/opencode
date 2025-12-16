@@ -7,7 +7,7 @@
 
 </div>
 
-<img src="packages/site/public/images/terminal-ui.png">
+<img src="packages/site/public/images/forge-demo.gif">
 
 ## Quickstart
 
