@@ -497,7 +497,7 @@ export default function Layout(props: ParentProps) {
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
-    const [store] = globalSync.child(props.project.worktree)
+    const [store, setProjectStore] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session ?? [])
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const childSessionsByParent = createMemo(() => {
@@ -511,6 +511,11 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
+    const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
+    const loadMoreSessions = async () => {
+      setProjectStore("limit", (limit) => limit + 10)
+      await globalSync.project.loadSessions(props.project.worktree)
+    }
     const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
@@ -581,6 +586,19 @@ export default function Layout(props: ParentProps) {
                           </Tooltip>
                         </div>
                       </div>
+                    </div>
+                  </Show>
+                  <Show when={hasMoreSessions()}>
+                    <div class="relative w-full pl-4 pr-2 py-1">
+                      <Button
+                        variant="ghost"
+                        class="w-full text-12-regular text-text-muted"
+                        size="small"
+                        icon="plus-small"
+                        onClick={loadMoreSessions}
+                      >
+                        Load more
+                      </Button>
                     </div>
                   </Show>
                 </nav>
