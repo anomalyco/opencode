@@ -1,4 +1,4 @@
-import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput, Plugin as PluginInstance, SidebarSection } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -87,5 +87,28 @@ export namespace Plugin {
         })
       }
     })
+  }
+
+  /**
+   * Collect sidebar sections from all plugins.
+   * Sections are sorted by priority (lower = higher in sidebar).
+   */
+  export async function getSidebarSections(): Promise<SidebarSection[]> {
+    const hooks = await state().then((x) => x.hooks)
+    const sections: SidebarSection[] = []
+    
+    for (const hook of hooks) {
+      const fn = hook["tui.sidebar.sections"]
+      if (!fn) continue
+      try {
+        const pluginSections = await fn()
+        sections.push(...pluginSections)
+      } catch (e) {
+        log.error("failed to get sidebar sections from plugin", { error: e })
+      }
+    }
+    
+    // Sort by priority (lower = higher in sidebar)
+    return sections.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100))
   }
 }

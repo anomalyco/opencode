@@ -15,6 +15,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
+  SidebarSectionsResponse,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -63,6 +64,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
+      sidebar_sections: SidebarSectionsResponse
       path: Path
     }>({
       provider_next: {
@@ -88,6 +90,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       formatter: [],
       vcs: undefined,
+      sidebar_sections: [],
       path: { state: "", config: "", worktree: "", directory: "" },
     })
 
@@ -290,6 +293,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
             sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
             sdk.client.path.get().then((x) => setStore("path", x.data!)),
+            sdk.client.sidebar.sections().then((x) => setStore("sidebar_sections", x.data ?? [])),
           ]).then(() => {
             setStore("status", "complete")
           })

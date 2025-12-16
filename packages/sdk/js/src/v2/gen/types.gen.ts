@@ -4126,3 +4126,34 @@ export type EventSubscribeResponses = {
 }
 
 export type EventSubscribeResponse = EventSubscribeResponses[keyof EventSubscribeResponses]
+
+export type SidebarSectionsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/sidebar/sections"
+}
+
+export type SidebarSectionsResponses = {
+  /**
+   * Sidebar sections from plugins
+   */
+  200: Array<{
+    id: string
+    title: string
+    priority?: number
+    items: Array<{
+      type: "text" | "status" | "link"
+      label: string
+      value?: string
+      status?: "success" | "warning" | "error" | "info" | "muted"
+      command?: string
+    }>
+    collapsible?: boolean
+    defaultExpanded?: boolean
+  }>
+}
+
+export type SidebarSectionsResponse = SidebarSectionsResponses[keyof SidebarSectionsResponses]

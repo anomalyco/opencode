@@ -115,6 +115,7 @@ import type {
   SessionUnshareResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
+  SidebarSectionsResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -2562,6 +2563,27 @@ export class Event extends HeyApiClient {
   }
 }
 
+export class Sidebar extends HeyApiClient {
+  /**
+   * Get plugin sidebar sections
+   *
+   * Get sidebar sections provided by plugins for display in the TUI sidebar
+   */
+  public sections<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<SidebarSectionsResponses, unknown, ThrowOnError>({
+      url: "/sidebar/sections",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -2611,4 +2633,6 @@ export class OpencodeClient extends HeyApiClient {
   auth = new Auth({ client: this.client })
 
   event = new Event({ client: this.client })
+
+  sidebar = new Sidebar({ client: this.client })
 }

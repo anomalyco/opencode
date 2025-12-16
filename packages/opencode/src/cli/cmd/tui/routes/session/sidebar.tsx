@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
-import type { AssistantMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, SidebarSectionsResponse } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
@@ -18,8 +18,15 @@ export function Sidebar(props: { sessionID: string }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const pluginSections = createMemo(() => sync.data.sidebar_sections ?? [])
 
-  const [expanded, setExpanded] = createStore({
+  const [expanded, setExpanded] = createStore<{
+    mcp: boolean
+    diff: boolean
+    todo: boolean
+    lsp: boolean
+    [key: `plugin_${string}`]: boolean
+  }>({
     mcp: true,
     diff: true,
     todo: true,
@@ -247,6 +254,79 @@ export function Sidebar(props: { sessionID: string }) {
                 </Show>
               </box>
             </Show>
+            {/* Plugin Sidebar Sections */}
+            <For each={pluginSections()}>
+              {(section) => {
+                const sectionKey = `plugin_${section.id}` as const
+                const isExpanded = () => expanded[sectionKey] ?? section.defaultExpanded ?? true
+                const isCollapsible = () => section.collapsible !== false && section.items.length > 2
+                return (
+                  <box>
+                    <box
+                      flexDirection="row"
+                      gap={1}
+                      onMouseDown={() => isCollapsible() && setExpanded(sectionKey, !isExpanded())}
+                    >
+                      <Show when={isCollapsible()}>
+                        <text fg={theme.text}>{isExpanded() ? "▼" : "▶"}</text>
+                      </Show>
+                      <text fg={theme.text}>
+                        <b>{section.title}</b>
+                      </text>
+                    </box>
+                    <Show when={!isCollapsible() || isExpanded()}>
+                      <For each={section.items}>
+                        {(item) => (
+                          <Switch>
+                            <Match when={item.type === "text"}>
+                              <box flexDirection="row" gap={1} justifyContent="space-between">
+                                <text fg={theme.textMuted}>{item.label}</text>
+                                <Show when={item.value}>
+                                  <text fg={theme.text}>{item.value}</text>
+                                </Show>
+                              </box>
+                            </Match>
+                            <Match when={item.type === "status"}>
+                              <box flexDirection="row" gap={1}>
+                                <text
+                                  flexShrink={0}
+                                  fg={
+                                    ({
+                                      success: theme.success,
+                                      warning: theme.warning,
+                                      error: theme.error,
+                                      info: theme.info,
+                                      muted: theme.textMuted,
+                                    } as const)[item.status ?? "muted"]
+                                  }
+                                >
+                                  •
+                                </text>
+                                <text fg={theme.text} wrapMode="word">
+                                  {item.label}
+                                  <Show when={item.value}>
+                                    {" "}
+                                    <span style={{ fg: theme.textMuted }}>{item.value}</span>
+                                  </Show>
+                                </text>
+                              </box>
+                            </Match>
+                            <Match when={item.type === "link"}>
+                              <box flexDirection="row" gap={1} justifyContent="space-between">
+                                <text fg={theme.text}>{item.label}</text>
+                                <Show when={item.command}>
+                                  <text fg={theme.textMuted}>{item.command}</text>
+                                </Show>
+                              </box>
+                            </Match>
+                          </Switch>
+                        )}
+                      </For>
+                    </Show>
+                  </box>
+                )
+              }}
+            </For>
           </box>
         </scrollbox>
 

@@ -47,6 +47,7 @@ import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
+import { Plugin } from "@/plugin"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -2504,6 +2505,47 @@ export namespace Server {
               })
             })
           })
+        },
+      )
+      .get(
+        "/sidebar/sections",
+        describeRoute({
+          summary: "Get plugin sidebar sections",
+          description: "Get sidebar sections provided by plugins for display in the TUI sidebar",
+          operationId: "sidebar.sections",
+          responses: {
+            200: {
+              description: "Sidebar sections from plugins",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.array(
+                      z.object({
+                        id: z.string(),
+                        title: z.string(),
+                        priority: z.number().optional(),
+                        items: z.array(
+                          z.object({
+                            type: z.enum(["text", "status", "link"]),
+                            label: z.string(),
+                            value: z.string().optional(),
+                            status: z.enum(["success", "warning", "error", "info", "muted"]).optional(),
+                            command: z.string().optional(),
+                          }),
+                        ),
+                        collapsible: z.boolean().optional(),
+                        defaultExpanded: z.boolean().optional(),
+                      }),
+                    ),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const sections = await Plugin.getSidebarSections()
+          return c.json(sections)
         },
       )
       .all("/*", async (c) => {

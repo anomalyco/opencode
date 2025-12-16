@@ -33,6 +33,40 @@ export type PluginInput = {
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
+/**
+ * Represents an item in a sidebar section
+ */
+export type SidebarItem = {
+  /** Type of item to render */
+  type: "text" | "status" | "link"
+  /** Label/title for the item */
+  label: string
+  /** Optional value to display */
+  value?: string
+  /** Status indicator color */
+  status?: "success" | "warning" | "error" | "info" | "muted"
+  /** Command to execute when clicked (optional) */
+  command?: string
+}
+
+/**
+ * Represents a section in the TUI sidebar provided by a plugin
+ */
+export type SidebarSection = {
+  /** Unique identifier for the section */
+  id: string
+  /** Title displayed at the top of the section */
+  title: string
+  /** Priority for ordering (lower = higher in sidebar, default 100) */
+  priority?: number
+  /** Items to display in the section */
+  items: SidebarItem[]
+  /** Whether the section can be collapsed (default true) */
+  collapsible?: boolean
+  /** Whether the section starts expanded (default true) */
+  defaultExpanded?: boolean
+}
+
 export type AuthHook = {
   provider: string
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
@@ -195,4 +229,9 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Provide custom sections for the TUI sidebar.
+   * Called periodically to refresh sidebar content.
+   */
+  "tui.sidebar.sections"?: () => Promise<SidebarSection[]>
 }
