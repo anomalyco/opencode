@@ -45,13 +45,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       },
     )
 
-    // onMount(() => {
-    //   const daysToKeep = 7
-    //   // setStore("list", (n) => n.filter((n) => !n.viewed && n.time + 1000 * 60 * 60 * 24 * daysToKeep < Date.now()))
-    // })
-
     globalSDK.event.listen((e) => {
-      console.log(e)
       const directory = e.name
       const event = e.details
       const base = {
