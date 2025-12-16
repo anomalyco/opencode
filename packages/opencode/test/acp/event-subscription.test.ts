@@ -286,5 +286,3 @@ describe("acp.agent event subscription", () => {
     stop()
   })
 })
-
-
