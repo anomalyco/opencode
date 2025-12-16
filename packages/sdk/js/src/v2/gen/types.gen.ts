@@ -918,6 +918,14 @@ export type KeybindsConfig = {
    */
   model_cycle_recent_reverse?: string
   /**
+   * Next favorite model
+   */
+  model_cycle_favorite?: string
+  /**
+   * Previous favorite model
+   */
+  model_cycle_favorite_reverse?: string
+  /**
    * List available commands
    */
   command_list?: string
@@ -1413,6 +1421,9 @@ export type Config = {
     build?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
+    title?: AgentConfig
+    summary?: AgentConfig
+    compaction?: AgentConfig
     [key: string]: AgentConfig | undefined
   }
   /**

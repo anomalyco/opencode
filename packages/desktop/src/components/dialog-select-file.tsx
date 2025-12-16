@@ -3,13 +3,18 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { useSession } from "@/context/session"
+import { useLayout } from "@/context/layout"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useParams } from "@solidjs/router"
+import { createMemo } from "solid-js"
 
 export function DialogSelectFile() {
-  const session = useSession()
+  const layout = useLayout()
   const local = useLocal()
   const dialog = useDialog()
+  const params = useParams()
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const tabs = createMemo(() => layout.tabs(sessionKey()))
   return (
     <Dialog title="Select file">
       <List
@@ -20,9 +25,9 @@ export function DialogSelectFile() {
         key={(x) => x}
         onSelect={(path) => {
           if (path) {
-            session.layout.openTab("file://" + path)
+            tabs().open("file://" + path)
           }
-          dialog.clear()
+          dialog.close()
         }}
       >
         {(i) => (

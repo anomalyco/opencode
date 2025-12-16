@@ -7169,6 +7169,16 @@
             "default": "shift+f2",
             "type": "string"
           },
+          "model_cycle_favorite": {
+            "description": "Next favorite model",
+            "default": "none",
+            "type": "string"
+          },
+          "model_cycle_favorite_reverse": {
+            "description": "Previous favorite model",
+            "default": "none",
+            "type": "string"
+          },
           "command_list": {
             "description": "List available commands",
             "default": "ctrl+p",
@@ -7991,6 +8001,15 @@
                 "$ref": "#/components/schemas/AgentConfig"
               },
               "explore": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "title": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "compaction": {
                 "$ref": "#/components/schemas/AgentConfig"
               }
             },

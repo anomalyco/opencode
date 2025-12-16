@@ -14,11 +14,78 @@
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-base);
-  display: -webkit-box;
-  line-clamp: 3;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  [data-slot="user-message-attachments"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  [data-slot="user-message-attachment"] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-base);
+    border: 1px solid var(--border-base);
+    transition: border-color 0.15s ease;
+
+    &:hover {
+      border-color: var(--border-strong-base);
+    }
+
+    &[data-type="image"] {
+      width: 48px;
+      height: 48px;
+    }
+
+    &[data-type="file"] {
+      width: 48px;
+      height: 48px;
+    }
+  }
+
+  [data-slot="user-message-attachment-image"] {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  [data-slot="user-message-attachment-icon"] {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-weak);
+
+    [data-component="icon"] {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  [data-slot="user-message-text"] {
+    display: -webkit-box;
+    white-space: pre-wrap;
+    line-clamp: 3;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .text-text-strong {
+    color: var(--text-strong);
+  }
+
+  .font-medium {
+    font-weight: var(--font-weight-medium);
+  }
 }
 
 [data-component="text-part"] {
@@ -108,15 +175,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   width: 100%;
 
   [data-slot="message-part-title-area"] {
+    flex-grow: 1;
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
   }
 
   [data-slot="message-part-title"] {
+    flex-shrink: 0;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-style: normal;
@@ -129,14 +200,22 @@
 
   [data-slot="message-part-path"] {
     display: flex;
+    flex-grow: 1;
+    min-width: 0;
   }
 
   [data-slot="message-part-directory"] {
     color: var(--text-weak);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
   }
 
   [data-slot="message-part-filename"] {
     color: var(--text-strong);
+    flex-shrink: 0;
   }
 
   [data-slot="message-part-actions"] {
@@ -149,6 +228,23 @@
 
 [data-component="edit-content"] {
   border-top: 1px solid var(--border-weaker-base);
+}
+
+[data-component="write-content"] {
+  border-top: 1px solid var(--border-weaker-base);
+  max-height: 240px;
+  overflow-y: auto;
+
+  [data-component="code"] {
+    padding-bottom: 0px !important;
+  }
+
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 [data-component="tool-action"] {

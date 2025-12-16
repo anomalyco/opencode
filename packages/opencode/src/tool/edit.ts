@@ -140,16 +140,14 @@ export const EditTool = Tool.define("edit", {
     let output = ""
     await LSP.touchFile(filePath, true)
     const diagnostics = await LSP.diagnostics()
-    for (const [file, issues] of Object.entries(diagnostics)) {
-      if (issues.length === 0) continue
-      if (file === filePath) {
-        const errors = issues.filter((item) => item.severity === 1)
-        const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
-        const suffix =
-          errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
-        continue
-      }
+    const normalizedFilePath = Filesystem.normalizePath(filePath)
+    const issues = diagnostics[normalizedFilePath] ?? []
+    if (issues.length > 0) {
+      const errors = issues.filter((item) => item.severity === 1)
+      const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
+      const suffix =
+        errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
+      output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
     }
 
     const filediff: Snapshot.FileDiff = {

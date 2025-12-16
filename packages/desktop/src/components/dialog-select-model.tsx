@@ -28,7 +28,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
           class="h-7 -my-1 text-14-medium"
           icon="plus-small"
           tabIndex={-1}
-          onClick={() => dialog.replace(() => <DialogSelectProvider />)}
+          onClick={() => dialog.show(() => <DialogSelectProvider />)}
         >
           Connect provider
         </Button>
@@ -57,7 +57,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
           local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
             recent: true,
           })
-          dialog.clear()
+          dialog.close()
         }}
       >
         {(i) => (
@@ -75,7 +75,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
       <Button
         variant="ghost"
         class="ml-3 mt-5 mb-6 text-text-base self-start"
-        onClick={() => dialog.replace(() => <DialogManageModels />)}
+        onClick={() => dialog.show(() => <DialogManageModels />)}
       >
         Manage models
       </Button>

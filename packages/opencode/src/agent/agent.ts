@@ -107,6 +107,24 @@ export namespace Agent {
     )
 
     const result: Record<string, Info> = {
+      build: {
+        name: "build",
+        tools: { ...defaultTools },
+        options: {},
+        permission: agentPermission,
+        mode: "primary",
+        native: true,
+      },
+      plan: {
+        name: "plan",
+        options: {},
+        permission: planPermission,
+        tools: {
+          ...defaultTools,
+        },
+        mode: "primary",
+        native: true,
+      },
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
@@ -149,14 +167,6 @@ export namespace Agent {
         options: {},
         permission: agentPermission,
       },
-      build: {
-        name: "build",
-        tools: { ...defaultTools },
-        options: {},
-        permission: agentPermission,
-        mode: "primary",
-        native: true,
-      },
       title: {
         name: "title",
         mode: "primary",
@@ -176,16 +186,6 @@ export namespace Agent {
         permission: agentPermission,
         prompt: PROMPT_SUMMARY,
         tools: {},
-      },
-      plan: {
-        name: "plan",
-        options: {},
-        permission: planPermission,
-        tools: {
-          ...defaultTools,
-        },
-        mode: "primary",
-        native: true,
       },
     }
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
@@ -256,9 +256,9 @@ export namespace Agent {
     return state().then((x) => Object.values(x))
   }
 
-  export async function generate(input: { description: string }) {
+  export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
     const cfg = await Config.get()
-    const defaultModel = await Provider.defaultModel()
+    const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
     const system = SystemPrompt.header(defaultModel.providerID)

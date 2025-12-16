@@ -42,7 +42,7 @@ export const DialogSelectModelUnpaid: Component = () => {
             local.model.set(x ? { modelID: x.id, providerID: x.provider.id } : undefined, {
               recent: true,
             })
-            dialog.clear()
+            dialog.close()
           }}
         >
           {(i) => (
@@ -75,7 +75,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                 }}
                 onSelect={(x) => {
                   if (!x) return
-                  dialog.replace(() => <DialogConnectProvider provider={x.id} />)
+                  dialog.show(() => <DialogConnectProvider provider={x.id} />)
                 }}
               >
                 {(i) => (
@@ -105,7 +105,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                 class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
                 icon="dot-grid"
                 onClick={() => {
-                  dialog.replace(() => <DialogSelectProvider />)
+                  dialog.show(() => <DialogSelectProvider />)
                 }}
               >
                 View all providers

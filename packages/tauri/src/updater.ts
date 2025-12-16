@@ -2,6 +2,8 @@ import { check, DownloadEvent } from "@tauri-apps/plugin-updater"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { ask, message } from "@tauri-apps/plugin-dialog"
 
+export const UPDATER_ENABLED = window.__OPENCODE__?.updaterEnabled ?? false
+
 export async function runUpdater(onDownloadEvent?: (progress: DownloadEvent) => void) {
   let update
   try {

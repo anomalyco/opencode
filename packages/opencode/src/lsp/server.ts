@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -176,7 +177,13 @@ export namespace LSPServer {
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
         await Bun.file(zipPath).write(response)
 
-        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        const ok = await Archive.extractZip(zipPath, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract vscode-eslint archive", { error })
+            return false
+          })
+        if (!ok) return
         await fs.rm(zipPath, { force: true })
 
         const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
@@ -281,7 +288,7 @@ export namespace LSPServer {
     extensions: [".go"],
     async spawn(root) {
       let bin = Bun.which("gopls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         if (!Bun.which("go")) return
@@ -319,7 +326,7 @@ export namespace LSPServer {
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(root) {
       let bin = Bun.which("rubocop", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         const ruby = Bun.which("ruby")
@@ -420,7 +427,7 @@ export namespace LSPServer {
           Global.Path.bin,
           "elixir-ls-master",
           "release",
-          process.platform === "win32" ? "language_server.bar" : "language_server.sh",
+          process.platform === "win32" ? "language_server.bat" : "language_server.sh",
         )
 
         if (!(await Bun.file(binary).exists())) {
@@ -438,7 +445,13 @@ export namespace LSPServer {
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
 
-          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          const ok = await Archive.extractZip(zipPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract elixir-ls archive", { error })
+              return false
+            })
+          if (!ok) return
 
           await fs.rm(zipPath, {
             force: true,
@@ -470,7 +483,7 @@ export namespace LSPServer {
     root: NearestRoot(["build.zig"]),
     async spawn(root) {
       let bin = Bun.which("zls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -541,7 +554,13 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract zls archive", { error })
+              return false
+            })
+          if (!ok) return
         } else {
           await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
         }
@@ -576,7 +595,7 @@ export namespace LSPServer {
     extensions: [".cs"],
     async spawn(root) {
       let bin = Bun.which("csharp-ls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         if (!Bun.which("dotnet")) {
@@ -600,6 +619,46 @@ export namespace LSPServer {
 
         bin = path.join(Global.Path.bin, "csharp-ls" + (process.platform === "win32" ? ".exe" : ""))
         log.info(`installed csharp-ls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const FSharp: Info = {
+    id: "fsharp",
+    root: NearestRoot([".sln", ".fsproj", "global.json"]),
+    extensions: [".fs", ".fsi", ".fsx", ".fsscript"],
+    async spawn(root) {
+      let bin = Bun.which("fsautocomplete", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+      if (!bin) {
+        if (!Bun.which("dotnet")) {
+          log.error(".NET SDK is required to install fsautocomplete")
+          return
+        }
+
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing fsautocomplete via dotnet tool")
+        const proc = Bun.spawn({
+          cmd: ["dotnet", "tool", "install", "fsautocomplete", "--tool-path", Global.Path.bin],
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install fsautocomplete")
+          return
+        }
+
+        bin = path.join(Global.Path.bin, "fsautocomplete" + (process.platform === "win32" ? ".exe" : ""))
+        log.info(`installed fsautocomplete`, { bin })
       }
 
       return {
@@ -800,7 +859,13 @@ export namespace LSPServer {
       }
 
       if (zip) {
-        await $`unzip -o -q ${archive}`.quiet().cwd(Global.Path.bin).nothrow()
+        const ok = await Archive.extractZip(archive, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract clangd archive", { error })
+            return false
+          })
+        if (!ok) return
       }
       if (tar) {
         await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
@@ -1070,7 +1135,7 @@ export namespace LSPServer {
     extensions: [".lua"],
     async spawn(root) {
       let bin = Bun.which("lua-language-server", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -1148,14 +1213,21 @@ export namespace LSPServer {
         await fs.mkdir(installDir, { recursive: true })
 
         if (ext === "zip") {
-          const ok = await $`unzip -o -q ${tempPath} -d ${installDir}`.quiet().catch((error) => {
-            log.error("Failed to extract lua-language-server archive", { error })
-          })
+          const ok = await Archive.extractZip(tempPath, installDir)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract lua-language-server archive", { error })
+              return false
+            })
           if (!ok) return
         } else {
-          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`.quiet().catch((error) => {
-            log.error("Failed to extract lua-language-server archive", { error })
-          })
+          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`
+            .quiet()
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract lua-language-server archive", { error })
+              return false
+            })
           if (!ok) return
         }
 
@@ -1309,7 +1381,7 @@ export namespace LSPServer {
     root: NearestRoot([".terraform.lock.hcl", "terraform.tfstate", "*.tf"]),
     async spawn(root) {
       let bin = Bun.which("terraform-ls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -1356,7 +1428,13 @@ export namespace LSPServer {
         const tempPath = path.join(Global.Path.bin, assetName)
         await Bun.file(tempPath).write(downloadResponse)
 
-        await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+        const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract terraform-ls archive", { error })
+            return false
+          })
+        if (!ok) return
         await fs.rm(tempPath, { force: true })
 
         bin = path.join(Global.Path.bin, "terraform-ls" + (platform === "win32" ? ".exe" : ""))
@@ -1393,7 +1471,7 @@ export namespace LSPServer {
     root: NearestRoot([".latexmkrc", "latexmkrc", ".texlabroot", "texlabroot"]),
     async spawn(root) {
       let bin = Bun.which("texlab", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -1441,7 +1519,13 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract texlab archive", { error })
+              return false
+            })
+          if (!ok) return
         }
         if (ext === "tar.gz") {
           await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).nothrow()
