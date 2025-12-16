@@ -75,6 +75,7 @@ export function SessionTurn(
 
   let scrollRef: HTMLDivElement | undefined
   const [state, setState] = createStore({
+    contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
     userScrolled: false,
@@ -101,9 +102,17 @@ export function SessionTurn(
   function scrollToBottom() {
     if (!scrollRef || state.userScrolled || !working()) return
     requestAnimationFrame(() => {
-      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "instant" })
+      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
     })
   }
+
+  createResizeObserver(
+    () => state.contentRef,
+    ({ height }) => {
+      console.log(height)
+      scrollToBottom()
+    },
+  )
 
   createEffect(() => {
     if (!working()) {
@@ -232,11 +241,6 @@ export function SessionTurn(
                 })
               }
 
-              createEffect(() => {
-                lastPart()
-                scrollToBottom()
-              })
-
               const [store, setStore] = createStore({
                 status: rawStatus(),
                 stepsExpanded: props.stepsExpanded ?? working(),
@@ -296,6 +300,7 @@ export function SessionTurn(
 
               return (
                 <div
+                  ref={(el) => setState("contentRef", el)}
                   data-message={message().id}
                   data-slot="session-turn-message-container"
                   class={props.classes?.container}
