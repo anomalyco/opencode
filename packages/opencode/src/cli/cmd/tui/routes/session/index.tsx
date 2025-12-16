@@ -53,7 +53,7 @@ import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
-import { DialogForkTimeline } from "./dialog-fork-timeline"
+
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
@@ -301,9 +301,9 @@ export function Session() {
       value: "session.fork",
       keybind: "session_fork",
       category: "Session",
-      onSelect: (dialog) => {
+onSelect: (dialog) => {
         dialog.replace(() => (
-          <DialogForkTimeline
+          <DialogTimeline
             onMove={(messageID) => {
               const child = scroll.getChildren().find((child) => {
                 return child.id === messageID
