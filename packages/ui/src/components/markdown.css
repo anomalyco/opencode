@@ -5,36 +5,84 @@
   color: var(--text-base);
   text-wrap: pretty;
 
-  /* text-12-regular */
-  font-family: var(--font-family-sans);
-  font-size: var(--font-size-small);
-  font-style: normal;
-  font-weight: var(--font-weight-regular);
-  line-height: var(--line-height-large); /* 166.667% */
-  letter-spacing: var(--letter-spacing-normal);
-
-  h1,
-  h2,
-  h3 {
-    margin-top: 16px;
-    margin-bottom: 8px;
+  strong {
     font-weight: var(--font-weight-medium);
   }
 
+  /* text-12-regular */
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-base);
+  font-style: normal;
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large);
+  letter-spacing: var(--letter-spacing-normal);
+
+  h1 {
+    margin-top: 40px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-strong);
+
+    strong {
+      font-weight: var(--font-weight-medium);
+    }
+  }
+
+  h2 {
+    margin-top: 32px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-strong);
+
+    strong {
+      font-weight: var(--font-weight-medium);
+    }
+  }
+
+  h3 {
+    margin-top: 24px;
+    font-weight: var(--font-weight-medium);
+    color: var(--text-strong);
+
+
+    strong {
+      font-weight: var(--font-weight-medium);
+    }
+  }
+
+  h1 {
+    font-size: 15px;
+  }
+
   p {
+    margin-top: 16px;
     margin-bottom: 8px;
   }
 
   ul,
   ol {
     margin-top: 16px;
-    margin-bottom: 16px;
+
+    li {
+      margin-bottom: 12px;
+      line-height: var(--line-height-large);
+    }
+
+    li:last-child {
+      margin-bottom: 0;
+    }
   }
 
   hr {
     margin-top: 8px;
     margin-bottom: 16px;
     border-color: var(--border-weaker-base);
+  }
+
+  .shiki {
+    font-size: 13px;
+    background: var(--surface-raised-base) !important; /* temporary fix to test style */
+    padding: 8px 12px;
+    border-radius: 4px;
+    border: 0.5px solid var(--border-weak-base);
   }
 
   pre {
@@ -51,7 +99,7 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    font-size: 0.9em;
+    font-size: 13px;
     /* background-color: var(--surface-base-strong); */
     /* padding: 0.15em 0.35em; */
     /* border-radius: var(--radius-sm); */
