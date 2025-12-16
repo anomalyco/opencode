@@ -1,0 +1,38 @@
+name: generate
+
+on:
+  push:
+    branches-ignore:
+      - production
+  pull_request:
+    branches-ignore:
+      - production
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Generate SDK
+        run: |
+          bun ./packages/sdk/js/script/build.ts
+          (cd packages/opencode && bun dev generate > ../sdk/openapi.json)
+          bun x prettier --write packages/sdk/openapi.json
+
+      - name: Format
+        run: ./script/format.ts
+        env:
+          CI: true
+          PUSH_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}

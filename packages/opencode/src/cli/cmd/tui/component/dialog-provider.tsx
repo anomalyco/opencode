@@ -122,7 +122,9 @@ function AutoMethod(props: AutoMethodProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD}>{props.title}</text>
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          {props.title}
+        </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
       <box gap={1}>
@@ -198,7 +200,7 @@ function ApiMethod(props: ApiMethodProps) {
             <text fg={theme.textMuted}>
               OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
             </text>
-            <text>
+            <text fg={theme.text}>
               Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
             </text>
           </box>

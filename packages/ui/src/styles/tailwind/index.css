@@ -57,6 +57,7 @@
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
 
   --shadow-xs: var(--shadow-xs);
   --shadow-md: var(--shadow-md);

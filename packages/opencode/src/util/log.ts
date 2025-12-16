@@ -50,7 +50,10 @@ export namespace Log {
   export function file() {
     return logpath
   }
-  let write = (msg: any) => Bun.stderr.write(msg)
+  let write = (msg: any) => {
+    process.stderr.write(msg)
+    return msg.length
+  }
 
   export async function init(options: Options) {
     if (options.level) level = options.level

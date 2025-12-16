@@ -17,7 +17,7 @@
     "darkAccent": "#FFF7F1",
     "darkRed": "#e06c75",
     "darkOrange": "#EC5B2B",
-    "darkGreen": "#7fd88f",
+    "darkBlue": "#6ba1e6",
     "darkCyan": "#56b6c2",
     "darkYellow": "#e5c07b",
     "lightStep1": "#ffffff",
@@ -36,7 +36,7 @@
     "lightAccent": "#c94d24",
     "lightRed": "#d1383d",
     "lightOrange": "#EC5B2B",
-    "lightGreen": "#3d9a57",
+    "lightBlue": "#0062d1",
     "lightCyan": "#318795",
     "lightYellow": "#b0851f"
   },
@@ -62,8 +62,8 @@
       "light": "lightOrange"
     },
     "success": {
-      "dark": "darkGreen",
-      "light": "lightGreen"
+      "dark": "darkBlue",
+      "light": "lightBlue"
     },
     "info": {
       "dark": "darkCyan",
@@ -102,8 +102,8 @@
       "light": "lightStep6"
     },
     "diffAdded": {
-      "dark": "#4fd6be",
-      "light": "#1e725c"
+      "dark": "#6ba1e6",
+      "light": "#0062d1"
     },
     "diffRemoved": {
       "dark": "#c53b53",
@@ -118,16 +118,16 @@
       "light": "#7086b5"
     },
     "diffHighlightAdded": {
-      "dark": "#b8db87",
-      "light": "#4db380"
+      "dark": "#6ba1e6",
+      "light": "#0062d1"
     },
     "diffHighlightRemoved": {
       "dark": "#e26a75",
       "light": "#f52a65"
     },
     "diffAddedBg": {
-      "dark": "#20303b",
-      "light": "#d5e5d5"
+      "dark": "#1a2a3d",
+      "light": "#e0edfa"
     },
     "diffRemovedBg": {
       "dark": "#37222c",
@@ -142,8 +142,8 @@
       "light": "lightStep3"
     },
     "diffAddedLineNumberBg": {
-      "dark": "#1b2b34",
-      "light": "#c5d5c5"
+      "dark": "#162535",
+      "light": "#d0e5f5"
     },
     "diffRemovedLineNumberBg": {
       "dark": "#2d1f26",
@@ -166,8 +166,8 @@
       "light": "lightCyan"
     },
     "markdownCode": {
-      "dark": "darkGreen",
-      "light": "lightGreen"
+      "dark": "darkBlue",
+      "light": "lightBlue"
     },
     "markdownBlockQuote": {
       "dark": "#FFF7F1",
@@ -222,8 +222,8 @@
       "light": "lightRed"
     },
     "syntaxString": {
-      "dark": "darkGreen",
-      "light": "lightGreen"
+      "dark": "darkBlue",
+      "light": "lightBlue"
     },
     "syntaxNumber": {
       "dark": "#FFF7F1",

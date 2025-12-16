@@ -1,10 +1,13 @@
 // @refresh reload
 import { render } from "solid-js/web"
 import { App, PlatformProvider, Platform } from "@opencode-ai/desktop"
-import { runUpdater } from "./updater"
 import { onMount } from "solid-js"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
+import { type as ostype } from "@tauri-apps/plugin-os"
+
+import { runUpdater, UPDATER_ENABLED } from "./updater"
+import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -47,19 +50,18 @@ const platform: Platform = {
   },
 }
 
-declare global {
-  interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean }
-  }
-}
+createMenu()
 
 render(() => {
   onMount(() => {
-    if (window.__OPENCODE__?.updaterEnabled) runUpdater()
+    if (UPDATER_ENABLED) runUpdater()
   })
 
   return (
     <PlatformProvider value={platform}>
+      {ostype() === "macos" && (
+        <div class="bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
+      )}
       <App />
     </PlatformProvider>
   )

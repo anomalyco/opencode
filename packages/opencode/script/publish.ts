@@ -35,26 +35,21 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
     2,
   ),
 )
-for (const [name] of Object.entries(binaries)) {
-  try {
-    process.chdir(`./dist/${name}`)
-    if (process.platform !== "win32") {
-      await $`chmod 755 -R .`
-    }
-    await $`bun publish --access public --tag ${Script.channel}`
-  } finally {
-    process.chdir(dir)
-  }
-}
-await $`cd ./dist/${pkg.name} && bun publish --access public --tag ${Script.channel}`
 
-if (!Script.preview) {
-  const major = Script.version.split(".")[0]
-  const majorTag = `latest-${major}`
-  for (const [name] of Object.entries(binaries)) {
-    await $`cd dist/${name} && npm dist-tag add ${name}@${Script.version} ${majorTag}`
+const tags = [Script.channel]
+
+const tasks = Object.entries(binaries).map(async ([name]) => {
+  if (process.platform !== "win32") {
+    await $`chmod 755 -R .`.cwd(`./dist/${name}`)
   }
-  await $`cd ./dist/${pkg.name} && npm dist-tag add ${pkg.name}-ai@${Script.version} ${majorTag}`
+  await $`bun pm pack`.cwd(`./dist/${name}`)
+  for (const tag of tags) {
+    await $`npm publish *.tgz --access public --tag ${tag}`.cwd(`./dist/${name}`)
+  }
+})
+await Promise.all(tasks)
+for (const tag of tags) {
+  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag}`
 }
 
 if (!Script.preview) {
@@ -249,8 +244,8 @@ if (!Script.preview) {
   await $`cd ./dist/homebrew-tap && git push`
 
   const image = "ghcr.io/sst/opencode"
-  await $`docker build -t ${image}:${Script.version} .`
-  await $`docker push ${image}:${Script.version}`
-  await $`docker tag ${image}:${Script.version} ${image}:latest`
-  await $`docker push ${image}:latest`
+  const platforms = "linux/amd64,linux/arm64"
+  const tags = [`${image}:${Script.version}`, `${image}:latest`]
+  const tagFlags = tags.flatMap((t) => ["-t", t])
+  await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
 }
