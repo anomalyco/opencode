@@ -127,8 +127,10 @@ export namespace Server {
           return streamSSE(c, async (stream) => {
             stream.writeSSE({
               data: JSON.stringify({
-                type: "server.connected",
-                properties: {},
+                payload: {
+                  type: "server.connected",
+                  properties: {},
+                },
               }),
             })
             async function handler(event: any) {
