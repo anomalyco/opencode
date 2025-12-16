@@ -598,19 +598,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       const cursorPosition = getCursorPosition(editorRef)
       const textLength = promptLength(prompt.current())
+      const textContent = editorRef.textContent ?? ""
+      const isEmpty = textContent.trim() === "" || textLength <= 1
+      const hasNewlines = textContent.includes("\n")
       const inHistory = store.historyIndex >= 0
-      const atStart = cursorPosition <= 0
-      const atEnd = cursorPosition >= textLength
+      const atStart = cursorPosition <= (isEmpty ? 1 : 0)
+      const atEnd = cursorPosition >= (isEmpty ? textLength - 1 : textLength)
+      const allowUp = isEmpty || atStart || (!hasNewlines && !inHistory) || (inHistory && atEnd)
+      const allowDown = isEmpty || atEnd || (!hasNewlines && !inHistory) || (inHistory && atStart)
 
       if (event.key === "ArrowUp") {
-        if (!atStart && !(inHistory && atEnd)) return
+        if (!allowUp) return
         if (navigateHistory("up")) {
           event.preventDefault()
         }
         return
       }
 
-      if (!atEnd && !(inHistory && atStart)) return
+      if (!allowDown) return
       if (navigateHistory("down")) {
         event.preventDefault()
       }
