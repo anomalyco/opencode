@@ -1,4 +1,4 @@
-import { type FileContents, File, FileOptions, LineAnnotation } from "@pierre/precision-diffs"
+import { type FileContents, File, FileOptions, LineAnnotation } from "@pierre/diffs"
 import { ComponentProps, createEffect, createMemo, splitProps } from "solid-js"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { workerPool } from "../pierre/worker"

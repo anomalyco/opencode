@@ -128,6 +128,19 @@ const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
+// Parses GitHub remote URLs in various formats:
+// - https://github.com/owner/repo.git
+// - https://github.com/owner/repo
+// - git@github.com:owner/repo.git
+// - git@github.com:owner/repo
+// - ssh://git@github.com/owner/repo.git
+// - ssh://git@github.com/owner/repo
+export function parseGitHubRemote(url: string): { owner: string; repo: string } | null {
+  const match = url.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) return null
+  return { owner: match[1], repo: match[2] }
+}
+
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -197,20 +210,12 @@ export const GithubInstallCommand = cmd({
 
             // Get repo info
             const info = (await $`git remote get-url origin`.quiet().nothrow().text()).trim()
-            // match https or git pattern
-            // ie. https://github.com/sst/opencode.git
-            // ie. https://github.com/sst/opencode
-            // ie. git@github.com:sst/opencode.git
-            // ie. git@github.com:sst/opencode
-            // ie. ssh://git@github.com/sst/opencode.git
-            // ie. ssh://git@github.com/sst/opencode
-            const parsed = info.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/)
+            const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
-            const [, owner, repo] = parsed
-            return { owner, repo, root: Instance.worktree }
+            return { owner: parsed.owner, repo: parsed.repo, root: Instance.worktree }
           }
 
           async function promptProvider() {
@@ -278,7 +283,7 @@ export const GithubInstallCommand = cmd({
               process.platform === "darwin"
                 ? `open "${url}"`
                 : process.platform === "win32"
-                  ? `start "${url}"`
+                  ? `start "" "${url}"`
                   : `xdg-open "${url}"`
 
             exec(command, (error) => {
@@ -413,17 +418,30 @@ export const GithubRunCommand = cmd({
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = isCommentEvent ? commentPayload!.comment.id : undefined
+      const useGithubToken = normalizeUseGithubToken()
 
       try {
-        const actionToken = isMock ? args.token! : await getOidcToken()
-        appToken = await exchangeForAppToken(actionToken)
+        if (useGithubToken) {
+          const githubToken = process.env["GITHUB_TOKEN"]
+          if (!githubToken) {
+            throw new Error(
+              "GITHUB_TOKEN environment variable is not set. When using use_github_token, you must provide GITHUB_TOKEN.",
+            )
+          }
+          appToken = githubToken
+        } else {
+          const actionToken = isMock ? args.token! : await getOidcToken()
+          appToken = await exchangeForAppToken(actionToken)
+        }
         octoRest = new Octokit({ auth: appToken })
         octoGraph = graphql.defaults({
           headers: { authorization: `token ${appToken}` },
         })
 
         const { userPrompt, promptFiles } = await getUserPrompt()
-        await configureGit(appToken)
+        if (!useGithubToken) {
+          await configureGit(appToken)
+        }
         await assertPermissions()
 
         await addReaction()
@@ -519,8 +537,10 @@ export const GithubRunCommand = cmd({
         // Also output the clean error message for the action to capture
         //core.setOutput("prepare_error", e.message);
       } finally {
-        await restoreGitConfig()
-        await revokeAppToken()
+        if (!useGithubToken) {
+          await restoreGitConfig()
+          await revokeAppToken()
+        }
       }
       process.exit(exitCode)
 
@@ -547,6 +567,14 @@ export const GithubRunCommand = cmd({
         if (value === "true") return true
         if (value === "false") return false
         throw new Error(`Invalid share value: ${value}. Share must be a boolean.`)
+      }
+
+      function normalizeUseGithubToken() {
+        const value = process.env["USE_GITHUB_TOKEN"]
+        if (!value) return false
+        if (value === "true") return true
+        if (value === "false") return false
+        throw new Error(`Invalid use_github_token value: ${value}. Must be a boolean.`)
       }
 
       function isIssueCommentEvent(

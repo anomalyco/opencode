@@ -9,6 +9,7 @@ import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
+import { useKV } from "../../context/kv"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -48,12 +49,13 @@ export function Sidebar(props: { sessionID: string }) {
     }
   })
 
-  const keybind = useKeybind()
   const directory = useDirectory()
+  const kv = useKV()
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
+  const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
 
   return (
     <Show when={session()}>
@@ -249,7 +251,7 @@ export function Sidebar(props: { sessionID: string }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <Show when={!hasProviders()}>
+          <Show when={!hasProviders() && !gettingStartedDismissed()}>
             <box
               backgroundColor={theme.backgroundElement}
               paddingTop={1}
@@ -259,23 +261,33 @@ export function Sidebar(props: { sessionID: string }) {
               flexDirection="row"
               gap={1}
             >
-              <text flexShrink={0}>⬖</text>
+              <text flexShrink={0} fg={theme.text}>
+                ⬖
+              </text>
               <box flexGrow={1} gap={1}>
-                <text>
-                  <b>Getting started</b>
-                </text>
+                <box flexDirection="row" justifyContent="space-between">
+                  <text fg={theme.text}>
+                    <b>Getting started</b>
+                  </text>
+                  <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
+                    ✕
+                  </text>
+                </box>
                 <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
                 <text fg={theme.textMuted}>
                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
                 </text>
                 <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text>Connect provider</text>
+                  <text fg={theme.text}>Connect provider</text>
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
             </box>
           </Show>
-          <text fg={theme.text}>{directory()}</text>
+          <text>
+            <span style={{ fg: theme.textMuted }}>{directory().split("/").slice(0, -1).join("/")}/</span>
+            <span style={{ fg: theme.text }}>{directory().split("/").at(-1)}</span>
+          </text>
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span> <b>Open</b>
             <span style={{ fg: theme.text }}>

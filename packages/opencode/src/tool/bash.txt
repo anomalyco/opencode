@@ -1,5 +1,7 @@
 Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.
 
+All commands run in ${directory} by default. Use the `workdir` parameter if you need to run a command in a different directory.
+
 Before executing the command, please follow these steps:
 
 1. Directory Verification:
