@@ -396,6 +396,30 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
+
+        // Add synthetic user message to prevent certain reasoning models from erroring
+        // If we create assistant messages w/ out user ones following mid loop thinking signatures
+        // will be missing and it can cause errors for models like gemini for example
+        const summaryUserMsg: MessageV2.User = {
+          id: Identifier.ascending("message"),
+          sessionID,
+          role: "user",
+          time: {
+            created: Date.now(),
+          },
+          agent: lastUser.agent,
+          model: lastUser.model,
+        }
+        await Session.updateMessage(summaryUserMsg)
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: summaryUserMsg.id,
+          sessionID,
+          type: "text",
+          text: "Summarize the task tool output above and continue with your task.",
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+
         continue
       }
 
@@ -683,6 +707,7 @@ export namespace SessionPrompt {
       tools: input.tools,
       agent: agent.name,
       model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      system: input.system,
     }
 
     const parts = await Promise.all(
@@ -1096,7 +1121,7 @@ export namespace SessionPrompt {
           `
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-            ${input.command}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },
@@ -1105,8 +1130,9 @@ export namespace SessionPrompt {
           "-c",
           "-l",
           `
+            shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-            ${input.command}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },

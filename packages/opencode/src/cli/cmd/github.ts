@@ -128,6 +128,19 @@ const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
+// Parses GitHub remote URLs in various formats:
+// - https://github.com/owner/repo.git
+// - https://github.com/owner/repo
+// - git@github.com:owner/repo.git
+// - git@github.com:owner/repo
+// - ssh://git@github.com/owner/repo.git
+// - ssh://git@github.com/owner/repo
+export function parseGitHubRemote(url: string): { owner: string; repo: string } | null {
+  const match = url.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) return null
+  return { owner: match[1], repo: match[2] }
+}
+
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -197,20 +210,12 @@ export const GithubInstallCommand = cmd({
 
             // Get repo info
             const info = (await $`git remote get-url origin`.quiet().nothrow().text()).trim()
-            // match https or git pattern
-            // ie. https://github.com/sst/opencode.git
-            // ie. https://github.com/sst/opencode
-            // ie. git@github.com:sst/opencode.git
-            // ie. git@github.com:sst/opencode
-            // ie. ssh://git@github.com/sst/opencode.git
-            // ie. ssh://git@github.com/sst/opencode
-            const parsed = info.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/)
+            const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
-            const [, owner, repo] = parsed
-            return { owner, repo, root: Instance.worktree }
+            return { owner: parsed.owner, repo: parsed.repo, root: Instance.worktree }
           }
 
           async function promptProvider() {

@@ -60,10 +60,17 @@ export namespace LLM {
         .join("\n"),
     )
 
+    const header = system[0]
     const original = clone(system)
     await Plugin.trigger("experimental.chat.system.transform", {}, { system })
     if (system.length === 0) {
       system.push(...original)
+    }
+    // rejoin to maintain 2-part structure for caching if header unchanged
+    if (system.length > 2 && system[0] === header) {
+      const rest = system.slice(1)
+      system.length = 0
+      system.push(header, rest.join("\n"))
     }
 
     const params = await Plugin.trigger(

@@ -2,6 +2,7 @@ import { readableStreamToText } from "bun"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { Flag } from "@/flag/flag"
 
 export interface Info {
   name: string
@@ -69,6 +70,25 @@ export const prettier: Info = {
       const json = await Bun.file(item).json()
       if (json.dependencies?.prettier) return true
       if (json.devDependencies?.prettier) return true
+    }
+    return false
+  },
+}
+
+export const oxfmt: Info = {
+  name: "oxfmt",
+  command: [BunProc.which(), "x", "oxfmt", "$FILE"],
+  environment: {
+    BUN_BE_BUN: "1",
+  },
+  extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
+  async enabled() {
+    if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
+    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.dependencies?.oxfmt) return true
+      if (json.devDependencies?.oxfmt) return true
     }
     return false
   },

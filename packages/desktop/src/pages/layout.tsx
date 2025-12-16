@@ -413,11 +413,11 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-    const isWorking = createMemo(
-      () =>
-        props.session.id !== params.id &&
-        globalSync.child(props.project.worktree)[0].session_status[props.session.id]?.type === "busy",
-    )
+    const isWorking = createMemo(() => {
+      if (props.session.id === params.id) return false
+      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      return status?.type === "busy" || status?.type === "retry"
+    })
     return (
       <>
         <div
@@ -497,7 +497,7 @@ export default function Layout(props: ParentProps) {
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
-    const [store] = globalSync.child(props.project.worktree)
+    const [store, setProjectStore] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session ?? [])
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const childSessionsByParent = createMemo(() => {
@@ -511,6 +511,11 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
+    const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
+    const loadMoreSessions = async () => {
+      setProjectStore("limit", (limit) => limit + 10)
+      await globalSync.project.loadSessions(props.project.worktree)
+    }
     const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
@@ -581,6 +586,19 @@ export default function Layout(props: ParentProps) {
                           </Tooltip>
                         </div>
                       </div>
+                    </div>
+                  </Show>
+                  <Show when={hasMoreSessions()}>
+                    <div class="relative w-full pl-4 pr-2 py-1">
+                      <Button
+                        variant="ghost"
+                        class="w-full text-12-regular text-text-muted"
+                        size="small"
+                        icon="plus-small"
+                        onClick={loadMoreSessions}
+                      >
+                        Load more
+                      </Button>
                     </div>
                   </Show>
                 </nav>
@@ -710,7 +728,7 @@ export default function Layout(props: ParentProps) {
               <Match when={true}>
                 <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
                   <Button
-                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                    class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                     variant="ghost"
                     size="large"
                     icon="plus"
@@ -724,7 +742,7 @@ export default function Layout(props: ParentProps) {
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -750,7 +768,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"
