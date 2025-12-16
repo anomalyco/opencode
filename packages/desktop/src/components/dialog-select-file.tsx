@@ -27,7 +27,7 @@ export function DialogSelectFile() {
           if (path) {
             tabs().open("file://" + path)
           }
-          dialog.clear()
+          dialog.close()
         }}
       >
         {(i) => (

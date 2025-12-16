@@ -51,6 +51,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     // })
 
     globalSDK.event.listen((e) => {
+      console.log(e)
       const directory = e.name
       const event = e.details
       const base = {

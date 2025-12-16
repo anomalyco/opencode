@@ -864,7 +864,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               as="div"
               variant="ghost"
               onClick={() =>
-                dialog.push(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
+                dialog.show(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
               }
             >
               {local.model.current()?.name ?? "Select model"}

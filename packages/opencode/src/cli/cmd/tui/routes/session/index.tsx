@@ -64,6 +64,7 @@ import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
+import { Filesystem } from "@/util/filesystem"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1414,7 +1415,10 @@ ToolRegistry.register<typeof WriteTool>({
       return props.input.content
     })
 
-    const diagnostics = createMemo(() => props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? [])
+    const diagnostics = createMemo(() => {
+      const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+      return props.metadata.diagnostics?.[filePath] ?? []
+    })
 
     return (
       <>
@@ -1587,7 +1591,8 @@ ToolRegistry.register<typeof EditTool>({
     const diffContent = createMemo(() => props.metadata.diff ?? props.permission["diff"])
 
     const diagnostics = createMemo(() => {
-      const arr = props.metadata.diagnostics?.[props.input.filePath ?? ""] ?? []
+      const filePath = Filesystem.normalizePath(props.input.filePath ?? "")
+      const arr = props.metadata.diagnostics?.[filePath] ?? []
       return arr.filter((x) => x.severity === 1).slice(0, 3)
     })
 

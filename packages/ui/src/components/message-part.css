@@ -72,6 +72,7 @@
 
   [data-slot="user-message-text"] {
     display: -webkit-box;
+    white-space: pre-wrap;
     line-clamp: 3;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;

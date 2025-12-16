@@ -11,4 +11,7 @@
     },
   },
   "mcp": {},
+  "tools": {
+    "github-triage": false,
+  },
 }
