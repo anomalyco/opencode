@@ -106,12 +106,7 @@ export function SessionTurn(
     })
   }
 
-  createResizeObserver(
-    () => state.contentRef,
-    () => {
-      scrollToBottom()
-    },
-  )
+  createResizeObserver(() => state.contentRef, scrollToBottom)
 
   createEffect(() => {
     if (!working()) {
