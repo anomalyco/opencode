@@ -1,7 +1,7 @@
 ---
 mode: primary
 hidden: true
-model: opencode/claude-haiku-4-5
+model: opencode/gpt-5-nano
 tools:
   "*": false
   "github-triage": true
