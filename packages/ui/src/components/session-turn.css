@@ -27,7 +27,6 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    max-width: 800px;
     gap: clamp(8px, calc(42px - var(--scroll-y) * 0.48), 42px);
     overflow-anchor: none;
   }
