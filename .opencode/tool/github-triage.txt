@@ -31,6 +31,7 @@ This relates to OpenCode server primarily but has overlap with just about anythi
 
 Adam is responsible for managing the Desktop/Web app. If there is an issue relating to the desktop app or `opencode web` command. Assign him.
 
+
 ### fwang
 
 Frank is responsible for managing Zen, if you see complaints about OpenCode Zen, maybe it's the dashboard, the model quality, billing issues, etc. Assign him to the issue.
@@ -46,6 +47,8 @@ Sebastian is responsible for managing an OpenTUI (a library for building termina
 - keybinds not working on different terminals
 - general terminal stuff
 Then assign the issue to Him.
+
+(anything that should have opentui label basically)
 
 ### rekram1-node
 
@@ -68,7 +71,7 @@ Anything related to slow performance, high ram, high cpu usage, or any other per
 
 ### web
 
-Anything related to `opencode web` or the desktop app should have a web label
+Anything related to `opencode web` or the desktop app should have a web label. Never add this label for anything terminal/tui related
 
 ### zen
 
