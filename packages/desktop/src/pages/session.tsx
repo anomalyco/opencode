@@ -1,4 +1,5 @@
 import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo, createEffect, on } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
@@ -11,7 +12,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { Code } from "@opencode-ai/ui/code"
+import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
@@ -48,6 +49,7 @@ export default function Page() {
   const sync = useSync()
   const terminal = useTerminal()
   const dialog = useDialog()
+  const codeComponent = useCodeComponent()
   const command = useCommand()
   const params = useParams()
   const navigate = useNavigate()
@@ -764,7 +766,8 @@ export default function Page() {
                     <Switch>
                       <Match when={file()}>
                         {(f) => (
-                          <Code
+                          <Dynamic
+                            component={codeComponent}
                             file={{
                               name: f().path,
                               contents: f().content?.content ?? "",
