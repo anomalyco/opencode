@@ -29,6 +29,7 @@ npm i -g opencode-ai@latest        # or bun/pnpm/yarn
 scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
 brew install opencode              # macOS and Linux
+brew install --cask opencode-desktop # macOS (desktop app)
 paru -S opencode-bin               # Arch Linux
 mise use -g ubi:sst/opencode # Any OS
 nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
