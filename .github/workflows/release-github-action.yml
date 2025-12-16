@@ -3,7 +3,7 @@ name: release-github-action
 on:
   push:
     branches:
-      - main
+      - dev
     paths:
       - "github/**"
 
