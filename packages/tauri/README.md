@@ -14,11 +14,17 @@ First you need to make a build of the opencode cli tool.
 bun -F opencode build
 ```
 
-To create a production build, run the following command:
+Then you need to prepare for making a Tauri build by running:
 
 ```bash
+cd packages/tauri; bun ./scripts/prepare.ts; cd ../..
+```
 
+Now you can create a local build with:
+
+```bash
 # for rpm only build
-bun -F @opencode-ai/tuari tauri build --bundles rpm
+env TAURI_CONFIG_BUNDLE_CREATEUPDATERARTIFACTS=false \
+  bun -F @opencode-ai/tuari tauri build --bundles rpm
 ```
 

@@ -8,7 +8,7 @@ DESKTOP_FILE="/usr/share/applications/OpenCode.desktop"
 
 # Update the desktop file's Exec line to set Wayland environment variables
 if [ -f "$DESKTOP_FILE" ]; then
-  sed -i 's|^Exec=.*|Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 GDK_BACKEND=wayland /opt/opencode/bin/opencode %u|' "$DESKTOP_FILE"
+  sed -i 's|^Exec=\(.*\)|Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 GDK_BACKEND=wayland \1|' "$DESKTOP_FILE"
 fi
 
 # Update desktop database (required for .desktop file changes)
