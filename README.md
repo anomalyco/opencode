@@ -145,3 +145,7 @@ Options:
   -c, --continue    continue the last session  [boolean]
   -s, --session     session id to continue  [string]
 ```
+
+## Share feedback
+
+Have feedback, found a bug, or want to request a feature? Open the command palette (default: `Ctrl+P`) and select **"Share feedback"** to create a GitHub issue. You can also directly visit [github.com/forge-agents/forge/issues](https://github.com/forge-agents/forge/issues).

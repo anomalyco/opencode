@@ -32,6 +32,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import { matchAgent, getAllAgents } from "@/acp/agents"
 import { matchModel } from "@/acp/util"
 import { findModeId, type AgentFlag } from "../session-init"
+import open from "open"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -445,6 +446,27 @@ function App() {
       value: "help.show",
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
+      },
+      category: "System",
+    },
+    {
+      title: "Share feedback",
+      value: "feedback.github",
+      onSelect: async () => {
+        const issueUrl = "https://github.com/forge-agents/forge/issues/new"
+        await open(issueUrl).catch((error) => {
+          toast.show({
+            variant: "error",
+            message: `Failed to open browser: ${error.message}`,
+            duration: 3000,
+          })
+        })
+        toast.show({
+          variant: "info",
+          message: "Opening GitHub to create an issue...",
+          duration: 2000,
+        })
+        dialog.clear()
       },
       category: "System",
     },
