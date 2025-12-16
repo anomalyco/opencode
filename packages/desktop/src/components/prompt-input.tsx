@@ -593,23 +593,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed, cursorPosition, textLength } = getCaretState()
+      const { collapsed } = getCaretState()
       if (!collapsed) return
+
+      const cursorPosition = getCursorPosition(editorRef)
+      const textLength = promptLength(prompt.current())
       const inHistory = store.historyIndex >= 0
-      const atAbsoluteStart = cursorPosition === 0
-      const atAbsoluteEnd = cursorPosition === textLength
-      const allowUp = (inHistory && atAbsoluteEnd) || atAbsoluteStart
-      const allowDown = (inHistory && atAbsoluteStart) || atAbsoluteEnd
+      const atStart = cursorPosition <= 0
+      const atEnd = cursorPosition >= textLength
 
       if (event.key === "ArrowUp") {
-        if (!allowUp) return
+        if (!atStart && !(inHistory && atEnd)) return
         if (navigateHistory("up")) {
           event.preventDefault()
         }
         return
       }
 
-      if (!allowDown) return
+      if (!atEnd && !(inHistory && atStart)) return
       if (navigateHistory("down")) {
         event.preventDefault()
       }
