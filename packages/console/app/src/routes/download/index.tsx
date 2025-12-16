@@ -93,6 +93,12 @@ export default function Download() {
               <span>[2]</span> OpenCode Desktop (Beta)
             </div>
             <div data-component="section-content">
+              <button data-component="cli-row" onClick={handleCopyClick("brew install --cask opencode-desktop")}>
+                <code>
+                  brew install --cask <strong>opencode-desktop</strong>
+                </code>
+                <CopyStatus />
+              </button>
               <div data-component="download-row">
                 <div data-component="download-info">
                   <span data-slot="icon">
