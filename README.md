@@ -35,23 +35,15 @@ Run Claude Code with a prompt:
 forge claude --model opus --mode acceptEdits "Create or update my CLAUDE.md"
 ```
 
-Plan with Claude Code, implement with Codex:
-
-```sh
-# forge codex "Find a single TODO comment in the codebase and make a plan to address it" --plan-agent claude
-```
-
 ## What is Forge/ACP?
 
 Forge is a terminal interface for AI coding agents. It implements the [Agent Client Protocol](https://agentclientprotocol.com/) (ACP) - an open standard that lets any editor work with any agent, similar to how LSP standardized language servers.
 
 **Key features:**
 
-- **Multi-agent workflows** - Start planning with Claude Code, and then implement with Codex
 - **Unified history** - Single conversation history across all agents
-- **Shared MCP configuration** - Configure MCP servers once, use them across all agents
 - **Growing agent ecosystem** - 15+ agents with new ones added weekly
-- **Full ACP feature set** - Tool calls, session modes, agent plans, slash commands
+- **Full ACP feature set** - Tool calls, session modes, agent plans, etc
 
 ## Why agent harnesses matter
 
@@ -63,7 +55,7 @@ For a deeper dive, see Viv Trivedy's great article: [Agents Should Be More Opini
 
 ## Managing Agents
 
-> Note: Forge has install instructions for all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents), but note that not all of them are running yet. Please file an issue for any agents you have trouble running!
+> **Note:** Forge has install logic for all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents), but note that not all of them are running yet. Please file an issue for any agents you have trouble running!
 
 To view available agents, run:
 
@@ -142,27 +134,6 @@ Prints response and exits:
 forge <agent> -p "Create or update AGENTS.md"
 ```
 
-### Plan With One Agent, Implement With Another
-
-<!-- ACP enables planning with one agent and implementing with another. Specify a planning agent using `--plan-agent`
-
-```sh
-forge codex "Find a single TODO comment in the codebase and make a plan to address it" --plan-agent claude
-```
-
-Options:
-
-- `--plan-agent` - Planning agent name
-- `--plan-model` - Planning agent model
-
-When the planning agent [exits plan mode](https://agentclientprotocol.com/protocol/session-modes#exiting-plan-modes), Forge automatically switches to the main agent for implementation.
-
-> Agents that expose a `plan` session mode today
->
-> - `claude`
-> - `opencode`
--->
-
 ### Commands & Flags
 
 #### `forge -h`
@@ -188,7 +159,6 @@ Examples:
   forge claude install                                                                     Install claude
   forge claude "Update my CLAUDE.md"                                                       Run claude with prompt
   forge claude --model opus --mode bypassPermissions "Refactor the authentication module"  Run with specific model/mode
-  # forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus           Plan with claude, implement with codex
 ```
 
 #### `forge <agent> -h`
@@ -201,8 +171,6 @@ run agent with prompt
 Options:
       --mode        mode to use for the agent  [string]
       --model       model to use for the agent  [string]
-      # --plan-agent  agent to use for planning  [string]
-      # --plan-model  model to use for planning agent  [string]
   -p, --print       Run headless, print response and exit  [boolean]
       --project     path to start forge in  [string]
   -c, --continue    continue the last session  [boolean]
