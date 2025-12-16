@@ -31,8 +31,16 @@ export type Notification = TurnCompleteNotification | ErrorNotification
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   init: () => {
-    const idlePlayer = makeAudioPlayer(idleSound)
-    const errorPlayer = makeAudioPlayer(errorSound)
+    let idlePlayer: ReturnType<typeof makeAudioPlayer> | undefined
+    let errorPlayer: ReturnType<typeof makeAudioPlayer> | undefined
+
+    try {
+      idlePlayer = makeAudioPlayer(idleSound)
+      errorPlayer = makeAudioPlayer(errorSound)
+    } catch (err) {
+      console.log("Failed to load audio", err)
+    }
+
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
 
@@ -60,7 +68,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
           const isChild = match.found && syncStore.session[match.index].parentID
           if (isChild) break
-          idlePlayer.play()
+          idlePlayer?.play()
           setStore("list", store.list.length, {
             ...base,
             type: "turn-complete",
@@ -76,7 +84,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             const isChild = match.found && syncStore.session[match.index].parentID
             if (isChild) break
           }
-          errorPlayer.play()
+          errorPlayer?.play()
           setStore("list", store.list.length, {
             ...base,
             type: "error",
