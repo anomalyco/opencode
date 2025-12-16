@@ -27,7 +27,8 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: clamp(8px, calc(42px - var(--scroll-y) * 0.48), 42px);
+    gap: 42px;
+    /* gap: clamp(8px, calc(42px - var(--scroll-y) * 0.48), 42px); */
     overflow-anchor: none;
   }
 
@@ -59,7 +60,7 @@
   }
 
   [data-slot="session-turn-message-content"] {
-    margin-top: -24px;
+    margin-top: -18px;
   }
 
   [data-slot="session-turn-message-title"] {

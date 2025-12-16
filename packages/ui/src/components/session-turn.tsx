@@ -57,17 +57,12 @@ export function SessionTurn(
     userScrolled: false,
     stickyHeaderHeight: 0,
     scrollY: 0,
-    autoScrolling: false,
   })
 
   function handleScroll() {
     if (!scrollRef) return
-    if (state.autoScrolling) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
-    const scrollRoom = scrollHeight - clientHeight
-    if (scrollRoom > 100) {
-      setState("scrollY", scrollTop)
-    }
+    setState("scrollY", scrollTop)
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
       setState("userScrolled", true)
@@ -81,13 +76,9 @@ export function SessionTurn(
   }
 
   function scrollToBottom() {
-    if (!scrollRef || state.userScrolled || !working() || state.autoScrolling) return
-    setState("autoScrolling", true)
+    if (!scrollRef || state.userScrolled || !working()) return
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "instant" })
-      requestAnimationFrame(() => {
-        setState("autoScrolling", false)
-      })
     })
   }
 
