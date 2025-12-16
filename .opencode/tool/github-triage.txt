@@ -50,8 +50,12 @@ Then assign the issue to Him.
 
 ### rekram1-node
 
+ALL BUGS SHOULD BE assigned to rekram1-node unless they have the `opentui` label.
+
 Assign Aiden to an issue as a catch all, if you can't assign anyone else. Most of the time this will be bugs/polish things.
 If no one else makes sense to assign, assign rekram1-node to it.
+
+Always assign to aiden if the issue mentions "acp", "zed", or model performance issues
 
 ## Breakdown of Labels:
 
@@ -67,9 +71,9 @@ Anything relating to the TUI itself should have an opentui label
 
 Anything related to slow performance, high ram, high cpu usage, or any other performance related issue should have a perf label
 
-### web
+### desktop
 
-Anything related to `opencode web` or the desktop app should have a web label. Never add this label for anything terminal/tui related
+Anything related to `opencode web` command or the desktop app should have a desktop label. Never add this label for anything terminal/tui related
 
 ### zen
 
