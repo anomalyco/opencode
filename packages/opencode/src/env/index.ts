@@ -2,7 +2,7 @@ import { Instance } from "../project/instance"
 
 export namespace Env {
   const state = Instance.state(() => {
-    return { ...process.env } as Record<string, string | undefined>
+    return process.env as Record<string, string | undefined>
   })
 
   export function get(key: string) {

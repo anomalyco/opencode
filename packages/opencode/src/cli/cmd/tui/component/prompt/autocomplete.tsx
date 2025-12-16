@@ -184,7 +184,7 @@ export function Autocomplete(props: {
   const agents = createMemo(() => {
     const agents = sync.data.agent
     return agents
-      .filter((agent) => !agent.builtIn && agent.mode !== "primary")
+      .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
@@ -307,9 +307,13 @@ export function Autocomplete(props: {
       },
       {
         display: "/status",
-        aliases: ["/mcp"],
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
+      },
+      {
+        display: "/mcp",
+        description: "toggle MCPs",
+        onSelect: () => command.trigger("mcp.list"),
       },
       {
         display: "/theme",
@@ -360,6 +364,13 @@ export function Autocomplete(props: {
     const result = fuzzysort.go(currentFilter, mixed, {
       keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
+      scoreFn: (objResults) => {
+        const displayResult = objResults[0]
+        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+          return objResults.score * 2
+        }
+        return objResults.score
+      },
     })
     return result.map((arr) => arr.obj)
   })
@@ -493,7 +504,7 @@ export function Autocomplete(props: {
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text>No matching items</text>
+              <text fg={theme.textMuted}>No matching items</text>
             </box>
           }
         >

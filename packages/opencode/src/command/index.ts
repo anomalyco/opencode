@@ -1,14 +1,15 @@
+import { Bus } from "@/bus"
+import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
-import { Bus } from "../bus"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 
 export namespace Command {
   export const Event = {
-    Executed: Bus.event(
+    Executed: BusEvent.define(
       "command.executed",
       z.object({
         name: z.string(),

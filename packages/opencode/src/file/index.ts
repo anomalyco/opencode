@@ -1,5 +1,6 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import z from "zod"
-import { Bus } from "../bus"
 import { $ } from "bun"
 import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"
@@ -111,7 +112,7 @@ export namespace File {
   }
 
   export const Event = {
-    Edited: Bus.event(
+    Edited: BusEvent.define(
       "file.edited",
       z.object({
         file: z.string(),

@@ -34,6 +34,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".gitrebase": "git-rebase",
   ".go": "go",
   ".groovy": "groovy",
+  ".gleam": "gleam",
   ".hbs": "handlebars",
   ".handlebars": "handlebars",
   ".hs": "haskell",
@@ -103,4 +104,9 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".zig": "zig",
   ".zon": "zig",
   ".astro": "astro",
+  ".ml": "ocaml",
+  ".mli": "ocaml",
+  ".tf": "terraform",
+  ".tfvars": "terraform-vars",
+  ".hcl": "hcl",
 } as const

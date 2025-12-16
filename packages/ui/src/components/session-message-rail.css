@@ -17,11 +17,10 @@
   display: none;
 }
 
-@media (min-width: 72rem) {
+@container (min-width: 72rem) {
   [data-slot="session-message-rail-compact"] {
     display: none;
   }
-
   [data-slot="session-message-rail-full"] {
     display: flex;
   }

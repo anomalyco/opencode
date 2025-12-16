@@ -74,23 +74,28 @@ export namespace ProviderTransform {
       return result
     }
 
-    // DeepSeek: Handle reasoning_content for tool call continuations
-    // - With tool calls: Include reasoning_content in providerOptions so model can continue reasoning
-    // - Without tool calls: Strip reasoning (new turn doesn't need previous reasoning)
-    // See: https://api-docs.deepseek.com/guides/thinking_mode
-    if (model.providerID === "deepseek" || model.api.id.toLowerCase().includes("deepseek")) {
+    // TODO: rm later
+    const bugged =
+      (model.id === "kimi-k2-thinking" && model.providerID === "opencode") ||
+      (model.id === "moonshotai/Kimi-K2-Thinking" && model.providerID === "baseten")
+    if (
+      model.providerID === "deepseek" ||
+      model.api.id.toLowerCase().includes("deepseek") ||
+      (model.capabilities.interleaved &&
+        typeof model.capabilities.interleaved === "object" &&
+        model.capabilities.interleaved.field === "reasoning_content" &&
+        !bugged)
+    ) {
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
           const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const hasToolCalls = msg.content.some((part: any) => part.type === "tool-call")
           const reasoningText = reasoningParts.map((part: any) => part.text).join("")
 
           // Filter out reasoning parts from content
           const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // If this message has tool calls and reasoning, include reasoning_content
-          // so DeepSeek can continue reasoning after tool execution
-          if (hasToolCalls && reasoningText) {
+          // Include reasoning_content directly on the message for all assistant messages
+          if (reasoningText) {
             return {
               ...msg,
               content: filteredContent,
@@ -104,12 +109,12 @@ export namespace ProviderTransform {
             }
           }
 
-          // For final answers (no tool calls), just strip reasoning
           return {
             ...msg,
             content: filteredContent,
           }
         }
+
         return msg
       })
     }
@@ -166,6 +171,20 @@ export namespace ProviderTransform {
       const filtered = msg.content.map((part) => {
         if (part.type !== "file" && part.type !== "image") return part
 
+        // Check for empty base64 image data
+        if (part.type === "image") {
+          const imageStr = part.image.toString()
+          if (imageStr.startsWith("data:")) {
+            const match = imageStr.match(/^data:([^;]+);base64,(.*)$/)
+            if (match && (!match[2] || match[2].length === 0)) {
+              return {
+                type: "text" as const,
+                text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
+              }
+            }
+          }
+        }
+
         const mime = part.type === "image" ? part.image.toString().split(";")[0].replace("data:", "") : part.mediaType
         const filename = part.type === "file" ? part.filename : undefined
         const modality = mimeToModality(mime)
@@ -186,7 +205,12 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model)
-    if (model.providerID === "anthropic" || model.api.id.includes("anthropic") || model.api.id.includes("claude")) {
+    if (
+      model.providerID === "anthropic" ||
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic"
+    ) {
       msgs = applyCaching(msgs, model.providerID)
     }
 
@@ -194,14 +218,29 @@ export namespace ProviderTransform {
   }
 
   export function temperature(model: Provider.Model) {
-    if (model.api.id.toLowerCase().includes("qwen")) return 0.55
-    if (model.api.id.toLowerCase().includes("claude")) return undefined
-    if (model.api.id.toLowerCase().includes("gemini-3-pro")) return 1.0
-    return 0
+    const id = model.id.toLowerCase()
+    if (id.includes("qwen")) return 0.55
+    if (id.includes("claude")) return undefined
+    if (id.includes("gemini-3-pro")) return 1.0
+    if (id.includes("glm-4.6")) return 1.0
+    if (id.includes("minimax-m2")) return 1.0
+    // if (id.includes("kimi-k2")) {
+    //   if (id.includes("thinking")) return 1.0
+    //   return 0.6
+    // }
+    return undefined
   }
 
   export function topP(model: Provider.Model) {
-    if (model.api.id.toLowerCase().includes("qwen")) return 1
+    const id = model.id.toLowerCase()
+    if (id.includes("qwen")) return 1
+    if (id.includes("minimax-m2")) return 0.95
+    return undefined
+  }
+
+  export function topK(model: Provider.Model) {
+    const id = model.id.toLowerCase()
+    if (id.includes("minimax-m2")) return 40
     return undefined
   }
 
@@ -212,23 +251,32 @@ export namespace ProviderTransform {
   ): Record<string, any> {
     const result: Record<string, any> = {}
 
-    // switch to providerID later, for now use this
     if (model.api.npm === "@openrouter/ai-sdk-provider") {
       result["usage"] = {
         include: true,
       }
+      if (model.api.id.includes("gemini-3")) {
+        result["reasoning"] = { effort: "high" }
+      }
+    }
+
+    if (
+      model.providerID === "baseten" ||
+      (model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(model.api.id))
+    ) {
+      result["chat_template_args"] = { enable_thinking: true }
     }
 
     if (model.providerID === "openai" || providerOptions?.setCacheKey) {
       result["promptCacheKey"] = sessionID
     }
 
-    if (
-      model.providerID === "google" ||
-      (model.providerID.startsWith("opencode") && model.api.id.includes("gemini-3"))
-    ) {
+    if (model.api.npm === "@ai-sdk/google" || model.api.npm === "@ai-sdk/google-vertex") {
       result["thinkingConfig"] = {
         includeThoughts: true,
+      }
+      if (model.api.id.includes("gemini-3")) {
+        result["thinkingConfig"]["thinkingLevel"] = "high"
       }
     }
 
@@ -241,7 +289,7 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
-      if (model.api.id.endsWith("gpt-5.1") && model.providerID !== "azure") {
+      if (model.api.id.endsWith("gpt-5.") && model.providerID !== "azure") {
         result["textVerbosity"] = "low"
       }
 
@@ -258,7 +306,7 @@ export namespace ProviderTransform {
     const options: Record<string, any> = {}
 
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.1")) {
+      if (model.api.id.includes("5.")) {
         options["reasoningEffort"] = "low"
       } else {
         options["reasoningEffort"] = "minimal"
@@ -273,8 +321,8 @@ export namespace ProviderTransform {
     return options
   }
 
-  export function providerOptions(npm: string | undefined, providerID: string, options: { [x: string]: any }) {
-    switch (npm) {
+  export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+    switch (model.api.npm) {
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
         return {
@@ -302,7 +350,7 @@ export namespace ProviderTransform {
         }
       default:
         return {
-          [providerID]: options,
+          [model.providerID]: options,
         }
     }
   }

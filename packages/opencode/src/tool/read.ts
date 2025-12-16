@@ -93,7 +93,7 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const isImage = file.type.startsWith("image/")
+    const isImage = file.type.startsWith("image/") && file.type !== "image/svg+xml"
     const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
       const mime = file.type

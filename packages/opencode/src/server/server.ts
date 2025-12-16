@@ -1,5 +1,7 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
-import { Bus } from "../bus"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -8,7 +10,7 @@ import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { mapValues, pipe } from "remeda"
+import { filter, mapValues, sortBy, pipe } from "remeda"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
@@ -41,7 +43,6 @@ import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
-import { GlobalBus } from "@/bus/global"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
@@ -54,7 +55,8 @@ export namespace Server {
   const log = Log.create({ service: "server" })
 
   export const Event = {
-    Connected: Bus.event("server.connected", z.object({})),
+    Connected: BusEvent.define("server.connected", z.object({})),
+    Disposed: BusEvent.define("global.disposed", z.object({})),
   }
 
   const app = new Hono()
@@ -109,7 +111,7 @@ export namespace Server {
                     z
                       .object({
                         directory: z.string(),
-                        payload: Bus.payloads(),
+                        payload: BusEvent.payloads(),
                       })
                       .meta({
                         ref: "GlobalEvent",
@@ -123,6 +125,14 @@ export namespace Server {
         async (c) => {
           log.info("global event connected")
           return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                payload: {
+                  type: "server.connected",
+                  properties: {},
+                },
+              }),
+            })
             async function handler(event: any) {
               await stream.writeSSE({
                 data: JSON.stringify(event),
@@ -137,6 +147,35 @@ export namespace Server {
               })
             })
           })
+        },
+      )
+      .post(
+        "/global/dispose",
+        describeRoute({
+          summary: "Dispose instance",
+          description: "Clean up and dispose all OpenCode instances, releasing all resources.",
+          operationId: "global.dispose",
+          responses: {
+            200: {
+              description: "Global disposed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.disposeAll()
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: Event.Disposed.type,
+              properties: {},
+            },
+          })
+          return c.json(true)
         },
       )
       .use(async (c, next) => {
@@ -482,6 +521,7 @@ export namespace Server {
                   schema: resolver(
                     z
                       .object({
+                        home: z.string(),
                         state: z.string(),
                         config: z.string(),
                         worktree: z.string(),
@@ -498,6 +538,7 @@ export namespace Server {
         }),
         async (c) => {
           return c.json({
+            home: Global.Path.home,
             state: Global.Path.state,
             config: Global.Path.config,
             worktree: Instance.worktree,
@@ -548,7 +589,11 @@ export namespace Server {
         }),
         async (c) => {
           const sessions = await Array.fromAsync(Session.list())
-          sessions.sort((a, b) => b.time.updated - a.time.updated)
+          pipe(
+            await Array.fromAsync(Session.list()),
+            filter((s) => !s.time.archived),
+            sortBy((s) => s.time.updated),
+          )
           return c.json(sessions)
         },
       )
@@ -754,6 +799,11 @@ export namespace Server {
           "json",
           z.object({
             title: z.string().optional(),
+            time: z
+              .object({
+                archived: z.number().optional(),
+              })
+              .optional(),
           }),
         ),
         async (c) => {
@@ -764,6 +814,7 @@ export namespace Server {
             if (updates.title !== undefined) {
               session.title = updates.title
             }
+            if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
           })
 
           return c.json(updatedSession)
@@ -1447,15 +1498,27 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const providers = pipe(
-            await ModelsDev.get(),
-            mapValues((x) => Provider.fromModelsDevProvider(x)),
+          const config = await Config.get()
+          const disabled = new Set(config.disabled_providers ?? [])
+          const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+
+          const allProviders = await ModelsDev.get()
+          const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
+          for (const [key, value] of Object.entries(allProviders)) {
+            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+              filteredProviders[key] = value
+            }
+          }
+
+          const connected = await Provider.list()
+          const providers = Object.assign(
+            mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
+            connected,
           )
-          const connected = await Provider.list().then((x) => Object.keys(x))
           return c.json({
             all: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-            connected,
+            connected: Object.keys(connected),
           })
         },
       )
@@ -1984,6 +2047,52 @@ export namespace Server {
           return c.json({ success: true as const })
         },
       )
+      .post(
+        "/mcp/:name/connect",
+        describeRoute({
+          description: "Connect an MCP server",
+          operationId: "mcp.connect",
+          responses: {
+            200: {
+              description: "MCP server connected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ name: z.string() })),
+        async (c) => {
+          const { name } = c.req.valid("param")
+          await MCP.connect(name)
+          return c.json(true)
+        },
+      )
+      .post(
+        "/mcp/:name/disconnect",
+        describeRoute({
+          description: "Disconnect an MCP server",
+          operationId: "mcp.disconnect",
+          responses: {
+            200: {
+              description: "MCP server disconnected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ name: z.string() })),
+        async (c) => {
+          const { name } = c.req.valid("param")
+          await MCP.disconnect(name)
+          return c.json(true)
+        },
+      )
       .get(
         "/lsp",
         describeRoute({
@@ -2338,7 +2447,7 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(Bus.payloads()),
+                  schema: resolver(BusEvent.payloads()),
                 },
               },
             },
@@ -2372,10 +2481,10 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://desktop.dev.opencode.ai${c.req.path}`, {
+        return proxy(`https://desktop.opencode.ai${c.req.path}`, {
           ...c.req,
           headers: {
-            host: "desktop.dev.opencode.ai",
+            host: "desktop.opencode.ai",
           },
         })
       }),

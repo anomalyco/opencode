@@ -28,6 +28,7 @@ import type {
   FindSymbolsResponses,
   FindTextResponses,
   FormatterStatusResponses,
+  GlobalDisposeResponses,
   GlobalEventResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
@@ -41,6 +42,8 @@ import type {
   McpAuthRemoveResponses,
   McpAuthStartErrors,
   McpAuthStartResponses,
+  McpConnectResponses,
+  McpDisconnectResponses,
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
@@ -49,6 +52,8 @@ import type {
   PermissionRespondResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
+  ProjectUpdateErrors,
+  ProjectUpdateResponses,
   ProviderAuthResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -189,6 +194,18 @@ export class Global extends HeyApiClient {
       ...options,
     })
   }
+
+  /**
+   * Dispose instance
+   *
+   * Clean up and dispose all OpenCode instances, releasing all resources.
+   */
+  public dispose<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<GlobalDisposeResponses, unknown, ThrowOnError>({
+      url: "/global/dispose",
+      ...options,
+    })
+  }
 }
 
 export class Project extends HeyApiClient {
@@ -227,6 +244,48 @@ export class Project extends HeyApiClient {
       url: "/project/current",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update project
+   *
+   * Update project properties such as name, icon and color.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      name?: string
+      icon?: {
+        url?: string
+        color?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "name" },
+            { in: "body", key: "icon" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<ProjectUpdateResponses, ProjectUpdateErrors, ThrowOnError>({
+      url: "/project/{projectID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -766,6 +825,9 @@ export class Session extends HeyApiClient {
       sessionID: string
       directory?: string
       title?: string
+      time?: {
+        archived?: number
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -777,6 +839,7 @@ export class Session extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "body", key: "title" },
+            { in: "body", key: "time" },
           ],
         },
       ],
@@ -1140,10 +1203,10 @@ export class Session extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
-      system?: string
       tools?: {
         [key: string]: boolean
       }
+      system?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1159,8 +1222,8 @@ export class Session extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
-            { in: "body", key: "system" },
             { in: "body", key: "tools" },
+            { in: "body", key: "system" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1226,10 +1289,10 @@ export class Session extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
-      system?: string
       tools?: {
         [key: string]: boolean
       }
+      system?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1245,8 +1308,8 @@ export class Session extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
-            { in: "body", key: "system" },
             { in: "body", key: "tools" },
+            { in: "body", key: "system" },
             { in: "body", key: "parts" },
           ],
         },
@@ -2074,6 +2137,62 @@ export class Mcp extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Connect an MCP server
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<McpConnectResponses, unknown, ThrowOnError>({
+      url: "/mcp/{name}/connect",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Disconnect an MCP server
+   */
+  public disconnect<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<McpDisconnectResponses, unknown, ThrowOnError>({
+      url: "/mcp/{name}/disconnect",
+      ...options,
+      ...params,
     })
   }
 

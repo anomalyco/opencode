@@ -1,5 +1,6 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import z from "zod"
-import { Bus } from "../bus"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
@@ -8,12 +9,15 @@ import { Config } from "../config/config"
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
 import type ParcelWatcher from "@parcel/watcher"
+import { $ } from "bun"
+
+declare const OPENCODE_LIBC: string | undefined
 
 export namespace FileWatcher {
   const log = Log.create({ service: "file.watcher" })
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "file.watcher.updated",
       z.object({
         file: z.string(),
@@ -24,7 +28,7 @@ export namespace FileWatcher {
 
   const watcher = lazy(() => {
     const binding = require(
-      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? "-glibc" : ""}`,
+      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC || "glibc"}` : ""}`,
     )
     return createWrapper(binding) as typeof import("@parcel/watcher")
   })
@@ -63,7 +67,7 @@ export namespace FileWatcher {
         }),
       )
 
-      const vcsDir = Instance.project.vcsDir
+      const vcsDir = await $`git rev-parse --git-dir`.quiet().nothrow().cwd(Instance.worktree).text()
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         subs.push(
           await watcher().subscribe(vcsDir, subscribe, {

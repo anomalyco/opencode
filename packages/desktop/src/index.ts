@@ -1,2 +1,2 @@
-export { PlatformProvider, type Platform } from "./PlatformContext"
-export { DesktopInterface } from "./DesktopInterface"
+export { PlatformProvider, type Platform } from "./context/platform"
+export { App } from "./app"

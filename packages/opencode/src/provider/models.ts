@@ -4,6 +4,7 @@ import path from "path"
 import z from "zod"
 import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
+import { Flag } from "../flag/flag"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -12,11 +13,22 @@ export namespace ModelsDev {
   export const Model = z.object({
     id: z.string(),
     name: z.string(),
+    family: z.string().optional(),
     release_date: z.string(),
     attachment: z.boolean(),
     reasoning: z.boolean(),
     temperature: z.boolean(),
     tool_call: z.boolean(),
+    interleaved: z
+      .union([
+        z.literal(true),
+        z
+          .object({
+            field: z.enum(["reasoning_content", "reasoning_details"]),
+          })
+          .strict(),
+      ])
+      .optional(),
     cost: z
       .object({
         input: z.number(),
@@ -72,6 +84,7 @@ export namespace ModelsDev {
   }
 
   export async function refresh() {
+    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
     const file = Bun.file(filepath)
     log.info("refreshing", {
       file,

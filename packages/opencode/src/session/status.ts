@@ -1,3 +1,4 @@
+import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Instance } from "@/project/instance"
 import z from "zod"
@@ -24,7 +25,7 @@ export namespace SessionStatus {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Status: Bus.event(
+    Status: BusEvent.define(
       "session.status",
       z.object({
         sessionID: z.string(),
@@ -32,7 +33,7 @@ export namespace SessionStatus {
       }),
     ),
     // deprecated
-    Idle: Bus.event(
+    Idle: BusEvent.define(
       "session.idle",
       z.object({
         sessionID: z.string(),

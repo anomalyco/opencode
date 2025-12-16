@@ -2,12 +2,26 @@
 // xdg-basedir reads env vars at import time, so we must set these first
 import os from "os"
 import path from "path"
+import fs from "fs/promises"
 
-const testDataDir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
-process.env["XDG_DATA_HOME"] = testDataDir
-process.env["XDG_CACHE_HOME"] = path.join(testDataDir, "cache")
-process.env["XDG_CONFIG_HOME"] = path.join(testDataDir, "config")
-process.env["XDG_STATE_HOME"] = path.join(testDataDir, "state")
+const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
+await fs.mkdir(dir, { recursive: true })
+process.env["XDG_DATA_HOME"] = path.join(dir, "share")
+process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
+process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
+process.env["XDG_STATE_HOME"] = path.join(dir, "state")
+
+// Pre-fetch models.json so tests don't need the macro fallback
+// Also write the cache version file to prevent global/index.ts from clearing the cache
+const cacheDir = path.join(dir, "cache", "opencode")
+await fs.mkdir(cacheDir, { recursive: true })
+await fs.writeFile(path.join(cacheDir, "version"), "14")
+const response = await fetch("https://models.dev/api.json")
+if (response.ok) {
+  await fs.writeFile(path.join(cacheDir, "models.json"), await response.text())
+}
+// Disable models.dev refresh to avoid race conditions during tests
+process.env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
 
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]

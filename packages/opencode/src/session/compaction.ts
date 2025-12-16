@@ -1,27 +1,24 @@
-import { wrapLanguageModel, type ModelMessage } from "ai"
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
-import { SystemPrompt } from "./system"
-import { Bus } from "../bus"
 import z from "zod"
 import { SessionPrompt } from "./prompt"
 import { Flag } from "../flag/flag"
 import { Token } from "../util/token"
-import { Config } from "../config/config"
 import { Log } from "../util/log"
-import { ProviderTransform } from "@/provider/transform"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
-import { mergeDeep, pipe } from "remeda"
+import { Agent } from "@/agent/agent"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
 
   export const Event = {
-    Compacted: Bus.event(
+    Compacted: BusEvent.define(
       "session.compacted",
       z.object({
         sessionID: z.string(),
@@ -89,24 +86,21 @@ export namespace SessionCompaction {
     parentID: string
     messages: MessageV2.WithParts[]
     sessionID: string
-    model: {
-      providerID: string
-      modelID: string
-    }
-    agent: string
     abort: AbortSignal
     auto: boolean
   }) {
-    const cfg = await Config.get()
-    const model = await Provider.getModel(input.model.providerID, input.model.modelID)
-    const language = await Provider.getLanguage(model)
-    const system = [...SystemPrompt.compaction(model.providerID)]
+    const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    const agent = await Agent.get("compaction")
+    const model = agent.model
+      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+      : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",
       parentID: input.parentID,
       sessionID: input.sessionID,
-      mode: input.agent,
+      mode: "compaction",
+      agent: "compaction",
       summary: true,
       path: {
         cwd: Instance.directory,
@@ -119,7 +113,7 @@ export namespace SessionCompaction {
         reasoning: 0,
         cache: { read: 0, write: 0 },
       },
-      modelID: input.model.modelID,
+      modelID: model.id,
       providerID: model.providerID,
       time: {
         created: Date.now(),
@@ -128,73 +122,31 @@ export namespace SessionCompaction {
     const processor = SessionProcessor.create({
       assistantMessage: msg,
       sessionID: input.sessionID,
-      model: model,
+      model,
       abort: input.abort,
     })
     const result = await processor.process({
-      onError(error) {
-        log.error("stream error", {
-          error,
-        })
-      },
-      // set to 0, we handle loop
-      maxRetries: 0,
-      providerOptions: ProviderTransform.providerOptions(
-        model.api.npm,
-        model.providerID,
-        pipe({}, mergeDeep(ProviderTransform.options(model, input.sessionID)), mergeDeep(model.options)),
-      ),
-      headers: model.headers,
-      abortSignal: input.abort,
-      tools: model.capabilities.toolcall ? {} : undefined,
+      user: userMessage,
+      agent,
+      abort: input.abort,
+      sessionID: input.sessionID,
+      tools: {},
+      system: [],
       messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
-        ...MessageV2.toModelMessage(
-          input.messages.filter((m) => {
-            if (m.info.role !== "assistant" || m.info.error === undefined) {
-              return true
-            }
-            if (
-              MessageV2.AbortedError.isInstance(m.info.error) &&
-              m.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-            ) {
-              return true
-            }
-
-            return false
-          }),
-        ),
+        ...MessageV2.toModelMessage(input.messages),
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Summarize our conversation above. This summary will be the only context available when the conversation continues, so preserve critical information including: what was accomplished, current work in progress, files involved, next steps, and any key user requests or constraints. Be concise but detailed enough that work can continue seamlessly.",
+              text: "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation.",
             },
           ],
         },
       ],
-      model: wrapLanguageModel({
-        model: language,
-        middleware: [
-          {
-            async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, model)
-              }
-              return args.params
-            },
-          },
-        ],
-      }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      model,
     })
+
     if (result === "continue" && input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
@@ -203,8 +155,8 @@ export namespace SessionCompaction {
         time: {
           created: Date.now(),
         },
-        agent: input.agent,
-        model: input.model,
+        agent: userMessage.agent,
+        model: userMessage.model,
       })
       await Session.updatePart({
         id: Identifier.ascending("part"),

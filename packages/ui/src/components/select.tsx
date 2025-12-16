@@ -1,10 +1,10 @@
 import { Select as Kobalte } from "@kobalte/core/select"
-import { createMemo, splitProps, type ComponentProps } from "solid-js"
+import { createMemo, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
 
-export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect"> & {
+export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect" | "children"> & {
   placeholder?: string
   options: T[]
   current?: T
@@ -14,6 +14,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   onSelect?: (value: T | undefined) => void
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
+  children?: (item: T | undefined) => JSX.Element
 }
 
 export function Select<T>(props: SelectProps<T> & ButtonProps) {
@@ -27,6 +28,7 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
     "label",
     "groupBy",
     "onSelect",
+    "children",
   ])
   const grouped = createMemo(() => {
     const result = pipe(
@@ -63,7 +65,11 @@ export function Select<T>(props: SelectProps<T> & ButtonProps) {
           {...itemProps}
         >
           <Kobalte.ItemLabel data-slot="select-select-item-label">
-            {local.label ? local.label(itemProps.item.rawValue) : (itemProps.item.rawValue as string)}
+            {local.children
+              ? local.children(itemProps.item.rawValue)
+              : local.label
+                ? local.label(itemProps.item.rawValue)
+                : (itemProps.item.rawValue as string)}
           </Kobalte.ItemLabel>
           <Kobalte.ItemIndicator data-slot="select-select-item-indicator">
             <Icon name="check-small" size="small" />
