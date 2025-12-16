@@ -7,7 +7,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
 
-export function DialogForkTimeline(props: {
+export function DialogForkFromTimeline(props: {
   sessionID: string
   onMove: (messageID: string) => void
 }) {
