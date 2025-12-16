@@ -3,6 +3,7 @@ import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
+import { Provider } from "../../provider/provider"
 import path from "path"
 import fs from "fs/promises"
 import matter from "gray-matter"
@@ -47,6 +48,11 @@ const AgentCreateCommand = cmd({
       .option("tools", {
         type: "string",
         describe: `comma-separated list of tools to enable (default: all). Available: "${AVAILABLE_TOOLS.join(", ")}"`,
+      })
+      .option("model", {
+        type: "string",
+        alias: ["m"],
+        describe: "model to use in the format of provider/model",
       }),
   async handler(args) {
     await Instance.provide({
@@ -114,7 +120,8 @@ const AgentCreateCommand = cmd({
         // Generate agent
         const spinner = prompts.spinner()
         spinner.start("Generating agent configuration...")
-        const generated = await Agent.generate({ description }).catch((error) => {
+        const model = args.model ? Provider.parseModel(args.model) : undefined
+        const generated = await Agent.generate({ description, model }).catch((error) => {
           spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
           if (isFullyNonInteractive) process.exit(1)
           throw new UI.CancelledError()

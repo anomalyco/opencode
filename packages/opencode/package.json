@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.155",
+  "version": "1.0.164",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -64,7 +64,7 @@
     "@hono/zod-validator": "catalog:",
     "@modelcontextprotocol/sdk": "1.15.1",
     "@octokit/graphql": "9.0.2",
-    "@octokit/rest": "22.0.0",
+    "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",

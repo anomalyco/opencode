@@ -5,7 +5,9 @@ import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
+import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
 import { Diff } from "@opencode-ai/ui/diff"
+import { Code } from "@opencode-ai/ui/code"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
@@ -36,17 +38,23 @@ const url =
 
 export function App() {
   return (
-    <MarkedProvider>
-      <DiffComponentProvider component={Diff}>
-        <GlobalSDKProvider url={url}>
-          <GlobalSyncProvider>
-            <LayoutProvider>
-              <DialogProvider>
-                <CommandProvider>
+    <DialogProvider>
+      <MarkedProvider>
+        <DiffComponentProvider component={Diff}>
+          <CodeComponentProvider component={Code}>
+            <GlobalSDKProvider url={url}>
+              <GlobalSyncProvider>
+                <LayoutProvider>
                   <NotificationProvider>
                     <MetaProvider>
                       <Font />
-                      <Router root={Layout}>
+                      <Router
+                        root={(props) => (
+                          <CommandProvider>
+                            <Layout>{props.children}</Layout>
+                          </CommandProvider>
+                        )}
+                      >
                         <Route path="/" component={Home} />
                         <Route path="/:dir" component={DirectoryLayout}>
                           <Route path="/" component={() => <Navigate href="session" />} />
@@ -66,12 +74,12 @@ export function App() {
                       </Router>
                     </MetaProvider>
                   </NotificationProvider>
-                </CommandProvider>
-              </DialogProvider>
-            </LayoutProvider>
-          </GlobalSyncProvider>
-        </GlobalSDKProvider>
-      </DiffComponentProvider>
-    </MarkedProvider>
+                </LayoutProvider>
+              </GlobalSyncProvider>
+            </GlobalSDKProvider>
+          </CodeComponentProvider>
+        </DiffComponentProvider>
+      </MarkedProvider>
+    </DialogProvider>
   )
 }

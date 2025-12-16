@@ -31,8 +31,16 @@ export type Notification = TurnCompleteNotification | ErrorNotification
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   init: () => {
-    const idlePlayer = makeAudioPlayer(idleSound)
-    const errorPlayer = makeAudioPlayer(errorSound)
+    let idlePlayer: ReturnType<typeof makeAudioPlayer> | undefined
+    let errorPlayer: ReturnType<typeof makeAudioPlayer> | undefined
+
+    try {
+      idlePlayer = makeAudioPlayer(idleSound)
+      errorPlayer = makeAudioPlayer(errorSound)
+    } catch (err) {
+      console.log("Failed to load audio", err)
+    }
+
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
 
@@ -44,11 +52,6 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         name: "notification.v1",
       },
     )
-
-    // onMount(() => {
-    //   const daysToKeep = 7
-    //   // setStore("list", (n) => n.filter((n) => !n.viewed && n.time + 1000 * 60 * 60 * 24 * daysToKeep < Date.now()))
-    // })
 
     globalSDK.event.listen((e) => {
       const directory = e.name
@@ -65,7 +68,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
           const isChild = match.found && syncStore.session[match.index].parentID
           if (isChild) break
-          idlePlayer.play()
+          try {
+            idlePlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "turn-complete",
@@ -81,7 +86,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             const isChild = match.found && syncStore.session[match.index].parentID
             if (isChild) break
           }
-          errorPlayer.play()
+          try {
+            errorPlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "error",

@@ -6,7 +6,6 @@ import { LocalProvider } from "@/context/local"
 import { base64Decode } from "@opencode-ai/util/encode"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
-import { DialogRoot } from "@opencode-ai/ui/context/dialog"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
@@ -21,9 +20,7 @@ export default function Layout(props: ParentProps) {
             const sync = useSync()
             return (
               <DataProvider data={sync.data} directory={directory()}>
-                <LocalProvider>
-                  <DialogRoot>{props.children}</DialogRoot>
-                </LocalProvider>
+                <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>
             )
           })}

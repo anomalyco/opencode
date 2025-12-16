@@ -99,19 +99,19 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     }
 
     async function loadSessions(directory: string) {
+      const [store, setStore] = child(directory)
       globalSDK.client.session.list({ directory }).then((x) => {
         const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
         const nonArchived = (x.data ?? [])
           .slice()
           .filter((s) => !s.time.archived)
           .sort((a, b) => a.id.localeCompare(b.id))
-        // Include at least 5 sessions, plus any updated in the last hour
+        // Include sessions up to the limit, plus any updated in the last hour
         const sessions = nonArchived.filter((s, i) => {
-          if (i < 5) return true
+          if (i < store.limit) return true
           const updated = new Date(s.time.updated).getTime()
           return updated > fourHoursAgo
         })
-        const [, setStore] = child(directory)
         setStore("session", sessions)
       })
     }
@@ -142,7 +142,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
       const event = e.details
 
       if (directory === "global") {
-        switch (event.type) {
+        switch (event?.type) {
           case "global.disposed": {
             bootstrap()
             break
@@ -288,9 +288,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         globalSDK.client.project.list().then(async (x) => {
           setGlobalStore(
             "project",
-            x
-              .data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
-              .sort((a, b) => a.id.localeCompare(b.id)),
+            x.data!.filter((p) => !p.worktree.includes("opencode-test")).sort((a, b) => a.id.localeCompare(b.id)),
           )
         }),
         globalSDK.client.provider.list().then((x) => {

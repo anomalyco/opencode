@@ -11,6 +11,7 @@ import {
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
+import { useCodeComponent } from "../context/code"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Card } from "./card"
@@ -19,6 +20,7 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
+import { checksum } from "@opencode-ai/util/encode"
 
 export interface MessageProps {
   message: MessageType
@@ -488,9 +490,10 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "write",
   render(props) {
-    console.log(props)
+    const codeComponent = useCodeComponent()
     return (
       <BasicTool
+        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="write-trigger">
@@ -507,19 +510,19 @@ ToolRegistry.register({
           </div>
         }
       >
-        {/* <Show when={props.input.content}> */}
-        {/*   <div data-component="write-content"> */}
-        {/*     <Code */}
-        {/*       file={{ */}
-        {/*         name: props.input.filePath, */}
-        {/*         contents: props.input.content, */}
-        {/*         cacheKey: checksum(props.input.content), */}
-        {/*       }} */}
-        {/*       overflow="scroll" */}
-        {/*       class="pb-40" */}
-        {/*     /> */}
-        {/*   </div> */}
-        {/* </Show> */}
+        <Show when={props.input.content}>
+          <div data-component="write-content">
+            <Dynamic
+              component={codeComponent}
+              file={{
+                name: props.input.filePath,
+                contents: props.input.content,
+                cacheKey: checksum(props.input.content),
+              }}
+              overflow="scroll"
+            />
+          </div>
+        </Show>
       </BasicTool>
     )
   },

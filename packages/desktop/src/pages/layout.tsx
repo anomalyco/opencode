@@ -194,7 +194,6 @@ export default function Layout(props: ParentProps) {
       title: "Previous session",
       category: "Session",
       keybind: "alt+arrowup",
-      disabled: !params.dir,
       onSelect: () => navigateSessionByOffset(-1),
     },
     {
@@ -202,7 +201,6 @@ export default function Layout(props: ParentProps) {
       title: "Next session",
       category: "Session",
       keybind: "alt+arrowdown",
-      disabled: !params.dir,
       onSelect: () => navigateSessionByOffset(1),
     },
     {
@@ -219,7 +217,7 @@ export default function Layout(props: ParentProps) {
   ])
 
   function connectProvider() {
-    dialog.replace(() => <DialogSelectProvider />)
+    dialog.show(() => <DialogSelectProvider />)
   }
 
   function navigateToProject(directory: string | undefined) {
@@ -415,11 +413,11 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-    const isWorking = createMemo(
-      () =>
-        props.session.id !== params.id &&
-        globalSync.child(props.project.worktree)[0].session_status[props.session.id]?.type === "busy",
-    )
+    const isWorking = createMemo(() => {
+      if (props.session.id === params.id) return false
+      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      return status?.type === "busy" || status?.type === "retry"
+    })
     return (
       <>
         <div
@@ -496,11 +494,10 @@ export default function Layout(props: ParentProps) {
   }
 
   const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
-    const notification = useNotification()
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
-    const [store, setStore] = globalSync.child(props.project.worktree)
+    const [store, setProjectStore] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session ?? [])
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const childSessionsByParent = createMemo(() => {
@@ -514,6 +511,11 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
+    const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
+    const loadMoreSessions = async () => {
+      setProjectStore("limit", (limit) => limit + 10)
+      await globalSync.project.loadSessions(props.project.worktree)
+    }
     const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
@@ -584,6 +586,18 @@ export default function Layout(props: ParentProps) {
                           </Tooltip>
                         </div>
                       </div>
+                    </div>
+                  </Show>
+                  <Show when={hasMoreSessions()}>
+                    <div class="relative w-full py-1">
+                      <Button
+                        variant="ghost"
+                        class="flex w-full text-left justify-start text-12-medium opacity-50 px-3.5"
+                        size="large"
+                        onClick={loadMoreSessions}
+                      >
+                        Load more
+                      </Button>
                     </div>
                   </Show>
                 </nav>
@@ -713,7 +727,7 @@ export default function Layout(props: ParentProps) {
               <Match when={true}>
                 <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
                   <Button
-                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                    class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                     variant="ghost"
                     size="large"
                     icon="plus"
@@ -727,7 +741,7 @@ export default function Layout(props: ParentProps) {
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -753,7 +767,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"

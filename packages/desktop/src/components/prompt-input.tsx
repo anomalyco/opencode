@@ -79,6 +79,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const providers = useProviders()
   const command = useCommand()
   let editorRef!: HTMLDivElement
+  let fileInputRef!: HTMLInputElement
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
@@ -379,31 +380,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const parseFromDOM = (): Prompt => {
     const newParts: Prompt = []
     let position = 0
-    editorRef.childNodes.forEach((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (node.textContent) {
-          const content = node.textContent
-          newParts.push({ type: "text", content, start: position, end: position + content.length })
-          position += content.length
-        }
-      } else if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type) {
-        switch ((node as HTMLElement).dataset.type) {
-          case "file":
-            const content = node.textContent!
-            newParts.push({
-              type: "file",
-              path: (node as HTMLElement).dataset.path!,
-              content,
-              start: position,
-              end: position + content.length,
-            })
-            position += content.length
-            break
-          default:
-            break
-        }
-      }
+
+    const pushText = (content: string) => {
+      if (!content) return
+      newParts.push({ type: "text", content, start: position, end: position + content.length })
+      position += content.length
+    }
+
+    const rangeText = (range: Range) => {
+      const fragment = range.cloneContents()
+      const container = document.createElement("div")
+      container.append(fragment)
+      return container.innerText
+    }
+
+    const files = Array.from(editorRef.querySelectorAll<HTMLElement>("[data-type=file]"))
+    let last: HTMLElement | undefined
+
+    files.forEach((file) => {
+      const before = document.createRange()
+      before.selectNodeContents(editorRef)
+      if (last) before.setStartAfter(last)
+      before.setEndBefore(file)
+      pushText(rangeText(before))
+
+      const content = file.textContent ?? ""
+      newParts.push({
+        type: "file",
+        path: file.dataset.path!,
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+      last = file
     })
+
+    const after = document.createRange()
+    after.selectNodeContents(editorRef)
+    if (last) after.setStartAfter(last)
+    pushText(rangeText(after))
+
     if (newParts.length === 0) newParts.push(...DEFAULT_PROMPT)
     return newParts
   }
@@ -576,13 +593,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed, cursorPosition, textLength } = getCaretState()
+      const { collapsed } = getCaretState()
       if (!collapsed) return
+
+      const cursorPosition = getCursorPosition(editorRef)
+      const textLength = promptLength(prompt.current())
+      const textContent = editorRef.textContent ?? ""
+      const isEmpty = textContent.trim() === "" || textLength <= 1
+      const hasNewlines = textContent.includes("\n")
       const inHistory = store.historyIndex >= 0
-      const atAbsoluteStart = cursorPosition === 0
-      const atAbsoluteEnd = cursorPosition === textLength
-      const allowUp = (inHistory && atAbsoluteEnd) || atAbsoluteStart
-      const allowDown = (inHistory && atAbsoluteStart) || atAbsoluteEnd
+      const atStart = cursorPosition <= (isEmpty ? 1 : 0)
+      const atEnd = cursorPosition >= (isEmpty ? textLength - 1 : textLength)
+      const allowUp = isEmpty || atStart || (!hasNewlines && !inHistory) || (inHistory && atEnd)
+      const allowDown = isEmpty || atEnd || (!hasNewlines && !inHistory) || (inHistory && atStart)
 
       if (event.key === "ArrowUp") {
         if (!allowUp) return
@@ -791,7 +814,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <Show when={store.dragging}>
           <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 pointer-events-none">
             <div class="flex flex-col items-center gap-2 text-text-weak">
-              <Icon name="plus" class="size-8" />
+              <Icon name="photo" class="size-8" />
               <span class="text-14-regular">Drop images or PDFs here</span>
             </div>
           </div>
@@ -832,6 +855,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </Show>
         <div class="relative max-h-[240px] overflow-y-auto">
           <div
+            data-component="prompt-input"
             ref={(el) => {
               editorRef = el
               props.ref?.(el)
@@ -863,7 +887,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               as="div"
               variant="ghost"
               onClick={() =>
-                dialog.push(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
+                dialog.show(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
               }
             >
               {local.model.current()?.name ?? "Select model"}
@@ -871,34 +895,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <Icon name="chevron-down" size="small" />
             </Button>
           </div>
-          <Tooltip
-            placement="top"
-            inactive={!prompt.dirty() && !working()}
-            value={
-              <Switch>
-                <Match when={working()}>
-                  <div class="flex items-center gap-2">
-                    <span>Stop</span>
-                    <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
-                  </div>
-                </Match>
-                <Match when={true}>
-                  <div class="flex items-center gap-2">
-                    <span>Send</span>
-                    <Icon name="enter" size="small" class="text-icon-base" />
-                  </div>
-                </Match>
-              </Switch>
-            }
-          >
-            <IconButton
-              type="submit"
-              disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
-              icon={working() ? "stop" : "arrow-up"}
-              variant="primary"
-              class="h-10 w-8 absolute right-2 bottom-2"
+          <div class="flex items-center gap-1 absolute right-2 bottom-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_IMAGE_TYPES.join(",")}
+              class="hidden"
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0]
+                if (file) addImageAttachment(file)
+                e.currentTarget.value = ""
+              }}
             />
-          </Tooltip>
+            <Tooltip placement="top" value="Attach image">
+              <IconButton
+                type="button"
+                icon="photo"
+                variant="ghost"
+                class="h-10 w-8"
+                onClick={() => fileInputRef.click()}
+              />
+            </Tooltip>
+            <Tooltip
+              placement="top"
+              inactive={!prompt.dirty() && !working()}
+              value={
+                <Switch>
+                  <Match when={working()}>
+                    <div class="flex items-center gap-2">
+                      <span>Stop</span>
+                      <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
+                    </div>
+                  </Match>
+                  <Match when={true}>
+                    <div class="flex items-center gap-2">
+                      <span>Send</span>
+                      <Icon name="enter" size="small" class="text-icon-base" />
+                    </div>
+                  </Match>
+                </Switch>
+              }
+            >
+              <IconButton
+                type="submit"
+                disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
+                icon={working() ? "stop" : "arrow-up"}
+                variant="primary"
+                class="h-10 w-8"
+              />
+            </Tooltip>
+          </div>
         </div>
       </form>
     </div>
