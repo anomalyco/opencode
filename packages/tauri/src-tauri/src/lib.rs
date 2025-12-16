@@ -78,7 +78,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
             .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
             .env("OPENCODE_CLIENT", "desktop")
             .args([
-                "-l",
+                "-il",
                 "-c",
                 &format!("{} serve --port={}", sidecar_path.display(), port),
             ])
