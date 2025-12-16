@@ -1,16 +1,4 @@
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Match,
-  onCleanup,
-  onMount,
-  ParentProps,
-  Show,
-  Switch,
-  type JSX,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, ParentProps, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors } from "@/context/layout"
@@ -20,14 +8,14 @@ import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session, Project, ProviderAuthMethod, ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
+import { Session, Project } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore, produce } from "solid-js/store"
 import {
@@ -40,27 +28,31 @@ import {
   useDragDropContext,
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
-import { SelectDialog } from "@opencode-ai/ui/select-dialog"
-import { Tag } from "@opencode-ai/ui/tag"
-import { IconName } from "@opencode-ai/ui/icons/provider"
-import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { iife } from "@opencode-ai/util/iife"
-import { Link } from "@/components/link"
-import { List, ListRef } from "@opencode-ai/ui/list"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { showToast, Toast } from "@opencode-ai/ui/toast"
+import { useProviders } from "@/hooks/use-providers"
+import { Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { Spinner } from "@opencode-ai/ui/spinner"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
 import { Header } from "@/components/header"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectProvider } from "@/components/dialog-select-provider"
+import { useCommand } from "@/context/command"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
     lastSession: {} as { [directory: string]: string },
     activeDraggable: undefined as string | undefined,
   })
+
+  let scrollContainerRef: HTMLDivElement | undefined
+
+  function scrollToSession(sessionId: string) {
+    if (!scrollContainerRef) return
+    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
+    if (element) {
+      element.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
+  }
 
   const params = useParams()
   const globalSDK = useGlobalSDK()
@@ -70,6 +62,163 @@ export default function Layout(props: ParentProps) {
   const notification = useNotification()
   const navigate = useNavigate()
   const providers = useProviders()
+  const dialog = useDialog()
+  const command = useCommand()
+
+  function flattenSessions(sessions: Session[]): Session[] {
+    const childrenMap = new Map<string, Session[]>()
+    for (const session of sessions) {
+      if (session.parentID) {
+        const children = childrenMap.get(session.parentID) ?? []
+        children.push(session)
+        childrenMap.set(session.parentID, children)
+      }
+    }
+    const result: Session[] = []
+    function visit(session: Session) {
+      result.push(session)
+      for (const child of childrenMap.get(session.id) ?? []) {
+        visit(child)
+      }
+    }
+    for (const session of sessions) {
+      if (!session.parentID) visit(session)
+    }
+    return result
+  }
+
+  const currentSessions = createMemo(() => {
+    if (!params.dir) return []
+    const directory = base64Decode(params.dir)
+    return flattenSessions(globalSync.child(directory)[0].session ?? [])
+  })
+
+  function navigateSessionByOffset(offset: number) {
+    const projects = layout.projects.list()
+    if (projects.length === 0) return
+
+    const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
+    const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
+
+    if (projectIndex === -1) {
+      const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
+      if (targetProject) navigateToProject(targetProject.worktree)
+      return
+    }
+
+    const sessions = currentSessions()
+    const sessionIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
+
+    let targetIndex: number
+    if (sessionIndex === -1) {
+      targetIndex = offset > 0 ? 0 : sessions.length - 1
+    } else {
+      targetIndex = sessionIndex + offset
+    }
+
+    if (targetIndex >= 0 && targetIndex < sessions.length) {
+      const session = sessions[targetIndex]
+      navigateToSession(session)
+      queueMicrotask(() => scrollToSession(session.id))
+      return
+    }
+
+    const nextProjectIndex = projectIndex + (offset > 0 ? 1 : -1)
+    const nextProject = projects[nextProjectIndex]
+    if (!nextProject) return
+
+    const nextProjectSessions = flattenSessions(globalSync.child(nextProject.worktree)[0].session ?? [])
+    if (nextProjectSessions.length === 0) {
+      navigateToProject(nextProject.worktree)
+      return
+    }
+
+    const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
+    navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+    queueMicrotask(() => scrollToSession(targetSession.id))
+  }
+
+  async function archiveSession(session: Session) {
+    const [store, setStore] = globalSync.child(session.directory)
+    const sessions = store.session ?? []
+    const index = sessions.findIndex((s) => s.id === session.id)
+    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+
+    await globalSDK.client.session.update({
+      directory: session.directory,
+      sessionID: session.id,
+      time: { archived: Date.now() },
+    })
+    setStore(
+      produce((draft) => {
+        const match = Binary.search(draft.session, session.id, (s) => s.id)
+        if (match.found) draft.session.splice(match.index, 1)
+      }),
+    )
+    if (session.id === params.id) {
+      if (nextSession) {
+        navigate(`/${params.dir}/session/${nextSession.id}`)
+      } else {
+        navigate(`/${params.dir}/session`)
+      }
+    }
+  }
+
+  command.register(() => [
+    {
+      id: "sidebar.toggle",
+      title: "Toggle sidebar",
+      category: "View",
+      keybind: "mod+b",
+      onSelect: () => layout.sidebar.toggle(),
+    },
+    ...(platform.openDirectoryPickerDialog
+      ? [
+          {
+            id: "project.open",
+            title: "Open project",
+            category: "Project",
+            keybind: "mod+o",
+            onSelect: () => chooseProject(),
+          },
+        ]
+      : []),
+    {
+      id: "provider.connect",
+      title: "Connect provider",
+      category: "Provider",
+      onSelect: () => connectProvider(),
+    },
+    {
+      id: "session.previous",
+      title: "Previous session",
+      category: "Session",
+      keybind: "alt+arrowup",
+      onSelect: () => navigateSessionByOffset(-1),
+    },
+    {
+      id: "session.next",
+      title: "Next session",
+      category: "Session",
+      keybind: "alt+arrowdown",
+      onSelect: () => navigateSessionByOffset(1),
+    },
+    {
+      id: "session.archive",
+      title: "Archive session",
+      category: "Session",
+      keybind: "mod+shift+backspace",
+      disabled: !params.dir || !params.id,
+      onSelect: () => {
+        const session = currentSessions().find((s) => s.id === params.id)
+        if (session) archiveSession(session)
+      },
+    },
+  ])
+
+  function connectProvider() {
+    dialog.show(() => <DialogSelectProvider />)
+  }
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
@@ -108,10 +257,6 @@ export default function Layout(props: ParentProps) {
     } else if (result) {
       openProject(result)
     }
-  }
-
-  async function connectProvider() {
-    layout.dialog.open("provider")
   }
 
   createEffect(() => {
@@ -189,11 +334,13 @@ export default function Layout(props: ParentProps) {
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => getFilename(props.project.worktree))
     const mask = "radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px)"
+    const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+
     return (
-      <div class="relative size-6 shrink-0">
+      <div class="relative size-5 shrink-0 rounded-sm overflow-hidden">
         <Avatar
           fallback={name()}
-          src={props.project.icon?.url}
+          src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
           {...getAvatarColors(props.project.icon?.color)}
           class={`size-full ${props.class ?? ""}`}
           style={
@@ -203,7 +350,7 @@ export default function Layout(props: ParentProps) {
         <Show when={props.expandable}>
           <Icon
             name="chevron-right"
-            size="large"
+            size="normal"
             class="hidden size-full items-center justify-center text-text-subtle group-hover/session:flex group-data-[expanded]/trigger:rotate-90 transition-transform duration-50"
           />
         </Show>
@@ -253,13 +400,117 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
+  const SessionItem = (props: {
+    session: Session
+    slug: string
+    project: Project
+    depth?: number
+    childrenMap: Map<string, Session[]>
+  }): JSX.Element => {
     const notification = useNotification()
+    const depth = props.depth ?? 0
+    const children = createMemo(() => props.childrenMap.get(props.session.id) ?? [])
+    const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
+    const notifications = createMemo(() => notification.session.unseen(props.session.id))
+    const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const isWorking = createMemo(
+      () =>
+        props.session.id !== params.id &&
+        globalSync.child(props.project.worktree)[0].session_status[props.session.id]?.type === "busy",
+    )
+    return (
+      <>
+        <div
+          data-session-id={props.session.id}
+          class="group/session relative w-full pr-2 py-1 rounded-md cursor-default transition-colors
+                 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
+          style={{ "padding-left": `${16 + depth * 12}px` }}
+        >
+          <Tooltip placement="right" value={props.session.title} gutter={10}>
+            <A
+              href={`${props.slug}/session/${props.session.id}`}
+              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
+            >
+              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
+                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                  {props.session.title}
+                </span>
+                <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                  <Switch>
+                    <Match when={isWorking()}>
+                      <Spinner class="size-2.5 mr-0.5" />
+                    </Match>
+                    <Match when={hasError()}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
+                    </Match>
+                    <Match when={notifications().length > 0}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
+                    </Match>
+                    <Match when={true}>
+                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                        {Math.abs(updated().diffNow().as("seconds")) < 60
+                          ? "Now"
+                          : updated()
+                              .toRelative({
+                                style: "short",
+                                unit: ["days", "hours", "minutes"],
+                              })
+                              ?.replace(" ago", "")
+                              ?.replace(/ days?/, "d")
+                              ?.replace(" min.", "m")
+                              ?.replace(" hr.", "h")}
+                      </span>
+                    </Match>
+                  </Switch>
+                </div>
+              </div>
+              <Show when={props.session.summary?.files}>
+                <div class="flex justify-between items-center self-stretch">
+                  <span class="text-12-regular text-text-weak">{`${props.session.summary?.files || "No"} file${props.session.summary?.files !== 1 ? "s" : ""} changed`}</span>
+                  <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+                </div>
+              </Show>
+            </A>
+          </Tooltip>
+          <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
+            <Tooltip placement="right" value="Archive session">
+              <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
+            </Tooltip>
+          </div>
+        </div>
+        <For each={children()}>
+          {(child) => (
+            <SessionItem
+              session={child}
+              slug={props.slug}
+              project={props.project}
+              depth={depth + 1}
+              childrenMap={props.childrenMap}
+            />
+          )}
+        </For>
+      </>
+    )
+  }
+
+  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
-    const [store, setStore] = globalSync.child(props.project.worktree)
+    const [store] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session ?? [])
+    const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
+    const childSessionsByParent = createMemo(() => {
+      const map = new Map<string, Session[]>()
+      for (const session of sessions()) {
+        if (session.parentID) {
+          const children = map.get(session.parentID) ?? []
+          children.push(session)
+          map.set(session.parentID, children)
+        }
+      }
+      return map
+    })
     const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
@@ -270,7 +521,7 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1 self-stretch h-auto border-none rounded-lg"
+                class="group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg"
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <ProjectAvatar
@@ -299,101 +550,38 @@ export default function Layout(props: ParentProps) {
               </Button>
               <Collapsible.Content>
                 <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
-                  <For each={sessions()}>
-                    {(session) => {
-                      const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
-                      const notifications = createMemo(() => notification.session.unseen(session.id))
-                      const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-                      async function archive(session: Session) {
-                        await globalSDK.client.session.update({
-                          directory: session.directory,
-                          sessionID: session.id,
-                          time: { archived: Date.now() },
-                        })
-                        setStore(
-                          produce((draft) => {
-                            const match = Binary.search(draft.session, session.id, (s) => s.id)
-                            if (match.found) draft.session.splice(match.index, 1)
-                          }),
-                        )
-                      }
-                      return (
-                        <A
-                          href={`${slug()}/session/${session.id}`}
-                          class="group/session focus:outline-none cursor-default"
-                        >
-                          <Tooltip placement="right" value={session.title}>
-                            <div
-                              class="relative w-full pl-4 pr-1 py-1 rounded-md
-                                     group-[.active]/session:bg-surface-raised-base-hover
-                                     group-hover/session:bg-surface-raised-base-hover
-                                     group-focus/session:bg-surface-raised-base-hover"
+                  <For each={rootSessions()}>
+                    {(session) => (
+                      <SessionItem
+                        session={session}
+                        slug={slug()}
+                        project={props.project}
+                        childrenMap={childSessionsByParent()}
+                      />
+                    )}
+                  </For>
+                  <Show when={rootSessions().length === 0}>
+                    <div
+                      class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
+                             hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
+                    >
+                      <div class="flex items-center self-stretch w-full">
+                        <div class="flex-1 min-w-0">
+                          <Tooltip placement="right" value="New session">
+                            <A
+                              href={`${slug()}/session`}
+                              class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
                                 <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                                  {session.title}
+                                  New session
                                 </span>
-                                <div class="shrink-0 group-hover/session:hidden mr-1">
-                                  <Switch>
-                                    <Match when={hasError()}>
-                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
-                                    </Match>
-                                    <Match when={notifications().length > 0}>
-                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
-                                    </Match>
-                                    <Match when={true}>
-                                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                                        {Math.abs(updated().diffNow().as("seconds")) < 60
-                                          ? "Now"
-                                          : updated()
-                                              .toRelative({
-                                                style: "short",
-                                                unit: ["days", "hours", "minutes"],
-                                              })
-                                              ?.replace(" ago", "")
-                                              ?.replace(/ days?/, "d")
-                                              ?.replace(" min.", "m")
-                                              ?.replace(" hr.", "h")}
-                                      </span>
-                                    </Match>
-                                  </Switch>
-                                </div>
-                                <div class="hidden group-hover/session:flex group-active/session:flex text-text-base gap-1">
-                                  {/* <IconButton icon="dot-grid" variant="ghost" /> */}
-                                  <Tooltip placement="right" value="Archive session">
-                                    <IconButton icon="archive" variant="ghost" onClick={() => archive(session)} />
-                                  </Tooltip>
-                                </div>
                               </div>
-                              <Show when={session.summary?.files}>
-                                <div class="flex justify-between items-center self-stretch">
-                                  <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                                  <Show when={session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
-                                </div>
-                              </Show>
-                            </div>
+                            </A>
                           </Tooltip>
-                        </A>
-                      )
-                    }}
-                  </For>
-                  <Show when={sessions().length === 0}>
-                    <A href={`${slug()}/session`} class="group/session focus:outline-none cursor-default">
-                      <Tooltip placement="right" value="New session">
-                        <div
-                          class="relative w-full pl-4 pr-1 py-1 rounded-md
-                                 group-[.active]/session:bg-surface-raised-base-hover
-                                 group-hover/session:bg-surface-raised-base-hover
-                                 group-focus/session:bg-surface-raised-base-hover"
-                        >
-                          <div class="flex items-center self-stretch gap-6 justify-between">
-                            <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                              New session
-                            </span>
-                          </div>
                         </div>
-                      </Tooltip>
-                    </A>
+                      </div>
+                    </div>
                   </Show>
                 </nav>
               </Collapsible.Content>
@@ -485,7 +673,10 @@ export default function Layout(props: ParentProps) {
             >
               <DragDropSensors />
               <ConstrainDragXAxis />
-              <div class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar">
+              <div
+                ref={scrollContainerRef}
+                class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
+              >
                 <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
                   <For each={layout.projects.list()}>{(project) => <SortableProject project={project} />}</For>
                 </SortableProvider>
@@ -519,7 +710,7 @@ export default function Layout(props: ParentProps) {
               <Match when={true}>
                 <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
                   <Button
-                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                    class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                     variant="ghost"
                     size="large"
                     icon="plus"
@@ -533,7 +724,7 @@ export default function Layout(props: ParentProps) {
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -559,7 +750,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"
@@ -570,456 +761,6 @@ export default function Layout(props: ParentProps) {
           </div>
         </div>
         <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
-        <Show when={layout.dialog.opened() === "provider"}>
-          <SelectDialog
-            defaultOpen
-            title="Connect provider"
-            placeholder="Search providers"
-            activeIcon="plus-small"
-            key={(x) => x?.id}
-            items={providers.all}
-            filterKeys={["id", "name"]}
-            groupBy={(x) => (popularProviders.includes(x.id) ? "Popular" : "Other")}
-            sortBy={(a, b) => {
-              if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
-                return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
-              return a.name.localeCompare(b.name)
-            }}
-            sortGroupsBy={(a, b) => {
-              if (a.category === "Popular" && b.category !== "Popular") return -1
-              if (b.category === "Popular" && a.category !== "Popular") return 1
-              return 0
-            }}
-            onSelect={(x) => {
-              if (!x) return
-              layout.dialog.connect(x.id)
-            }}
-            onOpenChange={(open) => {
-              if (open) {
-                layout.dialog.open("provider")
-              } else {
-                layout.dialog.close("provider")
-              }
-            }}
-          >
-            {(i) => (
-              <div class="px-1.25 w-full flex items-center gap-x-4">
-                <ProviderIcon
-                  data-slot="list-item-extra-icon"
-                  id={i.id as IconName}
-                  // TODO: clean this up after we update icon in models.dev
-                  classList={{
-                    "text-icon-weak-base": true,
-                    "size-4 mx-0.5": i.id === "opencode",
-                    "size-5": i.id !== "opencode",
-                  }}
-                />
-                <span>{i.name}</span>
-                <Show when={i.id === "opencode"}>
-                  <Tag>Recommended</Tag>
-                </Show>
-                <Show when={i.id === "anthropic"}>
-                  <div class="text-14-regular text-text-weak">Connect with Claude Pro/Max or API key</div>
-                </Show>
-              </div>
-            )}
-          </SelectDialog>
-        </Show>
-        <Show when={layout.dialog.opened() === "connect"}>
-          {iife(() => {
-            const providerID = createMemo(() => layout.connect.provider()!)
-            const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === providerID())!)
-            const methods = createMemo(
-              () =>
-                globalSync.data.provider_auth[providerID()] ?? [
-                  {
-                    type: "api",
-                    label: "API key",
-                  },
-                ],
-            )
-            const [store, setStore] = createStore({
-              method: undefined as undefined | ProviderAuthMethod,
-              authorization: undefined as undefined | ProviderAuthAuthorization,
-              state: "pending" as undefined | "pending" | "complete" | "error",
-              error: undefined as string | undefined,
-            })
-
-            const methodIndex = createMemo(() => methods().findIndex((x) => x.label === store.method?.label))
-
-            async function selectMethod(index: number) {
-              const method = methods()[index]
-              setStore(
-                produce((draft) => {
-                  draft.method = method
-                  draft.authorization = undefined
-                  draft.state = undefined
-                  draft.error = undefined
-                }),
-              )
-
-              if (method.type === "oauth") {
-                setStore("state", "pending")
-                const start = Date.now()
-                await globalSDK.client.provider.oauth
-                  .authorize(
-                    {
-                      providerID: providerID(),
-                      method: index,
-                    },
-                    { throwOnError: true },
-                  )
-                  .then((x) => {
-                    const elapsed = Date.now() - start
-                    const delay = 1000 - elapsed
-
-                    if (delay > 0) {
-                      setTimeout(() => {
-                        setStore("state", "complete")
-                        setStore("authorization", x.data!)
-                      }, delay)
-                      return
-                    }
-                    setStore("state", "complete")
-                    setStore("authorization", x.data!)
-                  })
-                  .catch((e) => {
-                    setStore("state", "error")
-                    setStore("error", String(e))
-                  })
-              }
-            }
-
-            let listRef: ListRef | undefined
-            function handleKey(e: KeyboardEvent) {
-              if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
-                return
-              }
-              if (e.key === "Escape") return
-              listRef?.onKeyDown(e)
-            }
-
-            onMount(() => {
-              if (methods().length === 1) {
-                selectMethod(0)
-              }
-
-              document.addEventListener("keydown", handleKey)
-              onCleanup(() => {
-                document.removeEventListener("keydown", handleKey)
-              })
-            })
-
-            async function complete() {
-              await globalSDK.client.global.dispose()
-              setTimeout(() => {
-                showToast({
-                  variant: "success",
-                  icon: "circle-check",
-                  title: `${provider().name} connected`,
-                  description: `${provider().name} models are now available to use.`,
-                })
-                layout.connect.complete()
-              }, 500)
-            }
-
-            return (
-              <Dialog
-                modal
-                defaultOpen
-                onOpenChange={(open) => {
-                  if (open) {
-                    layout.dialog.open("connect")
-                  } else {
-                    layout.dialog.close("connect")
-                  }
-                }}
-              >
-                <Dialog.Header class="px-4.5">
-                  <Dialog.Title class="flex items-center">
-                    <IconButton
-                      tabIndex={-1}
-                      icon="arrow-left"
-                      variant="ghost"
-                      onClick={() => {
-                        if (methods().length === 1) {
-                          layout.dialog.open("provider")
-                          return
-                        }
-                        if (store.authorization) {
-                          setStore("authorization", undefined)
-                          setStore("method", undefined)
-                          return
-                        }
-                        if (store.method) {
-                          setStore("method", undefined)
-                          return
-                        }
-                        layout.dialog.open("provider")
-                      }}
-                    />
-                  </Dialog.Title>
-                  <Dialog.CloseButton tabIndex={-1} />
-                </Dialog.Header>
-                <Dialog.Body>
-                  <div class="flex flex-col gap-6 px-2.5 pb-3">
-                    <div class="px-2.5 flex gap-4 items-center">
-                      <ProviderIcon id={providerID() as IconName} class="size-5 shrink-0 icon-strong-base" />
-                      <div class="text-16-medium text-text-strong">
-                        <Switch>
-                          <Match
-                            when={providerID() === "anthropic" && store.method?.label?.toLowerCase().includes("max")}
-                          >
-                            Login with Claude Pro/Max
-                          </Match>
-                          <Match when={true}>Connect {provider().name}</Match>
-                        </Switch>
-                      </div>
-                    </div>
-                    <div class="px-2.5 pb-10 flex flex-col gap-6">
-                      <Switch>
-                        <Match when={store.method === undefined}>
-                          <div class="text-14-regular text-text-base">Select login method for {provider().name}.</div>
-                          <div class="">
-                            <List
-                              ref={(ref) => (listRef = ref)}
-                              items={methods}
-                              key={(m) => m?.label}
-                              onSelect={async (method, index) => {
-                                if (!method) return
-                                selectMethod(index)
-                              }}
-                            >
-                              {(i) => (
-                                <div class="w-full flex items-center gap-x-4">
-                                  <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
-                                    <div
-                                      class="w-2.5 h-0.5 bg-icon-strong-base hidden"
-                                      data-slot="list-item-extra-icon"
-                                    />
-                                  </div>
-                                  <span>{i.label}</span>
-                                </div>
-                              )}
-                            </List>
-                          </div>
-                        </Match>
-                        <Match when={store.state === "pending"}>
-                          <div class="text-14-regular text-text-base">
-                            <div class="flex items-center gap-x-4">
-                              <Spinner />
-                              <span>Authorization in progress...</span>
-                            </div>
-                          </div>
-                        </Match>
-                        <Match when={store.state === "error"}>
-                          <div class="text-14-regular text-text-base">
-                            <div class="flex items-center gap-x-4">
-                              <Icon name="circle-ban-sign" class="text-icon-critical-base" />
-                              <span>Authorization failed: {store.error}</span>
-                            </div>
-                          </div>
-                        </Match>
-                        <Match when={store.method?.type === "api"}>
-                          {iife(() => {
-                            const [formStore, setFormStore] = createStore({
-                              value: "",
-                              error: undefined as string | undefined,
-                            })
-
-                            async function handleSubmit(e: SubmitEvent) {
-                              e.preventDefault()
-
-                              const form = e.currentTarget as HTMLFormElement
-                              const formData = new FormData(form)
-                              const apiKey = formData.get("apiKey") as string
-
-                              if (!apiKey?.trim()) {
-                                setFormStore("error", "API key is required")
-                                return
-                              }
-
-                              setFormStore("error", undefined)
-                              await globalSDK.client.auth.set({
-                                providerID: providerID(),
-                                auth: {
-                                  type: "api",
-                                  key: apiKey,
-                                },
-                              })
-                              await complete()
-                            }
-
-                            return (
-                              <div class="flex flex-col gap-6">
-                                <Switch>
-                                  <Match when={provider().id === "opencode"}>
-                                    <div class="flex flex-col gap-4">
-                                      <div class="text-14-regular text-text-base">
-                                        OpenCode Zen gives you access to a curated set of reliable optimized models for
-                                        coding agents.
-                                      </div>
-                                      <div class="text-14-regular text-text-base">
-                                        With a single API key you’ll get access to models such as Claude, GPT, Gemini,
-                                        GLM and more.
-                                      </div>
-                                      <div class="text-14-regular text-text-base">
-                                        Visit{" "}
-                                        <Link href="https://opencode.ai/zen" tabIndex={-1}>
-                                          opencode.ai/zen
-                                        </Link>{" "}
-                                        to collect your API key.
-                                      </div>
-                                    </div>
-                                  </Match>
-                                  <Match when={true}>
-                                    <div class="text-14-regular text-text-base">
-                                      Enter your {provider().name} API key to connect your account and use{" "}
-                                      {provider().name} models in OpenCode.
-                                    </div>
-                                  </Match>
-                                </Switch>
-                                <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                                  <TextField
-                                    autofocus
-                                    type="text"
-                                    label={`${provider().name} API key`}
-                                    placeholder="API key"
-                                    name="apiKey"
-                                    value={formStore.value}
-                                    onChange={setFormStore.bind(null, "value")}
-                                    validationState={formStore.error ? "invalid" : undefined}
-                                    error={formStore.error}
-                                  />
-                                  <Button class="w-auto" type="submit" size="large" variant="primary">
-                                    Submit
-                                  </Button>
-                                </form>
-                              </div>
-                            )
-                          })}
-                        </Match>
-                        <Match when={store.method?.type === "oauth"}>
-                          <Switch>
-                            <Match when={store.authorization?.method === "code"}>
-                              {iife(() => {
-                                const [formStore, setFormStore] = createStore({
-                                  value: "",
-                                  error: undefined as string | undefined,
-                                })
-
-                                onMount(() => {
-                                  if (store.authorization?.method === "code" && store.authorization?.url) {
-                                    platform.openLink(store.authorization.url)
-                                  }
-                                })
-
-                                async function handleSubmit(e: SubmitEvent) {
-                                  e.preventDefault()
-
-                                  const form = e.currentTarget as HTMLFormElement
-                                  const formData = new FormData(form)
-                                  const code = formData.get("code") as string
-
-                                  if (!code?.trim()) {
-                                    setFormStore("error", "Authorization code is required")
-                                    return
-                                  }
-
-                                  setFormStore("error", undefined)
-                                  const { error } = await globalSDK.client.provider.oauth.callback({
-                                    providerID: providerID(),
-                                    method: methodIndex(),
-                                    code,
-                                  })
-                                  if (!error) {
-                                    await complete()
-                                    return
-                                  }
-                                  setFormStore("error", "Invalid authorization code")
-                                }
-
-                                return (
-                                  <div class="flex flex-col gap-6">
-                                    <div class="text-14-regular text-text-base">
-                                      Visit <Link href={store.authorization!.url}>this link</Link> to collect your
-                                      authorization code to connect your account and use {provider().name} models in
-                                      OpenCode.
-                                    </div>
-                                    <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                                      <TextField
-                                        autofocus
-                                        type="text"
-                                        label={`${store.method?.label} authorization code`}
-                                        placeholder="Authorization code"
-                                        name="code"
-                                        value={formStore.value}
-                                        onChange={setFormStore.bind(null, "value")}
-                                        validationState={formStore.error ? "invalid" : undefined}
-                                        error={formStore.error}
-                                      />
-                                      <Button class="w-auto" type="submit" size="large" variant="primary">
-                                        Submit
-                                      </Button>
-                                    </form>
-                                  </div>
-                                )
-                              })}
-                            </Match>
-                            <Match when={store.authorization?.method === "auto"}>
-                              {iife(() => {
-                                const code = createMemo(() => {
-                                  const instructions = store.authorization?.instructions
-                                  if (instructions?.includes(":")) {
-                                    return instructions?.split(":")[1]?.trim()
-                                  }
-                                  return instructions
-                                })
-
-                                onMount(async () => {
-                                  const result = await globalSDK.client.provider.oauth.callback({
-                                    providerID: providerID(),
-                                    method: methodIndex(),
-                                  })
-                                  if (result.error) {
-                                    // TODO: show error
-                                    layout.dialog.close("connect")
-                                    return
-                                  }
-                                  await complete()
-                                })
-
-                                return (
-                                  <div class="flex flex-col gap-6">
-                                    <div class="text-14-regular text-text-base">
-                                      Visit <Link href={store.authorization!.url}>this link</Link> and enter the code
-                                      below to connect your account and use {provider().name} models in OpenCode.
-                                    </div>
-                                    <TextField
-                                      label="Confirmation code"
-                                      class="font-mono"
-                                      value={code()}
-                                      readOnly
-                                      copyable
-                                    />
-                                    <div class="text-14-regular text-text-base flex items-center gap-4">
-                                      <Spinner />
-                                      <span>Waiting for authorization...</span>
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </Match>
-                          </Switch>
-                        </Match>
-                      </Switch>
-                    </div>
-                  </div>
-                </Dialog.Body>
-              </Dialog>
-            )
-          })}
-        </Show>
       </div>
       <Toast.Region />
     </div>

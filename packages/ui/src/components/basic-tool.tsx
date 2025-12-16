@@ -13,7 +13,9 @@ export type TriggerTitle = {
 }
 
 const isTriggerTitle = (val: any): val is TriggerTitle => {
-  return typeof val === "object" && val !== null && "title" in val && !(val instanceof Node)
+  return (
+    typeof val === "object" && val !== null && "title" in val && (typeof Node === "undefined" || !(val instanceof Node))
+  )
 }
 
 export interface BasicToolProps {
@@ -21,12 +23,13 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
   hideDetails?: boolean
+  defaultOpen?: boolean
 }
 
 export function BasicTool(props: BasicToolProps) {
   const resolved = children(() => props.children)
   return (
-    <Collapsible>
+    <Collapsible defaultOpen={props.defaultOpen}>
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">

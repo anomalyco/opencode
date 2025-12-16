@@ -182,9 +182,9 @@ export function Autocomplete(props: {
   )
 
   const agents = createMemo(() => {
-    return sync.data.agent
-      .filter((agent) => !agent.builtIn && agent.mode !== "primary")
-      .filter((agent) => !agent.hidden)
+    const agents = sync.data.agent
+    return agents
+      .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
@@ -364,6 +364,13 @@ export function Autocomplete(props: {
     const result = fuzzysort.go(currentFilter, mixed, {
       keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
+      scoreFn: (objResults) => {
+        const displayResult = objResults[0]
+        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+          return objResults.score * 2
+        }
+        return objResults.score
+      },
     })
     return result.map((arr) => arr.obj)
   })

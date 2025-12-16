@@ -1,5 +1,5 @@
-import { FileDiff } from "@pierre/precision-diffs"
-import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { FileDiff } from "@pierre/diffs"
+import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { onCleanup, onMount, Show, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
 import { createDefaultOptions, styleVariables, type DiffProps } from "../pierre"
@@ -65,11 +65,11 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
   return (
     <div data-component="diff" style={styleVariables} ref={container}>
-      <file-diff ref={fileDiffRef} id="ssr-diff">
+      <diffs-container ref={fileDiffRef} id="ssr-diff">
         <Show when={isServer}>
           <template shadowrootmode="open" innerHTML={props.preloadedDiff.prerenderedHTML} />
         </Show>
-      </file-diff>
+      </diffs-container>
     </div>
   )
 }
