@@ -347,6 +347,143 @@ export namespace LSP {
       .then((result) => result.filter(Boolean))
   }
 
+  export async function definition(input: { file: string; line: number; character: number }) {
+    const clients = await getClients(input.file)
+    if (clients.length === 0) return null
+    for (const client of clients) {
+      const result = await client.connection
+        .sendRequest("textDocument/definition", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+        })
+        .catch(() => null)
+      if (result) return result
+    }
+    return null
+  }
+
+  export async function references(input: {
+    file: string
+    line: number
+    character: number
+    includeDeclaration?: boolean
+  }) {
+    const clients = await getClients(input.file)
+    if (clients.length === 0) return null
+    for (const client of clients) {
+      const result = await client.connection
+        .sendRequest("textDocument/references", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+          context: { includeDeclaration: input.includeDeclaration ?? true },
+        })
+        .catch(() => null)
+      if (result) return result
+    }
+    return null
+  }
+
+  export async function prepareRename(input: { file: string; line: number; character: number }) {
+    const clients = await getClients(input.file)
+    if (clients.length === 0) return null
+    for (const client of clients) {
+      const result = await client.connection
+        .sendRequest("textDocument/prepareRename", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+        })
+        .catch(() => null)
+      if (result) return result
+    }
+    return null
+  }
+
+  export async function rename(input: { file: string; line: number; character: number; newName: string }) {
+    const clients = await getClients(input.file)
+    if (clients.length === 0) return null
+    for (const client of clients) {
+      const result = await client.connection
+        .sendRequest("textDocument/rename", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          position: { line: input.line, character: input.character },
+          newName: input.newName,
+        })
+        .catch(() => null)
+      if (result) return result
+    }
+    return null
+  }
+
+  export async function codeAction(input: {
+    file: string
+    startLine: number
+    startCharacter: number
+    endLine: number
+    endCharacter: number
+    only?: string[]
+  }) {
+    const clients = await getClients(input.file)
+    if (clients.length === 0) return null
+    for (const client of clients) {
+      // For source actions (like organizeImports), don't filter by diagnostics
+      // For quickfixes and refactors, include relevant diagnostics
+      const isSourceAction = input.only?.some((k) => k.startsWith("source"))
+
+      let rangeDiagnostics: LSPClient.Diagnostic[] = []
+      if (!isSourceAction) {
+        const allDiagnostics = client.diagnostics.get(input.file) || []
+        rangeDiagnostics = allDiagnostics.filter((d) => {
+          const dStart = d.range.start
+          const dEnd = d.range.end
+          // Check if diagnostic range overlaps with requested range
+          return !(
+            dEnd.line < input.startLine ||
+            (dEnd.line === input.startLine && dEnd.character < input.startCharacter) ||
+            dStart.line > input.endLine ||
+            (dStart.line === input.endLine && dStart.character > input.endCharacter)
+          )
+        })
+      }
+
+      const result = await client.connection
+        .sendRequest("textDocument/codeAction", {
+          textDocument: { uri: pathToFileURL(input.file).href },
+          range: {
+            start: { line: input.startLine, character: input.startCharacter },
+            end: { line: input.endLine, character: input.endCharacter },
+          },
+          context: {
+            diagnostics: rangeDiagnostics,
+            only: input.only,
+          },
+        })
+        .catch(() => null)
+      if (result) return result
+    }
+    return null
+  }
+
+  export async function codeActionResolve(input: { file: string; codeAction: any }) {
+    const clients = await getClients(input.file)
+    if (clients.length === 0) return null
+    for (const client of clients) {
+      const result = await client.connection.sendRequest("codeAction/resolve", input.codeAction).catch(() => null)
+      if (result) return result
+    }
+    return null
+  }
+
+  export async function fileDiagnostics(file: string) {
+    const clients = await getClients(file)
+    if (clients.length === 0) return []
+    const result: LSPClient.Diagnostic[] = []
+    for (const client of clients) {
+      const diags = client.diagnostics.get(file)
+      if (diags) result.push(...diags)
+    }
+    return result
+  }
+
   async function run<T>(input: (client: LSPClient.Info) => Promise<T>): Promise<T[]> {
     const clients = await state().then((x) => x.clients)
     const tasks = clients.map((x) => input(x))

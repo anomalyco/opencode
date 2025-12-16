@@ -1,0 +1,18 @@
+Execute TypeScript/JavaScript Language Server Protocol actions.
+
+Actions and their parameters:
+- hover: Get type info at position (filePath, line, character)
+- definition: Jump to symbol definition (filePath, line, character)
+- references: Find all usages (filePath, line, character, includeDeclaration?)
+- documentSymbols: Get file symbol outline (filePath)
+- workspaceSymbols: Search symbols by name (filePath, query, limit?)
+- diagnostics: Get errors/warnings (filePath, severity?)
+- prepareRename: Check if rename is valid (filePath, line, character)
+- rename: Rename symbol across workspace (filePath, line, character, newName)
+- codeActions: Get available code actions (filePath, startLine, startCharacter, endLine, endCharacter, kind?)
+- codeActionResolve: Apply a code action (filePath, codeAction)
+
+IMPORTANT: For renaming symbols, prefer this tool over grep/sed:
+1. Use workspaceSymbols to find the symbol's file and line
+2. Use rename to rename it - this automatically updates ALL references across the entire workspace in one operation
+Do NOT use grep, sed, or manual find/replace for renames - the LSP rename is more accurate and handles all edge cases.
