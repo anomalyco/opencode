@@ -1208,10 +1208,10 @@ export class Session extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
-      system?: string
       tools?: {
         [key: string]: boolean
       }
+      system?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1227,8 +1227,8 @@ export class Session extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
-            { in: "body", key: "system" },
             { in: "body", key: "tools" },
+            { in: "body", key: "system" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1294,10 +1294,10 @@ export class Session extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
-      system?: string
       tools?: {
         [key: string]: boolean
       }
+      system?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1313,8 +1313,8 @@ export class Session extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
-            { in: "body", key: "system" },
             { in: "body", key: "tools" },
+            { in: "body", key: "system" },
             { in: "body", key: "parts" },
           ],
         },

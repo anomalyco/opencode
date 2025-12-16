@@ -1,5 +1,5 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { For, Match, Show, Switch } from "solid-js"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -14,6 +14,7 @@ export default function Home() {
   const layout = useLayout()
   const platform = usePlatform()
   const navigate = useNavigate()
+  const homedir = createMemo(() => sync.data.path.home)
 
   function openProject(directory: string) {
     layout.projects.open(directory)
@@ -61,7 +62,7 @@ export default function Home() {
                     class="text-14-mono text-left justify-between px-3"
                     onClick={() => openProject(project.worktree)}
                   >
-                    {project.worktree}
+                    {project.worktree.replace(homedir(), "~")}
                     <div class="text-14-regular text-text-weak">
                       {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
                     </div>

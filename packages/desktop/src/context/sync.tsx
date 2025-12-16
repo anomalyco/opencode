@@ -65,6 +65,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         },
         more: createMemo(() => store.session.length >= store.limit),
+        archive: async (sessionID: string) => {
+          await sdk.client.session.update({ sessionID, time: { archived: Date.now() } })
+          setStore(
+            produce((draft) => {
+              const match = Binary.search(draft.session, sessionID, (s) => s.id)
+              if (match.found) draft.session.splice(match.index, 1)
+            }),
+          )
+        },
       },
       absolute,
       get directory() {
