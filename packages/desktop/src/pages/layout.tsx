@@ -505,7 +505,7 @@ export default function Layout(props: ParentProps) {
               <Match when={true}>
                 <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
                   <Button
-                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                    class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                     variant="ghost"
                     size="large"
                     icon="plus"
@@ -519,7 +519,7 @@ export default function Layout(props: ParentProps) {
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -545,7 +545,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"
