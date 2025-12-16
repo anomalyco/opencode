@@ -370,17 +370,15 @@ export namespace SessionPrompt {
             log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
             return undefined
           })
-        if (result) {
-          await Plugin.trigger(
-            "tool.execute.after",
-            {
-              tool: "task",
-              sessionID,
-              callID: part.id,
-            },
-            result,
-          )
-        }
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          result,
+        )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
