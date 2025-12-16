@@ -489,7 +489,11 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system: [
+          ...(await SystemPrompt.environment()),
+          ...(await SystemPrompt.custom()),
+          ...(lastUser.system ? [lastUser.system] : []),
+        ],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
@@ -683,6 +687,7 @@ export namespace SessionPrompt {
       tools: input.tools,
       agent: agent.name,
       model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      system: input.system,
     }
 
     const parts = await Promise.all(
