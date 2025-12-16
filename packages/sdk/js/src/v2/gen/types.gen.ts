@@ -147,6 +147,7 @@ export type AssistantMessage = {
   modelID: string
   providerID: string
   mode: string
+  agent: string
   path: {
     cwd: string
     root: string
@@ -475,6 +476,40 @@ export type EventPermissionReplied = {
   }
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+  /**
+   * Unique identifier for the todo item
+   */
+  id: string
+}
+
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
 export type SessionStatus =
   | {
       type: "idle"
@@ -508,40 +543,6 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
-  }
-}
-
-export type EventFileEdited = {
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-  /**
-   * Unique identifier for the todo item
-   */
-  id: string
-}
-
-export type EventTodoUpdated = {
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
   }
 }
 
@@ -745,11 +746,11 @@ export type Event =
   | EventMessagePartRemoved
   | EventPermissionUpdated
   | EventPermissionReplied
+  | EventFileEdited
+  | EventTodoUpdated
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
-  | EventFileEdited
-  | EventTodoUpdated
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -916,6 +917,14 @@ export type KeybindsConfig = {
    * Previous recently used model
    */
   model_cycle_recent_reverse?: string
+  /**
+   * Next favorite model
+   */
+  model_cycle_favorite?: string
+  /**
+   * Previous favorite model
+   */
+  model_cycle_favorite_reverse?: string
   /**
    * List available commands
    */
@@ -1419,6 +1428,9 @@ export type Config = {
     build?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
+    title?: AgentConfig
+    summary?: AgentConfig
+    compaction?: AgentConfig
     [key: string]: AgentConfig | undefined
   }
   /**
@@ -1525,6 +1537,10 @@ export type Config = {
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
+    /**
+     * Continue the agent loop when a tool call is denied
+     */
+    continue_loop_on_deny?: boolean
   }
 }
 
@@ -1664,6 +1680,7 @@ export type Model = {
   headers: {
     [key: string]: string
   }
+  release_date: string
 }
 
 export type Provider = {
@@ -1741,7 +1758,8 @@ export type Agent = {
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
-  builtIn: boolean
+  native?: boolean
+  hidden?: boolean
   topP?: number
   temperature?: number
   color?: string
@@ -2804,10 +2822,10 @@ export type SessionPromptData = {
     }
     agent?: string
     noReply?: boolean
-    system?: string
     tools?: {
       [key: string]: boolean
     }
+    system?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -2899,10 +2917,10 @@ export type SessionPromptAsyncData = {
     }
     agent?: string
     noReply?: boolean
-    system?: string
     tools?: {
       [key: string]: boolean
     }
+    system?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {

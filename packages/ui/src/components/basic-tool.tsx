@@ -13,7 +13,9 @@ export type TriggerTitle = {
 }
 
 const isTriggerTitle = (val: any): val is TriggerTitle => {
-  return typeof val === "object" && val !== null && "title" in val && !(val instanceof Node)
+  return (
+    typeof val === "object" && val !== null && "title" in val && (typeof Node === "undefined" || !(val instanceof Node))
+  )
 }
 
 export interface BasicToolProps {
