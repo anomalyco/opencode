@@ -4,7 +4,7 @@
 
 set -e
 
-DESKTOP_FILE="/usr/share/applications/opencode.desktop"
+DESKTOP_FILE="/usr/share/applications/OpenCode.desktop"
 
 # Update the desktop file's Exec line to set Wayland environment variables
 if [ -f "$DESKTOP_FILE" ]; then
