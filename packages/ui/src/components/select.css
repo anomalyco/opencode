@@ -37,7 +37,6 @@
   }
 
   [data-slot="select-select-content-list"] {
-    min-height: 2rem;
     overflow-y: auto;
     max-height: 12rem;
     white-space: nowrap;
