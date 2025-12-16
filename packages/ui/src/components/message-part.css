@@ -77,6 +77,10 @@
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    background: var(--surface-inset-base);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 0.5px solid var(--border-weak-base);
   }
 
   .text-text-strong {

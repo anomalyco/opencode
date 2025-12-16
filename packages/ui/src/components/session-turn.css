@@ -64,7 +64,7 @@
 
   [data-slot="session-turn-message-title"] {
     width: 100%;
-    font-size: 15px; /* text-14-medium */
+    font-size: var(--font-size-large);
     font-weight: 500;
     color: var(--text-strong);
     overflow: hidden;
