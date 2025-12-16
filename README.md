@@ -3,8 +3,6 @@
 
 **Universal CLI for coding agents, powered by the [Agent Client Protocol](https://agentclientprotocol.com/)**
 
-`brew install forge`
-<br />
 `npm i -g @forge-agents/forge`
 
 </div>
@@ -13,11 +11,10 @@
 
 ## Quickstart
 
-Install globally using NPM or Homebrew
+Install globally using NPM:
 
 ```sh
 npm i -g @forge-agents/forge
-brew install forge
 ```
 
 Then run `forge` to get started:
@@ -41,7 +38,7 @@ forge claude --model opus --mode acceptEdits "Create or update my CLAUDE.md"
 Plan with Claude Code, implement with Codex:
 
 ```sh
-forge codex "Find a single TODO comment in the codebase and make a plan to address it" --plan-agent claude
+# forge codex "Find a single TODO comment in the codebase and make a plan to address it" --plan-agent claude
 ```
 
 ## What is Forge/ACP?
@@ -72,7 +69,7 @@ To view available agents, run:
 forge agents
 ```
 
-Forge supports all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents):
+> Forge has install instructions for all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents), but note that not all of them are running yet. Please file an issue for any agents you have trouble running!
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) (via Zed's SDK adapter)
 - [Codex CLI](https://developers.openai.com/codex/cli) (via Zed's adapter)
@@ -148,7 +145,7 @@ forge <agent> -p "Create or update AGENTS.md"
 
 ### Plan With One Agent, Implement With Another
 
-ACP enables planning with one agent and implementing with another. Specify a planning agent using `--plan-agent`
+<!-- ACP enables planning with one agent and implementing with another. Specify a planning agent using `--plan-agent`
 
 ```sh
 forge codex "Find a single TODO comment in the codebase and make a plan to address it" --plan-agent claude
@@ -165,6 +162,7 @@ When the planning agent [exits plan mode](https://agentclientprotocol.com/protoc
 >
 > - `claude`
 > - `opencode`
+-->
 
 ### Commands & Flags
 
@@ -191,7 +189,7 @@ Examples:
   forge claude install                                                                     Install claude
   forge claude "Update my CLAUDE.md"                                                       Run claude with prompt
   forge claude --model opus --mode bypassPermissions "Refactor the authentication module"  Run with specific model/mode
-  forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus           Plan with claude, implement with codex
+  # forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus           Plan with claude, implement with codex
 ```
 
 #### `forge <agent> -h`
@@ -204,8 +202,8 @@ run agent with prompt
 Options:
       --mode        mode to use for the agent  [string]
       --model       model to use for the agent  [string]
-      --plan-agent  agent to use for planning  [string]
-      --plan-model  model to use for planning agent  [string]
+      # --plan-agent  agent to use for planning  [string]
+      # --plan-model  model to use for planning agent  [string]
   -p, --print       Run headless, print response and exit  [boolean]
       --project     path to start forge in  [string]
   -c, --continue    continue the last session  [boolean]

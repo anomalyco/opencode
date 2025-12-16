@@ -64,9 +64,9 @@ function parseBareAgent(input: string): AgentFlag {
 }
 
 /**
- * Parse --agent and --plan-agent flags into structured entries.
+ * Parse --agent flags into structured entries.
  * Supports either key/value pairs ("name=claude model=opus") or bare values ("claude/opus").
- * For plan-agent, mode is always forced to "plan" regardless of input.
+ * // For plan-agent, mode is always forced to "plan" regardless of input.
  */
 export function parseAgentFlags(
   agent?: string | null,

@@ -81,10 +81,10 @@ export const RunCommand = cmd({
         alias: ["a"],
         describe: 'agent spec: --agent claude or --agent "name=claude model=opus mode=bypassPermissions"',
       })
-      .option("plan-agent", {
-        type: "string",
-        describe: 'plan agent spec: --plan-agent claude or --plan-agent "name=claude model=opus"',
-      })
+      // .option("plan-agent", {
+      //   type: "string",
+      //   describe: 'plan agent spec: --plan-agent claude or --plan-agent "name=claude model=opus"',
+      // })
       .option("format", {
         type: "string",
         choices: ["default", "json"],

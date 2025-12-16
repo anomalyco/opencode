@@ -114,10 +114,10 @@ cli
     'forge claude --model opus --mode bypassPermissions "Refactor the authentication module"',
     "Run with specific model/mode",
   )
-  .example(
-    'forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus ',
-    "Plan with claude, implement with codex",
-  )
+  // .example(
+  //   'forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus ',
+  //   "Plan with claude, implement with codex",
+  // )
   .middleware(async (opts) => {
     if (!opts.help) return
 
@@ -218,14 +218,14 @@ async function renderAgentRunHelp() {
       describe: "model to use for the agent",
       type: "string",
     })
-    .option("plan-agent", {
-      describe: "agent to use for planning",
-      type: "string",
-    })
-    .option("plan-model", {
-      describe: "model to use for planning agent",
-      type: "string",
-    })
+    // .option("plan-agent", {
+    //   describe: "agent to use for planning",
+    //   type: "string",
+    // })
+    // .option("plan-model", {
+    //   describe: "model to use for planning agent",
+    //   type: "string",
+    // })
     .option("print", {
       alias: ["p"],
       type: "boolean",
@@ -297,10 +297,10 @@ function renderTopLevelHelp() {
       'forge claude --model opus --mode bypassPermissions "Refactor the authentication module"',
       "Run with specific model/mode",
     ],
-    [
-      'forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus',
-      "Plan with claude, implement with codex",
-    ],
+    // [
+    //   'forge codex "Find all the TODO comments" --plan-agent claude --plan-model opus',
+    //   "Plan with claude, implement with codex",
+    // ],
   ]
 
   const commandWidth = Math.max(...commands.map(([cmd]) => cmd.length))

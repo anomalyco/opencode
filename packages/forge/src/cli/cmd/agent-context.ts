@@ -73,14 +73,14 @@ export const AgentRunCommand = cmd({
         describe: "model to use for the agent",
         type: "string",
       })
-      .option("plan-agent", {
-        describe: "agent to use for planning",
-        type: "string",
-      })
-      .option("plan-model", {
-        describe: "model to use for planning agent",
-        type: "string",
-      })
+      // .option("plan-agent", {
+      //   describe: "agent to use for planning",
+      //   type: "string",
+      // })
+      // .option("plan-model", {
+      //   describe: "model to use for planning agent",
+      //   type: "string",
+      // })
       .option("print", {
         alias: ["p"],
         type: "boolean",
@@ -345,9 +345,9 @@ export async function runWithAgent(args: any) {
   })()
 
   const workerArgv: string[] = []
-  if (args.planAgent) {
-    workerArgv.push("--plan-agent", args.planAgent)
-  }
+  // if (args.planAgent) {
+  //   workerArgv.push("--plan-agent", args.planAgent)
+  // }
   if (args.agent) {
     workerArgv.push("--agent", args.agent)
   }
