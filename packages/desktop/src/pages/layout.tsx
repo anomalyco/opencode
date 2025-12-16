@@ -589,12 +589,11 @@ export default function Layout(props: ParentProps) {
                     </div>
                   </Show>
                   <Show when={hasMoreSessions()}>
-                    <div class="relative w-full pl-4 pr-2 py-1">
+                    <div class="relative w-full py-1">
                       <Button
                         variant="ghost"
-                        class="w-full text-12-regular text-text-muted"
-                        size="small"
-                        icon="plus-small"
+                        class="flex w-full text-left justify-start text-12-medium opacity-50 px-3.5"
+                        size="large"
                         onClick={loadMoreSessions}
                       >
                         Load more
