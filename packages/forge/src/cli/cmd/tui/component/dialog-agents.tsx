@@ -25,7 +25,7 @@ export function DialogAgents() {
             return
           }
           dialog.clear()
-          await local.agent.set(agent.name)
+          await local.agent.set(agent.name, dialog)
         },
       }
     })

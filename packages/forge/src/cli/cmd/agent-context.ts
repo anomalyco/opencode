@@ -2,7 +2,13 @@ import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
 import { EOL } from "os"
-import { matchAgent, getAllAgents, getInstallCommandsForPlatform, getUninstallCommandsForPlatform, type ACPAgentDefinition } from "@/acp/agents"
+import {
+  matchAgent,
+  getAllAgents,
+  getInstallCommandsForPlatform,
+  getUninstallCommandsForPlatform,
+  type ACPAgentDefinition,
+} from "@/acp/agents"
 import { ACPClient } from "@/acp/client"
 import { AuthenticationRequiredError } from "@/acp/types"
 import * as prompts from "@clack/prompts"
@@ -130,6 +136,7 @@ export const AgentRunCommand = cmd({
   handler: async (args) => {
     markCommandHandled()
     const agentName = args.agent as string | undefined
+
     const promptArgs = (args.prompt as string[]) || []
 
     if (!agentName) {
@@ -191,6 +198,29 @@ export function markCommandHandled() {
   commandHandled = true
 }
 
+export function resolvePrompt(args: { prompt?: unknown; _?: unknown; agent?: unknown; print?: unknown }) {
+  if (typeof args.prompt === "string" && args.prompt.trim().length > 0) {
+    return args.prompt
+  }
+
+  if (Array.isArray(args.prompt)) {
+    const joined = args.prompt.filter((part): part is string => typeof part === "string").join(" ")
+    if (joined.trim().length > 0) return joined
+  }
+
+  const positionals = Array.isArray(args._) ? args._ : []
+  const usablePositionals =
+    typeof args.agent === "string" && positionals.length > 0 ? positionals.slice(1) : positionals
+  const positionalPrompt = usablePositionals.filter((part): part is string => typeof part === "string").join(" ")
+  if (positionalPrompt.trim().length > 0) return positionalPrompt
+
+  if (typeof args.print === "string" && args.print.trim().length > 0) {
+    return args.print
+  }
+
+  return undefined
+}
+
 export async function runAgentManage(agentName: string | undefined, subcommand: string | undefined, verbose: boolean) {
   markCommandHandled()
 
@@ -249,6 +279,8 @@ export async function runWithAgent(args: any) {
     process.exit(1)
   }
 
+  const cliPrompt = resolvePrompt(args)
+
   let parsedAgents: ReturnType<typeof parseAgentFlags> | null = null
   if (!args.print) {
     try {
@@ -265,7 +297,7 @@ export async function runWithAgent(args: any) {
         }
         if (!Bun.which(resolved.match.command)) {
           UI.error(
-            `Agent '${resolved.match.name}' is not installed. Run 'forge ${resolved.match.name} install' to install.`,
+            `Agent '${resolved.match.name}' is not installed. Run 'forge "${resolved.match.name}" install' to install.`,
           )
           process.exit(1)
         }
@@ -278,7 +310,7 @@ export async function runWithAgent(args: any) {
 
   if (args.print) {
     await runNonInteractive({
-      message: args.prompt,
+      message: cliPrompt,
       command: args.command,
       continue: args.continue,
       session: args.session,
@@ -290,11 +322,10 @@ export async function runWithAgent(args: any) {
       attach: args.attach,
       port: args.port,
       format: args.format,
+      quietAgentLogs: true,
     })
     return
   }
-
-  const cliPrompt = args.prompt
 
   Log.Default.info("agent-context.args", {
     rawPrompt: args.prompt,
@@ -490,6 +521,12 @@ async function handleModels(agent: ACPAgentDefinition, verbose: boolean) {
       command: agent.command,
       args: agent.acpStartupArgs,
       cwd: process.cwd(),
+      capabilities: {
+        fs: {
+          readTextFile: false,
+          writeTextFile: false,
+        },
+      },
     })
 
     await client.initialize()
@@ -559,6 +596,12 @@ async function handleModes(agent: ACPAgentDefinition, verbose: boolean) {
       command: agent.command,
       args: agent.acpStartupArgs,
       cwd: process.cwd(),
+      capabilities: {
+        fs: {
+          readTextFile: false,
+          writeTextFile: false,
+        },
+      },
     })
 
     await client.initialize()

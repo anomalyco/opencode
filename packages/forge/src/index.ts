@@ -77,6 +77,12 @@ const cli = yargs(hideBin(process.argv))
     describe: "session id to continue",
     global: true,
   })
+  .option("print", {
+    alias: ["p"],
+    type: "boolean",
+    describe: "run headless, print response and exit",
+    global: true,
+  })
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),

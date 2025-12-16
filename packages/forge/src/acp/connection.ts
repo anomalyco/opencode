@@ -33,6 +33,8 @@ export interface AgentConnectionOptions {
   version?: number
   /** Callback to check if connection is stale (returns true if should abort) */
   onStaleCheck?: (currentVersion: number) => boolean
+  /** Callback to prompt user to select auth method */
+  onSelectAuthMethod?: (methods: AuthMethod[]) => Promise<AuthMethod | null>
 }
 
 /**
@@ -93,7 +95,7 @@ export class AgentConnector {
   static async connect(
     options: AgentConnectionOptions
   ): Promise<AgentConnectionResult> {
-    const { agentDef, cwd, mcp, existingClient, version = 0, onStaleCheck, abortSignal } = options
+    const { agentDef, cwd, mcp, existingClient, version = 0, onStaleCheck, abortSignal, onSelectAuthMethod } = options
 
     log.debug("agent.connect.start", { agent: agentDef.name })
 
@@ -116,6 +118,12 @@ export class AgentConnector {
         cwd,
         mcp,
         abortSignal,
+        capabilities: {
+          fs: {
+            readTextFile: false,
+            writeTextFile: false,
+          },
+        },
       })
       log.debug("agent.connect.created", { agent: agentDef.name })
 
@@ -134,11 +142,29 @@ export class AgentConnector {
       // Store auth methods for later use
       const authMethods = initResp.authMethods ?? []
 
-      // Attempt authentication (handles agents that don't support authenticate() method)
-      await ACPAuthManager.attemptAuth(client, authMethods)
+      // Try to create session - only authenticate if it fails with auth error
+      let sessionResp: Awaited<ReturnType<typeof client.createSession>>
+      try {
+        sessionResp = await client.createSession()
+      } catch (error: unknown) {
+        // Check if this is an auth error
+        const isAuthError = ACPAuthManager.isAuthError(error)
+        if (isAuthError.isAuthError && authMethods.length > 0) {
+          // Authentication required - prompt user to select method
+          if (!onSelectAuthMethod) {
+            throw new Error(
+              `Agent ${agentDef.name} requires authentication but no auth method selection callback was provided`
+            )
+          }
+          await ACPAuthManager.attemptAuth(client, authMethods, onSelectAuthMethod)
 
-      // Create session
-      const sessionResp = await client.createSession()
+          // Retry creating session after authentication
+          sessionResp = await client.createSession()
+        } else {
+          // Not an auth error, or no auth methods available - rethrow
+          throw error
+        }
+      }
 
       // Check if connection is stale
       if (onStaleCheck?.(version)) {

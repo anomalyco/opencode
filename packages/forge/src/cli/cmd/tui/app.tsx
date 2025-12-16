@@ -209,7 +209,7 @@ function App() {
 
     // Only set agent if we have one to set
     if (agentToUse) {
-      await local.agent.set(agentToUse)
+      await local.agent.set(agentToUse, dialog)
     }
 
     // Handle model selection with matching and fallback (only if agent is connected)

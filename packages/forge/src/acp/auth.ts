@@ -20,21 +20,27 @@ export class ACPAuthManager {
    *
    * @param client - The ACP client instance
    * @param authMethods - Available authentication methods from initialize response
+   * @param onSelectMethod - Callback to prompt user to select an auth method
    * @returns Success status and the auth method used
    */
   static async attemptAuth(
     client: ACPClient.Instance,
-    authMethods: AuthMethod[]
+    authMethods: AuthMethod[],
+    onSelectMethod: (methods: AuthMethod[]) => Promise<AuthMethod | null>,
   ): Promise<{ success: boolean; method?: AuthMethod }> {
     if (authMethods.length === 0) {
       return { success: true }
     }
 
+    // Prompt user to select auth method
+    const selectedMethod = await onSelectMethod(authMethods)
+    if (!selectedMethod) {
+      throw new Error("Authentication cancelled by user")
+    }
+
     try {
-      // For now, just use the first auth method
-      // TODO: Allow user to select auth method if multiple are available
-      await client.authenticate(authMethods[0].id)
-      return { success: true, method: authMethods[0] }
+      await client.authenticate(selectedMethod.id)
+      return { success: true, method: selectedMethod }
     } catch (error: unknown) {
       // Graceful fallback for agents that don't implement authenticate()
       const isNotImplemented =
@@ -51,7 +57,7 @@ export class ACPAuthManager {
 
       if (isNotImplemented) {
         // Agent doesn't support protocol auth - will be validated during createSession
-        return { success: true, method: authMethods[0] }
+        return { success: true, method: selectedMethod }
       }
 
       // Real authentication error - bubble it up

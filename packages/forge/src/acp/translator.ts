@@ -3,6 +3,7 @@ import { Bus } from "../bus"
 import { TuiEvent } from "../cli/cmd/tui/event"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
+import { Session } from "../session"
 import * as TextTranslator from "./translation/text"
 import * as ToolTranslator from "./translation/tool"
 import * as PlanTranslator from "./translation/plan"
@@ -20,6 +21,7 @@ export namespace ACPTranslator {
     messageID: string
     currentTextPartID: string
     textAccumulator: string
+    textStartTime: number | null
     reasoningPartID: string
     reasoningAccumulator: string
     toolCallMap: Map<string, string>
@@ -35,6 +37,7 @@ export namespace ACPTranslator {
         messageID: Identifier.ascending("message"),
         currentTextPartID: "",
         textAccumulator: "",
+        textStartTime: null,
         reasoningPartID: Identifier.ascending("part"),
         reasoningAccumulator: "",
         toolCallMap: new Map(),
@@ -66,12 +69,18 @@ export namespace ACPTranslator {
           if (!state.currentTextPartID) {
             state.currentTextPartID = Identifier.ascending("part")
           }
+          if (!state.textStartTime) {
+            state.textStartTime = Date.now()
+          }
           const result = await TextTranslator.handleAgentMessageChunk(
             sessionID,
             state.messageID,
             state.currentTextPartID,
             notification,
-            { current: state.textAccumulator },
+            {
+              current: state.textAccumulator,
+              startTime: state.textStartTime,
+            },
           )
           state.textAccumulator = result.textAccumulator
           break
@@ -92,6 +101,7 @@ export namespace ACPTranslator {
           await ToolTranslator.handleToolCall(sessionID, state.messageID, notification, state.toolCallMap)
           state.currentTextPartID = ""
           state.textAccumulator = ""
+          state.textStartTime = null
           break
         }
 
@@ -186,9 +196,36 @@ export namespace ACPTranslator {
     state.messageID = messageID
     state.currentTextPartID = ""
     state.textAccumulator = ""
+    state.textStartTime = null
     state.reasoningPartID = Identifier.ascending("part")
     state.reasoningAccumulator = ""
     state.toolCallMap.clear()
     log.info("started new message", { sessionID, messageID: state.messageID })
+  }
+
+  /**
+   * Mark the current text part as finished and publish the final part with an end timestamp.
+   */
+  export async function finishText(sessionID: string): Promise<void> {
+    const state = states.get(sessionID)
+    if (!state || !state.currentTextPartID) return
+
+    const part: MessageV2.TextPart = {
+      id: state.currentTextPartID,
+      sessionID,
+      messageID: state.messageID,
+      type: "text",
+      text: state.textAccumulator,
+      time: {
+        start: state.textStartTime ?? Date.now(),
+        end: Date.now(),
+      },
+    }
+
+    await Session.updatePart(part)
+
+    state.currentTextPartID = ""
+    state.textAccumulator = ""
+    state.textStartTime = null
   }
 }

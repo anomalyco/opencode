@@ -12,6 +12,7 @@ import type { ACPAgentDefinition } from "./agents"
 import { DEFAULT_AGENT, getAgent, matchAgent } from "./agents"
 import { Bus } from "../bus"
 import { SessionMode } from "../session/mode"
+import { TuiEvent } from "../cli/cmd/tui/event"
 
 const log = Log.create({ service: "acp-orchestrator" })
 
@@ -92,19 +93,68 @@ export namespace ACPOrchestrator {
     const promptText = textParts.join("\n")
 
     // Send prompt to ACP
-    const promptResult = await state.client!.sendPrompt(state.acpSessionID!, promptText)
+    try {
+      const promptResult = await state.client!.sendPrompt(state.acpSessionID!, promptText)
 
-    if (promptResult.stopReason === "cancelled") {
-      assistantMessage.error = new MessageV2.AbortedError({
-        message: "The operation was aborted.",
-      }).toObject()
+      if (promptResult.stopReason === "cancelled") {
+        assistantMessage.error = new MessageV2.AbortedError({
+          message: "The operation was aborted.",
+        }).toObject()
+      }
+
+      log.info("prompt sent", {
+        sessionID: input.sessionID,
+        acpSessionID: state.acpSessionID,
+        stopReason: promptResult.stopReason,
+      })
+    } catch (error: unknown) {
+      // Handle errors from the agent (like Gemini's NOT_FOUND)
+      // Extract error message from various error formats
+      let errorMessage: string
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === "object" && error !== null) {
+        // Handle JSON-RPC error objects
+        const err = error as any
+        if (err.message) {
+          errorMessage = err.message
+          // If there's additional detail in data.details, try to extract it
+          if (err.data?.details) {
+            try {
+              const details = JSON.parse(err.data.details)
+              if (Array.isArray(details) && details[0]?.error?.message) {
+                errorMessage = details[0].error.message
+              }
+            } catch {
+              // If parsing fails, just use the message field
+            }
+          }
+        } else {
+          errorMessage = JSON.stringify(error)
+        }
+      } else {
+        errorMessage = String(error)
+      }
+
+      const errorDetails = typeof error === "object" && error !== null ? JSON.stringify(error) : errorMessage
+
+      log.error("prompt failed", {
+        sessionID: input.sessionID,
+        acpSessionID: state.acpSessionID,
+        error: errorMessage,
+        details: errorDetails,
+      })
+
+      // Show error as toast instead of storing in message
+      await Bus.publish(TuiEvent.ToastShow, {
+        variant: "error",
+        message: errorMessage,
+        duration: 5000,
+      })
+    } finally {
+      // Ensure the final text part is marked complete so print mode can exit
+      await ACPTranslator.finishText(input.sessionID)
     }
-
-    log.info("prompt sent", {
-      sessionID: input.sessionID,
-      acpSessionID: state.acpSessionID,
-      stopReason: promptResult.stopReason,
-    })
 
     // Mark message as complete
     await Session.updateMessage({
@@ -260,6 +310,12 @@ export namespace ACPOrchestrator {
       command: agent.command,
       args: agent.acpStartupArgs,
       cwd: Instance.directory,
+      capabilities: {
+        fs: {
+          readTextFile: false,
+          writeTextFile: false,
+        },
+      },
       onSessionUpdate: async (notification) => {
         log.info("  ┌─ [ORCHESTRATOR] received notification", {
           sessionID,

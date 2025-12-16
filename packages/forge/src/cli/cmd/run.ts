@@ -44,6 +44,7 @@ export type RunHandlerArgs = {
   title?: string
   attach?: string
   port?: number
+  quietAgentLogs?: boolean
 }
 
 export const RunCommand = cmd({
@@ -199,7 +200,7 @@ export async function runNonInteractive(args: RunHandlerArgs) {
             index,
           }) + EOL,
         )
-      } else {
+      } else if (!args.quietAgentLogs) {
         UI.println(
           UI.Style.TEXT_INFO_BOLD + "~",
           UI.Style.TEXT_DIM + " agent",
@@ -251,6 +252,8 @@ export async function runNonInteractive(args: RunHandlerArgs) {
       for await (const rawEvent of events.stream as AsyncIterable<any>) {
         const event = rawEvent as any
 
+        log.debug("event received", { type: event.type })
+
         if (event.type === "session.mode.changed") {
           if (queueState.entries.length <= queueState.index + 1) continue
           if (!queueState.active?.modeId) continue
@@ -280,6 +283,12 @@ export async function runNonInteractive(args: RunHandlerArgs) {
           const part = event.properties.part
           if (part.sessionID !== sessionID) continue
 
+          log.debug("message.part.updated", {
+            partType: part.type,
+            partTime: part.time,
+            hasEnd: !!part.time?.end,
+          })
+
           if (part.type === "tool" && part.state.status === "completed") {
             if (outputJsonEvent("tool_use", { part })) continue
             const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
@@ -302,11 +311,15 @@ export async function runNonInteractive(args: RunHandlerArgs) {
           }
 
           if (part.type === "text" && part.time?.end) {
+            log.info("text part complete, exiting", { text: part.text })
             if (outputJsonEvent("text", { part })) continue
             const isPiped = !process.stdout.isTTY
             if (!isPiped) UI.println()
-            process.stdout.write((isPiped ? part.text : UI.markdown(part.text)) + EOL)
+            const rendered = isPiped ? part.text : UI.markdown(part.text)
+            process.stdout.write(rendered + EOL)
             if (!isPiped) UI.println()
+            // In print mode, exit after printing the completed text
+            break
           }
         }
 

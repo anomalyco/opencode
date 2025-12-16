@@ -8,6 +8,7 @@ import { Global } from "@/global"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
+import { useDialog } from "../ui/dialog"
 import { RGBA } from "@opentui/core"
 import { ACPClient } from "@/acp/client"
 import { getAllAgents, getAgent, DEFAULT_AGENT, type ACPAgentDefinition } from "@/acp/agents"
@@ -19,6 +20,7 @@ import { AuthenticationRequiredError } from "@/acp/types"
 import { Log } from "@/util/log"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
+import { DialogAuth } from "@tui/component/dialog-auth"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -111,7 +113,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!agentStore.current) return null
           return agents().find((x) => x.name === agentStore.current) ?? null
         },
-        async set(agentName: string) {
+        async set(agentName: string, dialog?: ReturnType<typeof useDialog>) {
           setSessionStore({
             switching: true,
             switchingTo: agentName,
@@ -142,6 +144,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               existingClient: sessionStore.client,
               version,
               onStaleCheck: (currentVersion) => currentVersion !== connectVersion,
+              onSelectAuthMethod: dialog
+                ? async (methods) => {
+                    const selected = await DialogAuth.show(dialog, agentDef.name, methods)
+                    // Clear dialog after selection (whether successful or cancelled)
+                    dialog.clear()
+                    return selected
+                  }
+                : undefined,
             })
 
             // Store session state

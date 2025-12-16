@@ -370,6 +370,10 @@ export namespace ACPClient {
           },
         }
 
+        log.info("sending initialize request", {
+          capabilities: request.clientCapabilities,
+        })
+
         const response = await connection.initialize(request)
         initialized = true
 

@@ -13,7 +13,7 @@ export async function handleAgentMessageChunk(
   messageID: string,
   partID: string,
   notification: SessionNotification,
-  textAccumulator: { current: string },
+  textAccumulator: { current: string; startTime: number | null },
 ): Promise<{ textAccumulator: string }> {
   if (notification.update.sessionUpdate !== "agent_message_chunk") {
     return { textAccumulator: textAccumulator.current }
@@ -36,7 +36,7 @@ export async function handleAgentMessageChunk(
     type: "text",
     text: textAccumulator.current,
     time: {
-      start: Date.now(),
+      start: textAccumulator.startTime ?? Date.now(),
     },
   }
 

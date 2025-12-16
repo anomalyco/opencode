@@ -12,6 +12,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
+import { useDialog } from "@tui/ui/dialog"
 import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
@@ -60,6 +61,7 @@ export function Prompt(props: PromptProps) {
 
   const keybind = useKeybind()
   const local = useLocal()
+  const dialog = useDialog()
   const args = useArgs()
   const sdk = useSDK()
   const route = useRoute()
@@ -109,7 +111,7 @@ export function Prompt(props: PromptProps) {
 
   async function syncLocalFromApplied(applied: { agent: string; model: string | null; modeId: string | null }) {
     if (local.agent.current()?.name !== applied.agent) {
-      await local.agent.set(applied.agent)
+      await local.agent.set(applied.agent, dialog)
     }
     if (applied.model && local.model.current() !== applied.model) {
       await local.model.set(applied.model).catch((error) => {

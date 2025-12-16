@@ -86,7 +86,7 @@ export function DialogAgentInstall(props: { agentName: string }) {
         duration: 4000,
       })
       dialog.clear()
-      await local.agent.set(agentDef.name)
+      await local.agent.set(agentDef.name, dialog)
       return
     }
 

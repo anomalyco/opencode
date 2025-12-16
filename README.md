@@ -41,7 +41,7 @@ forge claude --model opus --mode acceptEdits "Create or update my CLAUDE.md"
 Plan with Claude Code, implement with Codex:
 
 ```sh
-forge codex "Find all the TODO comments in the codebase and address the top 3" --plan-agent claude
+forge codex "Find a single TODO comment in the codebase and make a plan to address it" --plan-agent claude
 ```
 
 ## What is Forge/ACP?
@@ -74,12 +74,12 @@ forge agents
 
 Forge supports all agents listed at [agentclientprotocol.com/overview/agents](https://agentclientprotocol.com/overview/agents):
 
-- [Augment Code](https://docs.augmentcode.com/cli/acp)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) (via Zed's SDK adapter)
 - [Codex CLI](https://developers.openai.com/codex/cli) (via Zed's adapter)
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli)
+- [Augment Code](https://docs.augmentcode.com/cli/acp)
 - [Code Assistant](https://github.com/stippi/code-assistant?tab=readme-ov-file#configuration)
 - [fast-agent](https://fast-agent.ai/acp)
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Goose](https://block.github.io/goose/docs/guides/acp-clients)
 - [JetBrains Junie](https://www.jetbrains.com/junie/) (coming soon)
 - [Kimi CLI](https://github.com/MoonshotAI/kimi-cli)
@@ -151,7 +151,7 @@ forge <agent> -p "Create or update AGENTS.md"
 ACP enables planning with one agent and implementing with another. Specify a planning agent using `--plan-agent`
 
 ```sh
-forge codex "Find all the TODO comments" --plan-agent claude
+forge codex "Find a single TODO comment in the codebase and make a plan to address it" --plan-agent claude
 ```
 
 Options:
@@ -216,3 +216,9 @@ Options:
 ## Share feedback
 
 Have feedback, found a bug, or want to request a feature? Open the command palette (default: `Ctrl+P`) and select **"Share feedback"** to create a GitHub issue. You can also directly visit [github.com/forge-agents/forge/issues](https://github.com/forge-agents/forge/issues).
+
+## FAQ
+
+### How do I set the model for Gemini CLI?
+
+Gemini doesn't support model selection through ACP. Set `export GEMINI_MODEL=<model>>` before running Forge to avoid "Requested entity was not found" errors with OAuth.
