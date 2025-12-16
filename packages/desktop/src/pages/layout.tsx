@@ -597,7 +597,7 @@ export default function Layout(props: ParentProps) {
                         icon="plus-small"
                         onClick={loadMoreSessions}
                       >
-                        Load more sessions
+                        Load more
                       </Button>
                     </div>
                   </Show>
