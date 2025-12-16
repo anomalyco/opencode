@@ -108,8 +108,7 @@ export function SessionTurn(
 
   createResizeObserver(
     () => state.contentRef,
-    ({ height }) => {
-      console.log(height)
+    () => {
       scrollToBottom()
     },
   )

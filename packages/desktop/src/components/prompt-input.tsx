@@ -850,6 +850,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </Show>
         <div class="relative max-h-[240px] overflow-y-auto">
           <div
+            data-component="prompt-input"
             ref={(el) => {
               editorRef = el
               props.ref?.(el)
