@@ -352,7 +352,7 @@ export default function () {
                                     messageID={store.messageId ?? firstUserMessage()!.id!}
                                     classes={{
                                       root: "grow",
-                                      content: "flex flex-col justify-between items-start",
+                                      content: "flex flex-col justify-between",
                                       container:
                                         "w-full pb-20 " +
                                         (wide()
