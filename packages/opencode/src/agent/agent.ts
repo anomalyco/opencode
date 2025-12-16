@@ -17,7 +17,7 @@ export namespace Agent {
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
-      visible: z.boolean().optional(),
+      hidden: z.boolean().optional(),
       permission: z.object({
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
@@ -197,7 +197,7 @@ export namespace Agent {
         permission,
         color,
         maxSteps,
-        visible,
+        hidden,
         ...extra
       } = value
       item.options = {
@@ -220,7 +220,7 @@ export namespace Agent {
       if (top_p != undefined) item.topP = top_p
       if (mode) item.mode = mode
       if (color) item.color = color
-      if (visible != undefined) item.visible = visible
+      if (hidden != undefined) item.hidden = hidden
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
       if (maxSteps != undefined) item.maxSteps = maxSteps

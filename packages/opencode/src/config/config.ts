@@ -392,10 +392,10 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
-      visible: z
+      hidden: z
         .boolean()
         .optional()
-        .describe("Whether this subagent appears in the agent menu (default: true, only applies to mode: subagent)"),
+        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
       color: z
         .string()
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")

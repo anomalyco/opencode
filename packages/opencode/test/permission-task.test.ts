@@ -97,10 +97,10 @@ describe("filterSubagents - permission.task filtering", () => {
     expect(result.map((a) => a.name)).toEqual(["general", "code-reviewer", "orchestrator-fast"])
   })
 
-  test("visible: false does not affect filtering (visible only affects autocomplete)", () => {
+  test("hidden: true does not affect filtering (hidden only affects autocomplete)", () => {
     const agents = [
-      { name: "general", mode: "subagent", visible: false },
-      { name: "code-reviewer", mode: "subagent", visible: true },
+      { name: "general", mode: "subagent", hidden: true },
+      { name: "code-reviewer", mode: "subagent", hidden: false },
       { name: "orchestrator", mode: "subagent" },
     ] as Agent.Info[]
 
@@ -109,10 +109,10 @@ describe("filterSubagents - permission.task filtering", () => {
     expect(result.map((a) => a.name)).toEqual(["general", "code-reviewer", "orchestrator"])
   })
 
-  test("visible: false agents can be filtered by permission.task deny", () => {
+  test("hidden: true agents can be filtered by permission.task deny", () => {
     const agents = [
-      { name: "general", mode: "subagent", visible: false },
-      { name: "orchestrator-coder", mode: "subagent", visible: false },
+      { name: "general", mode: "subagent", hidden: true },
+      { name: "orchestrator-coder", mode: "subagent", hidden: true },
     ] as Agent.Info[]
 
     const result = filterSubagents(agents, { general: "deny" })

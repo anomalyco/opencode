@@ -1117,9 +1117,9 @@ export type AgentConfig = {
   description?: string
   mode?: "subagent" | "primary" | "all"
   /**
-   * Whether this subagent appears in the agent menu (default: true, only applies to mode: subagent)
+   * Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)
    */
-  visible?: boolean
+  hidden?: boolean
   /**
    * Hex color code for the agent (e.g., #FF5733)
    */
@@ -1748,7 +1748,7 @@ export type Agent = {
   topP?: number
   temperature?: number
   color?: string
-  visible?: boolean
+  hidden?: boolean
   permission: {
     edit: "ask" | "allow" | "deny"
     bash: {

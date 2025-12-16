@@ -531,16 +531,16 @@ The `mode` option can be set to `primary`, `subagent`, or `all`. If no `mode` is
 
 ---
 
-### Visible
+### Hidden
 
-Hide a subagent from the `@` autocomplete with `visible: false`. Useful for internal subagents that should only be invoked by other agents via the Task tool.
+Hide a subagent from the `@` autocomplete with `hidden: true`. Useful for internal subagents that should only be invoked by other agents via the Task tool.
 
 ```json title="opencode.json"
 {
   "agent": {
     "internal-helper": {
       "mode": "subagent",
-      "visible": false
+      "hidden": true
     }
   }
 }
