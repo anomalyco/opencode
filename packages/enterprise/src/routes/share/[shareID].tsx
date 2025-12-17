@@ -19,7 +19,7 @@ import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
 import { type IconName } from "@opencode-ai/ui/icons/provider"
@@ -138,18 +138,13 @@ const getData = query(async (shareID) => {
 
 export default function () {
   const params = useParams()
-  const data = createAsync(
-    async () => {
-      if (!params.shareID) throw new Error("Missing shareID")
-      const now = Date.now()
-      const data = getData(params.shareID)
-      console.log("getData", Date.now() - now)
-      return data
-    },
-    {
-      deferStream: true,
-    },
-  )
+  const data = createAsync(async () => {
+    if (!params.shareID) throw new Error("Missing shareID")
+    const now = Date.now()
+    const data = getData(params.shareID)
+    console.log("getData", Date.now() - now)
+    return data
+  })
 
   createEffect(() => {
     console.log(data())

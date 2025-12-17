@@ -206,6 +206,7 @@ body {
   [data-component="top"] {
     padding: 24px var(--padding);
     height: 80px;
+    min-height: 80px;
     position: sticky;
     top: 0;
     display: flex;
