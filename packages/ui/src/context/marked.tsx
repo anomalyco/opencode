@@ -2,7 +2,7 @@ import { marked } from "marked"
 import markedShiki from "marked-shiki"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
-import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/precision-diffs"
+import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
 registerCustomTheme("OpenCode", () => {
   return Promise.resolve({
