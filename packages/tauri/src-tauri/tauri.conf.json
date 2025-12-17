@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenCode",
+  "productName": "OpenCode Dev",
+  "identifier": "ai.opencode.desktop.dev",
   "mainBinaryName": "OpenCode",
   "version": "../package.json",
-  "identifier": "ai.opencode.desktop",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -18,19 +18,18 @@
     "macOSPrivateApi": true
   },
   "bundle": {
+    "icon": [
+      "icons/dev/32x32.png",
+      "icons/dev/128x128.png",
+      "icons/dev/128x128@2x.png",
+      "icons/dev/icon.icns",
+      "icons/dev/icon.ico"
+    ],
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "externalBin": ["sidecars/opencode-cli"],
-    "createUpdaterArtifacts": true,
     "macOS": {
       "entitlements": "./entitlements.plist"
-    }
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwMDM5Nzg5OUMzOUExMDQKUldRRW9UbWNpWmNEOENYT01CV0lhOXR1UFhpaXJsK1Z3aU9lZnNtNzE0TDROWVMwVW9XQnFOelkK",
-      "endpoints": ["https://github.com/sst/opencode/releases/latest/download/latest.json"]
     }
   }
 }
