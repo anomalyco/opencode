@@ -225,7 +225,7 @@ export function Session() {
     const parentID = session()?.parentID ?? session()?.id
     let children = sync.data.session
       .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((b, a) => a.id.localeCompare(b.id))
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     if (children.length === 1) return
     let next = children.findIndex((x) => x.id === session()?.id) + direction
     if (next >= children.length) next = 0
