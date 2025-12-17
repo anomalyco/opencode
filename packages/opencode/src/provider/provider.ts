@@ -13,6 +13,9 @@ import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { RotatingFetch } from "@/inference/rotating-fetch"
+import { CredentialStore, CredentialsMigrate } from "@/credentials"
+import { ProviderAuthRegistry } from "@/provider-auth/registry"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
@@ -288,14 +291,14 @@ export namespace Provider {
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
       const envServiceKey = iife(() => {
-        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
-        if (envAICoreServiceKey) return envAICoreServiceKey
-        if (auth?.type === "api") {
-          Env.set("AICORE_SERVICE_KEY", auth.key)
-          return auth.key
-        }
-        return undefined
-      })
+	        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+	        if (envAICoreServiceKey) return envAICoreServiceKey
+		        if (auth && auth.type === "api" && auth.key) {
+		          Env.set("AICORE_SERVICE_KEY", auth.key)
+		          return auth.key
+		        }
+		        return undefined
+		      })
       const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
       const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
 
@@ -753,58 +756,101 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(model: Model) {
-    try {
-      using _ = log.time("getSDK", {
-        providerID: model.providerID,
-      })
-      const s = await state()
-      const provider = s.providers[model.providerID]
-      const options = { ...provider.options }
+	  async function getSDK(model: Model) {
+	    try {
+	      using _ = log.time("getSDK", {
+	        providerID: model.providerID,
+	      })
+	      const s = await state()
+	      const config = await Config.get()
+	      const provider = s.providers[model.providerID]
+	      const options = { ...provider.options }
+	      const configProvider = config.provider?.[model.providerID]
+	      const authMode = configProvider?.auth?.mode ?? "auto"
+	      const authNamespace = configProvider?.auth?.namespace ?? "default"
+	      const authMaxAttempts = configProvider?.auth?.maxAttempts
 
-      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-        options["includeUsage"] = true
-      }
+	      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
+	        options["includeUsage"] = true
+	      }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
-      if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
-      if (model.headers)
-        options["headers"] = {
-          ...options["headers"],
-          ...model.headers,
-        }
+	      if (!options["baseURL"]) options["baseURL"] = model.api.url
+	      if (authMode === "subscription") {
+	        options["apiKey"] = "unused"
+	      } else {
+	        if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+	      }
+	      if (model.headers)
+	        options["headers"] = {
+	          ...options["headers"],
+	          ...model.headers,
+	        }
 
       const key = Bun.hash.xxHash32(JSON.stringify({ npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
-      const customFetch = options["fetch"]
+	      const customFetch = options["fetch"]
+	      const fetchFn = customFetch ?? fetch
 
-      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-        // Preserve custom fetch if it exists, wrap it with timeout logic
-        const fetchFn = customFetch ?? fetch
-        const opts = init ?? {}
+	      const fetchWithTimeout = async (input: any, init?: BunFetchRequestInit) => {
+	        const opts: BunFetchRequestInit = {
+	          ...(init ?? {}),
+	        }
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
-          const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+	        if (!opts.signal && input instanceof Request && input.signal) {
+	          opts.signal = input.signal
+	        }
 
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+	        if (options["timeout"] !== undefined && options["timeout"] !== null) {
+	          const signals: AbortSignal[] = []
+	          if (opts.signal) signals.push(opts.signal)
+	          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
 
-          opts.signal = combined
-        }
+	          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-        return fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
-        })
-      }
+	          opts.signal = combined
+	        }
 
-      // Special case: google-vertex-anthropic uses a subpath import
-      const bundledKey =
-        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
+	        return fetchFn(input, {
+	          ...opts,
+	          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+	          timeout: false,
+	        })
+	      }
+
+	      if (authMode === "subscription") {
+	        await CredentialsMigrate.migrateIfNeeded()
+	        const adapter = ProviderAuthRegistry.getAdapter(model.providerID)
+	        if (!adapter) {
+	          throw new Error(
+	            `Provider '${model.providerID}' does not support subscription OAuth in this build (no adapter).`,
+	          )
+	        }
+	        const oauthRecords = (await CredentialStore.findByProvider(model.providerID, authNamespace)).filter(
+	          (r) => r.meta.kind === "oauth",
+	        )
+	        if (oauthRecords.length === 0) {
+	          throw new Error(
+	            `No OAuth credentials found for provider '${model.providerID}' in namespace '${authNamespace}'. Run opencode connect and choose an OAuth method.`,
+	          )
+	        }
+	      }
+
+	      if (authMode === "api") {
+	        options["fetch"] = fetchWithTimeout as any
+	      } else {
+	        const fetchWithRotation = RotatingFetch.create(fetchWithTimeout as any, {
+	          providerId: model.providerID,
+	          namespace: authNamespace,
+	          maxAttempts: authMaxAttempts,
+	        })
+	        options["fetch"] = fetchWithRotation as any
+	      }
+
+	      // Special case: google-vertex-anthropic uses a subpath import
+	      const bundledKey =
+	        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
       const bundledFn = BUNDLED_PROVIDERS[bundledKey]
       if (bundledFn) {
         log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })

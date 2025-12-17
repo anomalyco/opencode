@@ -11,8 +11,38 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
+import { CredentialStore, CredentialsMigrate } from "../../credentials"
+import { ProviderAuthRegistry } from "../../provider-auth/registry"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
+
+async function storeOAuthCredential(args: {
+  providerId: string
+  access: string
+  refresh?: string
+  expires?: number
+  extra?: Record<string, unknown>
+}) {
+  await CredentialsMigrate.migrateIfNeeded()
+  const config = await Config.get()
+  const namespace = config.provider?.[args.providerId]?.auth?.namespace ?? "default"
+  const existingOauth = (await CredentialStore.findByProvider(args.providerId, namespace)).filter((r) => r.meta.kind === "oauth")
+  const hasDefault = existingOauth.some((r) => (r.meta.label ?? "") === "default")
+  const label = hasDefault ? `${args.providerId}-${new Date().toISOString()}` : "default"
+
+  await CredentialStore.put({
+    providerId: args.providerId,
+    namespace,
+    kind: "oauth",
+    label,
+    secret: {
+      accessToken: args.access,
+      refreshToken: args.refresh || undefined,
+      expiresAt: args.expires || undefined,
+      extra: args.extra,
+    },
+  })
+}
 
 /**
  * Handle plugin-based authentication flow.
@@ -79,21 +109,21 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       if (result.type === "failed") {
         spinner.stop("Failed to authorize", 1)
       }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        if ("refresh" in result) {
-          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
-        }
-        if ("key" in result) {
-          await Auth.set(saveProvider, {
-            type: "api",
+	      if (result.type === "success") {
+	        const saveProvider = result.provider ?? provider
+	        if ("refresh" in result) {
+	          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+	          await storeOAuthCredential({
+	            providerId: saveProvider,
+	            refresh,
+	            access,
+	            expires,
+	            extra: extraFields,
+	          })
+	        }
+	        if ("key" in result) {
+	          await Auth.set(saveProvider, {
+	            type: "api",
             key: result.key,
           })
         }
@@ -111,21 +141,21 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       if (result.type === "failed") {
         prompts.log.error("Failed to authorize")
       }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        if ("refresh" in result) {
-          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
-        }
-        if ("key" in result) {
-          await Auth.set(saveProvider, {
-            type: "api",
+	      if (result.type === "success") {
+	        const saveProvider = result.provider ?? provider
+	        if ("refresh" in result) {
+	          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+	          await storeOAuthCredential({
+	            providerId: saveProvider,
+	            refresh,
+	            access,
+	            expires,
+	            extra: extraFields,
+	          })
+	        }
+	        if ("key" in result) {
+	          await Auth.set(saveProvider, {
+	            type: "api",
             key: result.key,
           })
         }
@@ -173,19 +203,32 @@ export const AuthListCommand = cmd({
   describe: "list providers",
   async handler() {
     UI.empty()
-    const authPath = path.join(Global.Path.data, "auth.json")
+    const authPath = path.join(Global.Path.data, "credentials")
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records, errors } = await CredentialStore.listAll()
     const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+    const sorted = [...records].sort((a, b) => {
+      if (a.meta.providerId !== b.meta.providerId) return a.meta.providerId.localeCompare(b.meta.providerId)
+      if (a.meta.namespace !== b.meta.namespace) return a.meta.namespace.localeCompare(b.meta.namespace)
+      return a.meta.createdAt - b.meta.createdAt
+    })
+    for (const record of sorted) {
+      const name = database[record.meta.providerId]?.name || record.meta.providerId
+      const label = record.meta.label
+        ? `${record.meta.namespace}/${record.meta.label}`
+        : `${record.meta.namespace}/${record.meta.id}`
+      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${record.meta.kind} ${label}`)
     }
 
-    prompts.outro(`${results.length} credentials`)
+    if (errors.length > 0) {
+      prompts.log.warn(`${errors.length} credential file(s) could not be read/validated.`)
+    }
+
+    prompts.outro(`${records.length} credential record` + (records.length === 1 ? "" : "s"))
 
     // Environment variables section
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
@@ -302,15 +345,21 @@ export const AuthLoginCommand = cmd({
               label: "Other",
             },
           ],
-        })
+	        })
 
-        if (prompts.isCancel(provider)) throw new UI.CancelledError()
+	        if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
-          if (handled) return
-        }
+	        const core = ProviderAuthRegistry.getAuthHook(provider)
+	        if (core) {
+	          const handled = await handlePluginAuth({ auth: core as any }, provider)
+	          if (handled) return
+	        } else {
+	          const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+	          if (plugin && plugin.auth) {
+	            const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+	            if (handled) return
+	          }
+	        }
 
         if (provider === "other") {
           provider = await prompts.text({
@@ -318,15 +367,21 @@ export const AuthLoginCommand = cmd({
             validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
           })
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
-          provider = provider.replace(/^@ai-sdk\//, "")
-          if (prompts.isCancel(provider)) throw new UI.CancelledError()
+	          provider = provider.replace(/^@ai-sdk\//, "")
+	          if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-          // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
-            if (handled) return
-          }
+	          const core = ProviderAuthRegistry.getAuthHook(provider)
+	          if (core) {
+	            const handled = await handlePluginAuth({ auth: core as any }, provider)
+	            if (handled) return
+	          } else {
+	            // Check if a plugin provides auth for this custom provider
+	            const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+	            if (customPlugin && customPlugin.auth) {
+	              const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+	              if (handled) return
+	            }
+	          }
 
           prompts.log.warn(
             `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
@@ -370,22 +425,29 @@ export const AuthLogoutCommand = cmd({
   describe: "log out from a configured provider",
   async handler() {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records } = await CredentialStore.listAll()
+    const providers = Array.from(new Set(records.map((r) => r.meta.providerId)))
     prompts.intro("Remove credential")
-    if (credentials.length === 0) {
+    if (providers.length === 0) {
       prompts.log.error("No credentials found")
       return
     }
     const database = await ModelsDev.get()
     const providerID = await prompts.select({
       message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
+      options: providers.map((key) => {
+        const name = database[key]?.name || key
+        const count = records.filter((r) => r.meta.providerId === key).length
+        return {
+          label: `${name} ${UI.Style.TEXT_DIM}(${count})`,
+          value: key,
+        }
+      }),
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
-    prompts.outro("Logout successful")
-  },
-})
+	    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
+	    const ids = records.filter((r) => r.meta.providerId === providerID).map((r) => r.meta.id)
+	    await Promise.all(ids.map((id) => CredentialStore.remove(id)))
+	    prompts.outro("Logout successful")
+	  },
+	})

@@ -6,15 +6,60 @@ import { fn } from "@/util/fn"
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
+import { ProviderAuthRegistry } from "@/provider-auth/registry"
+import { CredentialStore, CredentialsMigrate } from "@/credentials"
+import { Config } from "@/config/config"
 
 export namespace ProviderAuth {
+  function dedupeMethods(methods: NonNullable<Hooks["auth"]>["methods"]): NonNullable<Hooks["auth"]>["methods"] {
+    const seen = new Set<string>()
+    const out: typeof methods = []
+    for (const method of methods) {
+      const key = `${method.type}:${method.label}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(method)
+    }
+    return out
+  }
+
   const state = Instance.state(async () => {
-    const methods = pipe(
+    const pluginMethods = pipe(
       await Plugin.list(),
       filter((x) => x.auth?.provider !== undefined),
       map((x) => [x.auth!.provider, x.auth!] as const),
       fromEntries(),
     )
+
+    const methods: Record<string, NonNullable<Hooks["auth"]>> = { ...pluginMethods }
+    for (const providerId of ProviderAuthRegistry.listProviderIds()) {
+      const core = ProviderAuthRegistry.getAuthHook(providerId)
+      if (!core) continue
+      const existing = methods[providerId]
+      if (!existing) {
+        methods[providerId] = core as NonNullable<Hooks["auth"]>
+        continue
+      }
+      // Merge methods, preferring core methods first.
+      const merged = dedupeMethods([...core.methods, ...existing.methods])
+      methods[providerId] = {
+        ...existing,
+        methods: merged,
+      }
+    }
+
+    for (const providerId of Object.keys(methods)) {
+      const methodList = methods[providerId]?.methods ?? []
+      const hasApi = methodList.some((m) => m.type === "api")
+      if (!hasApi) {
+        methodList.push({
+          type: "api",
+          label: "API key",
+        } as any)
+      }
+      methods[providerId] = { ...methods[providerId]!, methods: methodList }
+    }
+
     return { methods, pending: {} as Record<string, AuthOuathResult> }
   })
 
@@ -99,13 +144,30 @@ export namespace ProviderAuth {
           })
         }
         if ("refresh" in result) {
-          await Auth.set(input.providerID, {
-            type: "oauth",
-            access: result.access,
-            refresh: result.refresh,
-            expires: result.expires,
+          await CredentialsMigrate.migrateIfNeeded()
+          const config = await Config.get()
+          const namespace = config.provider?.[input.providerID]?.auth?.namespace ?? "default"
+          const existingOauth = (await CredentialStore.findByProvider(input.providerID, namespace)).filter(
+            (r) => r.meta.kind === "oauth",
+          )
+          const hasDefault = existingOauth.some((r) => (r.meta.label ?? "") === "default")
+          const label = hasDefault ? `${input.providerID}-${new Date().toISOString()}` : "default"
+          const { type: _, provider: __, access, refresh, expires, ...extraFields } = result as any
+
+          await CredentialStore.put({
+            providerId: input.providerID,
+            namespace,
+            kind: "oauth",
+            label,
+            secret: {
+              accessToken: access,
+              refreshToken: refresh || undefined,
+              expiresAt: expires || undefined,
+              extra: Object.keys(extraFields).length > 0 ? extraFields : undefined,
+            },
           })
         }
+        await state().then((s) => delete s.pending[input.providerID])
         return
       }
 

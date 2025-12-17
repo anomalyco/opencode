@@ -584,16 +584,38 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
-  export const Provider = ModelsDev.Provider.partial()
-    .extend({
-      whitelist: z.array(z.string()).optional(),
-      blacklist: z.array(z.string()).optional(),
-      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
-      options: z
-        .object({
-          apiKey: z.string().optional(),
-          baseURL: z.string().optional(),
-          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+	  export const Provider = ModelsDev.Provider.partial()
+	    .extend({
+	      whitelist: z.array(z.string()).optional(),
+	      blacklist: z.array(z.string()).optional(),
+	      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+	      auth: z
+	        .object({
+	          mode: z
+	            .enum(["auto", "api", "subscription"])
+	            .optional()
+	            .describe(
+	              "Auth mode for this provider. 'auto' uses subscription OAuth when available, otherwise API key/env. 'api' forces API key/env. 'subscription' forces OAuth rotation.",
+	            ),
+	          namespace: z
+	            .string()
+	            .optional()
+	            .describe("Credential namespace to use for this provider (default: 'default')."),
+	          maxAttempts: z
+	            .number()
+	            .int()
+	            .positive()
+	            .optional()
+	            .describe("Max credentials to try per request when rotating (default: try all eligible)."),
+	        })
+	        .strict()
+	        .optional()
+	        .describe("Authentication settings for subscription OAuth rotation and API keys."),
+	      options: z
+	        .object({
+	          apiKey: z.string().optional(),
+	          baseURL: z.string().optional(),
+	          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
           timeout: z
             .union([
