@@ -1,5 +1,5 @@
 import "@/index.css"
-import { Show } from "solid-js"
+import { Show, Suspense } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"

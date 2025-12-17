@@ -5,6 +5,7 @@ import { onMount } from "solid-js"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
+import { AsyncStorage } from "@solid-primitives/storage"
 
 import { runUpdater, UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
@@ -47,6 +48,23 @@ const platform: Platform = {
 
   openLink(url: string) {
     shellOpen(url)
+  },
+
+  storage: (name = "default.dat") => {
+    const api: AsyncStorage = {
+      _store: null,
+      _getStore: async () => api._store || (api._store = (await import("@tauri-apps/plugin-store")).Store.load(name)),
+      getItem: async (key: string) => (await (await api._getStore()).get(key)) ?? null,
+      setItem: async (key: string, value: string) => await (await api._getStore()).set(key, value),
+      removeItem: async (key: string) => await (await api._getStore()).delete(key),
+      clear: async () => await (await api._getStore()).clear(),
+      key: async (index: number) => (await (await api._getStore()).keys())[index],
+      getLength: async () => (await api._getStore()).length(),
+      get length() {
+        return api.getLength()
+      },
+    }
+    return api
   },
 }
 

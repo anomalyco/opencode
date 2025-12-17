@@ -1,7 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createMemo } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { makePersisted } from "@solid-primitives/storage"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
 import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, usePrompt, ImageAttachmentPart } from "@/context/prompt"
@@ -21,6 +20,7 @@ import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand, formatKeybind } from "@/context/command"
+import { persisted } from "@/utils/persist"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -109,15 +109,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const MAX_HISTORY = 100
-  const [history, setHistory] = makePersisted(
+  const [history, setHistory] = persisted(
+    "prompt-history.v1",
     createStore<{
       entries: Prompt[]
     }>({
       entries: [],
     }),
-    {
-      name: "prompt-history.v1",
-    },
   )
 
   const clonePromptParts = (prompt: Prompt): Prompt =>

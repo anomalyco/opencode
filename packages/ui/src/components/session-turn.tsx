@@ -102,7 +102,9 @@ export function SessionTurn(
     setState("autoScrolled", true)
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
-      setState("autoScrolled", false)
+      requestAnimationFrame(() => {
+        setState("autoScrolled", false)
+      })
     })
   }
 
