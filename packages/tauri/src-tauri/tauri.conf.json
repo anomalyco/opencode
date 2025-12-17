@@ -30,6 +30,11 @@
     "externalBin": ["sidecars/opencode-cli"],
     "macOS": {
       "entitlements": "./entitlements.plist"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/dev/icon.ico"
+      }
     }
   }
 }
