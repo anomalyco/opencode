@@ -69,7 +69,7 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
   return (
     <div data-component="diff" style={styleVariables} ref={container}>
-      <Dynamic component={DIFFS_TAG_NAME} ref={fileDiffRef} id="ssr-diff" class="contain-layout contain-paint">
+      <Dynamic component={DIFFS_TAG_NAME} ref={fileDiffRef} id="ssr-diff" data-slot="diff-inner">
         <Show when={isServer}>
           <template shadowrootmode="open" innerHTML={props.preloadedDiff.prerenderedHTML} />
         </Show>
