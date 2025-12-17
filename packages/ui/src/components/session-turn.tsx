@@ -56,6 +56,7 @@ export function SessionTurn(
   })
 
   let scrollRef: HTMLDivElement | undefined
+  let lastScrollTop = 0
   const [state, setState] = createStore({
     contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
@@ -84,11 +85,14 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef || state.autoScrolled) return
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef
-    const atBottom = scrollHeight - scrollTop - clientHeight < 50
-    if (!atBottom && working()) {
+    const { scrollTop } = scrollRef
+    // only mark as user scrolled if they actively scrolled upward
+    // content growth increases scrollHeight but never decreases scrollTop
+    const scrolledUp = scrollTop < lastScrollTop - 10
+    if (scrolledUp && working()) {
       setState("userScrolled", true)
     }
+    lastScrollTop = scrollTop
   }
 
   function handleInteraction() {
@@ -103,6 +107,7 @@ export function SessionTurn(
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
       requestAnimationFrame(() => {
+        lastScrollTop = scrollRef?.scrollTop ?? 0
         setState("autoScrolled", false)
       })
     })

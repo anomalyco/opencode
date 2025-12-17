@@ -709,13 +709,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
+    const model = {
+      modelID: local.model.current()!.id,
+      providerID: local.model.current()!.provider.id,
+    }
+    const agent = local.agent.current()!.name
+
+    sync.session.addOptimisticMessage({
+      sessionID: existing.id,
+      text,
+      parts: [
+        { type: "text", text } as import("@opencode-ai/sdk/v2/client").Part,
+        ...(fileAttachmentParts as import("@opencode-ai/sdk/v2/client").Part[]),
+        ...(imageAttachmentParts as import("@opencode-ai/sdk/v2/client").Part[]),
+      ],
+      agent,
+      model,
+    })
+
     sdk.client.session.prompt({
       sessionID: existing.id,
-      agent: local.agent.current()!.name,
-      model: {
-        modelID: local.model.current()!.id,
-        providerID: local.model.current()!.provider.id,
-      },
+      agent,
+      model,
       parts: [
         {
           type: "text",
