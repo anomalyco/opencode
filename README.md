@@ -37,6 +37,22 @@ nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branc
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+### Desktop App (BETA)
+
+OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/sst/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+
+| Platform              | Download                              |
+| --------------------- | ------------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+| Windows               | `opencode-desktop-windows-x64.exe`    |
+| Linux                 | `.deb`, `.rpm`, or AppImage           |
+
+```bash
+# macOS (Homebrew)
+brew install --cask opencode-desktop
+```
+
 #### Installation Directory
 
 The install script respects the following priority order for the installation path:

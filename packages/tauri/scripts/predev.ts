@@ -1,4 +1,3 @@
-import * as fs from "node:fs/promises"
 import { $ } from "bun"
 
 import { copyBinaryToSidecarFolder, getCurrentSidecar } from "./utils"
