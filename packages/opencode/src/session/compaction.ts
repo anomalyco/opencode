@@ -127,7 +127,11 @@ export namespace SessionCompaction {
       abort: input.abort,
     })
     // Allow plugins to inject context for compaction
-    const compacting = await Plugin.trigger("session.compacting", { sessionID: input.sessionID }, { context: [] })
+    const compacting = await Plugin.trigger(
+      "experimental.session.compacting",
+      { sessionID: input.sessionID },
+      { context: [] },
+    )
     const result = await processor.process({
       user: userMessage,
       agent,

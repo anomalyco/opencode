@@ -217,7 +217,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
-    "session.compacting": async (input, output) => {
+    "experimental.session.compacting": async (input, output) => {
       // Inject additional context into the compaction prompt
       output.context.push(`
 ## Custom Context
@@ -232,4 +232,4 @@ Include any state that should persist across compaction:
 }
 ```
 
-The `session.compacting` hook fires before the LLM generates a continuation summary. Use it to inject domain-specific context that the default compaction prompt would miss.
+The `experimental.session.compacting` hook fires before the LLM generates a continuation summary. Use it to inject domain-specific context that the default compaction prompt would miss.
