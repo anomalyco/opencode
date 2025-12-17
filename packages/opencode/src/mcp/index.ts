@@ -494,11 +494,18 @@ export namespace MCP {
     // Extract state from authorization URL to use as callback key
     // If no state parameter, use mcpName as fallback
     const authUrl = new URL(authorizationUrl)
-    const oauthState = authUrl.searchParams.get("state") ?? mcpName
+    let oauthState = mcpName
+
+    if (authUrl.searchParams.has("state")) {
+      oauthState = authUrl.searchParams.get("state")!
+    } else {
+      log.info("no state parameter in authorization URL, using mcpName as state", { mcpName })
+      authUrl.searchParams.set("state", oauthState)
+    }
 
     // Open browser
-    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
-    await open(authorizationUrl)
+    log.info("opening browser for oauth", { mcpName, url: authUrl.toString(), state: oauthState })
+    await open(authUrl.toString())
 
     // Wait for callback using the OAuth state parameter (or mcpName as fallback)
     const code = await McpOAuthCallback.waitForCallback(oauthState)

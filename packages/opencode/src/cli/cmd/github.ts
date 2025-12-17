@@ -602,21 +602,26 @@ export const GithubRunCommand = cmd({
         }
 
         const reviewContext = getReviewCommentContext()
+        const mentions = (process.env["MENTIONS"] || "/opencode,/oc")
+          .split(",")
+          .map((m) => m.trim().toLowerCase())
+          .filter(Boolean)
         let prompt = (() => {
           const body = payload.comment.body.trim()
-          if (body === "/opencode" || body === "/oc") {
+          const bodyLower = body.toLowerCase()
+          if (mentions.some((m) => bodyLower === m)) {
             if (reviewContext) {
               return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
             }
             return "Summarize this thread"
           }
-          if (body.includes("/opencode") || body.includes("/oc")) {
+          if (mentions.some((m) => bodyLower.includes(m))) {
             if (reviewContext) {
               return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
             }
             return body
           }
-          throw new Error("Comments must mention `/opencode` or `/oc`")
+          throw new Error(`Comments must mention ${mentions.map((m) => "`" + m + "`").join(" or ")}`)
         })()
 
         // Handle images
