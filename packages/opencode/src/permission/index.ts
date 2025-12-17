@@ -145,7 +145,7 @@ export namespace Permission {
   export const Response = z.enum(["once", "always", "reject", "interject"])
   export type Response = z.infer<typeof Response>
 
-  export function respond(input: {sessionID: Info["sessionID"] permissionID: Info["id"] response: Response interjection?: string}) {
+  export function respond(input: {sessionID: Info["sessionID"]; permissionID: Info["id"]; response: Response; interjection?: string}) {
     log.info("response", input)
     const { pending, approved } = state()
     const match = pending[input.sessionID]?.[input.permissionID]
