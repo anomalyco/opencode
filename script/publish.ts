@@ -17,7 +17,7 @@ if (!Script.preview) {
     .then((data: any) => data.version)
 
   const log =
-    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin`.text()
+    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/desktop`.text()
 
   const commits = log
     .split("\n")

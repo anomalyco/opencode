@@ -1,4 +1,6 @@
 [data-component="diff"] {
+  contain: content;
+
   [data-slot="diff-hunk-separator-line-number"] {
     position: sticky;
     left: 0;

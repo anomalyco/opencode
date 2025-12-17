@@ -4,6 +4,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
+import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -29,6 +30,40 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const match = Binary.search(store.session, sessionID, (s) => s.id)
           if (match.found) return store.session[match.index]
           return undefined
+        },
+        addOptimisticMessage(input: {
+          sessionID: string
+          text: string
+          parts: Part[]
+          agent: string
+          model: { providerID: string; modelID: string }
+        }) {
+          const messageID = crypto.randomUUID()
+          const message: Message = {
+            id: messageID,
+            sessionID: input.sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: input.agent,
+            model: input.model,
+          }
+          setStore(
+            produce((draft) => {
+              const messages = draft.message[input.sessionID]
+              if (!messages) {
+                draft.message[input.sessionID] = [message]
+              } else {
+                const result = Binary.search(messages, messageID, (m) => m.id)
+                messages.splice(result.index, 0, message)
+              }
+              draft.part[messageID] = input.parts.map((part, i) => ({
+                ...part,
+                id: `${messageID}-${i}`,
+                sessionID: input.sessionID,
+                messageID,
+              }))
+            }),
+          )
         },
         async sync(sessionID: string, _isRetry = false) {
           const [session, messages, todo, diff] = await Promise.all([
