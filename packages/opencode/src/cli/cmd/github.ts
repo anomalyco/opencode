@@ -278,7 +278,7 @@ export const GithubInstallCommand = cmd({
               process.platform === "darwin"
                 ? `open "${url}"`
                 : process.platform === "win32"
-                  ? `start "${url}"`
+                  ? `start "" "${url}"`
                   : `xdg-open "${url}"`
 
             exec(command, (error) => {

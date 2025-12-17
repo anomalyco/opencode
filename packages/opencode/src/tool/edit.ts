@@ -18,6 +18,8 @@ import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
 
+const MAX_DIAGNOSTICS_PER_FILE = 20
+
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
 }
@@ -74,7 +76,7 @@ export const EditTool = Tool.define("edit", {
     let diff = ""
     let contentOld = ""
     let contentNew = ""
-    await (async () => {
+    await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
@@ -95,6 +97,7 @@ export const EditTool = Tool.define("edit", {
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
+        FileTime.read(ctx.sessionID, filePath)
         return
       }
 
@@ -131,22 +134,20 @@ export const EditTool = Tool.define("edit", {
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
-    })()
-
-    FileTime.read(ctx.sessionID, filePath)
+      FileTime.read(ctx.sessionID, filePath)
+    })
 
     let output = ""
     await LSP.touchFile(filePath, true)
     const diagnostics = await LSP.diagnostics()
-    for (const [file, issues] of Object.entries(diagnostics)) {
-      if (issues.length === 0) continue
-      if (file === filePath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues
-          .filter((item) => item.severity === 1)
-          .map(LSP.Diagnostic.pretty)
-          .join("\n")}\n</file_diagnostics>\n`
-        continue
-      }
+    const normalizedFilePath = Filesystem.normalizePath(filePath)
+    const issues = diagnostics[normalizedFilePath] ?? []
+    if (issues.length > 0) {
+      const errors = issues.filter((item) => item.severity === 1)
+      const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
+      const suffix =
+        errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
+      output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
     }
 
     const filediff: Snapshot.FileDiff = {

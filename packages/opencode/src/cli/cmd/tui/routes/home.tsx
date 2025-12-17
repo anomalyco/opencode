@@ -57,6 +57,7 @@ export function Home() {
     } else if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
       once = true
+      prompt.submit()
     }
   })
   const directory = useDirectory()

@@ -171,6 +171,20 @@ export namespace ProviderTransform {
       const filtered = msg.content.map((part) => {
         if (part.type !== "file" && part.type !== "image") return part
 
+        // Check for empty base64 image data
+        if (part.type === "image") {
+          const imageStr = part.image.toString()
+          if (imageStr.startsWith("data:")) {
+            const match = imageStr.match(/^data:([^;]+);base64,(.*)$/)
+            if (match && (!match[2] || match[2].length === 0)) {
+              return {
+                type: "text" as const,
+                text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
+              }
+            }
+          }
+        }
+
         const mime = part.type === "image" ? part.image.toString().split(";")[0].replace("data:", "") : part.mediaType
         const filename = part.type === "file" ? part.filename : undefined
         const modality = mimeToModality(mime)
@@ -191,7 +205,12 @@ export namespace ProviderTransform {
   export function message(msgs: ModelMessage[], model: Provider.Model) {
     msgs = unsupportedParts(msgs, model)
     msgs = normalizeMessages(msgs, model)
-    if (model.providerID === "anthropic" || model.api.id.includes("anthropic") || model.api.id.includes("claude")) {
+    if (
+      model.providerID === "anthropic" ||
+      model.api.id.includes("anthropic") ||
+      model.api.id.includes("claude") ||
+      model.api.npm === "@ai-sdk/anthropic"
+    ) {
       msgs = applyCaching(msgs, model.providerID)
     }
 
@@ -199,14 +218,29 @@ export namespace ProviderTransform {
   }
 
   export function temperature(model: Provider.Model) {
-    if (model.api.id.toLowerCase().includes("qwen")) return 0.55
-    if (model.api.id.toLowerCase().includes("claude")) return undefined
-    if (model.api.id.toLowerCase().includes("gemini-3-pro")) return 1.0
-    return 0
+    const id = model.id.toLowerCase()
+    if (id.includes("qwen")) return 0.55
+    if (id.includes("claude")) return undefined
+    if (id.includes("gemini-3-pro")) return 1.0
+    if (id.includes("glm-4.6")) return 1.0
+    if (id.includes("minimax-m2")) return 1.0
+    // if (id.includes("kimi-k2")) {
+    //   if (id.includes("thinking")) return 1.0
+    //   return 0.6
+    // }
+    return undefined
   }
 
   export function topP(model: Provider.Model) {
-    if (model.api.id.toLowerCase().includes("qwen")) return 1
+    const id = model.id.toLowerCase()
+    if (id.includes("qwen")) return 1
+    if (id.includes("minimax-m2")) return 0.95
+    return undefined
+  }
+
+  export function topK(model: Provider.Model) {
+    const id = model.id.toLowerCase()
+    if (id.includes("minimax-m2")) return 40
     return undefined
   }
 

@@ -13,6 +13,7 @@ import {
   type SessionStatus,
   type ProviderListResponse,
   type ProviderAuthResponse,
+  type Command,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -24,6 +25,7 @@ import { onMount } from "solid-js"
 type State = {
   ready: boolean
   agent: Agent[]
+  command: Command[]
   project: string
   provider: ProviderListResponse
   config: Config
@@ -79,6 +81,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           path: { state: "", config: "", worktree: "", directory: "", home: "" },
           ready: false,
           agent: [],
+          command: [],
           session: [],
           session_status: {},
           session_diff: {},
@@ -97,11 +100,17 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
 
     async function loadSessions(directory: string) {
       globalSDK.client.session.list({ directory }).then((x) => {
-        const sessions = (x.data ?? [])
+        const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
+        const nonArchived = (x.data ?? [])
           .slice()
           .filter((s) => !s.time.archived)
           .sort((a, b) => a.id.localeCompare(b.id))
-          .slice(0, 5)
+        // Include at least 5 sessions, plus any updated in the last hour
+        const sessions = nonArchived.filter((s, i) => {
+          if (i < 5) return true
+          const updated = new Date(s.time.updated).getTime()
+          return updated > fourHoursAgo
+        })
         const [, setStore] = child(directory)
         setStore("session", sessions)
       })
@@ -118,6 +127,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
         path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
         agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
+        command: () => sdk.command.list().then((x) => setStore("command", x.data ?? [])),
         session: () => loadSessions(directory),
         status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
         config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
@@ -128,11 +138,12 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
     }
 
     globalSDK.event.listen((e) => {
+      console.log(e)
       const directory = e.name
       const event = e.details
 
       if (directory === "global") {
-        switch (event.type) {
+        switch (event?.type) {
           case "global.disposed": {
             bootstrap()
             break
@@ -216,6 +227,21 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           )
           break
         }
+        case "message.removed": {
+          const messages = store.message[event.properties.sessionID]
+          if (!messages) break
+          const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
+          if (result.found) {
+            setStore(
+              "message",
+              event.properties.sessionID,
+              produce((draft) => {
+                draft.splice(result.index, 1)
+              }),
+            )
+          }
+          break
+        }
         case "message.part.updated": {
           const part = event.properties.part
           const parts = store.part[part.messageID]
@@ -237,6 +263,21 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
           )
           break
         }
+        case "message.part.removed": {
+          const parts = store.part[event.properties.messageID]
+          if (!parts) break
+          const result = Binary.search(parts, event.properties.partID, (p) => p.id)
+          if (result.found) {
+            setStore(
+              "part",
+              event.properties.messageID,
+              produce((draft) => {
+                draft.splice(result.index, 1)
+              }),
+            )
+          }
+          break
+        }
       }
     })
 
@@ -248,9 +289,7 @@ export const { use: useGlobalSync, provider: GlobalSyncProvider } = createSimple
         globalSDK.client.project.list().then(async (x) => {
           setGlobalStore(
             "project",
-            x
-              .data!.filter((p) => !p.worktree.includes("opencode-test") && p.vcs)
-              .sort((a, b) => a.id.localeCompare(b.id)),
+            x.data!.filter((p) => !p.worktree.includes("opencode-test")).sort((a, b) => a.id.localeCompare(b.id)),
           )
         }),
         globalSDK.client.provider.list().then((x) => {
