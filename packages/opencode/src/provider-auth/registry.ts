@@ -21,6 +21,21 @@ const ALIASES: Record<string, string> = {
 }
 
 export namespace ProviderAuthRegistry {
+  export function equivalentProviderIds(providerId: string): string[] {
+    const canonical = resolveProviderId(providerId)
+    const ids = new Set<string>([canonical, providerId])
+    for (const [alias, target] of Object.entries(ALIASES)) {
+      if (target === canonical) ids.add(alias)
+    }
+    return Array.from(ids)
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a === canonical) return -1
+        if (b === canonical) return 1
+        return a.localeCompare(b)
+      })
+  }
+
   export function listProviderIds(): string[] {
     const ids = new Set<string>()
     for (const adapter of ADAPTERS) ids.add(adapter.providerId)

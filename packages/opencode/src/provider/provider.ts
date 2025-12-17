@@ -821,15 +821,19 @@ export namespace Provider {
 
 	      if (authMode === "subscription") {
 	        await CredentialsMigrate.migrateIfNeeded()
-	        const adapter = ProviderAuthRegistry.getAdapter(model.providerID)
+	        const canonicalProviderId = ProviderAuthRegistry.resolveProviderId(model.providerID)
+	        const adapter = ProviderAuthRegistry.getAdapter(canonicalProviderId)
 	        if (!adapter) {
 	          throw new Error(
 	            `Provider '${model.providerID}' does not support subscription OAuth in this build (no adapter).`,
 	          )
 	        }
-	        const oauthRecords = (await CredentialStore.findByProvider(model.providerID, authNamespace)).filter(
-	          (r) => r.meta.kind === "oauth",
+	        const providerIds = ProviderAuthRegistry.equivalentProviderIds(model.providerID)
+	        const oauthRecords = (
+	          await Promise.all(providerIds.map((id) => CredentialStore.findByProvider(id, authNamespace)))
 	        )
+	          .flat()
+	          .filter((r) => r.meta.kind === "oauth")
 	        if (oauthRecords.length === 0) {
 	          throw new Error(
 	            `No OAuth credentials found for provider '${model.providerID}' in namespace '${authNamespace}'. Run opencode connect and choose an OAuth method.`,
