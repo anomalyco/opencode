@@ -277,8 +277,8 @@ export const RunCommand = cmd({
           }
           return { error }
         })
-        if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
         }
       }
 
@@ -330,8 +330,8 @@ export const RunCommand = cmd({
           }
           return { error }
         })
-        if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
         }
       }
 
