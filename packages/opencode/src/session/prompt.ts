@@ -28,6 +28,7 @@ import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
+import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
@@ -48,7 +49,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
-  export const OUTPUT_TOKEN_MAX = 32_000
+  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
   const state = Instance.state(
     () => {
@@ -325,42 +326,60 @@ export namespace SessionPrompt {
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
+              command: task.command,
             },
             time: {
               start: Date.now(),
             },
           },
         })) as MessageV2.ToolPart
+        const taskArgs = {
+          prompt: task.prompt,
+          description: task.description,
+          subagent_type: task.agent,
+          command: task.command,
+        }
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          { args: taskArgs },
+        )
         let executionError: Error | undefined
         const result = await taskTool
-          .execute(
-            {
-              prompt: task.prompt,
-              description: task.description,
-              subagent_type: task.agent,
+          .execute(taskArgs, {
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            sessionID: sessionID,
+            abort,
+            async metadata(input) {
+              await Session.updatePart({
+                ...part,
+                type: "tool",
+                state: {
+                  ...part.state,
+                  ...input,
+                },
+              } satisfies MessageV2.ToolPart)
             },
-            {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID: sessionID,
-              abort,
-              async metadata(input) {
-                await Session.updatePart({
-                  ...part,
-                  type: "tool",
-                  state: {
-                    ...part.state,
-                    ...input,
-                  },
-                } satisfies MessageV2.ToolPart)
-              },
-            },
-          )
+          })
           .catch((error) => {
             executionError = error
             log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
             return undefined
           })
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          result,
+        )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -1323,6 +1342,7 @@ export namespace SessionPrompt {
               type: "subtask" as const,
               agent: agent.name,
               description: command.description ?? "",
+              command: input.command,
               // TODO: how can we make task tool accept a more complex input?
               prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
             },

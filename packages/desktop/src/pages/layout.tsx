@@ -25,9 +25,8 @@ import {
   SortableProvider,
   closestCenter,
   createSortable,
-  useDragDropContext,
 } from "@thisbeyond/solid-dnd"
-import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -37,6 +36,7 @@ import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { useCommand } from "@/context/command"
+import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -299,28 +299,6 @@ export default function Layout(props: ParentProps) {
 
   function handleDragEnd() {
     setStore("activeDraggable", undefined)
-  }
-
-  const ConstrainDragXAxis = (): JSX.Element => {
-    const context = useDragDropContext()
-    if (!context) return <></>
-    const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
-    const transformer: Transformer = {
-      id: "constrain-x-axis",
-      order: 100,
-      callback: (transform) => ({ ...transform, x: 0 }),
-    }
-    onDragStart((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      addTransformer("draggables", id, transformer)
-    })
-    onDragEnd((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      removeTransformer("draggables", id, transformer.id)
-    })
-    return <></>
   }
 
   const ProjectAvatar = (props: {
@@ -589,12 +567,11 @@ export default function Layout(props: ParentProps) {
                     </div>
                   </Show>
                   <Show when={hasMoreSessions()}>
-                    <div class="relative w-full pl-4 pr-2 py-1">
+                    <div class="relative w-full py-1">
                       <Button
                         variant="ghost"
-                        class="w-full text-12-regular text-text-muted"
-                        size="small"
-                        icon="plus-small"
+                        class="flex w-full text-left justify-start text-12-medium opacity-50 px-3.5"
+                        size="large"
                         onClick={loadMoreSessions}
                       >
                         Load more
@@ -636,7 +613,7 @@ export default function Layout(props: ParentProps) {
           classList={{
             "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
             "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
-            "border-r border-border-weak-base": true,
+            "border-r border-border-weak-base contain-strict": true,
           }}
           style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
         >
@@ -778,7 +755,7 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           </div>
         </div>
-        <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
+        <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict">{props.children}</main>
       </div>
       <Toast.Region />
     </div>

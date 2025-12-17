@@ -26,6 +26,7 @@ export const TaskTool = Tool.define("task", async () => {
       prompt: z.string().describe("The task for the agent to perform"),
       subagent_type: z.string().describe("The type of specialized agent to use for this task"),
       session_id: z.string().describe("Existing Task session to continue").optional(),
+      command: z.string().describe("The command that triggered this task").optional(),
     }),
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)

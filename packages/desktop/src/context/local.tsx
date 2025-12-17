@@ -7,8 +7,8 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
-import { makePersisted } from "@solid-primitives/storage"
 import { DateTime } from "luxon"
+import { persisted } from "@/utils/persist"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -110,7 +110,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })()
 
     const model = (() => {
-      const [store, setStore] = makePersisted(
+      const [store, setStore, _, modelReady] = persisted(
+        "model.v1",
         createStore<{
           user: (ModelKey & { visibility: "show" | "hide"; favorite?: boolean })[]
           recent: ModelKey[]
@@ -118,7 +119,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           user: [],
           recent: [],
         }),
-        { name: "model.v1" },
       )
 
       const [ephemeral, setEphemeral] = createStore<{
@@ -242,6 +242,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       return {
+        ready: modelReady,
         current,
         recent,
         list,

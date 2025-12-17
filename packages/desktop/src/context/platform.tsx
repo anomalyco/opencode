@@ -1,4 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 
 export type Platform = {
   /** Platform discriminator */
@@ -15,6 +16,9 @@ export type Platform = {
 
   /** Open a URL in the default browser */
   openLink(url: string): void
+
+  /** Storage mechanism, defaults to localStorage */
+  storage?: (name?: string) => SyncStorage | AsyncStorage
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
