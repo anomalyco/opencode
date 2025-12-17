@@ -1,5 +1,5 @@
 import { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
-import { ComponentProps, createEffect, onCleanup, onMount, splitProps } from "solid-js"
+import { ComponentProps, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
@@ -31,7 +31,7 @@ export const Terminal = (props: TerminalProps) => {
     term = new Term({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: "TX-02, monospace",
+      fontFamily: "IBM Plex Mono, monospace",
       allowTransparency: true,
       theme: prefersDark()
         ? {

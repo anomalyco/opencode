@@ -38,16 +38,16 @@ const url =
 
 export function App() {
   return (
-    <DialogProvider>
-      <MarkedProvider>
-        <DiffComponentProvider component={Diff}>
-          <CodeComponentProvider component={Code}>
-            <GlobalSDKProvider url={url}>
-              <GlobalSyncProvider>
-                <LayoutProvider>
-                  <NotificationProvider>
-                    <MetaProvider>
-                      <Font />
+    <MetaProvider>
+      <Font />
+      <DialogProvider>
+        <MarkedProvider>
+          <DiffComponentProvider component={Diff}>
+            <CodeComponentProvider component={Code}>
+              <GlobalSDKProvider url={url}>
+                <GlobalSyncProvider>
+                  <LayoutProvider>
+                    <NotificationProvider>
                       <Router
                         root={(props) => (
                           <CommandProvider>
@@ -72,14 +72,14 @@ export function App() {
                           />
                         </Route>
                       </Router>
-                    </MetaProvider>
-                  </NotificationProvider>
-                </LayoutProvider>
-              </GlobalSyncProvider>
-            </GlobalSDKProvider>
-          </CodeComponentProvider>
-        </DiffComponentProvider>
-      </MarkedProvider>
-    </DialogProvider>
+                    </NotificationProvider>
+                  </LayoutProvider>
+                </GlobalSyncProvider>
+              </GlobalSDKProvider>
+            </CodeComponentProvider>
+          </DiffComponentProvider>
+        </MarkedProvider>
+      </DialogProvider>
+    </MetaProvider>
   )
 }
