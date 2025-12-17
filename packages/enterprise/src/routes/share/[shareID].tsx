@@ -274,8 +274,8 @@ export default function () {
                         )
 
                         const turns = () => (
-                          <div class="relative mt-2 pt-6 pb-8 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
-                            <div class="px-4">{title()}</div>
+                          <div class="relative mt-2 pb-8 min-w-0 w-full h-full overflow-y-auto no-scrollbar">
+                            <div class="px-4 py-6">{title()}</div>
                             <div class="flex flex-col gap-15 items-start justify-start mt-4">
                               <For each={messages()}>
                                 {(message) => (
