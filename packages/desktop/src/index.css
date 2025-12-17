@@ -8,6 +8,6 @@
   /* CSS performance optimization for diff components because they can have a
    * pretty heavy DOM structure */
   diffs-container {
-    contain: layout paint;
+    contain: content;
   }
 }
