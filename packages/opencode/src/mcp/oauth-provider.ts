@@ -127,6 +127,18 @@ export class McpOAuthProvider implements OAuthClientProvider {
     }
     return entry.codeVerifier
   }
+
+  async saveState(state: string): Promise<void> {
+    await McpAuth.updateOAuthState(this.mcpName, state)
+  }
+
+  async state(): Promise<string> {
+    const entry = await McpAuth.get(this.mcpName)
+    if (!entry?.oauthState) {
+      throw new Error(`No OAuth state saved for MCP server: ${this.mcpName}`)
+    }
+    return entry.oauthState
+  }
 }
 
 export { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH }

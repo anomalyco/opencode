@@ -24,6 +24,7 @@ export namespace McpAuth {
     tokens: Tokens.optional(),
     clientInfo: ClientInfo.optional(),
     codeVerifier: z.string().optional(),
+    oauthState: z.string().optional(),
   })
   export type Entry = z.infer<typeof Entry>
 
@@ -76,6 +77,25 @@ export namespace McpAuth {
     const entry = await get(mcpName)
     if (entry) {
       delete entry.codeVerifier
+      await set(mcpName, entry)
+    }
+  }
+
+  export async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
+    const entry = (await get(mcpName)) ?? {}
+    entry.oauthState = oauthState
+    await set(mcpName, entry)
+  }
+
+  export async function getOAuthState(mcpName: string): Promise<string | undefined> {
+    const entry = await get(mcpName)
+    return entry?.oauthState
+  }
+
+  export async function clearOAuthState(mcpName: string): Promise<void> {
+    const entry = await get(mcpName)
+    if (entry) {
+      delete entry.oauthState
       await set(mcpName, entry)
     }
   }

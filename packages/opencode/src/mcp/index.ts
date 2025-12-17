@@ -491,24 +491,32 @@ export namespace MCP {
       return s.status[mcpName] ?? { status: "connected" }
     }
 
-    // Extract state from authorization URL to use as callback key
-    // If no state parameter, use mcpName as fallback
-    const authUrl = new URL(authorizationUrl)
-    let oauthState = mcpName
+    // Generate and store a cryptographically secure state parameter
+    const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
 
-    if (authUrl.searchParams.has("state")) {
-      oauthState = authUrl.searchParams.get("state")!
-    } else {
-      log.info("no state parameter in authorization URL, using mcpName as state", { mcpName })
-      authUrl.searchParams.set("state", oauthState)
-    }
+    await McpAuth.updateOAuthState(mcpName, oauthState)
+
+    // Add state parameter to authorization URL
+    const authUrl = new URL(authorizationUrl)
+    authUrl.searchParams.set("state", oauthState)
 
     // Open browser
     log.info("opening browser for oauth", { mcpName, url: authUrl.toString(), state: oauthState })
     await open(authUrl.toString())
 
-    // Wait for callback using the OAuth state parameter (or mcpName as fallback)
+    // Wait for callback using the OAuth state parameter
     const code = await McpOAuthCallback.waitForCallback(oauthState)
+
+    // Validate and clear the state
+    const storedState = await McpAuth.getOAuthState(mcpName)
+    if (storedState !== oauthState) {
+      await McpAuth.clearOAuthState(mcpName)
+      throw new Error("OAuth state mismatch - potential CSRF attack")
+    }
+
+    await McpAuth.clearOAuthState(mcpName)
 
     // Finish auth
     return finishAuth(mcpName, code)
@@ -561,6 +569,7 @@ export namespace MCP {
     await McpAuth.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
     pendingOAuthTransports.delete(mcpName)
+    await McpAuth.clearOAuthState(mcpName)
     log.info("removed oauth credentials", { mcpName })
   }
 
