@@ -19,8 +19,8 @@
     position: sticky;
     background-color: var(--surface-diff-hidden-base);
     color: var(--text-base);
-    width: var(--pjs-column-content-width);
-    left: var(--pjs-column-number-width);
+    width: var(--diffs-column-content-width);
+    left: var(--diffs-column-number-width);
     padding-left: 8px;
     user-select: none;
     cursor: default;
