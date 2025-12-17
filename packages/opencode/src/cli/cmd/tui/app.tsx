@@ -457,6 +457,7 @@ function App() {
     const keybinds = sync.data.config.keybinds ?? {}
     for (const [key, value] of Object.entries(keybinds)) {
       if (!key.startsWith("/")) continue
+      if (!value) continue
       
       const commandName = key.slice(1)
       const commandKeybinds = Keybind.parse(value)

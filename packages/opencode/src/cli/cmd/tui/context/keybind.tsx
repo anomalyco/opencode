@@ -15,7 +15,7 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
     const keybinds = createMemo(() => {
       return pipe(
         sync.data.config.keybinds ?? {},
-        mapValues((value) => Keybind.parse(value)),
+        mapValues((value) => (value ? Keybind.parse(value) : [])),
       )
     })
     const [store, setStore] = createStore({
