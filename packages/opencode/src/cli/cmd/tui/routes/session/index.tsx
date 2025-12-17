@@ -242,29 +242,29 @@ export function Session() {
   command.register(() => [
     ...(sync.data.config.share !== "disabled"
       ? [
-        {
-          title: "Share session",
-          value: "session.share",
-          suggested: route.type === "session",
-          keybind: "session_share" as const,
-          disabled: !!session()?.share?.url,
-          category: "Session",
-          onSelect: async (dialog: any) => {
-            await sdk.client.session
-              .share({
-                sessionID: route.sessionID,
-              })
-              .then((res) =>
-                Clipboard.copy(res.data!.share!.url).catch(() =>
-                  toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
-                ),
-              )
-              .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
-              .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
-            dialog.clear()
+          {
+            title: "Share session",
+            value: "session.share",
+            suggested: route.type === "session",
+            keybind: "session_share" as const,
+            disabled: !!session()?.share?.url,
+            category: "Session",
+            onSelect: async (dialog: any) => {
+              await sdk.client.session
+                .share({
+                  sessionID: route.sessionID,
+                })
+                .then((res) =>
+                  Clipboard.copy(res.data!.share!.url).catch(() =>
+                    toast.show({ message: "Failed to copy URL to clipboard", variant: "error" }),
+                  ),
+                )
+                .then(() => toast.show({ message: "Share URL copied to clipboard!", variant: "success" }))
+                .catch(() => toast.show({ message: "Failed to share session", variant: "error" }))
+              dialog.clear()
+            },
           },
-        },
-      ]
+        ]
       : []),
     {
       title: "Rename session",
@@ -1242,19 +1242,19 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const style: BoxProps =
       container === "block" || permission
         ? {
-          border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
-          paddingTop: 1,
-          paddingBottom: 1,
-          paddingLeft: 2,
-          marginTop: 1,
-          gap: 1,
-          backgroundColor: theme.backgroundPanel,
-          customBorderChars: SplitBorder.customBorderChars,
-          borderColor: permissionIndex === 0 ? theme.warning : theme.background,
-        }
+            border: permissionIndex === 0 ? (["left", "right"] as const) : (["left"] as const),
+            paddingTop: 1,
+            paddingBottom: 1,
+            paddingLeft: 2,
+            marginTop: 1,
+            gap: 1,
+            backgroundColor: theme.backgroundPanel,
+            customBorderChars: SplitBorder.customBorderChars,
+            borderColor: permissionIndex === 0 ? theme.warning : theme.background,
+          }
         : {
-          paddingLeft: 3,
-        }
+            paddingLeft: 3,
+          }
 
     return (
       <box
