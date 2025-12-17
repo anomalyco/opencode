@@ -128,6 +128,19 @@ const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
+// Parses GitHub remote URLs in various formats:
+// - https://github.com/owner/repo.git
+// - https://github.com/owner/repo
+// - git@github.com:owner/repo.git
+// - git@github.com:owner/repo
+// - ssh://git@github.com/owner/repo.git
+// - ssh://git@github.com/owner/repo
+export function parseGitHubRemote(url: string): { owner: string; repo: string } | null {
+  const match = url.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) return null
+  return { owner: match[1], repo: match[2] }
+}
+
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -197,20 +210,12 @@ export const GithubInstallCommand = cmd({
 
             // Get repo info
             const info = (await $`git remote get-url origin`.quiet().nothrow().text()).trim()
-            // match https or git pattern
-            // ie. https://github.com/sst/opencode.git
-            // ie. https://github.com/sst/opencode
-            // ie. git@github.com:sst/opencode.git
-            // ie. git@github.com:sst/opencode
-            // ie. ssh://git@github.com/sst/opencode.git
-            // ie. ssh://git@github.com/sst/opencode
-            const parsed = info.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/)
+            const parsed = parseGitHubRemote(info)
             if (!parsed) {
               prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
               throw new UI.CancelledError()
             }
-            const [, owner, repo] = parsed
-            return { owner, repo, root: Instance.worktree }
+            return { owner: parsed.owner, repo: parsed.repo, root: Instance.worktree }
           }
 
           async function promptProvider() {
@@ -597,21 +602,26 @@ export const GithubRunCommand = cmd({
         }
 
         const reviewContext = getReviewCommentContext()
+        const mentions = (process.env["MENTIONS"] || "/opencode,/oc")
+          .split(",")
+          .map((m) => m.trim().toLowerCase())
+          .filter(Boolean)
         let prompt = (() => {
           const body = payload.comment.body.trim()
-          if (body === "/opencode" || body === "/oc") {
+          const bodyLower = body.toLowerCase()
+          if (mentions.some((m) => bodyLower === m)) {
             if (reviewContext) {
               return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
             }
             return "Summarize this thread"
           }
-          if (body.includes("/opencode") || body.includes("/oc")) {
+          if (mentions.some((m) => bodyLower.includes(m))) {
             if (reviewContext) {
               return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
             }
             return body
           }
-          throw new Error("Comments must mention `/opencode` or `/oc`")
+          throw new Error(`Comments must mention ${mentions.map((m) => "`" + m + "`").join(" or ")}`)
         })()
 
         // Handle images
