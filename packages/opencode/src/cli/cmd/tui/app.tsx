@@ -147,6 +147,14 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          }
+        },
       },
     )
   })
