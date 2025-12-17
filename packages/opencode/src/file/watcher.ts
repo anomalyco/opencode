@@ -5,11 +5,13 @@ import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
+import path from "path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
 import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
+import { Flag } from "@/flag/flag"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -57,17 +59,24 @@ export namespace FileWatcher {
         }
       }
 
-      const subs = []
+      const subs: ParcelWatcher.AsyncSubscription[] = []
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
-      subs.push(
-        await watcher().subscribe(Instance.directory, subscribe, {
-          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
-          backend,
-        }),
-      )
+      if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
+        subs.push(
+          await watcher().subscribe(Instance.directory, subscribe, {
+            ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
+            backend,
+          }),
+        )
+      }
 
-      const vcsDir = await $`git rev-parse --git-dir`.quiet().nothrow().cwd(Instance.worktree).text()
+      const vcsDir = await $`git rev-parse --git-dir`
+        .quiet()
+        .nothrow()
+        .cwd(Instance.worktree)
+        .text()
+        .then((x) => path.resolve(Instance.worktree, x.trim()))
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         subs.push(
           await watcher().subscribe(vcsDir, subscribe, {
@@ -86,6 +95,9 @@ export namespace FileWatcher {
   )
 
   export function init() {
+    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) {
+      return
+    }
     state()
   }
 }
