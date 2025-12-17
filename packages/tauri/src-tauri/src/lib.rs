@@ -4,9 +4,9 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, Monitor, RunEvent, WebviewUrl, WebviewWindow};
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
+use tauri::{AppHandle, LogicalSize, Manager, Monitor, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -66,7 +66,7 @@ fn find_and_kill_process_on_port(port: u16) -> Result<(), Box<dyn std::error::Er
 fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
     let (mut rx, child) = app
         .shell()
-        .sidecar("opencode")
+        .sidecar("opencode-cli")
         .unwrap()
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
         .env("OPENCODE_CLIENT", "desktop")
@@ -183,6 +183,7 @@ pub fn run() {
                         .inner_size(size.width as f64, size.height as f64)
                         .decorations(true)
                         .zoom_hotkeys_enabled(true)
+                        .disable_drag_drop_handler()
                         .initialization_script(format!(
                             r#"
                           window.__OPENCODE__ ??= {{}};

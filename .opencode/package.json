@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@octokit/rest": "^22.0.1",
+    "@opencode-ai/plugin": "0.0.0-dev-202512160036"
+  }
+}
