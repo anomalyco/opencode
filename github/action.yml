@@ -22,6 +22,10 @@ inputs:
     required: false
     default: "false"
 
+  mentions:
+    description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/opencode,/oc'"
+    required: false
+
 runs:
   using: "composite"
   steps:
@@ -57,3 +61,4 @@ runs:
         SHARE: ${{ inputs.share }}
         PROMPT: ${{ inputs.prompt }}
         USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
+        MENTIONS: ${{ inputs.mentions }}

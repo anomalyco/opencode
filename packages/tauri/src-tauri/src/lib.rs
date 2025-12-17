@@ -1,19 +1,39 @@
 use std::{
     net::{SocketAddr, TcpListener},
-    process::Command,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 #[cfg(target_os = "macos")]
 use tauri::TitleBarStyle;
-use tauri::{AppHandle, LogicalSize, Manager, Monitor, RunEvent, WebviewUrl, WebviewWindow};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
 
 #[derive(Clone)]
 struct ServerState(Arc<Mutex<Option<CommandChild>>>);
+
+#[tauri::command]
+fn kill_sidecar(app: AppHandle) {
+    let Some(server_state) = app.try_state::<ServerState>() else {
+        println!("Server not running");
+        return;
+    };
+
+    let Some(server_state) = server_state
+        .0
+        .lock()
+        .expect("Failed to acquire mutex lock")
+        .take()
+    else {
+        println!("Server state missing");
+        return;
+    };
+
+    let _ = server_state.kill();
+
+    println!("Killed server");
+}
 
 fn get_sidecar_port() -> u16 {
     option_env!("OPENCODE_PORT")
@@ -29,41 +49,12 @@ fn get_sidecar_port() -> u16 {
         })
 }
 
-fn find_and_kill_process_on_port(port: u16) -> Result<(), Box<dyn std::error::Error>> {
-    // Find all listeners on the specified port
-    let listeners = listeners::get_processes_by_port(port)?;
-
-    if listeners.is_empty() {
-        println!("No processes found listening on port {}", port);
-        return Ok(());
-    }
-
-    for listener in listeners {
-        let pid = listener.pid;
-        println!("Found process {} listening on port {}", pid, port);
-
-        // Kill the process using platform-appropriate command
-        #[cfg(target_os = "windows")]
-        {
-            Command::new("taskkill")
-                .args(["/F", "/PID", &pid.to_string()])
-                .output()?;
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            Command::new("kill")
-                .args(["-9", &pid.to_string()])
-                .output()?;
-        }
-
-        println!("Killed process {}", pid);
-    }
-
-    Ok(())
+fn get_user_shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
 fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
+    #[cfg(target_os = "windows")]
     let (mut rx, child) = app
         .shell()
         .sidecar("opencode-cli")
@@ -73,6 +64,27 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
         .args(["serve", &format!("--port={port}")])
         .spawn()
         .expect("Failed to spawn opencode");
+
+    #[cfg(not(target_os = "windows"))]
+    let (mut rx, child) = {
+        let sidecar_path = tauri::utils::platform::current_exe()
+            .expect("Failed to get current exe")
+            .parent()
+            .expect("Failed to get parent dir")
+            .join("opencode-cli");
+        let shell = get_user_shell();
+        app.shell()
+            .command(&shell)
+            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("OPENCODE_CLIENT", "desktop")
+            .args([
+                "-il",
+                "-c",
+                &format!("{} serve --port={}", sidecar_path.display(), port),
+            ])
+            .spawn()
+            .expect("Failed to spawn opencode")
+    };
 
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
@@ -116,6 +128,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![kill_sidecar])
         .setup(move |app| {
             let app = app.handle().clone();
 
@@ -123,28 +136,6 @@ pub fn run() {
                 let port = get_sidecar_port();
 
                 let should_spawn_sidecar = !is_server_running(port).await;
-
-                // if server_running {
-                //     let res = app
-                //         .dialog()
-                //         .message(
-                //             "OpenCode Server is already running, would you like to restart it?",
-                //         )
-                //         .buttons(MessageDialogButtons::YesNo)
-                //         .blocking_show_with_result();
-
-                //     match res {
-                //         MessageDialogResult::Yes => {
-                //             if let Err(e) = find_and_kill_process_on_port(port) {
-                //                 eprintln!("Failed to kill process on port {}: {}", port, e);
-                //             }
-                //             true
-                //         }
-                //         _ => false,
-                //     }
-                // } else {
-                //     true
-                // };
 
                 let child = if should_spawn_sidecar {
                     let child = spawn_sidecar(&app, port);
@@ -218,24 +209,7 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 println!("Received Exit");
 
-                let Some(server_state) = app.try_state::<ServerState>() else {
-                    println!("Server not running");
-                    return;
-                };
-
-                let Some(server_state) = server_state
-                    .0
-                    .lock()
-                    .expect("Failed to acquire mutex lock")
-                    .take()
-                else {
-                    println!("Server state missing");
-                    return;
-                };
-
-                let _ = server_state.kill();
-
-                println!("Killed server");
+                kill_sidecar(app.clone());
             }
         });
 }
