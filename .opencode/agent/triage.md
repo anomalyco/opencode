@@ -13,10 +13,10 @@ Use your github-triage tool to triage issues.
 
 ## Labels
 
-
 ### windows
 
 Use for any issue that is mentions windows (the OS). Be sure they are saying that they are on windows.
+
 - Use if they mention WSL too
 
 #### perf
