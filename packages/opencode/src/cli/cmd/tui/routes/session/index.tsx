@@ -840,6 +840,9 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
+              viewportOptions={{
+                paddingRight: showScrollbar() ? 1 : 0,
+              }}
               verticalScrollbarOptions={{
                 paddingLeft: 1,
                 visible: showScrollbar(),
