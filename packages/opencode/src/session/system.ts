@@ -14,8 +14,7 @@ import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
-import PROMPT_TITLE from "./prompt/title.txt"
+
 import PROMPT_CODEX from "./prompt/codex.txt"
 import type { Provider } from "@/provider/provider"
 
@@ -117,32 +116,5 @@ export namespace SystemPrompt {
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
     return Promise.all(found).then((result) => result.filter(Boolean))
-  }
-
-  export function compaction(providerID: string) {
-    switch (providerID) {
-      case "anthropic":
-        return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_COMPACTION]
-      default:
-        return [PROMPT_COMPACTION]
-    }
-  }
-
-  export function summarize(providerID: string) {
-    switch (providerID) {
-      case "anthropic":
-        return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_SUMMARIZE]
-      default:
-        return [PROMPT_SUMMARIZE]
-    }
-  }
-
-  export function title(providerID: string) {
-    switch (providerID) {
-      case "anthropic":
-        return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_TITLE]
-      default:
-        return [PROMPT_TITLE]
-    }
   }
 }
