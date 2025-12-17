@@ -66,12 +66,16 @@ export namespace RotatingFetch {
     return async (input, init) => {
       await CredentialsMigrate.migrateIfNeeded()
 
-      const adapter = ProviderAuthRegistry.getAdapter(opts.providerId)
+      const canonicalProviderId = ProviderAuthRegistry.resolveProviderId(opts.providerId)
+      const adapter = ProviderAuthRegistry.getAdapter(canonicalProviderId)
       if (!adapter) return baseFetch(input, init)
 
-      const records = (await CredentialStore.findByProvider(opts.providerId, opts.namespace)).filter(
-        (r) => r.meta.kind === "oauth",
+      const providerIds = ProviderAuthRegistry.equivalentProviderIds(opts.providerId)
+      const records = (
+        await Promise.all(providerIds.map((id) => CredentialStore.findByProvider(id, opts.namespace)))
       )
+        .flat()
+        .filter((r) => r.meta.kind === "oauth")
       if (records.length === 0) return baseFetch(input, init)
 
       records.sort((a, b) => {
@@ -83,7 +87,7 @@ export namespace RotatingFetch {
       })
 
       const eligibleIds = records.map((r) => r.meta.id)
-      const orderedIds = await CredentialPool.getOrderedIds(opts.providerId, opts.namespace, eligibleIds)
+      const orderedIds = await CredentialPool.getOrderedIds(canonicalProviderId, opts.namespace, eligibleIds)
 
       const recordById = new Map(records.map((r) => [r.meta.id, r] as const))
       const attempted = new Set<string>()
@@ -169,7 +173,7 @@ export namespace RotatingFetch {
             activeResp.body?.cancel()
           } catch {}
           await CredentialStore.recordOutcome({ id: chosenId, statusCode: activeResp.status, ok: false, cooldownUntil })
-          await CredentialPool.moveToBack(opts.providerId, opts.namespace, chosenId)
+          await CredentialPool.moveToBack(canonicalProviderId, opts.namespace, chosenId)
           continue
         }
 

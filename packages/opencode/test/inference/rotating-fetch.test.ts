@@ -123,4 +123,36 @@ describe("RotatingFetch", () => {
     expect((updated1?.meta.health.failureCount ?? 0) >= 1).toBe(true)
     expect(updated1?.meta.health.cooldownUntil).toBeDefined()
   })
+
+  test("uses canonical provider pool + credentials across alias ids", async () => {
+    await resetCredentials()
+
+    await CredentialStore.put({
+      id: "cred-1",
+      providerId: "github-copilot",
+      namespace: "default",
+      kind: "oauth",
+      label: "default",
+      secret: { accessToken: "t1", refreshToken: "r1" },
+    })
+
+    const seenAuth: Array<string | null> = []
+    const baseFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const req = new Request(input, init)
+      const auth = req.headers.get("Authorization")
+      seenAuth.push(auth)
+      if (auth === "Bearer t1") return new Response("ok", { status: 200 })
+      return new Response("missing_auth", { status: 401 })
+    }
+
+    const rotating = RotatingFetch.create(baseFetch, { providerId: "github-copilot-enterprise", namespace: "default" })
+    const resp = await rotating("https://example.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    })
+
+    expect(resp.status).toBe(200)
+    expect(seenAuth).toEqual(["Bearer t1"])
+  })
 })
