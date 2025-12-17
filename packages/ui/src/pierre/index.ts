@@ -1,4 +1,4 @@
-import { DiffLineAnnotation, FileContents, FileDiffOptions } from "@pierre/precision-diffs"
+import { DiffLineAnnotation, FileContents, FileDiffOptions } from "@pierre/diffs"
 import { ComponentProps } from "solid-js"
 
 export type DiffProps<T = {}> = FileDiffOptions<T> & {
@@ -10,8 +10,8 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 }
 
 const unsafeCSS = `
-[data-pjs-header],
-[data-pjs] {
+[data-diffs-header],
+[data-diffs] {
   [data-separator-wrapper] {
     margin: 0 !important;
     border-radius: 0 !important;
@@ -71,12 +71,12 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
 }
 
 export const styleVariables = {
-  "--pjs-font-family": "var(--font-family-mono)",
-  "--pjs-font-size": "var(--font-size-small)",
-  "--pjs-line-height": "24px",
-  "--pjs-tab-size": 2,
-  "--pjs-font-features": "var(--font-family-mono--font-feature-settings)",
-  "--pjs-header-font-family": "var(--font-family-sans)",
-  "--pjs-gap-block": 0,
-  "--pjs-min-number-column-width": "4ch",
+  "--diffs-font-family": "var(--font-family-mono)",
+  "--diffs-font-size": "var(--font-size-small)",
+  "--diffs-line-height": "24px",
+  "--diffs-tab-size": 2,
+  "--diffs-font-features": "var(--font-family-mono--font-feature-settings)",
+  "--diffs-header-font-family": "var(--font-family-sans)",
+  "--diffs-gap-block": 0,
+  "--diffs-min-number-column-width": "4ch",
 }

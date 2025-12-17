@@ -30,7 +30,7 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/precision-diffs": "0.6.1",
+      "@pierre/diffs": "1.0.0-beta.3",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
       "ai": "5.0.97",
