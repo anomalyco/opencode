@@ -9,6 +9,7 @@ import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
 import { createSignal, onMount, Show, JSX } from "solid-js"
+import { DownloadPlatform } from "./types"
 
 type OS = "macOS" | "Windows" | "Linux" | null
 
@@ -23,18 +24,21 @@ function detectOS(): OS {
   return null
 }
 
-function getDownloadUrl(os: OS): string {
-  const base = "https://github.com/sst/opencode/releases/latest/download"
+function getDownloadPlatform(os: OS): DownloadPlatform {
   switch (os) {
     case "macOS":
-      return `${base}/opencode-desktop-darwin-aarch64.dmg`
+      return "darwin-aarch64-dmg"
     case "Windows":
-      return `${base}/opencode-desktop-windows-x64.exe`
+      return "windows-x64-nsis"
     case "Linux":
-      return `${base}/opencode-desktop-linux-amd64.deb`
+      return "linux-x64-deb"
     default:
-      return `${base}/opencode-desktop-darwin-aarch64.dmg`
+      return "darwin-aarch64-dmg"
   }
+}
+
+function getDownloadHref(platform: DownloadPlatform) {
+  return `/download/${platform}`
 }
 
 function IconDownload(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
@@ -60,7 +64,6 @@ function CopyStatus() {
 }
 
 export default function Download() {
-  const downloadUrl = "https://github.com/sst/opencode/releases/latest/download"
   const [detectedOS, setDetectedOS] = createSignal<OS>(null)
 
   onMount(() => {
@@ -92,7 +95,7 @@ export default function Download() {
               <h1>Download OpenCode</h1>
               <p>Available in Beta for macOS, Windows, and Linux</p>
               <Show when={detectedOS()}>
-                <a href={getDownloadUrl(detectedOS())} data-component="download-button">
+                <a href={getDownloadHref(getDownloadPlatform(detectedOS()))} data-component="download-button">
                   <IconDownload />
                   Download for {detectedOS()}
                 </a>
@@ -166,7 +169,7 @@ export default function Download() {
                     macOS (<span data-slot="hide-narrow">Apple </span>Silicon)
                   </span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-darwin-aarch64.dmg"} data-component="action-button">
+                <a href={getDownloadHref("darwin-aarch64-dmg")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -182,7 +185,7 @@ export default function Download() {
                   </span>
                   <span>macOS (Intel)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-darwin-x64.dmg"} data-component="action-button">
+                <a href={getDownloadHref("darwin-x64-dmg")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -205,7 +208,7 @@ export default function Download() {
                   </span>
                   <span>Windows (x64)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-windows-x64.exe"} data-component="action-button">
+                <a href={getDownloadHref("windows-x64-nsis")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -221,7 +224,7 @@ export default function Download() {
                   </span>
                   <span>Linux (.deb)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-linux-amd64.deb"} data-component="action-button">
+                <a href={getDownloadHref("linux-x64-deb")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -237,7 +240,7 @@ export default function Download() {
                   </span>
                   <span>Linux (.rpm)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-linux-x86_64.rpm"} data-component="action-button">
+                <a href={getDownloadHref("linux-x64-rpm")} data-component="action-button">
                   Download
                 </a>
               </div>
