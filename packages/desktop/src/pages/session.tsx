@@ -259,11 +259,18 @@ export default function Page() {
       onSelect: () => local.agent.move(1),
     },
     {
+      id: "agent.cycle.reverse",
+      title: "Cycle agent backwards",
+      description: "Switch to the previous agent",
+      category: "Agent",
+      keybind: "shift+mod+.",
+      onSelect: () => local.agent.move(-1),
+    },
+    {
       id: "session.undo",
       title: "Undo",
       description: "Undo the last message",
       category: "Session",
-      keybind: "mod+z",
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -293,7 +300,6 @@ export default function Page() {
       title: "Redo",
       description: "Redo the last undone message",
       category: "Session",
-      keybind: "mod+shift+z",
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
