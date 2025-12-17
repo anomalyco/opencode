@@ -93,7 +93,8 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const isImage = file.type.startsWith("image/") && file.type !== "image/svg+xml"
+    const supportedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    const isImage = supportedImageTypes.includes(file.type)
     const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
       const mime = file.type
@@ -118,7 +119,13 @@ export const ReadTool = Tool.define("read", {
     }
 
     const isBinary = await isBinaryFile(filepath, file)
-    if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
+    if (isBinary) {
+      if (file.type.startsWith("image/")) {
+        const ext = path.extname(filepath).toLowerCase()
+        throw new Error(`Cannot read ${ext} image: only JPEG, PNG, GIF, and WebP images are supported`)
+      }
+      throw new Error(`Cannot read binary file: ${filepath}`)
+    }
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
