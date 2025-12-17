@@ -10,11 +10,12 @@ export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
   try {
     update = await check()
   } catch {
-    if(alertOnFail) await message("Failed to check for updates", { title: "Update Check Failed"})
+    if (alertOnFail) await message("Failed to check for updates", { title: "Update Check Failed" })
   }
 
-  if (!update){
-    if(alertOnFail) await message("You are already using the latest version of OpenCode", { title: "No Update Available"})
+  if (!update) {
+    if (alertOnFail)
+      await message("You are already using the latest version of OpenCode", { title: "No Update Available" })
 
     return
   }
@@ -22,12 +23,12 @@ export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
   try {
     await update.download()
   } catch {
-    if(alertOnFail) await message("Failed to download update", { title: "Update Failed" })
+    if (alertOnFail) await message("Failed to download update", { title: "Update Failed" })
   }
 
   const shouldUpdate = await ask(
     `Version ${update.version} of OpenCode has been downloaded, would you like to install it and relaunch?`,
-    { title: "Update Downloaded" }
+    { title: "Update Downloaded" },
   )
   if (!shouldUpdate) return
 
