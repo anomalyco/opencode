@@ -3,7 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -54,18 +54,27 @@ export function SessionTurn(
     if (s.type !== "retry") return
     return s
   })
-  const [retrySeconds, setRetrySeconds] = createSignal(0)
+
+  let scrollRef: HTMLDivElement | undefined
+  const [state, setState] = createStore({
+    contentRef: undefined as HTMLDivElement | undefined,
+    stickyTitleRef: undefined as HTMLDivElement | undefined,
+    stickyTriggerRef: undefined as HTMLDivElement | undefined,
+    autoScrolled: false,
+    userScrolled: false,
+    stickyHeaderHeight: 0,
+    retrySeconds: 0,
+  })
 
   createEffect(() => {
     const r = retry()
     if (!r) {
-      setRetrySeconds(0)
+      setState("retrySeconds", 0)
       return
     }
-
     const updateSeconds = () => {
       const next = r.next
-      if (next) setRetrySeconds(Math.max(0, Math.round((next - Date.now()) / 1000)))
+      if (next) setState("retrySeconds", Math.max(0, Math.round((next - Date.now()) / 1000)))
     }
     updateSeconds()
 
@@ -73,20 +82,9 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  let scrollRef: HTMLDivElement | undefined
-  const [state, setState] = createStore({
-    contentRef: undefined as HTMLDivElement | undefined,
-    stickyTitleRef: undefined as HTMLDivElement | undefined,
-    stickyTriggerRef: undefined as HTMLDivElement | undefined,
-    userScrolled: false,
-    stickyHeaderHeight: 0,
-    scrollY: 0,
-  })
-
   function handleScroll() {
-    if (!scrollRef) return
+    if (!scrollRef || state.autoScrolled) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
-    setState("scrollY", scrollTop)
     const atBottom = scrollHeight - scrollTop - clientHeight < 50
     if (!atBottom && working()) {
       setState("userScrolled", true)
@@ -101,8 +99,10 @@ export function SessionTurn(
 
   function scrollToBottom() {
     if (!scrollRef || state.userScrolled || !working()) return
+    setState("autoScrolled", true)
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
+      setState("autoScrolled", false)
     })
   }
 
@@ -131,7 +131,7 @@ export function SessionTurn(
   )
 
   return (
-    <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${state.scrollY}px` }}>
+    <div data-component="session-turn" class={props.classes?.root}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
         <div onClick={handleInteraction}>
           <Show when={message()}>
@@ -346,7 +346,7 @@ export function SessionTurn(
                             })()}
                           </span>
                           <span data-slot="session-turn-retry-seconds">
-                            · retrying {retrySeconds() > 0 ? `in ${retrySeconds()}s ` : ""}
+                            · retrying {state.retrySeconds > 0 ? `in ${state.retrySeconds}s ` : ""}
                           </span>
                           <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                         </Match>
