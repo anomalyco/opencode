@@ -1423,20 +1423,24 @@ ToolRegistry.register<typeof WriteTool>({
       return props.metadata.diagnostics?.[filePath] ?? []
     })
 
+    const done = !!props.input.filePath
+
     return (
       <>
-        <ToolTitle icon="←" fallback="Preparing write..." when={props.input.filePath}>
+        <ToolTitle icon="←" fallback="Preparing write..." when={done}>
           Wrote {props.input.filePath}
         </ToolTitle>
-        <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
-          <code
-            conceal={false}
-            fg={theme.text}
-            filetype={filetype(props.input.filePath!)}
-            syntaxStyle={syntax()}
-            content={code()}
-          />
-        </line_number>
+        <Show when={done}>
+          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
+            <code
+              conceal={false}
+              fg={theme.text}
+              filetype={filetype(props.input.filePath!)}
+              syntaxStyle={syntax()}
+              content={code()}
+            />
+          </line_number>
+        </Show>
         <Show when={diagnostics().length}>
           <For each={diagnostics()}>
             {(diagnostic) => (
