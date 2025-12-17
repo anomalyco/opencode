@@ -40,6 +40,8 @@ Desktop app issues:
 
 **Only** add if the issue mentions "zen" or "opencode zen". Zen is our gateway for coding models. **Do not** add for other gateways or inference providers.
 
+If the issue doesn't have "zen" in it then don't add zen label
+
 #### docs
 
 Add if the issue requests better documentation or docs updates.

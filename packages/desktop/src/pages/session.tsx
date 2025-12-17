@@ -1,4 +1,5 @@
 import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo, createEffect, on } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
@@ -11,7 +12,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { Code } from "@opencode-ai/ui/code"
+import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
@@ -22,9 +23,8 @@ import {
   SortableProvider,
   closestCenter,
   createSortable,
-  useDragDropContext,
 } from "@thisbeyond/solid-dnd"
-import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
@@ -41,6 +41,7 @@ import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 
 export default function Page() {
   const layout = useLayout()
@@ -48,6 +49,7 @@ export default function Page() {
   const sync = useSync()
   const terminal = useTerminal()
   const dialog = useDialog()
+  const codeComponent = useCodeComponent()
   const command = useCommand()
   const params = useParams()
   const navigate = useNavigate()
@@ -322,19 +324,6 @@ export default function Page() {
     if ((document.activeElement as HTMLElement)?.dataset?.component === "terminal") return
     if (dialog.active) return
 
-    if (event.key === "PageUp" || event.key === "PageDown") {
-      const scrollContainer = document.querySelector('[data-slot="session-turn-content"]') as HTMLElement
-      if (scrollContainer) {
-        event.preventDefault()
-        const scrollAmount = scrollContainer.clientHeight * 0.8
-        scrollContainer.scrollBy({
-          top: event.key === "PageUp" ? -scrollAmount : scrollAmount,
-          behavior: "instant",
-        })
-      }
-      return
-    }
-
     const focused = document.activeElement === inputRef
     if (focused) {
       if (event.key === "Escape") inputRef?.blur()
@@ -517,36 +506,6 @@ export default function Page() {
     )
   }
 
-  const ConstrainDragYAxis = (): JSX.Element => {
-    const context = useDragDropContext()
-    if (!context) return <></>
-    const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
-    const transformer: Transformer = {
-      id: "constrain-y-axis",
-      order: 100,
-      callback: (transform) => ({ ...transform, y: 0 }),
-    }
-    onDragStart((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      addTransformer("draggables", id, transformer)
-    })
-    onDragEnd((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      removeTransformer("draggables", id, transformer.id)
-    })
-    return <></>
-  }
-
-  const getDraggableId = (event: unknown): string | undefined => {
-    if (typeof event !== "object" || event === null) return undefined
-    if (!("draggable" in event)) return undefined
-    const draggable = (event as { draggable?: { id?: unknown } }).draggable
-    if (!draggable) return undefined
-    return typeof draggable.id === "string" ? draggable.id : undefined
-  }
-
   const wide = createMemo(() => layout.review.state() === "tab" || !diffs().length)
 
   return (
@@ -630,7 +589,7 @@ export default function Page() {
                 <div
                   classList={{
                     "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
-                    "max-w-146 mx-auto": !wide(),
+                    "max-w-200 mx-auto": !wide(),
                   }}
                 >
                   <Switch>
@@ -654,7 +613,7 @@ export default function Page() {
                               container:
                                 "w-full " +
                                 (wide()
-                                  ? "max-w-146 mx-auto px-6"
+                                  ? "max-w-200 mx-auto px-6"
                                   : visibleUserMessages().length > 1
                                     ? "pr-6 pl-18"
                                     : "px-6"),
@@ -664,7 +623,7 @@ export default function Page() {
                       </div>
                     </Match>
                     <Match when={true}>
-                      <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-146 mx-auto px-6">
+                      <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
                         <div class="text-20-medium text-text-weaker">New session</div>
                         <div class="flex justify-center items-center gap-3">
                           <Icon name="folder" size="small" />
@@ -690,7 +649,7 @@ export default function Page() {
                     </Match>
                   </Switch>
                   <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
-                    <div class="w-full max-w-146 px-6">
+                    <div class="w-full max-w-200 px-6">
                       <PromptInput
                         ref={(el) => {
                           inputRef = el
@@ -764,7 +723,8 @@ export default function Page() {
                     <Switch>
                       <Match when={file()}>
                         {(f) => (
-                          <Code
+                          <Dynamic
+                            component={codeComponent}
                             file={{
                               name: f().path,
                               contents: f().content?.content ?? "",
@@ -803,7 +763,7 @@ export default function Page() {
           </DragOverlay>
         </DragDropProvider>
         <Show when={tabs().active()}>
-          <div class="absolute inset-x-0 px-6 max-w-146 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+          <div class="absolute inset-x-0 px-6 max-w-200 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
             <PromptInput
               ref={(el) => {
                 inputRef = el

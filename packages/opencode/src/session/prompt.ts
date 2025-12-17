@@ -325,42 +325,60 @@ export namespace SessionPrompt {
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
+              command: task.command,
             },
             time: {
               start: Date.now(),
             },
           },
         })) as MessageV2.ToolPart
+        const taskArgs = {
+          prompt: task.prompt,
+          description: task.description,
+          subagent_type: task.agent,
+          command: task.command,
+        }
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          { args: taskArgs },
+        )
         let executionError: Error | undefined
         const result = await taskTool
-          .execute(
-            {
-              prompt: task.prompt,
-              description: task.description,
-              subagent_type: task.agent,
+          .execute(taskArgs, {
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            sessionID: sessionID,
+            abort,
+            async metadata(input) {
+              await Session.updatePart({
+                ...part,
+                type: "tool",
+                state: {
+                  ...part.state,
+                  ...input,
+                },
+              } satisfies MessageV2.ToolPart)
             },
-            {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID: sessionID,
-              abort,
-              async metadata(input) {
-                await Session.updatePart({
-                  ...part,
-                  type: "tool",
-                  state: {
-                    ...part.state,
-                    ...input,
-                  },
-                } satisfies MessageV2.ToolPart)
-              },
-            },
-          )
+          })
           .catch((error) => {
             executionError = error
             log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
             return undefined
           })
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          result,
+        )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -396,6 +414,30 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
+
+        // Add synthetic user message to prevent certain reasoning models from erroring
+        // If we create assistant messages w/ out user ones following mid loop thinking signatures
+        // will be missing and it can cause errors for models like gemini for example
+        const summaryUserMsg: MessageV2.User = {
+          id: Identifier.ascending("message"),
+          sessionID,
+          role: "user",
+          time: {
+            created: Date.now(),
+          },
+          agent: lastUser.agent,
+          model: lastUser.model,
+        }
+        await Session.updateMessage(summaryUserMsg)
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: summaryUserMsg.id,
+          sessionID,
+          type: "text",
+          text: "Summarize the task tool output above and continue with your task.",
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+
         continue
       }
 
@@ -1299,6 +1341,7 @@ export namespace SessionPrompt {
               type: "subtask" as const,
               agent: agent.name,
               description: command.description ?? "",
+              command: input.command,
               // TODO: how can we make task tool accept a more complex input?
               prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
             },
