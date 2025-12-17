@@ -59,7 +59,6 @@ interface ErrorPageProps {
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
-  console.log("ErrorPage", props.error)
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
