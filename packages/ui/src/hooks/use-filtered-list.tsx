@@ -5,7 +5,7 @@ import { createStore } from "solid-js/store"
 import { createList } from "solid-list"
 
 export interface FilteredListProps<T> {
-  items: (filter: string) => T[] | Promise<T[]>
+  items: T[] | ((filter: string) => T[] | Promise<T[]>)
   key: (item: T) => string
   filterKeys?: string[]
   current?: T
@@ -19,10 +19,13 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
 
   const [grouped, { refetch }] = createResource(
-    () => store.filter,
-    async (filter) => {
+    () => ({
+      filter: store.filter,
+      items: typeof props.items === "function" ? undefined : props.items,
+    }),
+    async ({ filter, items }) => {
       const needle = filter?.toLowerCase()
-      const all = (await props.items(needle)) || []
+      const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
       const result = pipe(
         all,
         (x) => {

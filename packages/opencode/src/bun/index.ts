@@ -85,47 +85,16 @@ export namespace BunProc {
       version,
     })
 
-    const total = 3
-    const wait = 500
-
-    const runInstall = async (count: number = 1): Promise<void> => {
-      log.info("bun install attempt", {
-        pkg,
-        version,
-        attempt: count,
-        total,
-      })
-      await BunProc.run(args, {
-        cwd: Global.Path.cache,
-      }).catch(async (error) => {
-        log.warn("bun install failed", {
-          pkg,
-          version,
-          attempt: count,
-          total,
-          error,
-        })
-        if (count >= total) {
-          throw new InstallFailedError(
-            { pkg, version },
-            {
-              cause: error,
-            },
-          )
-        }
-        const delay = wait * count
-        log.info("bun install retrying", {
-          pkg,
-          version,
-          next: count + 1,
-          delay,
-        })
-        await Bun.sleep(delay)
-        return runInstall(count + 1)
-      })
-    }
-
-    await runInstall()
+    await BunProc.run(args, {
+      cwd: Global.Path.cache,
+    }).catch((e) => {
+      throw new InstallFailedError(
+        { pkg, version },
+        {
+          cause: e,
+        },
+      )
+    })
 
     // Resolve actual version from installed package when using "latest"
     // This ensures subsequent starts use the cached version until explicitly updated

@@ -6,8 +6,8 @@ import { createMemo } from "solid-js"
 export const popularProviders = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
 
 export function useProviders() {
-  const params = useParams()
   const globalSync = useGlobalSync()
+  const params = useParams()
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const providers = createMemo(() => {
     if (currentDirectory()) {

@@ -22,8 +22,8 @@ Your output must be:
 - The title should NEVER include "summarizing" or "generating" when generating a title
 - DO NOT SAY YOU CANNOT GENERATE A TITLE OR COMPLAIN ABOUT THE INPUT
 - Always output something meaningful, even if the input is minimal.
-- If the user message is short or conversational (e.g. “hello”, “lol”, “whats up”, “hey”):
-  → create a title that reflects the user’s tone or intent (such as Greeting, Quick check-in, Light chat, Intro message, etc.)
+- If the user message is short or conversational (e.g. "hello", "lol", "whats up", "hey"):
+  → create a title that reflects the user's tone or intent (such as Greeting, Quick check-in, Light chat, Intro message, etc.)
 </rules>
 
 <examples>
