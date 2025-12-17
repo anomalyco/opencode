@@ -1,7 +1,5 @@
 [data-component="diff"] {
-  [data-slot="diff-inner"] {
-    contain: content;
-  }
+  contain: content;
 
   [data-slot="diff-hunk-separator-line-number"] {
     position: sticky;

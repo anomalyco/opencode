@@ -3,7 +3,7 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
 import { createDefaultOptions, styleVariables, type DiffProps } from "../pierre"
-import { workerPool } from "../pierre/worker"
+import { useWorkerPool } from "../context/worker-pool"
 
 export type SSRDiffProps<T = {}> = DiffProps<T> & {
   preloadedDiff: PreloadMultiFileDiffResult<T>
@@ -13,6 +13,7 @@ export function Diff<T>(props: SSRDiffProps<T>) {
   let container!: HTMLDivElement
   let fileDiffRef!: HTMLElement
   const [local, others] = splitProps(props, ["before", "after", "class", "classList", "annotations"])
+  const workerPool = useWorkerPool()
 
   let fileDiffInstance: FileDiff<T> | undefined
   const cleanupFunctions: Array<() => void> = []
@@ -69,7 +70,7 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
   return (
     <div data-component="diff" style={styleVariables} ref={container}>
-      <Dynamic component={DIFFS_TAG_NAME} ref={fileDiffRef} id="ssr-diff" data-slot="diff-inner">
+      <Dynamic component={DIFFS_TAG_NAME} ref={fileDiffRef} id="ssr-diff">
         <Show when={isServer}>
           <template shadowrootmode="open" innerHTML={props.preloadedDiff.prerenderedHTML} />
         </Show>
