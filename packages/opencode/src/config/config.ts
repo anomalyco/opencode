@@ -5,7 +5,7 @@ import os from "os"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
-import { mergeDeep, pipe } from "remeda"
+import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
 import { lazy } from "../util/lazy"
@@ -76,6 +76,13 @@ export namespace Config {
           stop: Instance.worktree,
         }),
       )),
+      ...(await Array.fromAsync(
+        Filesystem.up({
+          targets: [".opencode"],
+          start: Global.Path.home,
+          stop: Global.Path.home,
+        }),
+      )),
     ]
 
     if (Flag.OPENCODE_CONFIG_DIR) {
@@ -84,7 +91,7 @@ export namespace Config {
     }
 
     const promises: Promise<void>[] = []
-    for (const dir of directories) {
+    for (const dir of unique(directories)) {
       await assertValid(dir)
 
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {

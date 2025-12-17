@@ -88,7 +88,9 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
-    let message = [...args.message, ...(args["--"] || [])].join(" ")
+    let message = [...args.message, ...(args["--"] || [])]
+      .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
+      .join(" ")
 
     const fileParts: any[] = []
     if (args.file) {
