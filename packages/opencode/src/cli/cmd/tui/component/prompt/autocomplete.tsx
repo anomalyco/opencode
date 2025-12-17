@@ -72,9 +72,13 @@ export function Autocomplete(props: {
     const dims = dimensions()
     positionTick()
     const anchor = props.anchor()
+    const parent = anchor.parent
+    const parentX = parent?.x ?? 0
+    const parentY = parent?.y ?? 0
+
     return {
-      x: anchor.x,
-      y: anchor.y,
+      x: anchor.x - parentX,
+      y: anchor.y - parentY,
       width: anchor.width,
     }
   })
