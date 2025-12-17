@@ -380,31 +380,47 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const parseFromDOM = (): Prompt => {
     const newParts: Prompt = []
     let position = 0
-    editorRef.childNodes.forEach((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        if (node.textContent) {
-          const content = node.textContent
-          newParts.push({ type: "text", content, start: position, end: position + content.length })
-          position += content.length
-        }
-      } else if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type) {
-        switch ((node as HTMLElement).dataset.type) {
-          case "file":
-            const content = node.textContent!
-            newParts.push({
-              type: "file",
-              path: (node as HTMLElement).dataset.path!,
-              content,
-              start: position,
-              end: position + content.length,
-            })
-            position += content.length
-            break
-          default:
-            break
-        }
-      }
+
+    const pushText = (content: string) => {
+      if (!content) return
+      newParts.push({ type: "text", content, start: position, end: position + content.length })
+      position += content.length
+    }
+
+    const rangeText = (range: Range) => {
+      const fragment = range.cloneContents()
+      const container = document.createElement("div")
+      container.append(fragment)
+      return container.innerText
+    }
+
+    const files = Array.from(editorRef.querySelectorAll<HTMLElement>("[data-type=file]"))
+    let last: HTMLElement | undefined
+
+    files.forEach((file) => {
+      const before = document.createRange()
+      before.selectNodeContents(editorRef)
+      if (last) before.setStartAfter(last)
+      before.setEndBefore(file)
+      pushText(rangeText(before))
+
+      const content = file.textContent ?? ""
+      newParts.push({
+        type: "file",
+        path: file.dataset.path!,
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+      last = file
     })
+
+    const after = document.createRange()
+    after.selectNodeContents(editorRef)
+    if (last) after.setStartAfter(last)
+    pushText(rangeText(after))
+
     if (newParts.length === 0) newParts.push(...DEFAULT_PROMPT)
     return newParts
   }
@@ -577,13 +593,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed, cursorPosition, textLength } = getCaretState()
+      const { collapsed } = getCaretState()
       if (!collapsed) return
+
+      const cursorPosition = getCursorPosition(editorRef)
+      const textLength = promptLength(prompt.current())
+      const textContent = editorRef.textContent ?? ""
+      const isEmpty = textContent.trim() === "" || textLength <= 1
+      const hasNewlines = textContent.includes("\n")
       const inHistory = store.historyIndex >= 0
-      const atAbsoluteStart = cursorPosition === 0
-      const atAbsoluteEnd = cursorPosition === textLength
-      const allowUp = (inHistory && atAbsoluteEnd) || atAbsoluteStart
-      const allowDown = (inHistory && atAbsoluteStart) || atAbsoluteEnd
+      const atStart = cursorPosition <= (isEmpty ? 1 : 0)
+      const atEnd = cursorPosition >= (isEmpty ? textLength - 1 : textLength)
+      const allowUp = isEmpty || atStart || (!hasNewlines && !inHistory) || (inHistory && atEnd)
+      const allowDown = isEmpty || atEnd || (!hasNewlines && !inHistory) || (inHistory && atStart)
 
       if (event.key === "ArrowUp") {
         if (!allowUp) return
@@ -833,6 +855,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         </Show>
         <div class="relative max-h-[240px] overflow-y-auto">
           <div
+            data-component="prompt-input"
             ref={(el) => {
               editorRef = el
               props.ref?.(el)
