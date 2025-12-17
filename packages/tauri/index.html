@@ -19,6 +19,15 @@
       ;(function () {
         const savedTheme = localStorage.getItem("theme") || "oc-1"
         document.documentElement.setAttribute("data-theme", savedTheme)
+        // Apply saved color scheme immediately (set by Tauri initialization script on Linux)
+        // Falls back to media query detection (may not work on all Linux setups)
+        var colorScheme = localStorage.getItem("colorScheme")
+        if (!colorScheme && window.matchMedia) {
+          colorScheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : null
+        }
+        if (colorScheme) {
+          document.documentElement.setAttribute("data-color-scheme", colorScheme)
+        }
       })()
     </script>
     <noscript>You need to enable JavaScript to run this app.</noscript>

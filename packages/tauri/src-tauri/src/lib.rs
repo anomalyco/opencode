@@ -222,8 +222,9 @@ pub fn run() {
                           window.__OPENCODE__.updaterEnabled = {updater_enabled};
                           window.__OPENCODE__.port = {port};
                           window.__OPENCODE__.colorScheme = "{color_scheme}";
-                          // Apply color scheme immediately for Linux
+                          // Apply color scheme immediately for Linux and save to localStorage for persistence
                           document.documentElement.setAttribute("data-color-scheme", "{color_scheme}");
+                          try {{ localStorage.setItem("colorScheme", "{color_scheme}"); }} catch(e) {{}}
                         "#
                         ));
 
