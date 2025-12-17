@@ -461,6 +461,8 @@ export namespace Config {
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
       model_cycle_recent: z.string().optional().default("f2").describe("Next recently used model"),
       model_cycle_recent_reverse: z.string().optional().default("shift+f2").describe("Previous recently used model"),
+      model_cycle_favorite: z.string().optional().default("none").describe("Next favorite model"),
+      model_cycle_favorite_reverse: z.string().optional().default("none").describe("Previous favorite model"),
       command_list: z.string().optional().default("ctrl+p").describe("List available commands"),
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
@@ -669,10 +671,16 @@ export namespace Config {
         .describe("@deprecated Use `agent` field instead."),
       agent: z
         .object({
+          // primary
           plan: Agent.optional(),
           build: Agent.optional(),
+          // subagent
           general: Agent.optional(),
           explore: Agent.optional(),
+          // specialized
+          title: Agent.optional(),
+          summary: Agent.optional(),
+          compaction: Agent.optional(),
         })
         .catchall(Agent)
         .optional()
@@ -749,48 +757,49 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
-       experimental: z
-         .object({
-           hook: z
-             .object({
-               file_edited: z
-                 .record(
-                   z.string(),
-                   z
-                     .object({
-                       command: z.string().array(),
-                       environment: z.record(z.string(), z.string()).optional(),
-                     })
-                     .array(),
-                 )
-                 .optional(),
-               session_completed: z
-                 .object({
-                   command: z.string().array(),
-                   environment: z.record(z.string(), z.string()).optional(),
-                 })
-                 .array()
-                 .optional(),
-             })
-             .optional(),
-           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
-           disable_paste_summary: z.boolean().optional(),
-           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
-           openTelemetry: z
-             .boolean()
-             .optional()
-             .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
-           primary_tools: z
-             .array(z.string())
-             .optional()
-             .describe("Tools that should only be available to primary agents."),
-           cache_command_markdown_files: z
-             .boolean()
-             .optional()
-             .default(true)
-             .describe("Cache command markdown files on first load. Set to false to reload command files on every execution."),
-         })
-         .optional(),
+      experimental: z
+        .object({
+          hook: z
+            .object({
+              file_edited: z
+                .record(
+                  z.string(),
+                  z
+                    .object({
+                      command: z.string().array(),
+                      environment: z.record(z.string(), z.string()).optional(),
+                    })
+                    .array(),
+                )
+                .optional(),
+              session_completed: z
+                .object({
+                  command: z.string().array(),
+                  environment: z.record(z.string(), z.string()).optional(),
+                })
+                .array()
+                .optional(),
+            })
+            .optional(),
+          chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
+          disable_paste_summary: z.boolean().optional(),
+          batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          openTelemetry: z
+            .boolean()
+            .optional()
+            .describe("Enable OpenTelemetry spans for AI SDK calls (using the 'experimental_telemetry' flag)"),
+          primary_tools: z
+            .array(z.string())
+            .optional()
+            .describe("Tools that should only be available to primary agents."),
+          cache_command_markdown_files: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe("Cache command markdown files on first load. Set to false to reload command files on every execution."),
+          continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
+        })
+        .optional(),
     })
     .strict()
     .meta({
