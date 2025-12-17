@@ -8,6 +8,47 @@ import { Faq } from "~/component/faq"
 import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
+import { createSignal, onMount, Show, JSX } from "solid-js"
+
+type OS = "macOS" | "Windows" | "Linux" | null
+
+function detectOS(): OS {
+  if (typeof navigator === "undefined") return null
+  const platform = navigator.platform.toLowerCase()
+  const userAgent = navigator.userAgent.toLowerCase()
+
+  if (platform.includes("mac") || userAgent.includes("mac")) return "macOS"
+  if (platform.includes("win") || userAgent.includes("win")) return "Windows"
+  if (platform.includes("linux") || userAgent.includes("linux")) return "Linux"
+  return null
+}
+
+function getDownloadUrl(os: OS): string {
+  const base = "https://github.com/sst/opencode/releases/latest/download"
+  switch (os) {
+    case "macOS":
+      return `${base}/opencode-desktop-darwin-aarch64.dmg`
+    case "Windows":
+      return `${base}/opencode-desktop-windows-x64.exe`
+    case "Linux":
+      return `${base}/opencode-desktop-linux-amd64.deb`
+    default:
+      return `${base}/opencode-desktop-darwin-aarch64.dmg`
+  }
+}
+
+function IconDownload(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="square"
+      />
+    </svg>
+  )
+}
 
 function CopyStatus() {
   return (
@@ -20,6 +61,12 @@ function CopyStatus() {
 
 export default function Download() {
   const downloadUrl = "https://github.com/sst/opencode/releases/latest/download"
+  const [detectedOS, setDetectedOS] = createSignal<OS>(null)
+
+  onMount(() => {
+    setDetectedOS(detectOS())
+  })
+
   const handleCopyClick = (command: string) => (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     navigator.clipboard.writeText(command)
@@ -44,6 +91,12 @@ export default function Download() {
             <div data-component="hero-text">
               <h1>Download OpenCode</h1>
               <p>Available in Beta for macOS, Windows, and Linux</p>
+              <Show when={detectedOS()}>
+                <a href={getDownloadUrl(detectedOS())} data-component="download-button">
+                  <IconDownload />
+                  Download for {detectedOS()}
+                </a>
+              </Show>
             </div>
           </section>
 
