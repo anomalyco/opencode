@@ -560,7 +560,7 @@ export namespace Config {
       session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
     })
-    .strict()
+    .catchall(z.string())
     .meta({
       ref: "KeybindsConfig",
     })

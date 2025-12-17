@@ -1110,6 +1110,7 @@ export type KeybindsConfig = {
    * Suspend terminal
    */
   terminal_suspend?: string
+  [key: string]: string | undefined
 }
 
 export type AgentConfig = {
