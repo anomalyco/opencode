@@ -10,6 +10,44 @@ use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
 
+/// Detect system color scheme on Linux using gsettings
+#[cfg(target_os = "linux")]
+fn detect_linux_color_scheme() -> &'static str {
+    use std::process::Command;
+
+    // Try GNOME/GTK color-scheme setting first (GNOME 42+)
+    if let Ok(output) = Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if stdout.contains("dark") {
+            return "dark";
+        }
+        if stdout.contains("light") || stdout.contains("default") {
+            return "light";
+        }
+    }
+
+    // Fallback: check GTK theme name for "dark"
+    if let Ok(output) = Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "gtk-theme"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+        if stdout.contains("dark") {
+            return "dark";
+        }
+    }
+
+    "light"
+}
+
+#[cfg(not(target_os = "linux"))]
+fn detect_linux_color_scheme() -> &'static str {
+    "light"
+}
+
 #[derive(Clone)]
 struct ServerState(Arc<Mutex<Option<CommandChild>>>);
 
@@ -168,6 +206,9 @@ pub fn run() {
                     .map(|m| m.size().to_logical(m.scale_factor()))
                     .unwrap_or(LogicalSize::new(1920, 1080));
 
+                // Detect system color scheme (especially important for Linux)
+                let color_scheme = detect_linux_color_scheme();
+
                 let mut window_builder =
                     WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
                         .title("OpenCode")
@@ -180,6 +221,9 @@ pub fn run() {
                           window.__OPENCODE__ ??= {{}};
                           window.__OPENCODE__.updaterEnabled = {updater_enabled};
                           window.__OPENCODE__.port = {port};
+                          window.__OPENCODE__.colorScheme = "{color_scheme}";
+                          // Apply color scheme immediately for Linux
+                          document.documentElement.setAttribute("data-color-scheme", "{color_scheme}");
                         "#
                         ));
 
