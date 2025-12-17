@@ -153,7 +153,7 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
             Clipboard.copy(text).catch((error) => {
               console.error(`Failed to copy console selection to clipboard: ${error}`)
             })
-          }
+          },
         },
       },
     )
