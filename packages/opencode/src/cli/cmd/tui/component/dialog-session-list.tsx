@@ -84,7 +84,6 @@ export function DialogSessionList() {
                 sessionID: option.value,
               })
               setToDelete(undefined)
-              // dialog.clear()
               return
             }
             setToDelete(option.value)
