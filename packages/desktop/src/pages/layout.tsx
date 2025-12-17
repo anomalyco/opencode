@@ -25,9 +25,8 @@ import {
   SortableProvider,
   closestCenter,
   createSortable,
-  useDragDropContext,
 } from "@thisbeyond/solid-dnd"
-import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -37,6 +36,7 @@ import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { useCommand } from "@/context/command"
+import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -299,28 +299,6 @@ export default function Layout(props: ParentProps) {
 
   function handleDragEnd() {
     setStore("activeDraggable", undefined)
-  }
-
-  const ConstrainDragXAxis = (): JSX.Element => {
-    const context = useDragDropContext()
-    if (!context) return <></>
-    const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
-    const transformer: Transformer = {
-      id: "constrain-x-axis",
-      order: 100,
-      callback: (transform) => ({ ...transform, x: 0 }),
-    }
-    onDragStart((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      addTransformer("draggables", id, transformer)
-    })
-    onDragEnd((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      removeTransformer("draggables", id, transformer.id)
-    })
-    return <></>
   }
 
   const ProjectAvatar = (props: {
