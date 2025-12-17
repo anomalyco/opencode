@@ -1,3 +1,4 @@
+/// <reference path="../env.d.ts" />
 import { Octokit } from "@octokit/rest"
 import { tool } from "@opencode-ai/plugin"
 import DESCRIPTION from "./github-triage.txt"
@@ -16,9 +17,9 @@ export default tool({
       .describe("The username of the assignee")
       .default("rekram1-node"),
     labels: tool.schema
-      .array(tool.schema.enum(["nix", "opentui", "perf", "web", "zen", "docs"]))
+      .array(tool.schema.enum(["nix", "opentui", "perf", "desktop", "zen", "docs"]))
       .describe("The labels(s) to add to the issue")
-      .optional(),
+      .default([]),
   },
   async execute(args) {
     const issue = getIssueNumber()
@@ -28,6 +29,18 @@ export default tool({
 
     const results: string[] = []
 
+    if (args.assignee === "adamdotdevin" && !args.labels.includes("desktop")) {
+      throw new Error("Only desktop issues should be assigned to adamdotdevin")
+    }
+
+    if (args.assignee === "fwang" && !args.labels.includes("zen")) {
+      throw new Error("Only zen issues should be assigned to fwang")
+    }
+
+    if (args.assignee === "kommander" && !args.labels.includes("opentui")) {
+      throw new Error("Only opentui issues should be assigned to kommander")
+    }
+
     await octokit.rest.issues.addAssignees({
       owner,
       repo,
@@ -36,12 +49,14 @@ export default tool({
     })
     results.push(`Assigned @${args.assignee} to issue #${issue}`)
 
-    if (args.labels && args.labels.length > 0) {
+    const labels: string[] = args.labels.map((label) => (label === "desktop" ? "web" : label))
+
+    if (labels.length > 0) {
       await octokit.rest.issues.addLabels({
         owner,
         repo,
         issue_number: issue,
-        labels: args.labels,
+        labels,
       })
       results.push(`Added labels: ${args.labels.join(", ")}`)
     }
