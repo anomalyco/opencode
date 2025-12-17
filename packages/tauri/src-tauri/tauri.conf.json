@@ -33,7 +33,9 @@
     },
     "windows": {
       "nsis": {
-        "installerIcon": "icons/dev/icon.ico"
+        "installerIcon": "icons/dev/icon.ico",
+        "headerImage": "assets/nsis-header.bmp",
+        "sidebarImage": "assets/nsis-sidebar.bmp"
       }
     }
   }
