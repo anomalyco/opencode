@@ -5985,6 +5985,9 @@
               },
               "agent": {
                 "type": "string"
+              },
+              "command": {
+                "type": "string"
               }
             },
             "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
@@ -8488,6 +8491,9 @@
             "type": "string"
           },
           "agent": {
+            "type": "string"
+          },
+          "command": {
             "type": "string"
           }
         },

@@ -417,6 +417,7 @@ export type Part =
       prompt: string
       description: string
       agent: string
+      command?: string
     }
   | ReasoningPart
   | FilePart
@@ -1601,6 +1602,7 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  command?: string
 }
 
 export type Command = {
