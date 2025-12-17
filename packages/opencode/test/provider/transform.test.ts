@@ -415,6 +415,188 @@ describe("ProviderTransform.message - Claude tool interleaving", () => {
     expect(result[1].role).toBe("tool")
     expect(result[1].content).toHaveLength(3)
   })
+
+  test("merges split tool results across multiple tool messages", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "a", toolName: "bash", input: { command: "echo 1" } },
+          { type: "tool-call", toolCallId: "b", toolName: "bash", input: { command: "echo 2" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "a", toolName: "bash", output: { ok: true } }],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "b", toolName: "bash", output: { ok: true } }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0].role).toBe("assistant")
+    expect(result[1].role).toBe("tool")
+
+    const toolResults = result[1].content as any[]
+    expect(toolResults.map((p) => p.toolCallId)).toEqual(["a", "b"])
+  })
+
+  test("does not interleave if tool message contains non tool-result parts", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "a", toolName: "bash", input: { command: "echo 1" } },
+          { type: "text", text: "after" },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "a", toolName: "bash", output: { ok: true } },
+          { type: "text", text: "bad" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[0].role).toBe("assistant")
+    expect(result[1].role).toBe("tool")
+
+    const parts = result[0].content as any[]
+    const toolCallIndex = parts.findIndex((p) => p.type === "tool-call")
+    expect(toolCallIndex).toBeGreaterThanOrEqual(0)
+    expect(parts[toolCallIndex + 1].type).toBe("text")
+  })
+
+  test("does not interleave if tool results contain duplicate ids", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "a", toolName: "bash", input: { command: "echo 1" } }],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "a", toolName: "bash", output: { ok: true } },
+          { type: "tool-result", toolCallId: "a", toolName: "bash", output: { ok: true } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
+
+    expect(result).toHaveLength(2)
+    expect(result[1].content).toHaveLength(2)
+  })
+
+  test("does not move user message that only mentions attachment", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "a", toolName: "bash", input: { command: "echo 1" } }],
+      },
+      {
+        role: "user",
+        content: [{ type: "text", text: "Tool bash returned an attachment:" }],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "a", toolName: "bash", output: { ok: true } }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
+
+    expect(result).toHaveLength(3)
+    expect(result[1].role).toBe("user")
+  })
+
+  test("avoids toolCallId collisions", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "bad:id", toolName: "bash", input: { command: "echo 1" } },
+          { type: "tool-call", toolCallId: "bad_id", toolName: "bash", input: { command: "echo 2" } },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: "bad:id", toolName: "bash", output: { ok: true } },
+          { type: "tool-result", toolCallId: "bad_id", toolName: "bash", output: { ok: true } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
+
+    const assistantParts = result[0].content as any[]
+    const calls = assistantParts.filter((p) => p.type === "tool-call")
+    expect(calls).toHaveLength(2)
+
+    const callIds = calls.map((p) => p.toolCallId)
+    expect(callIds).toHaveLength(2)
+    expect(callIds[0]).not.toBe(callIds[1])
+
+    const toolMsg = result[1]
+    expect(toolMsg.role).toBe("tool")
+
+    const results = toolMsg.content as any[]
+    expect(results.map((p) => p.toolCallId)).toEqual(callIds)
+  })
+
+  test("is idempotent", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: "a", toolName: "bash", input: { command: "echo 1" } },
+          { type: "text", text: "after" },
+        ],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "a", toolName: "bash", output: { ok: true } }],
+      },
+    ] as any[]
+
+    const first = ProviderTransform.message(msgs, mockClaudeModel)
+    const second = ProviderTransform.message(first as any, mockClaudeModel)
+    expect(second).toEqual(first)
+  })
+
+  test("skips normalization if last assistant message contains thinking blocks", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "thinking", signature: "sig", thinking: "hmm" },
+          { type: "tool-call", toolCallId: "a", toolName: "bash", input: { command: "echo 1" } },
+          { type: "text", text: "trailing text" },
+        ],
+      },
+      {
+        role: "tool",
+        content: [{ type: "tool-result", toolCallId: "a", toolName: "bash", output: { ok: true } }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
+
+    // Should NOT have normalized (split/moved) because of thinking block
+    expect(result).toHaveLength(2)
+    expect(result[0].role).toBe("assistant")
+    expect(result[0].content).toHaveLength(3)
+    expect((result[0].content as any)[2].text).toBe("trailing text")
+  })
 })
 
 describe("ProviderTransform.message - empty image handling", () => {

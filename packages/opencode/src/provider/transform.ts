@@ -30,27 +30,110 @@ export namespace ProviderTransform {
       type UserContent = Exclude<UserModelMessage["content"], string>
       type UserPart = UserContent[number]
 
-      function sanitizeToolCallId(toolCallId: string) {
+      function isToolCallIdSafe(toolCallId: string) {
+        return /^[a-zA-Z0-9_-]+$/.test(toolCallId)
+      }
+
+      function coerceToolCallId(toolCallId: string) {
+        if (isToolCallIdSafe(toolCallId)) return toolCallId
         return toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_")
+      }
+
+      function encodeToolCallId(toolCallId: string) {
+        return `opencode_${Buffer.from(toolCallId).toString("base64url")}`
       }
 
       function isToolCallPart(part: unknown): part is ToolCallPart {
         if (!part) return false
         if (typeof part !== "object") return false
+        if (Array.isArray(part)) return false
         if ((part as { type?: unknown }).type !== "tool-call") return false
         const toolCallId = (part as { toolCallId?: unknown }).toolCallId
-        return typeof toolCallId === "string" && toolCallId.length > 0
+        if (typeof toolCallId !== "string" || toolCallId.length === 0) return false
+        const toolName = (part as { toolName?: unknown }).toolName
+        return typeof toolName === "string" && toolName.length > 0
       }
 
       function isToolResultPart(part: unknown): part is ToolResultPart {
         if (!part) return false
         if (typeof part !== "object") return false
+        if (Array.isArray(part)) return false
         if ((part as { type?: unknown }).type !== "tool-result") return false
         const toolCallId = (part as { toolCallId?: unknown }).toolCallId
-        return typeof toolCallId === "string" && toolCallId.length > 0
+        if (typeof toolCallId !== "string" || toolCallId.length === 0) return false
+        const toolName = (part as { toolName?: unknown }).toolName
+        if (toolName === undefined) return true
+        return typeof toolName === "string" && toolName.length > 0
+      }
+
+      function buildToolCallIdMap(input: ModelMessage[]) {
+        const ids: string[] = []
+        const seen = new Set<string>()
+
+        function addToolCallId(toolCallId: string) {
+          if (seen.has(toolCallId)) return
+          seen.add(toolCallId)
+          ids.push(toolCallId)
+        }
+
+        for (const msg of input) {
+          if (msg.role === "assistant" && Array.isArray(msg.content)) {
+            for (const part of msg.content) {
+              if (isToolCallPart(part) || isToolResultPart(part)) {
+                addToolCallId(part.toolCallId)
+              }
+            }
+          }
+
+          if (msg.role === "tool") {
+            for (const part of msg.content) {
+              if (!part) continue
+              if (typeof part !== "object") continue
+              if (Array.isArray(part)) continue
+              const toolCallId = (part as { toolCallId?: unknown }).toolCallId
+              if (typeof toolCallId !== "string" || toolCallId.length === 0) continue
+              addToolCallId(toolCallId)
+            }
+          }
+        }
+
+        const safeById = new Map<string, boolean>()
+        const idsByCandidate = new Map<string, string[]>()
+
+        for (const id of ids) {
+          const safe = isToolCallIdSafe(id)
+          safeById.set(id, safe)
+          const candidate = safe ? id : coerceToolCallId(id)
+          const existing = idsByCandidate.get(candidate)
+          if (existing) {
+            existing.push(id)
+            continue
+          }
+          idsByCandidate.set(candidate, [id])
+        }
+
+        const result = new Map<string, string>()
+        const used = new Set<string>()
+
+        for (const [candidate, candidateIds] of idsByCandidate) {
+          const keep = candidateIds.find((id) => id === candidate && safeById.get(id) === true) ?? candidateIds[0]
+
+          for (const id of candidateIds) {
+            let output = id === keep ? candidate : encodeToolCallId(id)
+            while (used.has(output)) {
+              output = encodeToolCallId(output)
+            }
+            used.add(output)
+            result.set(id, output)
+          }
+        }
+
+        return result
       }
 
       function sanitizeToolParts(input: ModelMessage[]): ModelMessage[] {
+        const toolCallIdMap = buildToolCallIdMap(input)
+
         return input.map((msg) => {
           if (msg.role === "assistant") {
             if (!Array.isArray(msg.content)) return msg
@@ -58,14 +141,14 @@ export namespace ProviderTransform {
               if (isToolCallPart(part)) {
                 return {
                   ...part,
-                  toolCallId: sanitizeToolCallId(part.toolCallId),
+                  toolCallId: toolCallIdMap.get(part.toolCallId) ?? part.toolCallId,
                 }
               }
 
               if (isToolResultPart(part)) {
                 return {
                   ...part,
-                  toolCallId: sanitizeToolCallId(part.toolCallId),
+                  toolCallId: toolCallIdMap.get(part.toolCallId) ?? part.toolCallId,
                 }
               }
 
@@ -78,10 +161,13 @@ export namespace ProviderTransform {
           }
 
           if (msg.role === "tool") {
-            const nextContent = msg.content.map((part) => ({
-              ...part,
-              toolCallId: sanitizeToolCallId(part.toolCallId),
-            })) satisfies ToolModelMessage["content"]
+            const nextContent = msg.content.map((part) => {
+              const toolCallId = toolCallIdMap.get(part.toolCallId) ?? part.toolCallId
+              return {
+                ...part,
+                toolCallId,
+              }
+            }) satisfies ToolModelMessage["content"]
             return {
               ...msg,
               content: nextContent,
@@ -98,14 +184,36 @@ export namespace ProviderTransform {
         const first = msg.content[0] as UserPart | undefined
         if (!first) return false
         if (typeof first !== "object") return false
+        if (Array.isArray(first)) return false
         if ((first as { type?: unknown }).type !== "text") return false
         const text = (first as { text?: unknown }).text
         if (typeof text !== "string") return false
+        const hasFilePart = msg.content.some(
+          (part) =>
+            typeof part === "object" && !!part && !Array.isArray(part) && (part as { type?: unknown }).type === "file",
+        )
+        if (!hasFilePart) return false
         return text.startsWith("Tool ") && text.includes(" returned an attachment")
+      }
+
+      function isThinkingPart(part: unknown): boolean {
+        if (!part) return false
+        if (typeof part !== "object") return false
+        if (Array.isArray(part)) return false
+        const type = (part as { type?: unknown }).type
+        return type === "thinking" || type === "redacted_thinking"
+      }
+
+      function findLastAssistantIndex(messages: ModelMessage[]): number {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === "assistant") return i
+        }
+        return -1
       }
 
       function normalizeToolCallsAndResults(input: ModelMessage[]): ModelMessage[] {
         const result: ModelMessage[] = []
+        const lastAssistantIndex = findLastAssistantIndex(input)
 
         for (let index = 0; index < input.length; index++) {
           const msg = input[index]
@@ -115,6 +223,15 @@ export namespace ProviderTransform {
           }
 
           const assistantContent = msg.content as AssistantPart[]
+
+          // Anthropic constraint: thinking/redacted_thinking blocks in the LATEST
+          // assistant message cannot be modified. Skip normalization for the last
+          // assistant message if it contains thinking blocks.
+          if (index === lastAssistantIndex && assistantContent.some(isThinkingPart)) {
+            result.push(msg)
+            continue
+          }
+
           const firstToolCallIndex = assistantContent.findIndex((part) => isToolCallPart(part))
           if (firstToolCallIndex === -1) {
             result.push(msg)
@@ -196,8 +313,11 @@ export namespace ProviderTransform {
             continue
           }
 
-          const toolResults = expectedIds.map((id) => toolResultsById.get(id))
-          if (toolResults.some((part) => !part)) {
+          const toolResults = expectedIds
+            .map((id) => toolResultsById.get(id))
+            .filter((part): part is ToolResultPart => part !== undefined)
+
+          if (toolResults.length !== expectedIds.length) {
             result.push(msg)
             continue
           }
@@ -210,7 +330,7 @@ export namespace ProviderTransform {
 
           result.push({
             role: "tool",
-            content: toolResults as ToolModelMessage["content"],
+            content: toolResults,
           })
 
           for (const moved of movedAttachmentUserMessages) {
@@ -219,7 +339,6 @@ export namespace ProviderTransform {
 
           if (afterToolCalls.length > 0) {
             result.push({
-              ...msg,
               role: "assistant",
               content: afterToolCalls satisfies AssistantContent,
             })
