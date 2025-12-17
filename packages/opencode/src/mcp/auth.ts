@@ -83,11 +83,7 @@ export namespace McpAuth {
     await set(mcpName, entry, serverUrl)
   }
 
-  export async function updateClientInfo(
-    mcpName: string,
-    clientInfo: ClientInfo,
-    serverUrl?: string,
-  ): Promise<void> {
+  export async function updateClientInfo(mcpName: string, clientInfo: ClientInfo, serverUrl?: string): Promise<void> {
     const entry = (await get(mcpName)) ?? {}
     entry.clientInfo = clientInfo
     await set(mcpName, entry, serverUrl)
