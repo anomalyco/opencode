@@ -54,7 +54,7 @@ createMenu()
 
 render(() => {
   onMount(() => {
-    if (UPDATER_ENABLED) runUpdater()
+    if (UPDATER_ENABLED) runUpdater({ alertOnFail: false })
   })
 
   return (

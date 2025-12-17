@@ -193,7 +193,7 @@ jobs:
           projectPath: packages/tauri
           uploadWorkflowArtifacts: true
           tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
-          args: --target ${{ matrix.settings.target }}
+          args: --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.publish.outputs.releaseId }}
           tagName: ${{ needs.publish.outputs.tagName }}
@@ -204,6 +204,7 @@ jobs:
     needs:
       - publish
       - publish-tauri
+    if: needs.publish.outputs.tagName
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
@@ -211,6 +212,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.publish.outputs.tagName }}
 
-      - run: gh release edit ${{ steps.publish.outputs.tagName }} --draft=false
+      - run: gh release edit ${{ needs.publish.outputs.tagName }} --draft=false
         env:
           GH_TOKEN: ${{ github.token }}
