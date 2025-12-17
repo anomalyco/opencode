@@ -37,7 +37,7 @@ export function DialogSessionList() {
           category = "Today"
         }
         const isDeleting = toDelete() === x.id
-        const status = sync.data.session_status[x.id]
+        const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
         return {
           title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,

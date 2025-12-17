@@ -340,7 +340,7 @@ export function Session() {
       keybind: "messages_undo",
       category: "Session",
       onSelect: async (dialog) => {
-        const status = sync.data.session_status[route.sessionID]
+        const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
         const revert = session().revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
