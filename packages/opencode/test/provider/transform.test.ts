@@ -318,24 +318,26 @@ describe("ProviderTransform.message - Claude tool interleaving", () => {
 
     const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
 
-    const toolCalls = result
-      .filter((m) => m.role === "assistant")
-      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
-      .filter((p) => p.type === "tool-call")
+    expect(result).toHaveLength(3)
+    expect(result[0].role).toBe("assistant")
+    expect(result[1].role).toBe("tool")
+    expect(result[2].role).toBe("assistant")
 
+    const assistantParts = result[0].content as any[]
+    const firstToolCallIndex = assistantParts.findIndex((p) => p.type === "tool-call")
+    expect(firstToolCallIndex).toBeGreaterThanOrEqual(0)
+    expect(assistantParts.slice(firstToolCallIndex).every((p) => p.type === "tool-call")).toBe(true)
+
+    const toolCalls = assistantParts.filter((p) => p.type === "tool-call")
     expect(toolCalls.map((p) => p.toolCallId)).toEqual(["bad_id", "ok"])
 
-    for (const [index, message] of result.entries()) {
-      if (message.role !== "assistant" || !Array.isArray(message.content)) continue
-      const call = message.content.find((p: any) => p.type === "tool-call")
-      if (!call) continue
+    const toolResults = result[1].content as any[]
+    expect(toolResults).toHaveLength(toolCalls.length)
+    expect(toolResults.every((p) => p.type === "tool-result")).toBe(true)
+    expect(toolResults.map((p) => p.toolCallId)).toEqual(toolCalls.map((p) => p.toolCallId))
 
-      const next = result[index + 1]
-      expect(next?.role).toBe("tool")
-      expect(next.content).toHaveLength(1)
-      expect(next.content[0].type).toBe("tool-result")
-      expect(next.content[0].toolCallId).toBe(call.toolCallId)
-    }
+    const afterParts = result[2].content as any[]
+    expect(afterParts).toEqual([{ type: "text", text: "After calls" }])
   })
 
   test("moves synthetic attachment user messages after interleaving", () => {
@@ -366,26 +368,25 @@ describe("ProviderTransform.message - Claude tool interleaving", () => {
 
     const result = ProviderTransform.message(msgs, mockClaudeModel) as any[]
 
-    const attachmentIndex = result.findIndex(
-      (m) =>
-        m.role === "user" &&
-        Array.isArray(m.content) &&
-        m.content[0]?.type === "text" &&
-        typeof m.content[0].text === "string" &&
-        m.content[0].text.includes("returned an attachment"),
-    )
-    expect(attachmentIndex).toBeGreaterThanOrEqual(0)
+    expect(result).toHaveLength(3)
+    expect(result[0].role).toBe("assistant")
+    expect(result[1].role).toBe("tool")
+    expect(result[2].role).toBe("user")
 
-    for (let i = 0; i < attachmentIndex; i++) {
-      const m = result[i]
-      if (m.role !== "assistant" || !Array.isArray(m.content)) continue
-      const call = m.content.find((p: any) => p.type === "tool-call")
-      if (!call) continue
+    const assistantParts = result[0].content as any[]
+    const firstToolCallIndex = assistantParts.findIndex((p) => p.type === "tool-call")
+    expect(firstToolCallIndex).toBeGreaterThanOrEqual(0)
+    expect(assistantParts.slice(firstToolCallIndex).every((p) => p.type === "tool-call")).toBe(true)
 
-      const next = result[i + 1]
-      expect(next?.role).toBe("tool")
-      expect(next.content[0].toolCallId).toBe(call.toolCallId)
-    }
+    const toolCalls = assistantParts.filter((p) => p.type === "tool-call")
+    expect(toolCalls.map((p) => p.toolCallId)).toEqual(["a", "b"])
+
+    const toolResults = result[1].content as any[]
+    expect(toolResults).toHaveLength(2)
+    expect(toolResults.map((p) => p.type)).toEqual(["tool-result", "tool-result"])
+    expect(toolResults.map((p) => p.toolCallId)).toEqual(["a", "b"])
+
+    expect((result[2].content as any[])[0].text).toContain("returned an attachment")
   })
 
   test("does not interleave if tool results include extra ids", () => {
