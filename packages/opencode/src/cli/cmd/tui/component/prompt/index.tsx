@@ -10,6 +10,7 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
+import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
@@ -17,11 +18,15 @@ import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk"
+import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { createColors, createFrames } from "../../ui/spinner.ts"
+import { useDialog } from "@tui/ui/dialog"
+import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
+import { DialogAlert } from "../../ui/dialog-alert"
+import { useToast } from "../../ui/toast"
 
 export type PromptProps = {
   sessionID?: string
@@ -34,10 +39,69 @@ export type PromptProps = {
 
 export type PromptRef = {
   focused: boolean
+  current: PromptInfo
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
   focus(): void
+  submit(): void
+}
+
+const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
+
+const TEXTAREA_ACTIONS = [
+  "submit",
+  "newline",
+  "move-left",
+  "move-right",
+  "move-up",
+  "move-down",
+  "select-left",
+  "select-right",
+  "select-up",
+  "select-down",
+  "line-home",
+  "line-end",
+  "select-line-home",
+  "select-line-end",
+  "visual-line-home",
+  "visual-line-end",
+  "select-visual-line-home",
+  "select-visual-line-end",
+  "buffer-home",
+  "buffer-end",
+  "select-buffer-home",
+  "select-buffer-end",
+  "delete-line",
+  "delete-to-line-end",
+  "delete-to-line-start",
+  "backspace",
+  "delete",
+  "undo",
+  "redo",
+  "word-forward",
+  "word-backward",
+  "select-word-forward",
+  "select-word-backward",
+  "delete-word-forward",
+  "delete-word-backward",
+] as const
+
+function mapTextareaKeybindings(
+  keybinds: Record<string, Keybind.Info[]>,
+  action: (typeof TEXTAREA_ACTIONS)[number],
+): KeyBinding[] {
+  const configKey = `input_${action.replace(/-/g, "_")}`
+  const bindings = keybinds[configKey]
+  if (!bindings) return []
+  return bindings.map((binding) => ({
+    name: binding.name,
+    ctrl: binding.ctrl || undefined,
+    meta: binding.meta || undefined,
+    shift: binding.shift || undefined,
+    super: binding.super || undefined,
+    action,
+  }))
 }
 
 export function Prompt(props: PromptProps) {
@@ -50,33 +114,32 @@ export function Prompt(props: PromptProps) {
   const sdk = useSDK()
   const route = useRoute()
   const sync = useSync()
-  const status = createMemo(() => sync.data.session_status[props.sessionID ?? ""] ?? { type: "idle" })
+  const dialog = useDialog()
+  const toast = useToast()
+  const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
 
+  function promptModelWarning() {
+    toast.show({
+      variant: "warning",
+      message: "Connect a provider to send prompts",
+      duration: 3000,
+    })
+    if (sync.data.provider.length === 0) {
+      dialog.replace(() => <DialogProviderConnect />)
+    }
+  }
+
   const textareaKeybindings = createMemo(() => {
-    const newlineBindings = keybind.all.input_newline || []
-    const submitBindings = keybind.all.input_submit || []
+    const keybinds = keybind.all
 
     return [
       { name: "return", action: "submit" },
       { name: "return", meta: true, action: "newline" },
-      ...newlineBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "newline" as const,
-      })),
-      ...submitBindings.map((binding) => ({
-        name: binding.name,
-        ctrl: binding.ctrl || undefined,
-        meta: binding.meta || undefined,
-        shift: binding.shift || undefined,
-        action: "submit" as const,
-      })),
+      ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
     ] satisfies KeyBinding[]
   })
 
@@ -87,90 +150,6 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => {
     return [
-      {
-        title: "Open editor",
-        category: "Session",
-        keybind: "editor_open",
-        value: "prompt.editor",
-        onSelect: async (dialog, trigger) => {
-          dialog.clear()
-
-          // replace summarized text parts with the actual text
-          const text = store.prompt.parts
-            .filter((p) => p.type === "text")
-            .reduce((acc, p) => {
-              if (!p.source) return acc
-              return acc.replace(p.source.text.value, p.text)
-            }, store.prompt.input)
-
-          const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
-
-          const value = trigger === "prompt" ? "" : text
-          const content = await Editor.open({ value, renderer })
-          if (!content) return
-
-          input.setText(content, { history: false })
-
-          // Update positions for nonTextParts based on their location in new content
-          // Filter out parts whose virtual text was deleted
-          // this handles a case where the user edits the text in the editor
-          // such that the virtual text moves around or is deleted
-          const updatedNonTextParts = nonTextParts
-            .map((part) => {
-              let virtualText = ""
-              if (part.type === "file" && part.source?.text) {
-                virtualText = part.source.text.value
-              } else if (part.type === "agent" && part.source) {
-                virtualText = part.source.value
-              }
-
-              if (!virtualText) return part
-
-              const newStart = content.indexOf(virtualText)
-              // if the virtual text is deleted, remove the part
-              if (newStart === -1) return null
-
-              const newEnd = newStart + virtualText.length
-
-              if (part.type === "file" && part.source?.text) {
-                return {
-                  ...part,
-                  source: {
-                    ...part.source,
-                    text: {
-                      ...part.source.text,
-                      start: newStart,
-                      end: newEnd,
-                    },
-                  },
-                }
-              }
-
-              if (part.type === "agent" && part.source) {
-                return {
-                  ...part,
-                  source: {
-                    ...part.source,
-                    start: newStart,
-                    end: newEnd,
-                  },
-                }
-              }
-
-              return part
-            })
-            .filter((part) => part !== null)
-
-          setStore("prompt", {
-            input: content,
-            // keep only the non-text parts because the text parts were
-            // already expanded inline
-            parts: updatedNonTextParts,
-          })
-          restoreExtmarksFromParts(updatedNonTextParts)
-          input.cursorOffset = Bun.stringWidth(content)
-        },
-      },
       {
         title: "Clear prompt",
         value: "prompt.clear",
@@ -235,13 +214,95 @@ export function Prompt(props: PromptProps) {
 
           if (store.interrupt >= 2) {
             sdk.client.session.abort({
-              path: {
-                id: props.sessionID,
-              },
+              sessionID: props.sessionID,
             })
             setStore("interrupt", 0)
           }
           dialog.clear()
+        },
+      },
+      {
+        title: "Open editor",
+        category: "Session",
+        keybind: "editor_open",
+        value: "prompt.editor",
+        onSelect: async (dialog, trigger) => {
+          dialog.clear()
+
+          // replace summarized text parts with the actual text
+          const text = store.prompt.parts
+            .filter((p) => p.type === "text")
+            .reduce((acc, p) => {
+              if (!p.source) return acc
+              return acc.replace(p.source.text.value, p.text)
+            }, store.prompt.input)
+
+          const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
+
+          const value = trigger === "prompt" ? "" : text
+          const content = await Editor.open({ value, renderer })
+          if (!content) return
+
+          input.setText(content)
+
+          // Update positions for nonTextParts based on their location in new content
+          // Filter out parts whose virtual text was deleted
+          // this handles a case where the user edits the text in the editor
+          // such that the virtual text moves around or is deleted
+          const updatedNonTextParts = nonTextParts
+            .map((part) => {
+              let virtualText = ""
+              if (part.type === "file" && part.source?.text) {
+                virtualText = part.source.text.value
+              } else if (part.type === "agent" && part.source) {
+                virtualText = part.source.value
+              }
+
+              if (!virtualText) return part
+
+              const newStart = content.indexOf(virtualText)
+              // if the virtual text is deleted, remove the part
+              if (newStart === -1) return null
+
+              const newEnd = newStart + virtualText.length
+
+              if (part.type === "file" && part.source?.text) {
+                return {
+                  ...part,
+                  source: {
+                    ...part.source,
+                    text: {
+                      ...part.source.text,
+                      start: newStart,
+                      end: newEnd,
+                    },
+                  },
+                }
+              }
+
+              if (part.type === "agent" && part.source) {
+                return {
+                  ...part,
+                  source: {
+                    ...part.source,
+                    start: newStart,
+                    end: newEnd,
+                  },
+                }
+              }
+
+              return part
+            })
+            .filter((part) => part !== null)
+
+          setStore("prompt", {
+            input: content,
+            // keep only the non-text parts because the text parts were
+            // already expanded inline
+            parts: updatedNonTextParts,
+          })
+          restoreExtmarksFromParts(updatedNonTextParts)
+          input.cursorOffset = Bun.stringWidth(content)
         },
       },
     ]
@@ -253,7 +314,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.primary
+    if (!props.disabled) input.cursorColor = theme.text
   })
 
   const [store, setStore] = createStore<{
@@ -261,7 +322,9 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    placeholder: number
   }>({
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
       input: "",
       parts: [],
@@ -310,6 +373,7 @@ export function Prompt(props: PromptProps) {
         const extmarkId = input.extmarks.create({
           start,
           end,
+          virtual: true,
           styleId,
           typeId: promptPartTypeId,
         })
@@ -360,6 +424,9 @@ export function Prompt(props: PromptProps) {
     get focused() {
       return input.focused
     },
+    get current() {
+      return store.prompt
+    },
     focus() {
       input.focus()
     },
@@ -367,7 +434,7 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
-      input.setText(prompt.input, { history: false })
+      input.setText(prompt.input)
       setStore("prompt", prompt)
       restoreExtmarksFromParts(prompt.parts)
       input.gotoBufferEnd()
@@ -381,12 +448,25 @@ export function Prompt(props: PromptProps) {
       })
       setStore("extmarkToPartIndex", new Map())
     },
+    submit() {
+      submit()
+    },
   })
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete.visible) return
+    if (autocomplete?.visible) return
     if (!store.prompt.input) return
+    const trimmed = store.prompt.input.trim()
+    if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
+      exit()
+      return
+    }
+    const selectedModel = local.model.current()
+    if (!selectedModel) {
+      promptModelWarning()
+      return
+    }
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -415,19 +495,18 @@ export function Prompt(props: PromptProps) {
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
+    // Capture mode before it gets reset
+    const currentMode = store.mode
+
     if (store.mode === "shell") {
       sdk.client.session.shell({
-        path: {
-          id: sessionID,
+        sessionID,
+        agent: local.agent.current().name,
+        model: {
+          providerID: selectedModel.providerID,
+          modelID: selectedModel.modelID,
         },
-        body: {
-          agent: local.agent.current().name,
-          model: {
-            providerID: local.model.current().providerID,
-            modelID: local.model.current().modelID,
-          },
-          command: inputText,
-        },
+        command: inputText,
       })
       setStore("mode", "normal")
     } else if (
@@ -440,42 +519,37 @@ export function Prompt(props: PromptProps) {
     ) {
       let [command, ...args] = inputText.split(" ")
       sdk.client.session.command({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          command: command.slice(1),
-          arguments: args.join(" "),
-          agent: local.agent.current().name,
-          model: `${local.model.current().providerID}/${local.model.current().modelID}`,
-          messageID,
-        },
+        sessionID,
+        command: command.slice(1),
+        arguments: args.join(" "),
+        agent: local.agent.current().name,
+        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+        messageID,
       })
     } else {
       sdk.client.session.prompt({
-        path: {
-          id: sessionID,
-        },
-        body: {
-          ...local.model.current(),
-          messageID,
-          agent: local.agent.current().name,
-          model: local.model.current(),
-          parts: [
-            {
-              id: Identifier.ascending("part"),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map((x) => ({
-              id: Identifier.ascending("part"),
-              ...x,
-            })),
-          ],
-        },
+        sessionID,
+        ...selectedModel,
+        messageID,
+        agent: local.agent.current().name,
+        model: selectedModel,
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: inputText,
+          },
+          ...nonTextParts.map((x) => ({
+            id: Identifier.ascending("part"),
+            ...x,
+          })),
+        ],
       })
     }
-    history.append(store.prompt)
+    history.append({
+      ...store.prompt,
+      mode: currentMode,
+    })
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -495,6 +569,40 @@ export function Prompt(props: PromptProps) {
     input.clear()
   }
   const exit = useExit()
+
+  function pasteText(text: string, virtualText: string) {
+    const currentOffset = input.visualCursor.offset
+    const extmarkStart = currentOffset
+    const extmarkEnd = extmarkStart + virtualText.length
+
+    input.insertText(virtualText + " ")
+
+    const extmarkId = input.extmarks.create({
+      start: extmarkStart,
+      end: extmarkEnd,
+      virtual: true,
+      styleId: pasteStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push({
+          type: "text" as const,
+          text,
+          source: {
+            text: {
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: virtualText,
+            },
+          },
+        })
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+  }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
@@ -551,12 +659,16 @@ export function Prompt(props: PromptProps) {
       frames: createFrames({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
       color: createColors({
         color,
         style: "blocks",
-        inactiveFactor: 0.25,
+        inactiveFactor: 0.6,
+        // enableFading: false,
+        minAlpha: 0.3,
       }),
     }
   })
@@ -602,13 +714,9 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={
-                props.showPlaceholder
-                  ? t`${dim(fg(theme.primary)("  → up/down"))} ${dim(fg("#64748b")("history"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_newline")))} ${dim(fg("#64748b")("newline"))} ${dim(fg("#a78bfa")("•"))} ${dim(fg(theme.primary)(keybind.print("input_submit")))} ${dim(fg("#64748b")("submit"))}`
-                  : undefined
-              }
-              textColor={theme.text}
-              focusedTextColor={theme.text}
+              placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+              textColor={keybind.leader ? theme.textMuted : theme.text}
+              focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
               maxHeight={6}
               onContentChange={() => {
@@ -633,20 +741,13 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
-                if (keybind.match("input_forward_delete", e) && store.prompt.input !== "") {
-                  const cursorOffset = input.cursorOffset
-                  if (cursorOffset < input.plainText.length) {
-                    const text = input.plainText
-                    const newText = text.slice(0, cursorOffset) + text.slice(cursorOffset + 1)
-                    input.setText(newText)
-                    input.cursorOffset = cursorOffset
-                  }
-                  e.preventDefault()
-                  return
-                }
                 if (keybind.match("app_exit", e)) {
-                  await exit()
-                  return
+                  if (store.prompt.input === "") {
+                    await exit()
+                    // Don't preventDefault - let textarea potentially handle the event
+                    e.preventDefault()
+                    return
+                  }
                 }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
                   setStore("mode", "shell")
@@ -670,8 +771,9 @@ export function Prompt(props: PromptProps) {
                     const item = history.move(direction, input.plainText)
 
                     if (item) {
-                      input.setText(item.input, { history: false })
+                      input.setText(item.input)
                       setStore("prompt", item)
+                      setStore("mode", item.mode ?? "normal")
                       restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
                       if (direction === -1) input.cursorOffset = 0
@@ -709,12 +811,21 @@ export function Prompt(props: PromptProps) {
                 if (!isUrl) {
                   try {
                     const file = Bun.file(filepath)
+                    // Handle SVG as raw text content, not as base64 image
+                    if (file.type === "image/svg+xml") {
+                      event.preventDefault()
+                      const content = await file.text().catch(() => {})
+                      if (content) {
+                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                        return
+                      }
+                    }
                     if (file.type.startsWith("image/")) {
                       event.preventDefault()
                       const content = await file
                         .arrayBuffer()
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(console.error)
+                        .catch(() => {})
                       if (content) {
                         await pasteImage({
                           filename: file.name,
@@ -733,48 +844,19 @@ export function Prompt(props: PromptProps) {
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
                   event.preventDefault()
-                  const currentOffset = input.visualCursor.offset
-                  const virtualText = `[Pasted ~${lineCount} lines]`
-                  const textToInsert = virtualText + " "
-                  const extmarkStart = currentOffset
-                  const extmarkEnd = extmarkStart + virtualText.length
-
-                  input.insertText(textToInsert)
-
-                  const extmarkId = input.extmarks.create({
-                    start: extmarkStart,
-                    end: extmarkEnd,
-                    virtual: true,
-                    styleId: pasteStyleId,
-                    typeId: promptPartTypeId,
-                  })
-
-                  const part = {
-                    type: "text" as const,
-                    text: pastedContent,
-                    source: {
-                      text: {
-                        start: extmarkStart,
-                        end: extmarkEnd,
-                        value: virtualText,
-                      },
-                    },
-                  }
-
-                  setStore(
-                    produce((draft) => {
-                      const partIndex = draft.prompt.parts.length
-                      draft.prompt.parts.push(part)
-                      draft.extmarkToPartIndex.set(extmarkId, partIndex)
-                    }),
-                  )
+                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
               }}
-              ref={(r: TextareaRenderable) => (input = r)}
+              ref={(r: TextareaRenderable) => {
+                input = r
+                setTimeout(() => {
+                  input.cursorColor = theme.text
+                }, 0)
+              }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
-              cursorColor={highlight()}
+              cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
@@ -783,10 +865,10 @@ export function Prompt(props: PromptProps) {
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <text flexShrink={0} fg={theme.text}>
+                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
                     {local.model.parsed().model}
                   </text>
+                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
                 </box>
               </Show>
             </box>
@@ -798,7 +880,7 @@ export function Prompt(props: PromptProps) {
           borderColor={highlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: "╹",
+            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
           }}
         >
           <box
@@ -806,7 +888,7 @@ export function Prompt(props: PromptProps) {
             border={["bottom"]}
             borderColor={theme.backgroundElement}
             customBorderChars={
-              theme.background.a != 0
+              theme.backgroundElement.a !== 0
                 ? {
                     ...EmptyBorder,
                     horizontal: "▀",
@@ -827,7 +909,8 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
+                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
@@ -839,9 +922,14 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (r.message.includes("exceeded your current quota") && r.message.includes("gemini"))
-                        return "gemini 3 way too hot right now"
-                      if (r.message.length > 50) return r.message.slice(0, 50) + "..."
+                        return "gemini is way too hot right now"
+                      if (r.message.length > 80) return r.message.slice(0, 80) + "..."
                       return r.message
+                    })
+                    const isTruncated = createMemo(() => {
+                      const r = retry()
+                      if (!r) return false
+                      return r.message.length > 120
                     })
                     const [seconds, setSeconds] = createSignal(0)
                     onMount(() => {
@@ -854,12 +942,28 @@ export function Prompt(props: PromptProps) {
                         clearInterval(timer)
                       })
                     })
+                    const handleMessageClick = () => {
+                      const r = retry()
+                      if (!r) return
+                      if (isTruncated()) {
+                        DialogAlert.show(dialog, "Retry Error", r.message)
+                      }
+                    }
+
+                    const retryText = () => {
+                      const r = retry()
+                      if (!r) return ""
+                      const baseMessage = message()
+                      const truncatedHint = isTruncated() ? " (click to expand)" : ""
+                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                      return baseMessage + truncatedHint + retryInfo
+                    }
+
                     return (
                       <Show when={retry()}>
-                        <text fg={theme.error}>
-                          {message()} [retrying {seconds() > 0 ? `in ${seconds()}s ` : ""}
-                          attempt #{retry()!.attempt}]
-                        </text>
+                        <box onMouseUp={handleMessageClick}>
+                          <text fg={theme.error}>{retryText()}</text>
+                        </box>
                       </Show>
                     )
                   })()}

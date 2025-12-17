@@ -69,6 +69,16 @@ Here are all available slash commands:
 
 ---
 
+### connect
+
+Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+
+```bash frame="none"
+/connect
+```
+
+---
+
 ### compact
 
 Compact the current session. _Alias_: `/summarize`
@@ -348,3 +358,16 @@ You can customize TUI behavior through your OpenCode config file.
 
 - `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `1` on Unix and `3` on Windows. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+
+---
+
+## View customization
+
+You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
+
+### Username display
+
+Toggle whether your username appears in chat messages. Access this through:
+
+- Command palette: Search for "username" or "hide username"
+- The setting persists automatically and will be remembered across TUI sessions

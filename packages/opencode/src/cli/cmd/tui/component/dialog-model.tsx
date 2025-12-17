@@ -7,87 +7,76 @@ import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { Keybind } from "@/util/keybind"
 
-export function DialogModel() {
+export function useConnected() {
+  const sync = useSync()
+  return createMemo(() =>
+    sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
+  )
+}
+
+export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
   const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
 
-  const connected = createMemo(() =>
-    sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
-  )
-
+  const connected = useConnected()
   const providers = createDialogProviderOptions()
+
+  const showExtra = createMemo(() => {
+    if (!connected()) return false
+    if (props.providerID) return false
+    return true
+  })
 
   const options = createMemo(() => {
     const query = ref()?.filter
-    const favorites = local.model.favorite()
+    const favorites = showExtra() ? local.model.favorite() : []
     const recents = local.model.recent()
-    const currentModel = local.model.current()
 
-    const orderedRecents = currentModel
-      ? [
-          currentModel,
-          ...recents.filter(
-            (item) => item.providerID !== currentModel.providerID || item.modelID !== currentModel.modelID,
-          ),
-        ]
-      : recents
+    const recentList = showExtra()
+      ? recents
+          .filter(
+            (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
+          )
+          .slice(0, 5)
+      : []
 
-    const isCurrent = (item: { providerID: string; modelID: string }) =>
-      currentModel && item.providerID === currentModel.providerID && item.modelID === currentModel.modelID
-
-    const currentIsFavorite = currentModel && favorites.some((fav) => isCurrent(fav))
-
-    const recentList = orderedRecents
-      .filter((item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID))
-      .slice(0, 5)
-
-    const orderedFavorites = currentModel
-      ? [...favorites.filter((item) => isCurrent(item)), ...favorites.filter((item) => !isCurrent(item))]
-      : favorites
-
-    const orderedRecentList =
-      currentModel && !currentIsFavorite
-        ? [...recentList.filter((item) => isCurrent(item)), ...recentList.filter((item) => !isCurrent(item))]
-        : recentList
-
-    const favoriteOptions =
-      !query && favorites.length > 0
-        ? orderedFavorites.flatMap((item) => {
-            const provider = sync.data.provider.find((x) => x.id === item.providerID)
-            if (!provider) return []
-            const model = provider.models[item.modelID]
-            if (!model) return []
-            return [
-              {
-                key: item,
-                value: {
-                  providerID: provider.id,
-                  modelID: model.id,
-                },
-                title: model.name ?? item.modelID,
-                description: `${provider.name} ★`,
-                category: "Favorites",
-                disabled: provider.id === "opencode" && model.id.includes("-nano"),
-                footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-                onSelect: () => {
-                  dialog.clear()
-                  local.model.set(
-                    {
-                      providerID: provider.id,
-                      modelID: model.id,
-                    },
-                    { recent: true },
-                  )
-                },
+    const favoriteOptions = !query
+      ? favorites.flatMap((item) => {
+          const provider = sync.data.provider.find((x) => x.id === item.providerID)
+          if (!provider) return []
+          const model = provider.models[item.modelID]
+          if (!model) return []
+          return [
+            {
+              key: item,
+              value: {
+                providerID: provider.id,
+                modelID: model.id,
               },
-            ]
-          })
-        : []
+              title: model.name ?? item.modelID,
+              description: provider.name,
+              category: "Favorites",
+              disabled: provider.id === "opencode" && model.id.includes("-nano"),
+              footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+              onSelect: () => {
+                dialog.clear()
+                local.model.set(
+                  {
+                    providerID: provider.id,
+                    modelID: model.id,
+                  },
+                  { recent: true },
+                )
+              },
+            },
+          ]
+        })
+      : []
 
     const recentOptions = !query
-      ? orderedRecentList.flatMap((item) => {
+      ? recentList.flatMap((item) => {
           const provider = sync.data.provider.find((x) => x.id === item.providerID)
           if (!provider) return []
           const model = provider.models[item.modelID]
@@ -132,18 +121,21 @@ export function DialogModel() {
           pipe(
             provider.models,
             entries(),
+            filter(([_, info]) => info.status !== "deprecated"),
+            filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
             map(([model, info]) => {
               const value = {
                 providerID: provider.id,
                 modelID: model,
               }
-              const favorite = favorites.some(
-                (item) => item.providerID === value.providerID && item.modelID === value.modelID,
-              )
               return {
                 value,
                 title: info.name ?? model,
-                description: connected() ? `${provider.name}${favorite ? " ★" : ""}` : undefined,
+                description: favorites.some(
+                  (item) => item.providerID === value.providerID && item.modelID === value.modelID,
+                )
+                  ? "(Favorite)"
+                  : undefined,
                 category: connected() ? provider.name : undefined,
                 disabled: provider.id === "opencode" && model.includes("-nano"),
                 footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -165,14 +157,17 @@ export function DialogModel() {
               const inFavorites = favorites.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
-              const inRecents = orderedRecents.some(
+              if (inFavorites) return false
+              const inRecents = recents.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
-              if (inFavorites) return false
               if (inRecents) return false
               return true
             }),
-            sortBy((x) => x.title),
+            sortBy(
+              (x) => x.footer !== "Free",
+              (x) => x.title,
+            ),
           ),
         ),
       ),
@@ -191,12 +186,21 @@ export function DialogModel() {
     ]
   })
 
+  const provider = createMemo(() =>
+    props.providerID ? sync.data.provider.find((x) => x.id === props.providerID) : null,
+  )
+
+  const title = createMemo(() => {
+    if (provider()) return provider()!.name
+    return "Select model"
+  })
+
   return (
     <DialogSelect
       keybind={[
         {
-          keybind: { ctrl: true, name: "a", meta: false, shift: false, leader: false },
-          title: connected() ? "Connect provider" : "More providers",
+          keybind: Keybind.parse("ctrl+a")[0],
+          title: connected() ? "Connect provider" : "View all providers",
           onTrigger() {
             dialog.replace(() => <DialogProvider />)
           },
@@ -204,13 +208,14 @@ export function DialogModel() {
         {
           keybind: Keybind.parse("ctrl+f")[0],
           title: "Favorite",
+          disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
         },
       ]}
       ref={setRef}
-      title="Select model"
+      title={title()}
       current={local.model.current()}
       options={options()}
     />

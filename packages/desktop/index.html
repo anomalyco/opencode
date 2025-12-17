@@ -9,11 +9,12 @@
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#000000" />
+    <meta name="theme-color" content="#F8F7F7" />
+    <meta name="theme-color" content="#131010" media="(prefers-color-scheme: dark)" />
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
   </head>
-  <body class="antialiased overscroll-none select-none text-12-regular">
+  <body class="antialiased overscroll-none select-none text-12-regular overflow-hidden">
     <script>
       ;(function () {
         const savedTheme = localStorage.getItem("theme") || "oc-1"
@@ -21,7 +22,7 @@
       })()
     </script>
     <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-    <script src="/src/index.tsx" type="module"></script>
+    <div id="root" class="flex flex-col h-screen"></div>
+    <script src="/src/entry.tsx" type="module"></script>
   </body>
 </html>

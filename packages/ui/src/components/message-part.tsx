@@ -1,40 +1,90 @@
-import { Component, createMemo, For, Match, Show, Switch } from "solid-js"
+import { Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
   AssistantMessage,
+  FilePart,
   Message as MessageType,
   Part as PartType,
   TextPart,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk"
+} from "@opencode-ai/sdk/v2"
+import { useData } from "../context"
+import { useDiffComponent } from "../context/diff"
+import { useCodeComponent } from "../context/code"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Card } from "./card"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
-import { Diff } from "./diff"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { sanitize, sanitizePart } from "@opencode-ai/util/sanitize"
+import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
+import { checksum } from "@opencode-ai/util/encode"
+
+interface Diagnostic {
+  range: {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  }
+  message: string
+  severity?: number
+}
+
+function getDiagnostics(
+  diagnosticsByFile: Record<string, Diagnostic[]> | undefined,
+  filePath: string | undefined,
+): Diagnostic[] {
+  if (!diagnosticsByFile || !filePath) return []
+  const diagnostics = diagnosticsByFile[filePath] ?? []
+  return diagnostics.filter((d) => d.severity === 1).slice(0, 3)
+}
+
+function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
+  return (
+    <Show when={props.diagnostics.length > 0}>
+      <div data-component="diagnostics">
+        <For each={props.diagnostics}>
+          {(diagnostic) => (
+            <div data-slot="diagnostic">
+              <span data-slot="diagnostic-label">Error</span>
+              <span data-slot="diagnostic-location">
+                [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]
+              </span>
+              <span data-slot="diagnostic-message">{diagnostic.message}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  )
+}
 
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
-  sanitize?: RegExp
 }
 
 export interface MessagePartProps {
   part: PartType
   message: MessageType
   hideDetails?: boolean
-  sanitize?: RegExp
 }
 
 export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
+
+function relativizeProjectPaths(text: string, directory?: string) {
+  if (!text) return ""
+  if (!directory) return text
+  return text.split(directory).join("")
+}
+
+function getDirectory(path: string | undefined) {
+  const data = useData()
+  return relativizeProjectPaths(_getDirectory(path), data.directory)
+}
 
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
@@ -48,50 +98,117 @@ export function Message(props: MessageProps) {
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
-          <AssistantMessageDisplay
-            message={assistantMessage() as AssistantMessage}
-            parts={props.parts}
-            sanitize={props.sanitize}
-          />
+          <AssistantMessageDisplay message={assistantMessage() as AssistantMessage} parts={props.parts} />
         )}
       </Match>
     </Switch>
   )
 }
 
-export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[]; sanitize?: RegExp }) {
+export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
   const filteredParts = createMemo(() => {
     return props.parts?.filter((x) => {
-      if (x.type === "reasoning") return false
       return x.type !== "tool" || (x as ToolPart).tool !== "todoread"
     })
   })
-  return (
-    <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} sanitize={props.sanitize} />}</For>
-  )
+  return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
-  const text = createMemo(() =>
-    props.parts
-      ?.filter((p) => p.type === "text" && !(p as TextPart).synthetic)
-      ?.map((p) => (p as TextPart).text)
-      ?.join(""),
+  const textPart = createMemo(
+    () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
-  return <div data-component="user-message">{text()}</div>
+
+  const text = createMemo(() => textPart()?.text || "")
+
+  const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
+
+  const attachments = createMemo(() =>
+    files()?.filter((f) => {
+      const mime = f.mime
+      return mime.startsWith("image/") || mime === "application/pdf"
+    }),
+  )
+
+  const inlineFiles = createMemo(() =>
+    files().filter((f) => {
+      const mime = f.mime
+      return !mime.startsWith("image/") && mime !== "application/pdf" && f.source?.text?.start !== undefined
+    }),
+  )
+
+  return (
+    <div data-component="user-message">
+      <Show when={attachments().length > 0}>
+        <div data-slot="user-message-attachments">
+          <For each={attachments()}>
+            {(file) => (
+              <div data-slot="user-message-attachment" data-type={file.mime.startsWith("image/") ? "image" : "file"}>
+                <Show
+                  when={file.mime.startsWith("image/") && file.url}
+                  fallback={
+                    <div data-slot="user-message-attachment-icon">
+                      <Icon name="folder" />
+                    </div>
+                  }
+                >
+                  <img data-slot="user-message-attachment-image" src={file.url} alt={file.filename ?? "attachment"} />
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show when={text()}>
+        <div data-slot="user-message-text">
+          <HighlightedText text={text()} references={inlineFiles()} />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function HighlightedText(props: { text: string; references: FilePart[] }) {
+  const segments = createMemo(() => {
+    const text = props.text
+    const refs = [...props.references].sort((a, b) => (a.source?.text?.start ?? 0) - (b.source?.text?.start ?? 0))
+
+    const result: { text: string; highlight?: boolean }[] = []
+    let lastIndex = 0
+
+    for (const ref of refs) {
+      const start = ref.source?.text?.start
+      const end = ref.source?.text?.end
+
+      if (start === undefined || end === undefined || start < lastIndex) continue
+
+      if (start > lastIndex) {
+        result.push({ text: text.slice(lastIndex, start) })
+      }
+
+      result.push({ text: text.slice(start, end), highlight: true })
+      lastIndex = end
+    }
+
+    if (lastIndex < text.length) {
+      result.push({ text: text.slice(lastIndex) })
+    }
+
+    return result
+  })
+
+  return (
+    <For each={segments()}>
+      {(segment) => <span classList={{ "text-text-strong font-medium": segment.highlight }}>{segment.text}</span>}
+    </For>
+  )
 }
 
 export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
   return (
     <Show when={component()}>
-      <Dynamic
-        component={component()}
-        part={props.part}
-        message={props.message}
-        hideDetails={props.hideDetails}
-        sanitize={props.sanitize}
-      />
+      <Dynamic component={component()} part={props.part} message={props.message} hideDetails={props.hideDetails} />
     </Show>
   )
 }
@@ -102,7 +219,6 @@ export interface ToolProps {
   tool: string
   output?: string
   hideDetails?: boolean
-  sanitize?: RegExp
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -145,7 +261,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             return (
               <Card variant="error">
                 <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" data-slot="message-part-tool-error-icon" />
+                  <Icon name="circle-ban-sign" size="small" />
                   <Switch>
                     <Match when={title && title.length < 30}>
                       <div data-slot="message-part-tool-error-content">
@@ -170,7 +286,6 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
             hideDetails={props.hideDetails}
-            sanitize={props.sanitize}
           />
         </Match>
       </Switch>
@@ -181,12 +296,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 }
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
+  const data = useData()
   const part = props.part as TextPart
-  const sanitized = createMemo(() => (props.sanitize ? (sanitizePart(part, props.sanitize) as TextPart) : part))
+  const content = createMemo(() => (part.text ?? "").trim())
+  const displayText = createMemo(() => relativizeProjectPaths(content(), data.directory))
+
   return (
-    <Show when={part.text.trim()}>
+    <Show when={displayText()}>
       <div data-component="text-part">
-        <Markdown text={sanitized().text.trim()} />
+        <Markdown text={displayText()} />
       </div>
     </Show>
   )
@@ -211,7 +329,7 @@ ToolRegistry.register({
         icon="glasses"
         trigger={{
           title: "Read",
-          subtitle: props.input.filePath ? getFilename(sanitize(props.input.filePath, props.sanitize)) : "",
+          subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
         }}
       />
     )
@@ -222,12 +340,13 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     return (
-      <BasicTool
-        icon="bullet-list"
-        trigger={{ title: "List", subtitle: getDirectory(sanitize(props.input.path, props.sanitize) || "/") }}
-      >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{sanitize(props.output, props.sanitize)}</div>
+      <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -246,8 +365,12 @@ ToolRegistry.register({
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -269,8 +392,12 @@ ToolRegistry.register({
           args,
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -294,8 +421,12 @@ ToolRegistry.register({
           ),
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -314,8 +445,12 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -333,9 +468,9 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <div data-component="tool-output">
+        <div data-component="tool-output" data-scrollable>
           <Markdown
-            text={`\`\`\`command\n$ ${sanitize(props.input.command, props.sanitize)}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
+            text={`\`\`\`command\n$ ${props.input.command}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>
@@ -346,8 +481,11 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "edit",
   render(props) {
+    const diffComponent = useDiffComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
+        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="edit-trigger">
@@ -355,13 +493,9 @@ ToolRegistry.register({
               <div data-slot="message-part-title">Edit</div>
               <div data-slot="message-part-path">
                 <Show when={props.input.filePath?.includes("/")}>
-                  <span data-slot="message-part-directory">
-                    {getDirectory(sanitize(props.input.filePath!, props.sanitize))}
-                  </span>
+                  <span data-slot="message-part-directory">{getDirectory(props.input.filePath!)}</span>
                 </Show>
-                <span data-slot="message-part-filename">
-                  {getFilename(sanitize(props.input.filePath ?? "", props.sanitize))}
-                </span>
+                <span data-slot="message-part-filename">{getFilename(props.input.filePath ?? "")}</span>
               </div>
             </div>
             <div data-slot="message-part-actions">
@@ -374,18 +508,20 @@ ToolRegistry.register({
       >
         <Show when={props.metadata.filediff}>
           <div data-component="edit-content">
-            <Diff
+            <Dynamic
+              component={diffComponent}
               before={{
-                name: getFilename(sanitize(props.metadata.filediff.path, props.sanitize)),
+                name: getFilename(props.metadata.filediff.path),
                 contents: props.metadata.filediff.before,
               }}
               after={{
-                name: getFilename(sanitize(props.metadata.filediff.path, props.sanitize)),
+                name: getFilename(props.metadata.filediff.path),
                 contents: props.metadata.filediff.after,
               }}
             />
           </div>
         </Show>
+        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </BasicTool>
     )
   },
@@ -394,8 +530,11 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "write",
   render(props) {
+    const codeComponent = useCodeComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
+        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="write-trigger">
@@ -412,9 +551,20 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.input.content}>
+          <div data-component="write-content">
+            <Dynamic
+              component={codeComponent}
+              file={{
+                name: props.input.filePath,
+                contents: props.input.content,
+                cacheKey: checksum(props.input.content),
+              }}
+              overflow="scroll"
+            />
+          </div>
         </Show>
+        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </BasicTool>
     )
   },
@@ -425,6 +575,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        defaultOpen
         icon="checklist"
         trigger={{
           title: "To-dos",

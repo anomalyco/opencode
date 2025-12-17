@@ -17,7 +17,7 @@ if (!Script.preview) {
     .then((data: any) => data.version)
 
   const log =
-    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin`.text()
+    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/desktop`.text()
 
   const commits = log
     .split("\n")
@@ -73,6 +73,45 @@ if (!Script.preview) {
   console.log(notes.join("\n"))
   console.log("-----------------------------")
   opencode.server.close()
+
+  // Get contributors
+  const team = [
+    "actions-user",
+    "opencode",
+    "rekram1-node",
+    "thdxr",
+    "kommander",
+    "jayair",
+    "fwang",
+    "adamdotdevin",
+    "iamdavidhill",
+    "opencode-agent[bot]",
+  ]
+  const compare =
+    await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
+  const contributors = new Map<string, string[]>()
+
+  for (const line of compare.split("\n").filter(Boolean)) {
+    const { login, message } = JSON.parse(line) as { login: string | null; message: string }
+    const title = message.split("\n")[0] ?? ""
+    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
+
+    if (login && !team.includes(login)) {
+      if (!contributors.has(login)) contributors.set(login, [])
+      contributors.get(login)?.push(title)
+    }
+  }
+
+  if (contributors.size > 0) {
+    notes.push("")
+    notes.push(`**Thank you to ${contributors.size} community contributor${contributors.size > 1 ? "s" : ""}:**`)
+    for (const [username, userCommits] of contributors) {
+      notes.push(`- @${username}:`)
+      for (const commit of userCommits) {
+        notes.push(`  - ${commit}`)
+      }
+    }
+  }
 }
 
 const pkgjsons = await Array.fromAsync(
@@ -116,5 +155,9 @@ if (!Script.preview) {
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force-with-lease`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release create v${Script.version} --title "v${Script.version}" --notes ${notes.join("\n") ?? "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
+  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
+  const release = await $`gh release view v${Script.version} --json id,tagName`.json()
+  if (process.env.GITHUB_OUTPUT) {
+    await Bun.write(process.env.GITHUB_OUTPUT, `releaseId=${release.id}\ntagName=${release.tagName}\n`)
+  }
 }

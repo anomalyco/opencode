@@ -64,7 +64,7 @@ Here are some common issues and how to resolve them.
 
 ---
 
-### opencode won't start
+### OpenCode won't start
 
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
@@ -74,7 +74,7 @@ Here are some common issues and how to resolve them.
 
 ### Authentication issues
 
-1. Try re-authenticating with `opencode auth login <provider>`
+1. Try re-authenticating with the `/connect` command in the TUI
 2. Check that your API keys are valid
 3. Ensure your network allows connections to the provider's API
 
@@ -113,10 +113,7 @@ To resolve this:
    rm -rf ~/.local/share/opencode
    ```
 
-3. Re-authenticate with your provider:
-   ```bash
-   opencode auth login <provider>
-   ```
+3. Re-authenticate with your provider using the `/connect` command in the TUI.
 
 ---
 

@@ -1,13 +1,14 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, For, Show } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
+import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 
@@ -41,13 +42,47 @@ export function Autocomplete(props: {
   const sync = useSync()
   const command = useCommandDialog()
   const { theme } = useTheme()
+  const dimensions = useTerminalDimensions()
 
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
-    position: { x: 0, y: 0, width: 0 },
   })
+
+  const [positionTick, setPositionTick] = createSignal(0)
+
+  createEffect(() => {
+    if (store.visible) {
+      let lastPos = { x: 0, y: 0, width: 0 }
+      const interval = setInterval(() => {
+        const anchor = props.anchor()
+        if (anchor.x !== lastPos.x || anchor.y !== lastPos.y || anchor.width !== lastPos.width) {
+          lastPos = { x: anchor.x, y: anchor.y, width: anchor.width }
+          setPositionTick((t) => t + 1)
+        }
+      }, 50)
+
+      onCleanup(() => clearInterval(interval))
+    }
+  })
+
+  const position = createMemo(() => {
+    if (!store.visible) return { x: 0, y: 0, width: 0 }
+    const dims = dimensions()
+    positionTick()
+    const anchor = props.anchor()
+    const parent = anchor.parent
+    const parentX = parent?.x ?? 0
+    const parentY = parent?.y ?? 0
+
+    return {
+      x: anchor.x - parentX,
+      y: anchor.y - parentY,
+      width: anchor.width,
+    }
+  })
+
   const filter = createMemo(() => {
     if (!store.visible) return
     // Track props.value to make memo reactive to text changes
@@ -81,6 +116,7 @@ export function Autocomplete(props: {
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
       end: extmarkEnd,
+      virtual: true,
       styleId,
       typeId: props.promptPartTypeId(),
     })
@@ -108,16 +144,14 @@ export function Autocomplete(props: {
 
       // Get files from SDK
       const result = await sdk.client.find.files({
-        query: {
-          query: query ?? "",
-        },
+        query: query ?? "",
       })
 
       const options: AutocompleteOption[] = []
 
       // Add file options
       if (!result.error && result.data) {
-        const width = store.position.width - 4
+        const width = props.anchor().width - 4
         options.push(
           ...result.data.map(
             (item): AutocompleteOption => ({
@@ -154,7 +188,7 @@ export function Autocomplete(props: {
   const agents = createMemo(() => {
     const agents = sync.data.agent
     return agents
-      .filter((agent) => !agent.builtIn && agent.mode !== "primary")
+      .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
@@ -238,7 +272,7 @@ export function Autocomplete(props: {
         },
         {
           display: "/thinking",
-          description: "toggle thinking blocks",
+          description: "toggle thinking visibility",
           onSelect: () => command.trigger("session.toggle.thinking"),
         },
       )
@@ -277,9 +311,13 @@ export function Autocomplete(props: {
       },
       {
         display: "/status",
-        aliases: ["/mcp"],
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
+      },
+      {
+        display: "/mcp",
+        description: "toggle MCPs",
+        onSelect: () => command.trigger("mcp.list"),
       },
       {
         display: "/theme",
@@ -290,6 +328,11 @@ export function Autocomplete(props: {
         display: "/editor",
         description: "open editor",
         onSelect: () => command.trigger("prompt.editor", "prompt"),
+      },
+      {
+        display: "/connect",
+        description: "connect to a provider",
+        onSelect: () => command.trigger("provider.connect"),
       },
       {
         display: "/help",
@@ -318,13 +361,20 @@ export function Autocomplete(props: {
 
   const options = createMemo(() => {
     const mixed: AutocompleteOption[] = (
-      store.visible === "@" ? [...agents(), ...(files.loading ? files.latest || [] : files())] : [...commands()]
+      store.visible === "@" ? [...agents(), ...(files() || [])] : [...commands()]
     ).filter((x) => x.disabled !== true)
     const currentFilter = filter()
     if (!currentFilter) return mixed.slice(0, 10)
     const result = fuzzysort.go(currentFilter, mixed, {
       keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
+      scoreFn: (objResults) => {
+        const displayResult = objResults[0]
+        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+          return objResults.score * 2
+        }
+        return objResults.score
+      },
     })
     return result.map((arr) => arr.obj)
   })
@@ -346,8 +396,8 @@ export function Autocomplete(props: {
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
-    selected.onSelect?.()
     hide()
+    selected.onSelect?.()
   }
 
   function show(mode: "@" | "/") {
@@ -355,11 +405,6 @@ export function Autocomplete(props: {
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
-      position: {
-        x: props.anchor().x,
-        y: props.anchor().y,
-        width: props.anchor().width,
-      },
     })
   }
 
@@ -368,6 +413,10 @@ export function Autocomplete(props: {
     if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
+      // Sync the prompt store immediately since onContentChange is async
+      props.setPrompt((draft) => {
+        draft.input = props.input().plainText
+      })
     }
     command.keybinds(true)
     setStore("visible", false)
@@ -447,9 +496,9 @@ export function Autocomplete(props: {
     <box
       visible={store.visible !== false}
       position="absolute"
-      top={store.position.y - height()}
-      left={store.position.x}
-      width={store.position.width}
+      top={position().y - height()}
+      left={position().x}
+      width={position().width}
       zIndex={100}
       {...SplitBorder}
       borderColor={theme.border}
@@ -459,7 +508,7 @@ export function Autocomplete(props: {
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text>No matching items</text>
+              <text fg={theme.textMuted}>No matching items</text>
             </box>
           }
         >

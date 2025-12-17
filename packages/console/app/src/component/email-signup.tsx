@@ -25,11 +25,8 @@ export function EmailSignup() {
   const submission = useSubmission(emailSignup)
   return (
     <section data-component="email">
-      <div data-slot="dock">
-        <img src={dock} alt="" />
-      </div>
       <div data-slot="section-title">
-        <h3>OpenCode will be available on desktop soon</h3>
+        <h3>Be the first to know when we release new products</h3>
         <p>Join the waitlist for early access.</p>
       </div>
       <form data-slot="form" action={emailSignup} method="post">

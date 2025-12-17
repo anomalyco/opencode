@@ -6,10 +6,10 @@ node_modules
 .idea
 .vscode
 *~
-openapi.json
 playground
 tmp
 dist
+ts-dist
 .turbo
 **/.serena
 .serena/
@@ -18,3 +18,4 @@ refs
 Session.vim
 opencode.json
 a.out
+target

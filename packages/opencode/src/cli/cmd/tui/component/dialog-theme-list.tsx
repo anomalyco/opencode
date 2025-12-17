@@ -5,10 +5,12 @@ import { onCleanup, onMount } from "solid-js"
 
 export function DialogThemeList() {
   const theme = useTheme()
-  const options = Object.keys(theme.all()).map((value) => ({
-    title: value,
-    value: value,
-  }))
+  const options = Object.keys(theme.all())
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map((value) => ({
+      title: value,
+      value: value,
+    }))
   const dialog = useDialog()
   let confirmed = false
   let ref: DialogSelectRef<string>
