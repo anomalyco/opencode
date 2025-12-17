@@ -1997,9 +1997,6 @@
                   "noReply": {
                     "type": "boolean"
                   },
-                  "system": {
-                    "type": "string"
-                  },
                   "tools": {
                     "type": "object",
                     "propertyNames": {
@@ -2008,6 +2005,9 @@
                     "additionalProperties": {
                       "type": "boolean"
                     }
+                  },
+                  "system": {
+                    "type": "string"
                   },
                   "parts": {
                     "type": "array",
@@ -2202,9 +2202,6 @@
                   "noReply": {
                     "type": "boolean"
                   },
-                  "system": {
-                    "type": "string"
-                  },
                   "tools": {
                     "type": "object",
                     "propertyNames": {
@@ -2213,6 +2210,9 @@
                     "additionalProperties": {
                       "type": "boolean"
                     }
+                  },
+                  "system": {
+                    "type": "string"
                   },
                   "parts": {
                     "type": "array",
@@ -5193,6 +5193,9 @@
           "mode": {
             "type": "string"
           },
+          "agent": {
+            "type": "string"
+          },
           "path": {
             "type": "object",
             "properties": {
@@ -5251,6 +5254,7 @@
           "modelID",
           "providerID",
           "mode",
+          "agent",
           "path",
           "cost",
           "tokens"
@@ -6152,6 +6156,72 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.file.edited": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.edited"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": ["file"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Todo": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "description": "Brief description of the task",
+            "type": "string"
+          },
+          "status": {
+            "description": "Current status of the task: pending, in_progress, completed, cancelled",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Priority level of the task: high, medium, low",
+            "type": "string"
+          },
+          "id": {
+            "description": "Unique identifier for the todo item",
+            "type": "string"
+          }
+        },
+        "required": ["content", "status", "priority", "id"]
+      },
+      "Event.todo.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "todo.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "todos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Todo"
+                }
+              }
+            },
+            "required": ["sessionID", "todos"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "SessionStatus": {
         "anyOf": [
           {
@@ -6251,72 +6321,6 @@
               }
             },
             "required": ["sessionID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.file.edited": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.edited"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              }
-            },
-            "required": ["file"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Todo": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "description": "Brief description of the task",
-            "type": "string"
-          },
-          "status": {
-            "description": "Current status of the task: pending, in_progress, completed, cancelled",
-            "type": "string"
-          },
-          "priority": {
-            "description": "Priority level of the task: high, medium, low",
-            "type": "string"
-          },
-          "id": {
-            "description": "Unique identifier for the todo item",
-            "type": "string"
-          }
-        },
-        "required": ["content", "status", "priority", "id"]
-      },
-      "Event.todo.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "todo.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string"
-              },
-              "todos": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/Todo"
-                }
-              }
-            },
-            "required": ["sessionID", "todos"]
           }
         },
         "required": ["type", "properties"]
@@ -6887,6 +6891,12 @@
             "$ref": "#/components/schemas/Event.permission.replied"
           },
           {
+            "$ref": "#/components/schemas/Event.file.edited"
+          },
+          {
+            "$ref": "#/components/schemas/Event.todo.updated"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.status"
           },
           {
@@ -6894,12 +6904,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.compacted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.file.edited"
-          },
-          {
-            "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
             "$ref": "#/components/schemas/Event.command.executed"
@@ -7163,6 +7167,16 @@
           "model_cycle_recent_reverse": {
             "description": "Previous recently used model",
             "default": "shift+f2",
+            "type": "string"
+          },
+          "model_cycle_favorite": {
+            "description": "Next favorite model",
+            "default": "none",
+            "type": "string"
+          },
+          "model_cycle_favorite_reverse": {
+            "description": "Previous favorite model",
+            "default": "none",
             "type": "string"
           },
           "command_list": {
@@ -7988,6 +8002,15 @@
               },
               "explore": {
                 "$ref": "#/components/schemas/AgentConfig"
+              },
+              "title": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "compaction": {
+                "$ref": "#/components/schemas/AgentConfig"
               }
             },
             "additionalProperties": {
@@ -8279,6 +8302,10 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "continue_loop_on_deny": {
+                "description": "Continue the agent loop when a tool call is denied",
+                "type": "boolean"
               }
             }
           }
@@ -8673,9 +8700,24 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "release_date": {
+            "type": "string"
           }
         },
-        "required": ["id", "providerID", "api", "name", "capabilities", "cost", "limit", "status", "options", "headers"]
+        "required": [
+          "id",
+          "providerID",
+          "api",
+          "name",
+          "capabilities",
+          "cost",
+          "limit",
+          "status",
+          "options",
+          "headers",
+          "release_date"
+        ]
       },
       "Provider": {
         "type": "object",
@@ -8916,7 +8958,10 @@
             "type": "string",
             "enum": ["subagent", "primary", "all"]
           },
-          "builtIn": {
+          "native": {
+            "type": "boolean"
+          },
+          "hidden": {
             "type": "boolean"
           },
           "topP": {
@@ -8997,7 +9042,7 @@
             "maximum": 9007199254740991
           }
         },
-        "required": ["name", "mode", "builtIn", "permission", "tools", "options"]
+        "required": ["name", "mode", "permission", "tools", "options"]
       },
       "MCPStatusConnected": {
         "type": "object",
