@@ -12,6 +12,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session, Project } from "@opencode-ai/sdk/v2/client"
@@ -24,9 +25,8 @@ import {
   SortableProvider,
   closestCenter,
   createSortable,
-  useDragDropContext,
 } from "@thisbeyond/solid-dnd"
-import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -35,12 +35,24 @@ import { Binary } from "@opencode-ai/util/binary"
 import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
+import { useCommand } from "@/context/command"
+import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
     lastSession: {} as { [directory: string]: string },
     activeDraggable: undefined as string | undefined,
   })
+
+  let scrollContainerRef: HTMLDivElement | undefined
+
+  function scrollToSession(sessionId: string) {
+    if (!scrollContainerRef) return
+    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
+    if (element) {
+      element.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
+  }
 
   const params = useParams()
   const globalSDK = useGlobalSDK()
@@ -51,9 +63,161 @@ export default function Layout(props: ParentProps) {
   const navigate = useNavigate()
   const providers = useProviders()
   const dialog = useDialog()
+  const command = useCommand()
+
+  function flattenSessions(sessions: Session[]): Session[] {
+    const childrenMap = new Map<string, Session[]>()
+    for (const session of sessions) {
+      if (session.parentID) {
+        const children = childrenMap.get(session.parentID) ?? []
+        children.push(session)
+        childrenMap.set(session.parentID, children)
+      }
+    }
+    const result: Session[] = []
+    function visit(session: Session) {
+      result.push(session)
+      for (const child of childrenMap.get(session.id) ?? []) {
+        visit(child)
+      }
+    }
+    for (const session of sessions) {
+      if (!session.parentID) visit(session)
+    }
+    return result
+  }
+
+  const currentSessions = createMemo(() => {
+    if (!params.dir) return []
+    const directory = base64Decode(params.dir)
+    return flattenSessions(globalSync.child(directory)[0].session ?? [])
+  })
+
+  function navigateSessionByOffset(offset: number) {
+    const projects = layout.projects.list()
+    if (projects.length === 0) return
+
+    const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
+    const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
+
+    if (projectIndex === -1) {
+      const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
+      if (targetProject) navigateToProject(targetProject.worktree)
+      return
+    }
+
+    const sessions = currentSessions()
+    const sessionIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
+
+    let targetIndex: number
+    if (sessionIndex === -1) {
+      targetIndex = offset > 0 ? 0 : sessions.length - 1
+    } else {
+      targetIndex = sessionIndex + offset
+    }
+
+    if (targetIndex >= 0 && targetIndex < sessions.length) {
+      const session = sessions[targetIndex]
+      navigateToSession(session)
+      queueMicrotask(() => scrollToSession(session.id))
+      return
+    }
+
+    const nextProjectIndex = projectIndex + (offset > 0 ? 1 : -1)
+    const nextProject = projects[nextProjectIndex]
+    if (!nextProject) return
+
+    const nextProjectSessions = flattenSessions(globalSync.child(nextProject.worktree)[0].session ?? [])
+    if (nextProjectSessions.length === 0) {
+      navigateToProject(nextProject.worktree)
+      return
+    }
+
+    const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
+    navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+    queueMicrotask(() => scrollToSession(targetSession.id))
+  }
+
+  async function archiveSession(session: Session) {
+    const [store, setStore] = globalSync.child(session.directory)
+    const sessions = store.session ?? []
+    const index = sessions.findIndex((s) => s.id === session.id)
+    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+
+    await globalSDK.client.session.update({
+      directory: session.directory,
+      sessionID: session.id,
+      time: { archived: Date.now() },
+    })
+    setStore(
+      produce((draft) => {
+        const match = Binary.search(draft.session, session.id, (s) => s.id)
+        if (match.found) draft.session.splice(match.index, 1)
+      }),
+    )
+    if (session.id === params.id) {
+      if (nextSession) {
+        navigate(`/${params.dir}/session/${nextSession.id}`)
+      } else {
+        navigate(`/${params.dir}/session`)
+      }
+    }
+  }
+
+  command.register(() => [
+    {
+      id: "sidebar.toggle",
+      title: "Toggle sidebar",
+      category: "View",
+      keybind: "mod+b",
+      onSelect: () => layout.sidebar.toggle(),
+    },
+    ...(platform.openDirectoryPickerDialog
+      ? [
+          {
+            id: "project.open",
+            title: "Open project",
+            category: "Project",
+            keybind: "mod+o",
+            onSelect: () => chooseProject(),
+          },
+        ]
+      : []),
+    {
+      id: "provider.connect",
+      title: "Connect provider",
+      category: "Provider",
+      onSelect: () => connectProvider(),
+    },
+    {
+      id: "session.previous",
+      title: "Previous session",
+      category: "Session",
+      keybind: "alt+arrowup",
+      onSelect: () => navigateSessionByOffset(-1),
+    },
+    {
+      id: "session.next",
+      title: "Next session",
+      category: "Session",
+      keybind: "alt+arrowdown",
+      onSelect: () => navigateSessionByOffset(1),
+    },
+    {
+      id: "session.archive",
+      title: "Archive session",
+      category: "Session",
+      keybind: "mod+shift+backspace",
+      disabled: !params.dir || !params.id,
+      onSelect: () => {
+        const session = currentSessions().find((s) => s.id === params.id)
+        if (session) archiveSession(session)
+      },
+    },
+  ])
 
   function connectProvider() {
-    dialog.replace(() => <DialogSelectProvider />)
+    dialog.show(() => <DialogSelectProvider />)
   }
 
   function navigateToProject(directory: string | undefined) {
@@ -137,28 +301,6 @@ export default function Layout(props: ParentProps) {
     setStore("activeDraggable", undefined)
   }
 
-  const ConstrainDragXAxis = (): JSX.Element => {
-    const context = useDragDropContext()
-    if (!context) return <></>
-    const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
-    const transformer: Transformer = {
-      id: "constrain-x-axis",
-      order: 100,
-      callback: (transform) => ({ ...transform, x: 0 }),
-    }
-    onDragStart((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      addTransformer("draggables", id, transformer)
-    })
-    onDragEnd((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      removeTransformer("draggables", id, transformer.id)
-    })
-    return <></>
-  }
-
   const ProjectAvatar = (props: {
     project: Project
     class?: string
@@ -236,13 +378,122 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
+  const SessionItem = (props: {
+    session: Session
+    slug: string
+    project: Project
+    depth?: number
+    childrenMap: Map<string, Session[]>
+  }): JSX.Element => {
     const notification = useNotification()
+    const depth = props.depth ?? 0
+    const children = createMemo(() => props.childrenMap.get(props.session.id) ?? [])
+    const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
+    const notifications = createMemo(() => notification.session.unseen(props.session.id))
+    const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const isWorking = createMemo(() => {
+      if (props.session.id === params.id) return false
+      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      return status?.type === "busy" || status?.type === "retry"
+    })
+    return (
+      <>
+        <div
+          data-session-id={props.session.id}
+          class="group/session relative w-full pr-2 py-1 rounded-md cursor-default transition-colors
+                 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
+          style={{ "padding-left": `${16 + depth * 12}px` }}
+        >
+          <Tooltip placement="right" value={props.session.title} gutter={10}>
+            <A
+              href={`${props.slug}/session/${props.session.id}`}
+              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
+            >
+              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
+                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                  {props.session.title}
+                </span>
+                <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
+                  <Switch>
+                    <Match when={isWorking()}>
+                      <Spinner class="size-2.5 mr-0.5" />
+                    </Match>
+                    <Match when={hasError()}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
+                    </Match>
+                    <Match when={notifications().length > 0}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
+                    </Match>
+                    <Match when={true}>
+                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
+                        {Math.abs(updated().diffNow().as("seconds")) < 60
+                          ? "Now"
+                          : updated()
+                              .toRelative({
+                                style: "short",
+                                unit: ["days", "hours", "minutes"],
+                              })
+                              ?.replace(" ago", "")
+                              ?.replace(/ days?/, "d")
+                              ?.replace(" min.", "m")
+                              ?.replace(" hr.", "h")}
+                      </span>
+                    </Match>
+                  </Switch>
+                </div>
+              </div>
+              <Show when={props.session.summary?.files}>
+                <div class="flex justify-between items-center self-stretch">
+                  <span class="text-12-regular text-text-weak">{`${props.session.summary?.files || "No"} file${props.session.summary?.files !== 1 ? "s" : ""} changed`}</span>
+                  <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+                </div>
+              </Show>
+            </A>
+          </Tooltip>
+          <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
+            <Tooltip placement="right" value="Archive session">
+              <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
+            </Tooltip>
+          </div>
+        </div>
+        <For each={children()}>
+          {(child) => (
+            <SessionItem
+              session={child}
+              slug={props.slug}
+              project={props.project}
+              depth={depth + 1}
+              childrenMap={props.childrenMap}
+            />
+          )}
+        </For>
+      </>
+    )
+  }
+
+  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
-    const [store, setStore] = globalSync.child(props.project.worktree)
+    const [store, setProjectStore] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session ?? [])
+    const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
+    const childSessionsByParent = createMemo(() => {
+      const map = new Map<string, Session[]>()
+      for (const session of sessions()) {
+        if (session.parentID) {
+          const children = map.get(session.parentID) ?? []
+          children.push(session)
+          map.set(session.parentID, children)
+        }
+      }
+      return map
+    })
+    const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
+    const loadMoreSessions = async () => {
+      setProjectStore("limit", (limit) => limit + 10)
+      await globalSync.project.loadSessions(props.project.worktree)
+    }
     const [expanded, setExpanded] = createSignal(true)
     return (
       // @ts-ignore
@@ -282,83 +533,17 @@ export default function Layout(props: ParentProps) {
               </Button>
               <Collapsible.Content>
                 <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
-                  <For each={sessions()}>
-                    {(session) => {
-                      const updated = createMemo(() => DateTime.fromMillis(session.time.updated))
-                      const notifications = createMemo(() => notification.session.unseen(session.id))
-                      const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-                      async function archive(session: Session) {
-                        await globalSDK.client.session.update({
-                          directory: session.directory,
-                          sessionID: session.id,
-                          time: { archived: Date.now() },
-                        })
-                        setStore(
-                          produce((draft) => {
-                            const match = Binary.search(draft.session, session.id, (s) => s.id)
-                            if (match.found) draft.session.splice(match.index, 1)
-                          }),
-                        )
-                      }
-                      return (
-                        <div
-                          class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
-                                 hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
-                        >
-                          <Tooltip placement="right" value={session.title} gutter={10}>
-                            <A
-                              href={`${slug()}/session/${session.id}`}
-                              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
-                            >
-                              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
-                                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                                  {session.title}
-                                </span>
-                                <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
-                                  <Switch>
-                                    <Match when={hasError()}>
-                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
-                                    </Match>
-                                    <Match when={notifications().length > 0}>
-                                      <div class="size-1.5 mr-1.5 rounded-full bg-text-interactive-base" />
-                                    </Match>
-                                    <Match when={true}>
-                                      <span class="text-12-regular text-text-weak text-right whitespace-nowrap">
-                                        {Math.abs(updated().diffNow().as("seconds")) < 60
-                                          ? "Now"
-                                          : updated()
-                                              .toRelative({
-                                                style: "short",
-                                                unit: ["days", "hours", "minutes"],
-                                              })
-                                              ?.replace(" ago", "")
-                                              ?.replace(/ days?/, "d")
-                                              ?.replace(" min.", "m")
-                                              ?.replace(" hr.", "h")}
-                                      </span>
-                                    </Match>
-                                  </Switch>
-                                </div>
-                              </div>
-                              <Show when={session.summary?.files}>
-                                <div class="flex justify-between items-center self-stretch">
-                                  <span class="text-12-regular text-text-weak">{`${session.summary?.files || "No"} file${session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                                  <Show when={session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
-                                </div>
-                              </Show>
-                            </A>
-                          </Tooltip>
-                          <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
-                            {/* <IconButton icon="dot-grid" variant="ghost" /> */}
-                            <Tooltip placement="right" value="Archive session">
-                              <IconButton icon="archive" variant="ghost" onClick={() => archive(session)} />
-                            </Tooltip>
-                          </div>
-                        </div>
-                      )
-                    }}
+                  <For each={rootSessions()}>
+                    {(session) => (
+                      <SessionItem
+                        session={session}
+                        slug={slug()}
+                        project={props.project}
+                        childrenMap={childSessionsByParent()}
+                      />
+                    )}
                   </For>
-                  <Show when={sessions().length === 0}>
+                  <Show when={rootSessions().length === 0}>
                     <div
                       class="group/session relative w-full pl-4 pr-2 py-1 rounded-md cursor-default transition-colors
                              hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
@@ -379,6 +564,18 @@ export default function Layout(props: ParentProps) {
                           </Tooltip>
                         </div>
                       </div>
+                    </div>
+                  </Show>
+                  <Show when={hasMoreSessions()}>
+                    <div class="relative w-full py-1">
+                      <Button
+                        variant="ghost"
+                        class="flex w-full text-left justify-start text-12-medium opacity-50 px-3.5"
+                        size="large"
+                        onClick={loadMoreSessions}
+                      >
+                        Load more
+                      </Button>
                     </div>
                   </Show>
                 </nav>
@@ -471,7 +668,10 @@ export default function Layout(props: ParentProps) {
             >
               <DragDropSensors />
               <ConstrainDragXAxis />
-              <div class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar">
+              <div
+                ref={scrollContainerRef}
+                class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
+              >
                 <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
                   <For each={layout.projects.list()}>{(project) => <SortableProject project={project} />}</For>
                 </SortableProvider>
@@ -505,7 +705,7 @@ export default function Layout(props: ParentProps) {
               <Match when={true}>
                 <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
                   <Button
-                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                    class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                     variant="ghost"
                     size="large"
                     icon="plus"
@@ -519,7 +719,7 @@ export default function Layout(props: ParentProps) {
             <Show when={platform.openDirectoryPickerDialog}>
               <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
                   icon="folder-add-left"
@@ -545,7 +745,7 @@ export default function Layout(props: ParentProps) {
                 as={"a"}
                 href="https://opencode.ai/desktop-feedback"
                 target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
                 icon="bubble-5"

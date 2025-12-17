@@ -367,6 +367,25 @@ The `disabled_providers` option accepts an array of provider IDs. When a provide
 
 ---
 
+### Enabled providers
+
+You can specify an allowlist of providers through the `enabled_providers` option. When set, only the specified providers will be enabled and all others will be ignored.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+This is useful when you want to restrict OpenCode to only use specific providers rather than disabling them one by one.
+
+:::note
+If a provider appears in both `enabled_providers` and `disabled_providers`, the `disabled_providers` takes priority for backwards compatibility.
+:::
+
+---
+
 ## Variables
 
 You can use variable substitution in your config files to reference environment variables and file contents.

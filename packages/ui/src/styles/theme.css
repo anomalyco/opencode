@@ -10,9 +10,9 @@
   --font-size-x-large: 20px;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
-  --line-height-large: 20px;
-  --line-height-x-large: 24px;
-  --line-height-2x-large: 30px;
+  --line-height-large: 150%;
+  --line-height-x-large: 180%;
+  --line-height-2x-large: 200%;
   --letter-spacing-normal: 0;
   --letter-spacing-tight: -0.1599999964237213;
   --letter-spacing-tightest: -0.3199999928474426;

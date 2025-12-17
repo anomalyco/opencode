@@ -80,6 +80,7 @@ export const WriteTool = Tool.define("write", {
     let output = ""
     await LSP.touchFile(filepath, true)
     const diagnostics = await LSP.diagnostics()
+    const normalizedFilepath = Filesystem.normalizePath(filepath)
     let projectDiagnosticsCount = 0
     for (const [file, issues] of Object.entries(diagnostics)) {
       if (issues.length === 0) continue
@@ -87,7 +88,7 @@ export const WriteTool = Tool.define("write", {
       const limited = sorted.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         issues.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${issues.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      if (file === filepath) {
+      if (file === normalizedFilepath) {
         output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
         continue
       }

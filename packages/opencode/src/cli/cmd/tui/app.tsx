@@ -147,6 +147,14 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          },
+        },
       },
     )
   })
@@ -174,6 +182,8 @@ function App() {
 
   // Update terminal window title based on current route and session
   createEffect(() => {
+    if (Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
       return
@@ -295,6 +305,24 @@ function App() {
       category: "Agent",
       onSelect: () => {
         local.model.cycle(-1)
+      },
+    },
+    {
+      title: "Favorite cycle",
+      value: "model.cycle_favorite",
+      keybind: "model_cycle_favorite",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(1)
+      },
+    },
+    {
+      title: "Favorite cycle reverse",
+      value: "model.cycle_favorite_reverse",
+      keybind: "model_cycle_favorite_reverse",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(-1)
       },
     },
     {

@@ -1,27 +1,34 @@
 import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLayout } from "@/context/layout"
 import { Session } from "@opencode-ai/sdk/v2/client"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Mark } from "@opencode-ai/ui/logo"
+import { Popover } from "@opencode-ai/ui/popover"
 import { Select } from "@opencode-ai/ui/select"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { base64Decode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useParams } from "@solidjs/router"
-import { createMemo, Show } from "solid-js"
+import { createMemo, createResource, Show } from "solid-js"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import { iife } from "@opencode-ai/util/iife"
 
 export function Header(props: {
   navigateToProject: (directory: string) => void
   navigateToSession: (session: Session | undefined) => void
 }) {
   const globalSync = useGlobalSync()
+  const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const params = useParams()
   const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
   const store = createMemo(() => globalSync.child(currentDirectory())[0])
   const sessions = createMemo(() => store().session ?? [])
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const shareEnabled = createMemo(() => store().config.share !== "disabled")
 
   return (
     <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
@@ -105,6 +112,33 @@ export function Header(props: {
                 </div>
               </Button>
             </Tooltip>
+            <Show when={shareEnabled() && currentSession()}>
+              <Popover
+                title="Share session"
+                trigger={
+                  <Tooltip class="shrink-0" value="Share session">
+                    <IconButton icon="share" variant="ghost" class="" />
+                  </Tooltip>
+                }
+              >
+                {iife(() => {
+                  const [url] = createResource(
+                    () => currentSession(),
+                    async (session) => {
+                      if (!session) return
+                      let shareURL = session.share?.url
+                      if (!shareURL) {
+                        shareURL = await globalSDK.client.session
+                          .share({ sessionID: session.id, directory: currentDirectory() })
+                          .then((r) => r.data?.share?.url)
+                      }
+                      return shareURL
+                    },
+                  )
+                  return <Show when={url()}>{(url) => <TextField value={url()} readOnly copyable class="w-72" />}</Show>
+                })}
+              </Popover>
+            </Show>
           </div>
         </Show>
       </div>

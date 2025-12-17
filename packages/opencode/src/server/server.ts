@@ -125,14 +125,36 @@ export namespace Server {
         async (c) => {
           log.info("global event connected")
           return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                payload: {
+                  type: "server.connected",
+                  properties: {},
+                },
+              }),
+            })
             async function handler(event: any) {
               await stream.writeSSE({
                 data: JSON.stringify(event),
               })
             }
             GlobalBus.on("event", handler)
+
+            // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+            const heartbeat = setInterval(() => {
+              stream.writeSSE({
+                data: JSON.stringify({
+                  payload: {
+                    type: "server.heartbeat",
+                    properties: {},
+                  },
+                }),
+              })
+            }, 30000)
+
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {
+                clearInterval(heartbeat)
                 GlobalBus.off("event", handler)
                 resolve()
                 log.info("global event disconnected")
@@ -2462,8 +2484,20 @@ export namespace Server {
                 stream.close()
               }
             })
+
+            // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+            const heartbeat = setInterval(() => {
+              stream.writeSSE({
+                data: JSON.stringify({
+                  type: "server.heartbeat",
+                  properties: {},
+                }),
+              })
+            }, 30000)
+
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {
+                clearInterval(heartbeat)
                 unsub()
                 resolve()
                 log.info("event disconnected")

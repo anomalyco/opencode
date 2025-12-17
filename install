@@ -240,22 +240,23 @@ download_with_progress() {
 
 download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
-    mkdir -p opencodetmp && cd opencodetmp
+    local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
+    mkdir -p "$tmp_dir"
     
-    if [[ "$os" == "windows" ]] || ! download_with_progress "$url" "$filename"; then
-        # Fallback to standard curl on Windows or if custom progress fails
-        curl -# -L -o "$filename" "$url"
+    if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
+        # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
+        curl -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
     if [ "$os" = "linux" ]; then
-        tar -xzf "$filename"
+        tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
     else
-        unzip -q "$filename"
+        unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
     
-    mv opencode "$INSTALL_DIR"
+    mv "$tmp_dir/opencode" "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
-    cd .. && rm -rf opencodetmp
+    rm -rf "$tmp_dir"
 }
 
 check_version
