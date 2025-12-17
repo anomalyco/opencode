@@ -1,4 +1,12 @@
-import type { APICallError, ModelMessage } from "ai"
+import type {
+  APICallError,
+  AssistantModelMessage,
+  ModelMessage,
+  ToolCallPart,
+  ToolModelMessage,
+  ToolResultPart,
+  UserModelMessage,
+} from "ai"
 import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
@@ -17,20 +25,186 @@ function mimeToModality(mime: string): Modality | undefined {
 export namespace ProviderTransform {
   function normalizeMessages(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
     if (model.api.id.includes("claude")) {
-      return msgs.map((msg) => {
-        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              return {
-                ...part,
-                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+      type AssistantContent = Exclude<AssistantModelMessage["content"], string>
+      type AssistantPart = AssistantContent[number]
+      type UserContent = Exclude<UserModelMessage["content"], string>
+      type UserPart = UserContent[number]
+
+      function sanitizeToolCallId(toolCallId: string) {
+        return toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_")
+      }
+
+      function isToolCallPart(part: unknown): part is ToolCallPart {
+        if (!part) return false
+        if (typeof part !== "object") return false
+        if ((part as { type?: unknown }).type !== "tool-call") return false
+        const toolCallId = (part as { toolCallId?: unknown }).toolCallId
+        return typeof toolCallId === "string"
+      }
+
+      function isToolResultPart(part: unknown): part is ToolResultPart {
+        if (!part) return false
+        if (typeof part !== "object") return false
+        if ((part as { type?: unknown }).type !== "tool-result") return false
+        const toolCallId = (part as { toolCallId?: unknown }).toolCallId
+        return typeof toolCallId === "string"
+      }
+
+      function sanitizeToolParts(input: ModelMessage[]): ModelMessage[] {
+        return input.map((msg) => {
+          if (msg.role === "assistant") {
+            if (!Array.isArray(msg.content)) return msg
+            const nextContent = msg.content.map((part) => {
+              if (isToolCallPart(part)) {
+                return {
+                  ...part,
+                  toolCallId: sanitizeToolCallId(part.toolCallId),
+                }
               }
+
+              if (isToolResultPart(part)) {
+                return {
+                  ...part,
+                  toolCallId: sanitizeToolCallId(part.toolCallId),
+                }
+              }
+
+              return part
+            }) satisfies AssistantContent
+            return {
+              ...msg,
+              content: nextContent,
             }
-            return part
-          })
+          }
+
+          if (msg.role === "tool") {
+            const nextContent = msg.content.map((part) => ({
+              ...part,
+              toolCallId: sanitizeToolCallId(part.toolCallId),
+            })) satisfies ToolModelMessage["content"]
+            return {
+              ...msg,
+              content: nextContent,
+            }
+          }
+
+          return msg
+        })
+      }
+
+      function isSyntheticAttachmentUserMessage(msg: ModelMessage): msg is UserModelMessage {
+        if (msg.role !== "user") return false
+        if (!Array.isArray(msg.content)) return false
+        const first = msg.content[0] as UserPart | undefined
+        if (!first) return false
+        if (typeof first !== "object") return false
+        if ((first as { type?: unknown }).type !== "text") return false
+        const text = (first as { text?: unknown }).text
+        if (typeof text !== "string") return false
+        return text.startsWith("Tool ") && text.includes(" returned an attachment")
+      }
+
+      function interleaveToolCallsAndResults(input: ModelMessage[]): ModelMessage[] {
+        const result: ModelMessage[] = []
+
+        for (let index = 0; index < input.length; index++) {
+          const msg = input[index]
+          if (msg.role !== "assistant" || !Array.isArray(msg.content)) {
+            result.push(msg)
+            continue
+          }
+
+          const assistantContent = msg.content as AssistantPart[]
+          const toolCalls = assistantContent.filter((part) => isToolCallPart(part))
+          if (toolCalls.length === 0) {
+            result.push(msg)
+            continue
+          }
+
+          const expectedIds = toolCalls.map((call) => call.toolCallId)
+          const toolResultsById = new Map<string, ToolResultPart>()
+          const movedAttachmentUserMessages: UserModelMessage[] = []
+
+          let scanIndex = index + 1
+          let stopIndex = index
+          while (scanIndex < input.length) {
+            const scanMsg = input[scanIndex]
+
+            if (scanMsg.role === "tool") {
+              const hasNonToolResultPart = scanMsg.content.some((part) => !isToolResultPart(part))
+              if (hasNonToolResultPart) break
+
+              const hasOtherToolResult = scanMsg.content.some((part) => !expectedIds.includes(part.toolCallId))
+              if (hasOtherToolResult) break
+
+              for (const part of scanMsg.content) {
+                toolResultsById.set(part.toolCallId, part)
+              }
+
+              stopIndex = scanIndex
+              if (expectedIds.every((id) => toolResultsById.has(id))) break
+              scanIndex++
+              continue
+            }
+
+            if (isSyntheticAttachmentUserMessage(scanMsg)) {
+              movedAttachmentUserMessages.push(scanMsg)
+              stopIndex = scanIndex
+              scanIndex++
+              continue
+            }
+
+            break
+          }
+
+          const hasAllResults = expectedIds.every((id) => toolResultsById.has(id))
+          if (!hasAllResults) {
+            result.push(msg)
+            continue
+          }
+
+          const buffer: AssistantPart[] = []
+          for (const part of assistantContent) {
+            buffer.push(part)
+            if (!isToolCallPart(part)) continue
+
+            const content = buffer.slice() satisfies AssistantContent
+            buffer.length = 0
+
+            result.push({
+              role: "assistant",
+              content,
+            })
+
+            const toolResult = toolResultsById.get(part.toolCallId)
+            if (toolResult) {
+              const toolMsg: ToolModelMessage = {
+                role: "tool",
+                content: [toolResult],
+              }
+              result.push(toolMsg)
+            }
+          }
+
+          if (buffer.length > 0) {
+            result.push({
+              role: "assistant",
+              content: buffer satisfies AssistantContent,
+            })
+          }
+
+          for (const moved of movedAttachmentUserMessages) {
+            result.push(moved)
+          }
+
+          index = stopIndex
         }
-        return msg
-      })
+
+        return result
+      }
+
+      const sanitized = sanitizeToolParts(msgs)
+      return interleaveToolCallsAndResults(sanitized)
     }
     if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
       const result: ModelMessage[] = []
