@@ -15,13 +15,12 @@ import {
   type ProviderAuthResponse,
   type Command,
   createOpencodeClient,
-  EventSessionError,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { useGlobalSDK } from "./global-sdk"
-import { ErrorPage } from "../pages/error"
-import { createContext, useContext, onMount, type ParentProps, Switch, Match, createEffect } from "solid-js"
+import { ErrorPage, type InitError } from "../pages/error"
+import { createContext, useContext, onMount, type ParentProps, Switch, Match } from "solid-js"
 
 type State = {
   ready: boolean
@@ -56,7 +55,7 @@ function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
-    error?: EventSessionError["properties"]["error"]
+    error?: InitError
     path: Path
     project: Project[]
     provider: ProviderListResponse
