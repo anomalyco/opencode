@@ -578,7 +578,10 @@ export default function Page() {
                 </div>
               </Tabs.List>
             </div>
-            <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
+            <Tabs.Content
+              value="chat"
+              class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden contain-strict"
+            >
               <div
                 classList={{
                   "w-full flex-1 min-h-0": true,
@@ -661,7 +664,7 @@ export default function Page() {
                 <Show when={layout.review.state() === "pane" && diffs().length}>
                   <div
                     classList={{
-                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base": true,
+                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base contain-strict": true,
                     }}
                   >
                     <SessionReview
@@ -689,7 +692,7 @@ export default function Page() {
               </div>
             </Tabs.Content>
             <Show when={layout.review.state() === "tab" && diffs().length}>
-              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
+              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden contain-strict">
                 <div
                   classList={{
                     "relative pt-3 flex-1 min-h-0 overflow-hidden": true,

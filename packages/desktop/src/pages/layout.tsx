@@ -613,7 +613,7 @@ export default function Layout(props: ParentProps) {
           classList={{
             "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
             "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
-            "border-r border-border-weak-base": true,
+            "border-r border-border-weak-base contain-strict": true,
           }}
           style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
         >
@@ -755,7 +755,7 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           </div>
         </div>
-        <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
+        <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict">{props.children}</main>
       </div>
       <Toast.Region />
     </div>
