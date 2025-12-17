@@ -136,16 +136,16 @@ export namespace McpOAuthCallback {
     log.info("oauth callback server started", { port: OAUTH_CALLBACK_PORT })
   }
 
-  export function waitForCallback(mcpName: string): Promise<string> {
+  export function waitForCallback(oauthState: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        if (pendingAuths.has(mcpName)) {
-          pendingAuths.delete(mcpName)
+        if (pendingAuths.has(oauthState)) {
+          pendingAuths.delete(oauthState)
           reject(new Error("OAuth callback timeout - authorization took too long"))
         }
       }, CALLBACK_TIMEOUT_MS)
 
-      pendingAuths.set(mcpName, { resolve, reject, timeout })
+      pendingAuths.set(oauthState, { resolve, reject, timeout })
     })
   }
 
