@@ -357,7 +357,7 @@ export function Autocomplete(props: {
 
   const options = createMemo(() => {
     const mixed: AutocompleteOption[] = (
-      store.visible === "@" ? [...agents(), ...(files.loading ? files.latest || [] : files())] : [...commands()]
+      store.visible === "@" ? [...agents(), ...(files() || [])] : [...commands()]
     ).filter((x) => x.disabled !== true)
     const currentFilter = filter()
     if (!currentFilter) return mixed.slice(0, 10)
