@@ -71,7 +71,6 @@ export namespace LSP {
     } else {
       // If experimental flag is disabled, disable ty
       if(servers["ty"]) {
-        log.info("LSP server ty is disabled because OPENCODE_EXPERIMENTAL_LSP_TY is disabled")
         delete servers["ty"]
       }
     }
