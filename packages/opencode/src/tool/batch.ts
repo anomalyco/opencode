@@ -53,8 +53,9 @@ export const BatchTool = Tool.define("batch", async () => {
 
           const tool = toolMap.get(call.tool)
           if (!tool) {
+            const availableToolsList = Array.from(toolMap.keys()).filter((name) => !FILTERED_FROM_SUGGESTIONS.has(name))
             throw new Error(
-              `Tool '${call.tool}' not in registry. External tools (MCP, environment) cannot be batched - call them directly.`,
+              `Tool '${call.tool}' not in registry. External tools (MCP, environment) cannot be batched - call them directly. Available tools: ${availableToolsList.join(", ")}`,
             )
           }
           const validatedParams = tool.parameters.parse(call.parameters)
