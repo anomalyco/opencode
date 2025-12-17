@@ -1,6 +1,6 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { MouseParser, TextAttributes } from "@opentui/core"
+import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
@@ -168,36 +168,24 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
-  // Track console state to match opentui's 3-state toggle behavior:
-  // - hidden → show+focus (visible=true, focused=true)
-  // - visible+focused → hide (visible=false, focused=false)
-  // - visible+unfocused → focus (visible=true, focused=true)
-  const [consoleState, setConsoleState] = createSignal<{ visible: boolean; focused: boolean }>({
-    visible: !!process.env["SHOW_CONSOLE"],
-    focused: !!process.env["SHOW_CONSOLE"], // show() also focuses
-  })
+  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
+  renderer.console.onCopySelection = async (text: string) => {
+    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+      renderer.clearSelection()
+      return
+    }
+    if (!text || text.length === 0) return
 
-  onMount(() => {
-    const parser = new MouseParser()
-    renderer.prependInputHandler((sequence: string) => {
-      if (!consoleState().visible) return false
-
-      const mouse = parser.parseMouseEvent(Buffer.from(sequence))
-      if (!mouse || mouse.type !== "up" || mouse.button !== 0) return false
-
-      const height = Math.floor(renderer.terminalHeight * 0.3)
-      if (mouse.y >= renderer.terminalHeight - height) {
-        const logs = renderer.console.getCachedLogs()
-        if (logs) {
-          Clipboard.copy(logs)
-            .then(() => toast.show({ message: "Console logs copied to clipboard", variant: "info" }))
-            .catch(() => toast.show({ message: "Failed to copy console logs", variant: "error" }))
-        }
-        return true
-      }
-      return false
-    })
-  })
+    const base64 = Buffer.from(text).toString("base64")
+    const osc52 = `\x1b]52;c;${base64}\x07`
+    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+    // @ts-expect-error writeOut is not in type definitions
+    renderer.writeOut(finalOsc52)
+    await Clipboard.copy(text)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+    renderer.clearSelection()
+  }
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -456,15 +444,6 @@ function App() {
       value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
-        // Mirror opentui's 3-state toggle behavior:
-        // visible+focused → hide, visible+unfocused → focus, hidden → show+focus
-        setConsoleState((s) => {
-          if (s.visible) {
-            if (s.focused) return { visible: false, focused: false }
-            return { visible: true, focused: true }
-          }
-          return { visible: true, focused: true }
-        })
         dialog.clear()
       },
     },
