@@ -108,8 +108,10 @@ export const McpAuthCommand = cmd({
         const config = await Config.get()
         const mcpServers = config.mcp ?? {}
 
-        // Get OAuth-enabled servers
-        const oauthServers = Object.entries(mcpServers).filter(([_, cfg]) => cfg.type === "remote" && !!cfg.oauth)
+        // Get OAuth-enabled servers (OAuth is enabled by default for remote servers unless oauth: false)
+        const oauthServers = Object.entries(mcpServers).filter(
+          ([_, cfg]) => cfg.type === "remote" && cfg.oauth !== false,
+        )
 
         if (oauthServers.length === 0) {
           prompts.log.warn("No OAuth-enabled MCP servers configured")
