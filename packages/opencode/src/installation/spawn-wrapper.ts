@@ -34,6 +34,7 @@ export function spawnWrapper(
     if (exitCode !== 0 && opts.throws !== false) {
       throw new Error(`Command failed (${exitCode}): ${args.join(" ")}\n${stderr}`)
     }
+
     return stdout
   }
 
