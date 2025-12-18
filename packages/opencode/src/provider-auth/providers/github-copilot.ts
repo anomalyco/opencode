@@ -1,6 +1,9 @@
 import type { AuthOuathResult } from "@opencode-ai/plugin"
 import type { ProviderAuthAdapter, ProviderAuthMethod } from "../adapter"
 
+// OAuth configuration for GitHub Copilot device flow.
+// These are placeholder development values - upstream may require registering
+// an official OpenCode OAuth app with GitHub before merging.
 const CLIENT_ID = process.env["COPILOT_CLIENT_ID"] ?? "Iv1.b507a08c87ecfe98"
 const DEVICE_CODE_URL = process.env["COPILOT_DEVICE_CODE_URL"] ?? "https://github.com/login/device/code"
 const TOKEN_URL = process.env["COPILOT_TOKEN_URL"] ?? "https://github.com/login/oauth/access_token"

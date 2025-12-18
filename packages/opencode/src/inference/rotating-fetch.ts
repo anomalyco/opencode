@@ -1,6 +1,8 @@
 import { CredentialPool, CredentialStore, CredentialsMigrate } from "@/credentials"
+import { isOAuthSecretWithRefresh } from "@/credentials/guards"
 import type { RotateDecision } from "@/provider-auth/adapter"
 import { ProviderAuthRegistry } from "@/provider-auth/registry"
+import { parseRetryAfterMs, AUTH_EXPIRED_COOLDOWN_MS, DEFAULT_RATE_LIMIT_COOLDOWN_MS } from "@/util/http"
 import { Log } from "@/util/log"
 
 const log = Log.create({ service: "inference.rotating-fetch" })
@@ -14,29 +16,14 @@ function buildRequestWithUrlAndHeaders(original: Request, url: URL, headers: Hea
 
   if (original.body) {
     init.body = original.body as any
-    // Node fetch requires duplex when sending a stream body.
-    ;(init as any).duplex = (original as any).duplex ?? "half"
+      // Node fetch requires duplex when sending a stream body.
+      ; (init as any).duplex = (original as any).duplex ?? "half"
   }
 
   return new Request(url, init as any)
 }
 
-function parseRetryAfterMs(resp: Response): number | undefined {
-  const msHeader = resp.headers.get("retry-after-ms") ?? resp.headers.get("Retry-After-Ms")
-  if (msHeader) {
-    const ms = Number(msHeader.trim())
-    if (Number.isFinite(ms) && ms >= 0) return Math.floor(ms)
-  }
-  const raw = resp.headers.get("retry-after") ?? resp.headers.get("Retry-After")
-  if (!raw) return undefined
-  const trimmed = raw.trim()
-  if (!trimmed) return undefined
-  const seconds = Number(trimmed)
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.floor(seconds * 1000)
-  const date = Date.parse(trimmed)
-  if (!Number.isNaN(date)) return Math.max(0, date - Date.now())
-  return undefined
-}
+// parseRetryAfterMs imported from @/util/http
 
 function stripApiKeyHeaders(headers: Headers): void {
   for (const name of ["authorization", "x-api-key", "api-key", "x-goog-api-key"]) {
@@ -49,10 +36,10 @@ function defaultClassifyResponse(resp: Response): RotateDecision {
     return { rotatable: true, isAuthExpired: true, reason: `auth_expired:${resp.status}` }
   }
   if (resp.status === 429) {
-    return { rotatable: true, cooldownMs: parseRetryAfterMs(resp) ?? 30_000, reason: "rate_limited" }
+    return { rotatable: true, cooldownMs: parseRetryAfterMs(resp) ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS, reason: "rate_limited" }
   }
   if (resp.status === 503 || resp.status === 529) {
-    return { rotatable: true, cooldownMs: parseRetryAfterMs(resp) ?? 30_000, reason: `overloaded:${resp.status}` }
+    return { rotatable: true, cooldownMs: parseRetryAfterMs(resp) ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS, reason: `overloaded:${resp.status}` }
   }
   return { rotatable: false, reason: `status:${resp.status}` }
 }
@@ -155,7 +142,7 @@ export namespace RotatingFetch {
         let activeDecision = await classifyResponse(adapter, resp)
 
         if (activeDecision.rotatable && activeDecision.isAuthExpired) {
-          if (adapter.refresh && (secret as any)?.refreshToken && !refreshed.has(chosenId)) {
+          if (adapter.refresh && isOAuthSecretWithRefresh(secret) && !refreshed.has(chosenId)) {
             refreshed.add(chosenId)
             log.info("refreshing oauth credential", {
               providerId: opts.providerId,
@@ -176,7 +163,7 @@ export namespace RotatingFetch {
               })
               try {
                 resp.body?.cancel()
-              } catch {}
+              } catch { }
 
               const retryReq = original.clone()
               const retryUrl = new URL(retryReq.url)
@@ -211,11 +198,11 @@ export namespace RotatingFetch {
         if (activeDecision.rotatable) {
           const cooldownMs =
             activeDecision.cooldownMs ??
-            (activeDecision.isAuthExpired ? 5 * 60_000 : parseRetryAfterMs(activeResp) ?? 30_000)
+            (activeDecision.isAuthExpired ? AUTH_EXPIRED_COOLDOWN_MS : parseRetryAfterMs(activeResp) ?? DEFAULT_RATE_LIMIT_COOLDOWN_MS)
           const cooldownUntil = Date.now() + cooldownMs
           try {
             activeResp.body?.cancel()
-          } catch {}
+          } catch { }
           log.warn("rotating oauth credential", {
             providerId: opts.providerId,
             canonicalProviderId,

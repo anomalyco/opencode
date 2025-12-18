@@ -2,6 +2,9 @@ import type { AuthOuathResult } from "@opencode-ai/plugin"
 import { PKCE } from "@/oauth/pkce"
 import type { ProviderAuthAdapter, ProviderAuthMethod } from "../adapter"
 
+// OAuth configuration for Qwen device flow.
+// These are placeholder development values - upstream may require registering
+// an official OpenCode OAuth app with Alibaba Cloud before merging.
 const DEVICE_CODE_URL = process.env["QWEN_DEVICE_CODE_ENDPOINT"] ?? "https://chat.qwen.ai/api/v1/oauth2/device/code"
 const TOKEN_URL = process.env["QWEN_TOKEN_ENDPOINT"] ?? "https://chat.qwen.ai/api/v1/oauth2/token"
 const CLIENT_ID = process.env["QWEN_CLIENT_ID"] ?? "f0304373b74a44d2b584a3fb70ca9e56"

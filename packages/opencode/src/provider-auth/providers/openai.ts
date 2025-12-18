@@ -3,6 +3,9 @@ import { OAuthCallback } from "@/oauth/callback"
 import { PKCE, OAuthState } from "@/oauth/pkce"
 import type { ProviderAuthAdapter, ProviderAuthMethod } from "../adapter"
 
+// OAuth configuration for OpenAI ChatGPT subscription.
+// These are placeholder development values - upstream may require registering
+// an official OpenCode OAuth app with OpenAI before merging.
 const AUTH_URL = process.env["OPENAI_AUTH_URL"] ?? "https://auth.openai.com/oauth/authorize"
 const TOKEN_URL = process.env["OPENAI_TOKEN_URL"] ?? "https://auth.openai.com/oauth/token"
 const CLIENT_ID = process.env["OPENAI_CLIENT_ID"] ?? "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -122,10 +125,10 @@ export const OpenAISubscriptionAdapter: ProviderAuthAdapter = {
                   mode === "code"
                     ? (code ?? "")
                     : await OAuthCallback.waitForCallback({
-                        port: CALLBACK_PORT,
-                        pathname: CALLBACK_PATH,
-                        key: state,
-                      })
+                      port: CALLBACK_PORT,
+                      pathname: CALLBACK_PATH,
+                      key: state,
+                    })
 
                 if (!resolvedCode) return { type: "failed" }
                 const tokens = await exchangeCode({ code: resolvedCode, codeVerifier, state })

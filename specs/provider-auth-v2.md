@@ -29,12 +29,16 @@ This enables “subscription pools” (user-context OAuth sessions) and “API k
 
 - Vault key:
   - Loaded from `OPENCODE_VAULT_KEY` (base64 32 bytes) **or**
-  - Generated and persisted to `Global.Path.config/vault.key` (mode `0600`).
+  - Generated and persisted to `Global.Path.data/vault.key` (mode `0600`).
+  - **Key is stored in `data/` alongside credentials** for backup/restore locality.
 - Encryption:
   - `AES-256-GCM` with random nonce per record.
 - IO semantics:
   - Atomic writes: write temp + `fsync` + `rename`.
   - Lockfile: prevents concurrent writers from clobbering pool/order state.
+
+**Backup**: Back up the entire `~/.local/share/opencode` (or `$XDG_DATA_HOME/opencode`) directory.
+This includes both encrypted credentials and the vault key. Do not back up the key separately from the credentials.
 
 Code:
 - `packages/opencode/src/vault/crypto.ts`
@@ -161,3 +165,20 @@ Code:
 - `packages/opencode/test/credentials/*`
 - `packages/opencode/test/inference/rotating-fetch.test.ts`
 
+## Security Considerations
+
+### Key Rotation
+
+If you need to rotate the vault key (e.g., suspected compromise):
+
+1. Export credentials: `opencode auth vault export -o backup.json`
+2. Delete the vault key: `rm ~/.local/share/opencode/vault.key`
+3. Restart OpenCode (new key will be auto-generated)
+4. Re-import credentials: `opencode auth vault import backup.json`
+5. Securely delete the backup: `shred -u backup.json`
+
+### Server Deployments
+
+For server/CI deployments, set `OPENCODE_VAULT_KEY` as an environment variable
+rather than relying on file-based key storage. This enables secrets management
+integration (e.g., Vault, AWS Secrets Manager).

@@ -2,6 +2,9 @@ import type { AuthOuathResult } from "@opencode-ai/plugin"
 import crypto from "crypto"
 import type { ProviderAuthAdapter, ProviderAuthMethod } from "../adapter"
 
+// OAuth configuration for Cursor device link login.
+// These are placeholder development values - upstream may require registering
+// an official OpenCode OAuth app with Cursor before merging.
 const AUTHENTICATOR_URL = process.env["CURSOR_AUTHENTICATOR_URL"] ?? "https://authenticator.cursor.sh"
 const API_URL = process.env["CURSOR_API_URL"] ?? "https://api2.cursor.sh"
 const LOGIN_URL = process.env["CURSOR_LOGIN_URL"] ?? `${AUTHENTICATOR_URL}/login`

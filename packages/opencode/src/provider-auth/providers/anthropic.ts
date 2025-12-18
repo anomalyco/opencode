@@ -1,8 +1,12 @@
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { OAuthCallback } from "@/oauth/callback"
 import { PKCE, OAuthState } from "@/oauth/pkce"
+import { parseRetryAfterMs } from "@/util/http"
 import type { ProviderAuthAdapter, ProviderAuthMethod, RotateDecision } from "../adapter"
 
+// OAuth configuration for Anthropic Claude Max subscription.
+// These are placeholder development values - upstream may require registering
+// an official OpenCode OAuth app with Anthropic before merging.
 const AUTH_URL = process.env["ANTHROPIC_AUTH_URL"] ?? "https://claude.ai/oauth/authorize"
 const TOKEN_URL = process.env["ANTHROPIC_TOKEN_URL"] ?? "https://console.anthropic.com/v1/oauth/token"
 const CLIENT_ID = process.env["ANTHROPIC_CLIENT_ID"] ?? "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -13,22 +17,7 @@ const REDIRECT = new URL(REDIRECT_URI)
 const CALLBACK_PORT = Number(REDIRECT.port || "54545")
 const CALLBACK_PATH = REDIRECT.pathname || "/callback"
 
-function parseRetryAfterMs(resp: Response): number | undefined {
-  const msHeader = resp.headers.get("retry-after-ms") ?? resp.headers.get("Retry-After-Ms")
-  if (msHeader) {
-    const ms = Number(msHeader.trim())
-    if (Number.isFinite(ms) && ms >= 0) return Math.floor(ms)
-  }
-  const raw = resp.headers.get("retry-after") ?? resp.headers.get("Retry-After")
-  if (!raw) return undefined
-  const trimmed = raw.trim()
-  if (!trimmed) return undefined
-  const seconds = Number(trimmed)
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.floor(seconds * 1000)
-  const date = Date.parse(trimmed)
-  if (!Number.isNaN(date)) return Math.max(0, date - Date.now())
-  return undefined
-}
+// parseRetryAfterMs imported from @/util/http
 
 function buildAuthUrl(state: string, codeChallenge: string): string {
   const url = new URL(AUTH_URL)
@@ -139,10 +128,10 @@ export const AnthropicSubscriptionAdapter: ProviderAuthAdapter = {
                   mode === "code"
                     ? (code ?? "")
                     : await OAuthCallback.waitForCallback({
-                        port: CALLBACK_PORT,
-                        pathname: CALLBACK_PATH,
-                        key: state,
-                      })
+                      port: CALLBACK_PORT,
+                      pathname: CALLBACK_PATH,
+                      key: state,
+                    })
 
                 if (!resolvedCode) return { type: "failed" }
                 const tokens = await exchangeCode({ code: resolvedCode, codeVerifier, state })

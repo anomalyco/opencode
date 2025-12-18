@@ -6,7 +6,9 @@ import { VaultFS } from "./fs"
 
 export namespace VaultKey {
   const KEY_ENV = "OPENCODE_VAULT_KEY"
-  const KEY_PATH = path.join(Global.Path.config, "vault.key")
+    // Store key in data dir alongside credentials for backup/restore locality.
+  // Users backing up ~/.local/share/opencode will get both key + encrypted creds.
+  const KEY_PATH = path.join(Global.Path.data, "vault.key")
   const KEY_BYTES = 32
   let cached: Buffer | undefined
 

@@ -140,6 +140,8 @@ export namespace CredentialStore {
     errors: Array<{ file: string; error: unknown }>
   }> {
     await ensureDirs()
+    // NOTE: Bun.Glob is Bun-specific. If Node.js compatibility is needed,
+    // consider using a cross-runtime glob library like 'fast-glob' or 'glob'.
     const glob = new Bun.Glob("*.json")
     const records: Credentials.RecordFile[] = []
     const errors: Array<{ file: string; error: unknown }> = []

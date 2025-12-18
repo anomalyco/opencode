@@ -3,6 +3,9 @@ import { OAuthCallback } from "@/oauth/callback"
 import { PKCE, OAuthState } from "@/oauth/pkce"
 import type { ProviderAuthAdapter, ProviderAuthMethod } from "../adapter"
 
+// OAuth configuration for Google Gemini Code Assist subscription.
+// These are placeholder development values - upstream may require registering
+// an official OpenCode OAuth app with Google before merging.
 const CLIENT_ID =
   process.env["GEMINI_CLIENT_ID"] ??
   "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j.apps.googleusercontent.com"
@@ -118,10 +121,10 @@ export const GoogleGeminiSubscriptionAdapter: ProviderAuthAdapter = {
                   mode === "code"
                     ? (code ?? "")
                     : await OAuthCallback.waitForCallback({
-                        port: CALLBACK_PORT,
-                        pathname: CALLBACK_PATH,
-                        key: state,
-                      })
+                      port: CALLBACK_PORT,
+                      pathname: CALLBACK_PATH,
+                      key: state,
+                    })
                 if (!resolvedCode) return { type: "failed" }
                 const tokens = await exchangeCode({ code: resolvedCode, codeVerifier, state })
                 return { type: "success", access: tokens.access, refresh: tokens.refresh, expires: tokens.expires }
