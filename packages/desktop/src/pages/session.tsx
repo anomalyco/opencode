@@ -602,7 +602,7 @@ export default function Page() {
                 <div
                   classList={{
                     "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
-                    "max-w-200 mx-auto": !wide(),
+                    "max-w-146 mx-auto": !wide(),
                   }}
                 >
                   <Switch>
