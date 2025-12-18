@@ -6,7 +6,7 @@ import { VaultFS } from "./fs"
 
 export namespace VaultKey {
   const KEY_ENV = "OPENCODE_VAULT_KEY"
-    // Store key in data dir alongside credentials for backup/restore locality.
+  // Store key in data dir alongside credentials for backup/restore locality.
   // Users backing up ~/.local/share/opencode will get both key + encrypted creds.
   const KEY_PATH = path.join(Global.Path.data, "vault.key")
   const KEY_BYTES = 32
@@ -37,7 +37,7 @@ export namespace VaultKey {
   async function writeKeyToFile(key: Buffer): Promise<void> {
     await VaultFS.atomicWriteText(KEY_PATH, key.toString("base64"), 0o600)
     // Bun can ignore mode on write; harden after.
-    await fs.chmod(KEY_PATH, 0o600).catch(() => {})
+    await fs.chmod(KEY_PATH, 0o600).catch(() => { })
   }
 
   export async function load(): Promise<Buffer> {
