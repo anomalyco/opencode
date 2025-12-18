@@ -299,7 +299,7 @@ export function Session() {
     },
     {
       title: "Fork from message",
-      onSelect: (dialog) => {
+      value: "session.fork",
       keybind: "session_fork",
       category: "Session",
       onSelect: (dialog) => {
