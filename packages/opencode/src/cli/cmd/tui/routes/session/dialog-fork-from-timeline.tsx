@@ -39,7 +39,14 @@ export function DialogForkFromTimeline(props: {
           })
           route.navigate({
             sessionID: result.data!.id,
+          const forked = await sdk.client.session.fork({
+            sessionID: props.sessionID,
+            messageID: message.id,
+          })
+          route.navigate({
+            sessionID: forked.data!.id,
             type: "session",
+          })
           })
           dialog.clear()
         },
