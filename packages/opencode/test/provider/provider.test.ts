@@ -1807,3 +1807,35 @@ test("custom model inherits api.url from models.dev provider", async () => {
     },
   })
 })
+
+test("config apiKey takes precedence over OAuth plugin auth loaders", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              options: {
+                apiKey: "explicit-config-api-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["anthropic"]).toBeDefined()
+      // When config has explicit apiKey, it should be used
+      // and plugin auth loaders should be skipped (no OAuth processing)
+      expect(providers["anthropic"].options.apiKey).toBe("explicit-config-api-key")
+      // Source should be "config" since config is merged last
+      expect(providers["anthropic"].source).toBe("config")
+    },
+  })
+})

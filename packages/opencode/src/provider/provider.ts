@@ -640,6 +640,14 @@ export namespace Provider {
       const providerID = plugin.auth.provider
       if (disabled.has(providerID)) continue
 
+      // Skip OAuth/plugin auth if config explicitly sets an apiKey for this provider
+      const configProvider = config.provider?.[providerID]
+      const hasExplicitApiKey = configProvider?.options?.apiKey !== undefined
+      if (hasExplicitApiKey) {
+        log.debug("skipping plugin auth loader - config has explicit apiKey", { providerID })
+        continue
+      }
+
       // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
       let hasAuth = false
       const auth = await Auth.get(providerID)
