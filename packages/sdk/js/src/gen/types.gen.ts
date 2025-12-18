@@ -951,6 +951,10 @@ export type KeybindsConfig = {
    * Suspend terminal
    */
   terminal_suspend?: string
+  /**
+   * Toggle terminal title
+   */
+  terminal_title_toggle?: string
 }
 
 export type AgentConfig = {

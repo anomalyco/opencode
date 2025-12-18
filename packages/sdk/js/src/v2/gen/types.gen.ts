@@ -844,6 +844,14 @@ export type KeybindsConfig = {
    */
   session_timeline?: string
   /**
+   * Fork session from message
+   */
+  session_fork?: string
+  /**
+   * Rename session
+   */
+  session_rename?: string
+  /**
    * Share current session
    */
   session_share?: string
@@ -1111,6 +1119,10 @@ export type KeybindsConfig = {
    * Suspend terminal
    */
   terminal_suspend?: string
+  /**
+   * Toggle terminal title
+   */
+  terminal_title_toggle?: string
 }
 
 export type AgentConfig = {

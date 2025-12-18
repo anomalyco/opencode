@@ -193,7 +193,7 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") ?? c.req.header("x-opencode-directory") ?? process.cwd()
+        const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
@@ -779,9 +779,6 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           await Session.remove(sessionID)
-          await Bus.publish(TuiEvent.CommandExecute, {
-            command: "session.list",
-          })
           return c.json(true)
         },
       )

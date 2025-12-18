@@ -13,6 +13,7 @@ import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
+import { Plugin } from "@/plugin"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -125,6 +126,12 @@ export namespace SessionCompaction {
       model,
       abort: input.abort,
     })
+    // Allow plugins to inject context for compaction
+    const compacting = await Plugin.trigger(
+      "experimental.session.compacting",
+      { sessionID: input.sessionID },
+      { context: [] },
+    )
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -139,7 +146,10 @@ export namespace SessionCompaction {
           content: [
             {
               type: "text",
-              text: "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation.",
+              text: [
+                "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation.",
+                ...compacting.context,
+              ].join("\n\n"),
             },
           ],
         },

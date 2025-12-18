@@ -82,3 +82,7 @@ Anything related to OpenCode Zen, billing, or model quality from Zen should have
 ### docs
 
 Anything related to the documentation should have a docs label
+
+### windows
+
+Use for any issue that involves the windows OS

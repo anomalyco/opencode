@@ -10,6 +10,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,
+      throwOnError: true,
     })
 
     const emitter = createGlobalEmitter<{
