@@ -11,6 +11,9 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 import { CredentialStore, CredentialsMigrate } from "../../credentials"
 import { ProviderAuthRegistry } from "../../provider-auth/registry"
+import { VaultKey } from "../../vault/key"
+import { VaultFS } from "../../vault/fs"
+import fs from "fs/promises"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -231,8 +234,135 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).command(AuthVaultCommand).demandCommand(),
   async handler() {},
+})
+
+export const AuthVaultCommand = cmd({
+  command: "vault",
+  describe: "manage the local encryption key for credentials",
+  builder: (yargs) =>
+    yargs
+      .command(AuthVaultInitCommand)
+      .command(AuthVaultExportCommand)
+      .command(AuthVaultImportCommand)
+      .demandCommand(),
+  async handler() {},
+})
+
+export const AuthVaultInitCommand = cmd({
+  command: "init",
+  describe: "initialize the local vault key (creates Global.Path.config/vault.key)",
+  builder: (yargs) =>
+    yargs.option("force", {
+      type: "boolean",
+      describe: "Overwrite existing vault key file",
+      default: false,
+    }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Vault init")
+
+    const keyPath = VaultKey.keyPath()
+    const exists = await VaultFS.exists(keyPath)
+    if (exists && args.force) {
+      const confirm = await prompts.confirm({
+        message: `Overwrite existing vault key at ${keyPath}? (This will break decryption of existing credentials unless you back up the current key)`,
+        initialValue: false,
+      })
+      if (prompts.isCancel(confirm)) throw new UI.CancelledError()
+      if (!confirm) {
+        prompts.outro("Cancelled")
+        return
+      }
+    }
+
+    const result = await VaultKey.init({ force: Boolean(args.force) })
+    prompts.log.info(`Key path: ${result.path}`)
+    prompts.log.info(`Source: ${result.source}`)
+    prompts.log.success(result.created ? "Vault key created" : "Vault key already exists")
+    prompts.outro("Done")
+  },
+})
+
+export const AuthVaultExportCommand = cmd({
+  command: "export",
+  describe: "export the vault key (base64) for backup/migration",
+  builder: (yargs) =>
+    yargs.option("output", {
+      type: "string",
+      describe: "Write the key to a file instead of stdout",
+    }),
+  async handler(args) {
+    const key = await VaultKey.exportBase64()
+    const output = (args.output as string | undefined)?.trim()
+    if (output) {
+      await VaultFS.atomicWriteText(output, key + "\n", 0o600)
+      await fs.chmod(output, 0o600).catch(() => {})
+      UI.empty()
+      prompts.intro("Vault export")
+      prompts.log.success(`Wrote key to ${output}`)
+      prompts.outro("Done")
+      return
+    }
+
+    // Default: print only the key to stdout for easy piping.
+    process.stdout.write(key + "\n")
+  },
+})
+
+export const AuthVaultImportCommand = cmd({
+  command: "import",
+  describe: "import a vault key (base64) to Global.Path.config/vault.key",
+  builder: (yargs) =>
+    yargs
+      .option("file", {
+        type: "string",
+        describe: "Read the key from a file",
+      })
+      .option("key", {
+        type: "string",
+        describe: "Provide the base64 key directly",
+      }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Vault import")
+
+    const keyPath = VaultKey.keyPath()
+    const exists = await VaultFS.exists(keyPath)
+    if (exists) {
+      const confirm = await prompts.confirm({
+        message: `Overwrite existing vault key at ${keyPath}?`,
+        initialValue: false,
+      })
+      if (prompts.isCancel(confirm)) throw new UI.CancelledError()
+      if (!confirm) {
+        prompts.outro("Cancelled")
+        return
+      }
+    }
+
+    let key: string | undefined
+    const filePath = (args.file as string | undefined)?.trim()
+    const inline = (args.key as string | undefined)?.trim()
+
+    if (filePath) {
+      key = (await fs.readFile(filePath, "utf8")).trim()
+    } else if (inline) {
+      key = inline
+    } else {
+      const entered = await prompts.password({
+        message: "Paste vault key (base64)",
+        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+      })
+      if (prompts.isCancel(entered)) throw new UI.CancelledError()
+      key = entered.trim()
+    }
+
+    await VaultKey.importBase64(key)
+    prompts.log.success(`Imported key to ${keyPath}`)
+    prompts.outro("Done")
+  },
 })
 
 export const AuthListCommand = cmd({
