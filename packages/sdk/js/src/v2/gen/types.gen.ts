@@ -1236,6 +1236,23 @@ export type ProviderConfig = {
   }
   whitelist?: Array<string>
   blacklist?: Array<string>
+  /**
+   * Authentication settings for subscription OAuth rotation and API keys.
+   */
+  auth?: {
+    /**
+     * Auth mode for this provider. 'auto' uses subscription OAuth when available, otherwise API key/env. 'api' forces API key/env. 'subscription' forces OAuth rotation.
+     */
+    mode?: "auto" | "api" | "subscription"
+    /**
+     * Credential namespace to use for this provider (default: 'default').
+     */
+    namespace?: string
+    /**
+     * Max credentials to try per request when rotating (default: try all eligible).
+     */
+    maxAttempts?: number
+  }
   options?: {
     apiKey?: string
     baseURL?: string
@@ -1827,14 +1844,6 @@ export type FormatterStatus = {
   enabled: boolean
 }
 
-export type OAuth = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-  enterpriseUrl?: string
-}
-
 export type ApiAuth = {
   type: "api"
   key: string
@@ -1846,7 +1855,7 @@ export type WellKnownAuth = {
   token: string
 }
 
-export type Auth = OAuth | ApiAuth | WellKnownAuth
+export type Auth = ApiAuth | WellKnownAuth
 
 export type GlobalEventData = {
   body?: never
@@ -3294,6 +3303,14 @@ export type ProviderOauthAuthorizeData = {
      * Auth method index
      */
     method: number
+    /**
+     * Credential namespace (optional)
+     */
+    namespace?: string
+    /**
+     * Credential label (optional)
+     */
+    label?: string
   }
   path: {
     /**
@@ -3335,6 +3352,14 @@ export type ProviderOauthCallbackData = {
      * OAuth authorization code
      */
     code?: string
+    /**
+     * Credential namespace (optional)
+     */
+    namespace?: string
+    /**
+     * Credential label (optional)
+     */
+    label?: string
   }
   path: {
     /**

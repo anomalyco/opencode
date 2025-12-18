@@ -5,14 +5,15 @@ import { mapValues, mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
-import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
+import { RotatingFetch } from "@/inference/rotating-fetch"
+import { CredentialStore, CredentialsMigrate } from "@/credentials"
+import { ProviderAuthRegistry } from "@/provider-auth/registry"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
@@ -66,7 +67,9 @@ export namespace Provider {
       const hasKey = await (async () => {
         const env = Env.all()
         if (input.env.some((item) => env[item])) return true
-        if (await Auth.get(input.id)) return true
+        await CredentialsMigrate.migrateIfNeeded()
+        const records = await CredentialStore.findByProvider(input.id, "default")
+        if (records.some((r) => r.meta.kind === "api")) return true
         return false
       })()
 
@@ -286,16 +289,23 @@ export namespace Provider {
       }
     },
     "sap-ai-core": async () => {
-      const auth = await Auth.get("sap-ai-core")
-      const envServiceKey = iife(() => {
-        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
-        if (envAICoreServiceKey) return envAICoreServiceKey
-        if (auth?.type === "api") {
-          Env.set("AICORE_SERVICE_KEY", auth.key)
-          return auth.key
+      const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+      let envServiceKey = envAICoreServiceKey
+      if (!envServiceKey) {
+        await CredentialsMigrate.migrateIfNeeded()
+        const records = await CredentialStore.findByProvider("sap-ai-core", "default")
+        const apiRecord =
+          records.find((r) => r.meta.kind === "api" && (r.meta.label ?? "") === "default") ??
+          records.find((r) => r.meta.kind === "api")
+        if (apiRecord) {
+          const secret = await CredentialStore.decryptSecret(apiRecord)
+          const apiKey = secret && typeof secret === "object" && "apiKey" in secret ? String((secret as any).apiKey) : undefined
+          if (apiKey) {
+            Env.set("AICORE_SERVICE_KEY", apiKey)
+            envServiceKey = apiKey
+          }
         }
-        return undefined
-      })
+      }
       const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
       const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
 
@@ -625,61 +635,18 @@ export namespace Provider {
     }
 
     // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records: credentialRecords } = await CredentialStore.listAll()
+    for (const record of credentialRecords) {
+      if (record.meta.kind !== "api") continue
+      const providerID = record.meta.providerId
       if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
-        mergeProvider(providerID, {
-          source: "api",
-          key: provider.key,
-        })
-      }
-    }
-
-    for (const plugin of await Plugin.list()) {
-      if (!plugin.auth) continue
-      const providerID = plugin.auth.provider
-      if (disabled.has(providerID)) continue
-
-      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
-      let hasAuth = false
-      const auth = await Auth.get(providerID)
-      if (auth) hasAuth = true
-
-      // Special handling for github-copilot: also check for enterprise auth
-      if (providerID === "github-copilot" && !hasAuth) {
-        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
-        if (enterpriseAuth) hasAuth = true
-      }
-
-      if (!hasAuth) continue
-      if (!plugin.auth.loader) continue
-
-      // Load for the main provider if auth exists
-      if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        mergeProvider(plugin.auth.provider, {
-          source: "custom",
-          options: options,
-        })
-      }
-
-      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
-      if (providerID === "github-copilot") {
-        const enterpriseProviderID = "github-copilot-enterprise"
-        if (!disabled.has(enterpriseProviderID)) {
-          const enterpriseAuth = await Auth.get(enterpriseProviderID)
-          if (enterpriseAuth) {
-            const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
-              database[enterpriseProviderID],
-            )
-            mergeProvider(enterpriseProviderID, {
-              source: "custom",
-              options: enterpriseOptions,
-            })
-          }
-        }
-      }
+      const secret = await CredentialStore.decryptSecret(record)
+      if (!secret || typeof secret !== "object" || !("apiKey" in secret)) continue
+      mergeProvider(providerID, {
+        source: "api",
+        key: String((secret as any).apiKey),
+      })
     }
 
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
@@ -753,58 +720,105 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
-  async function getSDK(model: Model) {
-    try {
-      using _ = log.time("getSDK", {
-        providerID: model.providerID,
-      })
-      const s = await state()
-      const provider = s.providers[model.providerID]
-      const options = { ...provider.options }
+	  async function getSDK(model: Model) {
+	    try {
+	      using _ = log.time("getSDK", {
+	        providerID: model.providerID,
+	      })
+	      const s = await state()
+	      const config = await Config.get()
+	      const provider = s.providers[model.providerID]
+	      const options = { ...provider.options }
+	      const configProvider = config.provider?.[model.providerID]
+	      const authMode = configProvider?.auth?.mode ?? "auto"
+	      const authNamespace = configProvider?.auth?.namespace ?? "default"
+	      const authMaxAttempts = configProvider?.auth?.maxAttempts
 
-      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-        options["includeUsage"] = true
-      }
+	      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
+	        options["includeUsage"] = true
+	      }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
-      if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
-      if (model.headers)
-        options["headers"] = {
-          ...options["headers"],
-          ...model.headers,
-        }
+	      if (!options["baseURL"]) options["baseURL"] = model.api.url
+	      if (authMode === "subscription") {
+	        options["apiKey"] = "unused"
+	      } else {
+	        if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+	      }
+	      if (model.headers)
+	        options["headers"] = {
+	          ...options["headers"],
+	          ...model.headers,
+	        }
 
       const key = Bun.hash.xxHash32(JSON.stringify({ npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
-      const customFetch = options["fetch"]
+	      const customFetch = options["fetch"]
+	      const fetchFn = customFetch ?? fetch
 
-      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-        // Preserve custom fetch if it exists, wrap it with timeout logic
-        const fetchFn = customFetch ?? fetch
-        const opts = init ?? {}
+	      const fetchWithTimeout = async (input: any, init?: BunFetchRequestInit) => {
+	        const opts: BunFetchRequestInit = {
+	          ...(init ?? {}),
+	        }
 
-        if (options["timeout"] !== undefined && options["timeout"] !== null) {
-          const signals: AbortSignal[] = []
-          if (opts.signal) signals.push(opts.signal)
-          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+	        if (!opts.signal && input instanceof Request && input.signal) {
+	          opts.signal = input.signal
+	        }
 
-          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+	        if (options["timeout"] !== undefined && options["timeout"] !== null) {
+	          const signals: AbortSignal[] = []
+	          if (opts.signal) signals.push(opts.signal)
+	          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
 
-          opts.signal = combined
-        }
+	          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
 
-        return fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
-        })
-      }
+	          opts.signal = combined
+	        }
 
-      // Special case: google-vertex-anthropic uses a subpath import
-      const bundledKey =
-        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
+	        return fetchFn(input, {
+	          ...opts,
+	          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+	          timeout: false,
+	        })
+	      }
+
+	      if (authMode === "subscription") {
+	        await CredentialsMigrate.migrateIfNeeded()
+	        const canonicalProviderId = ProviderAuthRegistry.resolveProviderId(model.providerID)
+	        const adapter = ProviderAuthRegistry.getAdapter(canonicalProviderId)
+	        if (!adapter) {
+	          throw new Error(
+	            `Provider '${model.providerID}' does not support subscription OAuth in this build (no adapter).`,
+	          )
+	        }
+	        const providerIds = ProviderAuthRegistry.equivalentProviderIds(model.providerID)
+	        const oauthRecords = (
+	          await Promise.all(providerIds.map((id) => CredentialStore.findByProvider(id, authNamespace)))
+	        )
+	          .flat()
+	          .filter((r) => r.meta.kind === "oauth")
+	        if (oauthRecords.length === 0) {
+	          throw new Error(
+	            `No OAuth credentials found for provider '${model.providerID}' in namespace '${authNamespace}'. Run opencode connect and choose an OAuth method.`,
+	          )
+	        }
+	      }
+
+	      if (authMode === "api") {
+	        options["fetch"] = fetchWithTimeout as any
+	      } else {
+	        const fetchWithRotation = RotatingFetch.create(fetchWithTimeout as any, {
+	          providerId: model.providerID,
+	          namespace: authNamespace,
+	          maxAttempts: authMaxAttempts,
+	        })
+	        options["fetch"] = fetchWithRotation as any
+	      }
+
+	      // Special case: google-vertex-anthropic uses a subpath import
+	      const bundledKey =
+	        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
       const bundledFn = BUNDLED_PROVIDERS[bundledKey]
       if (bundledFn) {
         log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })

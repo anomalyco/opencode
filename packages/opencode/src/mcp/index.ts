@@ -1,7 +1,7 @@
 import { type Tool } from "ai"
 import { experimental_createMCPClient } from "@ai-sdk/mcp"
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
+import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import { Config } from "../config/config"
@@ -12,11 +12,30 @@ import { Instance } from "../project/instance"
 import { withTimeout } from "@/util/timeout"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
-import { McpAuth } from "./auth"
+import { McpCredentials } from "./credentials"
 import open from "open"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
+
+  type RemoteTransportConstructors = {
+    StreamableHTTPClientTransport: typeof import("@modelcontextprotocol/sdk/client/streamableHttp.js").StreamableHTTPClientTransport
+    SSEClientTransport: typeof import("@modelcontextprotocol/sdk/client/sse.js").SSEClientTransport
+  }
+
+  let remoteTransportConstructors: Promise<RemoteTransportConstructors> | undefined
+
+  async function getRemoteTransportConstructors(): Promise<RemoteTransportConstructors> {
+    remoteTransportConstructors ??= Promise.all([
+      import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
+      import("@modelcontextprotocol/sdk/client/sse.js"),
+    ]).then(([streamable, sse]) => ({
+      StreamableHTTPClientTransport: streamable.StreamableHTTPClientTransport,
+      SSEClientTransport: sse.SSEClientTransport,
+    }))
+
+    return remoteTransportConstructors
+  }
 
   export const Failed = NamedError.create(
     "MCPFailed",
@@ -184,6 +203,7 @@ export namespace MCP {
         )
       }
 
+      const { StreamableHTTPClientTransport, SSEClientTransport } = await getRemoteTransportConstructors()
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
@@ -441,7 +461,7 @@ export namespace MCP {
     const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("")
-    await McpAuth.updateOAuthState(mcpName, oauthState)
+    await McpCredentials.updateOAuthState(mcpName, oauthState)
 
     // Create a new auth provider for this flow
     // OAuth config is optional - if not provided, we'll use auto-discovery
@@ -463,6 +483,7 @@ export namespace MCP {
     )
 
     // Create transport with auth provider
+    const { StreamableHTTPClientTransport } = await getRemoteTransportConstructors()
     const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
       authProvider,
     })
@@ -499,7 +520,7 @@ export namespace MCP {
     }
 
     // Get the state that was already generated and stored in startAuth()
-    const oauthState = await McpAuth.getOAuthState(mcpName)
+    const oauthState = await McpCredentials.getOAuthState(mcpName)
     if (!oauthState) {
       throw new Error("OAuth state not found - this should not happen")
     }
@@ -513,13 +534,13 @@ export namespace MCP {
     const code = await McpOAuthCallback.waitForCallback(oauthState)
 
     // Validate and clear the state
-    const storedState = await McpAuth.getOAuthState(mcpName)
+    const storedState = await McpCredentials.getOAuthState(mcpName)
     if (storedState !== oauthState) {
-      await McpAuth.clearOAuthState(mcpName)
+      await McpCredentials.clearOAuthState(mcpName)
       throw new Error("OAuth state mismatch - potential CSRF attack")
     }
 
-    await McpAuth.clearOAuthState(mcpName)
+    await McpCredentials.clearOAuthState(mcpName)
 
     // Finish auth
     return finishAuth(mcpName, code)
@@ -540,7 +561,7 @@ export namespace MCP {
       await transport.finishAuth(authorizationCode)
 
       // Clear the code verifier after successful auth
-      await McpAuth.clearCodeVerifier(mcpName)
+      await McpCredentials.clearCodeVerifier(mcpName)
 
       // Now try to reconnect
       const cfg = await Config.get()
@@ -569,10 +590,10 @@ export namespace MCP {
    * Remove OAuth credentials for an MCP server.
    */
   export async function removeAuth(mcpName: string): Promise<void> {
-    await McpAuth.remove(mcpName)
+    await McpCredentials.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
     pendingOAuthTransports.delete(mcpName)
-    await McpAuth.clearOAuthState(mcpName)
+    await McpCredentials.clearOAuthState(mcpName)
     log.info("removed oauth credentials", { mcpName })
   }
 
@@ -589,7 +610,7 @@ export namespace MCP {
    * Check if an MCP server has stored OAuth tokens.
    */
   export async function hasStoredTokens(mcpName: string): Promise<boolean> {
-    const entry = await McpAuth.get(mcpName)
+    const entry = await McpCredentials.get(mcpName)
     return !!entry?.tokens
   }
 }

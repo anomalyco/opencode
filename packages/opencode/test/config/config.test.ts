@@ -40,6 +40,37 @@ test("loads JSON config file", async () => {
   })
 })
 
+test("parses provider auth settings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              auth: {
+                mode: "subscription",
+                namespace: "work",
+                maxAttempts: 2,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.provider?.anthropic?.auth?.mode).toBe("subscription")
+      expect(config.provider?.anthropic?.auth?.namespace).toBe("work")
+      expect(config.provider?.anthropic?.auth?.maxAttempts).toBe(2)
+    },
+  })
+})
+
 test("loads JSONC config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
