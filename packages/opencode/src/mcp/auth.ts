@@ -24,6 +24,8 @@ export namespace McpAuth {
     tokens: Tokens.optional(),
     clientInfo: ClientInfo.optional(),
     codeVerifier: z.string().optional(),
+    oauthState: z.string().optional(),
+    serverUrl: z.string().optional(), // Track the URL these credentials are for
   })
   export type Entry = z.infer<typeof Entry>
 
@@ -34,14 +36,35 @@ export namespace McpAuth {
     return data[mcpName]
   }
 
+  /**
+   * Get auth entry and validate it's for the correct URL.
+   * Returns undefined if URL has changed (credentials are invalid).
+   */
+  export async function getForUrl(mcpName: string, serverUrl: string): Promise<Entry | undefined> {
+    const entry = await get(mcpName)
+    if (!entry) return undefined
+
+    // If no serverUrl is stored, this is from an old version - consider it invalid
+    if (!entry.serverUrl) return undefined
+
+    // If URL has changed, credentials are invalid
+    if (entry.serverUrl !== serverUrl) return undefined
+
+    return entry
+  }
+
   export async function all(): Promise<Record<string, Entry>> {
     const file = Bun.file(filepath)
     return file.json().catch(() => ({}))
   }
 
-  export async function set(mcpName: string, entry: Entry): Promise<void> {
+  export async function set(mcpName: string, entry: Entry, serverUrl?: string): Promise<void> {
     const file = Bun.file(filepath)
     const data = await all()
+    // Always update serverUrl if provided
+    if (serverUrl) {
+      entry.serverUrl = serverUrl
+    }
     await Bun.write(file, JSON.stringify({ ...data, [mcpName]: entry }, null, 2))
     await fs.chmod(file.name!, 0o600)
   }
@@ -54,16 +77,16 @@ export namespace McpAuth {
     await fs.chmod(file.name!, 0o600)
   }
 
-  export async function updateTokens(mcpName: string, tokens: Tokens): Promise<void> {
+  export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
     const entry = (await get(mcpName)) ?? {}
     entry.tokens = tokens
-    await set(mcpName, entry)
+    await set(mcpName, entry, serverUrl)
   }
 
-  export async function updateClientInfo(mcpName: string, clientInfo: ClientInfo): Promise<void> {
+  export async function updateClientInfo(mcpName: string, clientInfo: ClientInfo, serverUrl?: string): Promise<void> {
     const entry = (await get(mcpName)) ?? {}
     entry.clientInfo = clientInfo
-    await set(mcpName, entry)
+    await set(mcpName, entry, serverUrl)
   }
 
   export async function updateCodeVerifier(mcpName: string, codeVerifier: string): Promise<void> {
@@ -76,6 +99,25 @@ export namespace McpAuth {
     const entry = await get(mcpName)
     if (entry) {
       delete entry.codeVerifier
+      await set(mcpName, entry)
+    }
+  }
+
+  export async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
+    const entry = (await get(mcpName)) ?? {}
+    entry.oauthState = oauthState
+    await set(mcpName, entry)
+  }
+
+  export async function getOAuthState(mcpName: string): Promise<string | undefined> {
+    const entry = await get(mcpName)
+    return entry?.oauthState
+  }
+
+  export async function clearOAuthState(mcpName: string): Promise<void> {
+    const entry = await get(mcpName)
+    if (entry) {
+      delete entry.oauthState
       await set(mcpName, entry)
     }
   }
