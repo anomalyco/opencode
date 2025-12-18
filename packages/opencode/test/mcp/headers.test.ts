@@ -8,6 +8,12 @@ const transportCalls: Array<{
 }> = []
 
 // Mock the transport constructors to capture their arguments
+mock.module("@ai-sdk/mcp", () => ({
+  experimental_createMCPClient: async () => {
+    throw new Error("Mock MCP client cannot connect")
+  },
+}))
+
 mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit }) {
