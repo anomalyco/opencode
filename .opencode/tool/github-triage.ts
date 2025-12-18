@@ -17,7 +17,7 @@ export default tool({
       .describe("The username of the assignee")
       .default("rekram1-node"),
     labels: tool.schema
-      .array(tool.schema.enum(["nix", "opentui", "perf", "desktop", "zen", "docs"]))
+      .array(tool.schema.enum(["nix", "opentui", "perf", "desktop", "zen", "docs", "windows"]))
       .describe("The labels(s) to add to the issue")
       .default([]),
   },
