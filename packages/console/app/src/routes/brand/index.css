@@ -8,7 +8,8 @@
   }
 }
 
-[data-page="enterprise"] {
+[data-page="enterprise"],
+[data-page="legal"] {
   --color-background: hsl(0, 20%, 99%);
   --color-background-weak: hsl(0, 8%, 97%);
   --color-background-weak-hover: hsl(0, 8%, 94%);

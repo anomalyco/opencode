@@ -118,7 +118,13 @@ export async function handler(
       })
 
       // Try another provider => stop retrying if using fallback provider
-      if (res.status !== 200 && modelInfo.fallbackProvider && providerInfo.id !== modelInfo.fallbackProvider) {
+      if (
+        res.status !== 200 &&
+        // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
+        res.status !== 404 &&
+        modelInfo.fallbackProvider &&
+        providerInfo.id !== modelInfo.fallbackProvider
+      ) {
         return retriableRequest({
           excludeProviders: [...retry.excludeProviders, providerInfo.id],
           retryCount: retry.retryCount + 1,
@@ -147,7 +153,7 @@ export async function handler(
     }
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
-    // Handle non-streaming response
+    // Handle non-streaming response for non-stream request
     if (!isStream) {
       const responseConverter = createResponseConverter(providerInfo.format, opts.format)
       const json = await res.json()
@@ -161,6 +167,22 @@ export async function handler(
       await rateLimiter?.track()
       await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
       await reload(authInfo)
+      return new Response(body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: resHeaders,
+      })
+    }
+
+    // Handle non-streaming response for stream request
+    const contentType = res.headers.get("content-type") ?? ""
+    if (!contentType.includes("text/event-stream")) {
+      const body = await res.text()
+      logger.metric({ response_length: body.length })
+      logger.debug("RESPONSE: " + body)
+      dataDumper?.provideResponse(body)
+      dataDumper?.flush()
+      await rateLimiter?.track()
       return new Response(body, {
         status: res.status,
         statusText: res.statusText,

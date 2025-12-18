@@ -7411,6 +7411,11 @@
             "description": "Suspend terminal",
             "default": "ctrl+z",
             "type": "string"
+          },
+          "terminal_title_toggle": {
+            "description": "Toggle terminal title",
+            "default": "none",
+            "type": "string"
           }
         },
         "additionalProperties": false
