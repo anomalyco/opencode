@@ -92,7 +92,6 @@ export namespace ModelsDev {
     const result = await fetch("https://models.dev/api.json", {
       headers: {
         "User-Agent": Installation.USER_AGENT,
-        "x-opencode-client": Flag.OPENCODE_CLIENT,
       },
       signal: AbortSignal.timeout(10 * 1000),
     }).catch((e) => {
