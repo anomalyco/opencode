@@ -14,6 +14,7 @@ import { iife } from "@/util/iife"
 import { RotatingFetch } from "@/inference/rotating-fetch"
 import { CredentialStore, CredentialsMigrate } from "@/credentials"
 import { ProviderAuthRegistry } from "@/provider-auth/registry"
+import { ModelDiscovery } from "./model-discovery"
 
 // Direct imports for bundled providers
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
@@ -687,6 +688,79 @@ export namespace Provider {
       }
 
       const configProvider = config.provider?.[providerID]
+
+      if (configProvider?.options && configProvider.options["discoverModels"] === true) {
+        const template = Object.values(provider.models)[0]
+        const baseURL = String((provider.options as any)?.baseURL ?? template?.api?.url ?? "")
+        const apiKey = typeof (provider.options as any)?.apiKey === "string" ? String((provider.options as any).apiKey) : provider.key
+        const discovered = await ModelDiscovery.discover({
+          providerId: providerID,
+          namespace: configProvider?.auth?.namespace ?? "default",
+          baseURL,
+          authMode: (configProvider?.auth?.mode ?? "auto") as any,
+          apiKey,
+          headers: (provider.options as any)?.headers,
+          timeoutMs: typeof (provider.options as any)?.timeout === "number" ? (provider.options as any).timeout : undefined,
+          maxAttempts: configProvider?.auth?.maxAttempts,
+        })
+
+        if (template && discovered.length > 0) {
+          const npm = template.api.npm
+          const url = template.api.url ?? baseURL
+          const release_date = new Date().toISOString().slice(0, 10)
+          for (const id of discovered) {
+            if (provider.models[id]) continue
+            provider.models[id] = {
+              id,
+              providerID,
+              name: id,
+              family: "",
+              api: {
+                id,
+                npm,
+                url,
+              },
+              status: "beta",
+              capabilities: {
+                temperature: true,
+                reasoning: true,
+                attachment: false,
+                toolcall: true,
+                input: {
+                  text: true,
+                  audio: false,
+                  image: false,
+                  video: false,
+                  pdf: false,
+                },
+                output: {
+                  text: true,
+                  audio: false,
+                  image: false,
+                  video: false,
+                  pdf: false,
+                },
+                interleaved: false,
+              },
+              cost: {
+                input: 0,
+                output: 0,
+                cache: {
+                  read: 0,
+                  write: 0,
+                },
+              },
+              limit: {
+                context: 200_000,
+                output: 8_192,
+              },
+              options: {},
+              headers: {},
+              release_date,
+            }
+          }
+        }
+      }
 
       for (const [modelID, model] of Object.entries(provider.models)) {
         model.api.id = model.api.id ?? model.id ?? modelID
