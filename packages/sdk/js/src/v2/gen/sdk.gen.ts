@@ -16,6 +16,12 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  CredentialListResponses,
+  CredentialRemoveErrors,
+  CredentialRemoveResponses,
+  CredentialUpdateErrors,
+  CredentialUpdateResponses,
+  DebugRotationResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -2549,6 +2555,115 @@ export class Tui extends HeyApiClient {
   control = new Control({ client: this.client })
 }
 
+export class Credential extends HeyApiClient {
+  /**
+   * List credentials
+   *
+   * List credential records (metadata only).
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<CredentialListResponses, unknown, ThrowOnError>({
+      url: "/credential",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove credential
+   *
+   * Remove a credential record.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      credentialID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "credentialID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<CredentialRemoveResponses, CredentialRemoveErrors, ThrowOnError>({
+      url: "/credential/{credentialID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update credential
+   *
+   * Update a credential record's metadata (e.g. label).
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      credentialID: string
+      directory?: string
+      label?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "credentialID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "label" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<CredentialUpdateResponses, CredentialUpdateErrors, ThrowOnError>({
+      url: "/credential/{credentialID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Debug extends HeyApiClient {
+  /**
+   * Rotation stats
+   *
+   * In-memory counters for same-request OAuth rotation events.
+   */
+  public rotation<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<DebugRotationResponses, unknown, ThrowOnError>({
+      url: "/debug/rotation",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Event extends HeyApiClient {
   /**
    * Subscribe to events
@@ -2617,6 +2732,10 @@ export class OpencodeClient extends HeyApiClient {
   tui = new Tui({ client: this.client })
 
   auth = new Auth({ client: this.client })
+
+  credential = new Credential({ client: this.client })
+
+  debug = new Debug({ client: this.client })
 
   event = new Event({ client: this.client })
 }

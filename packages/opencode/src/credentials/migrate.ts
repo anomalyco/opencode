@@ -1,5 +1,5 @@
 import path from "path"
-import fs from "fs/promises"
+import crypto from "crypto"
 import z from "zod"
 import { Global } from "@/global"
 import { VaultFS } from "@/vault/fs"
@@ -51,18 +51,44 @@ const LegacyMcpAuthEntry = z
 export namespace CredentialsMigrate {
   const LEGACY_AUTH_PATH = path.join(Global.Path.data, "auth.json")
   const LEGACY_MCP_AUTH_PATH = path.join(Global.Path.data, "mcp-auth.json")
+  const MIGRATIONS_PATH = path.join(Global.Path.data, "credentials", "migrations.json")
   let didRun = false
   let inFlight: Promise<void> | undefined
+
+  const MigrationState = z
+    .object({
+      version: z.literal(1),
+      legacyAuth: z.record(z.string(), z.string()).default({}),
+      legacyMcpAuth: z.record(z.string(), z.string()).default({}),
+    })
+    .strict()
+  type MigrationState = z.infer<typeof MigrationState>
+
+  function fingerprint(raw: unknown): string {
+    const json = JSON.stringify(raw) ?? ""
+    return crypto.createHash("sha256").update(json).digest("hex")
+  }
+
+  async function loadState(): Promise<MigrationState> {
+    const json = await VaultFS.readJson<unknown>(MIGRATIONS_PATH)
+    const parsed = MigrationState.safeParse(json)
+    if (parsed.success) return parsed.data
+    return { version: 1, legacyAuth: {}, legacyMcpAuth: {} }
+  }
+
+  async function saveState(state: MigrationState): Promise<void> {
+    await VaultFS.atomicWriteJson(MIGRATIONS_PATH, state, 0o600)
+  }
 
   export async function migrateIfNeeded(): Promise<void> {
     if (didRun) return
     if (inFlight) return inFlight
     inFlight = (async () => {
-      const hasAny = await CredentialStore.hasAnyRecords()
-      if (hasAny) return
-
-      await migrateLegacyAuth()
-      await migrateLegacyMcpAuth()
+      const state = await loadState()
+      const changed = (await migrateLegacyAuth(state)) || (await migrateLegacyMcpAuth(state))
+      if (changed) {
+        await saveState(state)
+      }
     })()
     try {
       await inFlight
@@ -72,15 +98,19 @@ export namespace CredentialsMigrate {
     }
   }
 
-  async function migrateLegacyAuth() {
+  async function migrateLegacyAuth(state: MigrationState): Promise<boolean> {
     const legacy = await VaultFS.readJson<Record<string, unknown>>(LEGACY_AUTH_PATH)
-    if (!legacy) return
+    if (!legacy) return false
+    let changed = false
 
     for (const [providerId, raw] of Object.entries(legacy)) {
       const parsed = LegacyAuthInfo.safeParse(raw)
       if (!parsed.success) continue
 
       const info = parsed.data
+      const sig = fingerprint(raw)
+      if (state.legacyAuth[providerId] === sig) continue
+
       if (info.type === "api") {
         await CredentialStore.upsertSingleton({
           providerId,
@@ -90,14 +120,14 @@ export namespace CredentialsMigrate {
           secret: { apiKey: info.key },
         })
       } else if (info.type === "oauth") {
-        await CredentialStore.put({
+        await CredentialStore.upsertSingleton({
           providerId,
           namespace: "default",
           kind: "oauth",
-          label: `migrated-${providerId}`,
+          label: "migrated",
           secret: {
             accessToken: info.access,
-            refreshToken: info.refresh,
+            refreshToken: info.refresh || undefined,
             expiresAt: info.expires,
             extra: info.enterpriseUrl ? { enterpriseUrl: info.enterpriseUrl } : undefined,
           },
@@ -111,19 +141,24 @@ export namespace CredentialsMigrate {
           secret: { envKey: info.key, token: info.token },
         })
       }
-    }
 
-    const bak = path.join(Global.Path.data, "auth.v1.json.bak")
-    await fs.rename(LEGACY_AUTH_PATH, bak).catch(() => {})
+      state.legacyAuth[providerId] = sig
+      changed = true
+    }
+    return changed
   }
 
-  async function migrateLegacyMcpAuth() {
+  async function migrateLegacyMcpAuth(state: MigrationState): Promise<boolean> {
     const legacy = await VaultFS.readJson<Record<string, unknown>>(LEGACY_MCP_AUTH_PATH)
-    if (!legacy) return
+    if (!legacy) return false
+    let changed = false
 
     for (const [mcpName, raw] of Object.entries(legacy)) {
       const parsed = LegacyMcpAuthEntry.safeParse(raw)
       if (!parsed.success) continue
+
+      const sig = fingerprint(raw)
+      if (state.legacyMcpAuth[mcpName] === sig) continue
 
       await CredentialStore.upsertSingleton({
         providerId: `mcp:${mcpName}`,
@@ -132,9 +167,10 @@ export namespace CredentialsMigrate {
         label: mcpName,
         secret: { entry: parsed.data },
       })
-    }
 
-    const bak = path.join(Global.Path.data, "mcp-auth.v1.json.bak")
-    await fs.rename(LEGACY_MCP_AUTH_PATH, bak).catch(() => {})
+      state.legacyMcpAuth[mcpName] = sig
+      changed = true
+    }
+    return changed
   }
 }

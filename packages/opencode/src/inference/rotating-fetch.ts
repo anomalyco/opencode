@@ -1,6 +1,7 @@
 import { CredentialPool, CredentialStore, CredentialsMigrate } from "@/credentials"
 import type { RotateDecision } from "@/provider-auth/adapter"
 import { ProviderAuthRegistry } from "@/provider-auth/registry"
+import { RotationStats } from "@/inference/rotation-stats"
 import { Log } from "@/util/log"
 
 const log = Log.create({ service: "inference.rotating-fetch" })
@@ -97,6 +98,8 @@ export namespace RotatingFetch {
         .filter((r) => r.meta.kind === "oauth")
       if (records.length === 0) return baseFetch(input, init)
 
+      RotationStats.recordRequest(canonicalProviderId)
+
       records.sort((a, b) => {
         const aDefault = (a.meta.label ?? "") === "default"
         const bDefault = (b.meta.label ?? "") === "default"
@@ -117,6 +120,8 @@ export namespace RotatingFetch {
       let lastResponse: Response | undefined
 
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        RotationStats.recordAttempt(canonicalProviderId)
+
         const now = Date.now()
         const nextId = orderedIds.find((id) => {
           if (attempted.has(id)) return false
@@ -157,6 +162,7 @@ export namespace RotatingFetch {
         if (activeDecision.rotatable && activeDecision.isAuthExpired) {
           if (adapter.refresh && (secret as any)?.refreshToken && !refreshed.has(chosenId)) {
             refreshed.add(chosenId)
+            RotationStats.recordRefreshAttempt(canonicalProviderId)
             log.info("refreshing oauth credential", {
               providerId: opts.providerId,
               canonicalProviderId,
@@ -167,6 +173,7 @@ export namespace RotatingFetch {
             try {
               const nextSecret = await adapter.refresh(secret)
               await CredentialStore.updateSecret(chosenId, nextSecret)
+              RotationStats.recordRefreshSuccess(canonicalProviderId)
               log.info("refreshed oauth credential", {
                 providerId: opts.providerId,
                 canonicalProviderId,
@@ -184,6 +191,7 @@ export namespace RotatingFetch {
               stripApiKeyHeaders(retryHeaders)
               adapter.prepareRequest?.({ url: retryUrl, headers: retryHeaders, request: retryReq, secret: nextSecret })
               adapter.applyAuth(retryHeaders, nextSecret)
+              RotationStats.recordAttempt(canonicalProviderId)
               const retryResp = await baseFetch(buildRequestWithUrlAndHeaders(retryReq, retryUrl, retryHeaders))
               lastResponse = retryResp
 
@@ -196,6 +204,7 @@ export namespace RotatingFetch {
                 return activeResp
               }
             } catch {
+              RotationStats.recordRefreshFailure(canonicalProviderId)
               log.warn("oauth credential refresh failed; will rotate", {
                 providerId: opts.providerId,
                 canonicalProviderId,
@@ -209,6 +218,7 @@ export namespace RotatingFetch {
         }
 
         if (activeDecision.rotatable) {
+          RotationStats.recordRotation(canonicalProviderId, activeDecision.reason)
           const cooldownMs =
             activeDecision.cooldownMs ??
             (activeDecision.isAuthExpired ? 5 * 60_000 : parseRetryAfterMs(activeResp) ?? 30_000)
@@ -245,6 +255,7 @@ export namespace RotatingFetch {
         attempted: Array.from(attempted),
         maxAttempts,
       })
+      RotationStats.recordExhausted(canonicalProviderId)
       return lastResponse ?? baseFetch(input, init)
     }
   }
