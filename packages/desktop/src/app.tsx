@@ -39,9 +39,9 @@ const url =
 
 export function App() {
   return (
-    <ErrorBoundary fallback={ErrorPage}>
-      <MetaProvider>
-        <Font />
+    <MetaProvider>
+      <Font />
+      <ErrorBoundary fallback={ErrorPage}>
         <DialogProvider>
           <MarkedProvider>
             <DiffComponentProvider component={Diff}>
@@ -82,7 +82,7 @@ export function App() {
             </DiffComponentProvider>
           </MarkedProvider>
         </DialogProvider>
-      </MetaProvider>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </MetaProvider>
   )
 }
