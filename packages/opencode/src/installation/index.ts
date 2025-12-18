@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
+import { spawn } from "./bun-spawn"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
@@ -66,7 +67,7 @@ export namespace Installation {
     const checks = [
       {
         name: "npm" as const,
-        command: () => $`npm list -g --depth=0`.throws(false).text(),
+        command: () => spawn(["npm", "list", "-g", "--depth=0"], { throws: false }).text(),
       },
       {
         name: "yarn" as const,
@@ -180,7 +181,7 @@ export namespace Installation {
     }
 
     const registry = await iife(async () => {
-      const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
+      const r = (await spawn(["npm", "config", "get", "registry"], { throws: false }).text()).trim()
       const reg = r || "https://registry.npmjs.org"
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
