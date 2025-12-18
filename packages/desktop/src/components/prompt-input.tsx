@@ -99,6 +99,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     placeholder: number
     dragging: boolean
     imageAttachments: ImageAttachmentPart[]
+    mode: "normal" | "shell"
   }>({
     popover: null,
     historyIndex: -1,
@@ -106,6 +107,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     dragging: false,
     imageAttachments: [],
+    mode: "normal",
   })
 
   const MAX_HISTORY = 100
@@ -579,6 +581,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "!" && store.mode === "normal") {
+      const cursorPosition = getCursorPosition(editorRef)
+      if (cursorPosition === 0) {
+        setStore("mode", "shell")
+        setStore("popover", null)
+        event.preventDefault()
+        return
+      }
+    }
+    if (store.mode === "shell") {
+      const cursorPosition = getCursorPosition(editorRef)
+      if ((event.key === "Backspace" && cursorPosition === 0) || event.key === "Escape") {
+        setStore("mode", "normal")
+        event.preventDefault()
+        return
+      }
+    }
+
     if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       if (store.popover === "file") {
         onKeyDown(event)
@@ -688,10 +708,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       filename: attachment.filename,
     }))
 
+    const isShellMode = store.mode === "shell"
     tabs().setActive(undefined)
     editorRef.innerHTML = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
     setStore("imageAttachments", [])
+    setStore("mode", "normal")
+
+    const model = {
+      modelID: local.model.current()!.id,
+      providerID: local.model.current()!.provider.id,
+    }
+    const agent = local.agent.current()!.name
+
+    if (isShellMode) {
+      sdk.client.session.shell({
+        sessionID: existing.id,
+        agent,
+        model,
+        command: text,
+      })
+      return
+    }
 
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
@@ -702,18 +740,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           sessionID: existing.id,
           command: commandName,
           arguments: args.join(" "),
-          agent: local.agent.current()!.name,
-          model: `${local.model.current()!.provider.id}/${local.model.current()!.id}`,
+          agent,
+          model: `${model.providerID}/${model.modelID}`,
         })
         return
       }
     }
-
-    const model = {
-      modelID: local.model.current()!.id,
-      providerID: local.model.current()!.provider.id,
-    }
-    const agent = local.agent.current()!.name
 
     sync.session.addOptimisticMessage({
       sessionID: existing.id,
@@ -883,30 +915,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
           <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
-              Ask anything... "{PLACEHOLDERS[store.placeholder]}"
+              {store.mode === "shell"
+                ? "Enter shell command..."
+                : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
             </div>
           </Show>
         </div>
         <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
-            <Select
-              options={local.agent.list().map((agent) => agent.name)}
-              current={local.agent.current().name}
-              onSelect={local.agent.set}
-              class="capitalize"
-              variant="ghost"
-            />
-            <Button
-              as="div"
-              variant="ghost"
-              onClick={() =>
-                dialog.show(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
-              }
-            >
-              {local.model.current()?.name ?? "Select model"}
-              <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
-              <Icon name="chevron-down" size="small" />
-            </Button>
+            <Switch>
+              <Match when={store.mode === "shell"}>
+                <div class="flex items-center gap-2 px-2 h-6">
+                  <Icon name="console" size="small" class="text-icon-primary" />
+                  <span class="text-12-regular text-text-primary">Shell</span>
+                  <span class="text-12-regular text-text-weak">esc to exit</span>
+                </div>
+              </Match>
+              <Match when={store.mode === "normal"}>
+                <Select
+                  options={local.agent.list().map((agent) => agent.name)}
+                  current={local.agent.current().name}
+                  onSelect={local.agent.set}
+                  class="capitalize"
+                  variant="ghost"
+                />
+                <Button
+                  as="div"
+                  variant="ghost"
+                  onClick={() =>
+                    dialog.show(() =>
+                      providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
+                    )
+                  }
+                >
+                  {local.model.current()?.name ?? "Select model"}
+                  <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
+                  <Icon name="chevron-down" size="small" />
+                </Button>
+              </Match>
+            </Switch>
           </div>
           <div class="flex items-center gap-1 absolute right-2 bottom-2">
             <input
