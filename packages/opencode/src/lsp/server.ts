@@ -364,9 +364,17 @@ export namespace LSPServer {
   export const Ty: Info = {
     id: "ty",
     extensions: [".py", ".pyi"],
-    root: NearestRoot(["pyproject.toml", "ty.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
+    root: NearestRoot([
+      "pyproject.toml",
+      "ty.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements.txt",
+      "Pipfile",
+      "pyrightconfig.json",
+    ]),
     async spawn(root) {
-      if(!Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+      if (!Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
         return undefined
       }
 
@@ -388,7 +396,7 @@ export namespace LSPServer {
         }
       }
 
-      if(!binary) {
+      if (!binary) {
         for (const venvPath of potentialVenvPaths) {
           const isWindows = process.platform === "win32"
           const potentialTyPath = isWindows
@@ -401,7 +409,7 @@ export namespace LSPServer {
         }
       }
 
-      if(!binary) {
+      if (!binary) {
         log.error("ty not found, please install ty first")
         return
       }
@@ -409,7 +417,7 @@ export namespace LSPServer {
       const proc = spawn(binary, ["server"], {
         cwd: root,
       })
-      
+
       return {
         process: proc,
         initialization,
