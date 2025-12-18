@@ -1,66 +1,33 @@
 import { Instance } from "@/project/instance"
-import { Plugin } from "../plugin"
-import { map, filter, pipe, fromEntries, mapValues } from "remeda"
+import { mapValues } from "remeda"
 import z from "zod"
 import { fn } from "@/util/fn"
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
-import { Auth } from "@/auth"
 import { ProviderAuthRegistry } from "@/provider-auth/registry"
 import { CredentialStore, CredentialsMigrate } from "@/credentials"
 import { Config } from "@/config/config"
 
 export namespace ProviderAuth {
-  function dedupeMethods(methods: NonNullable<Hooks["auth"]>["methods"]): NonNullable<Hooks["auth"]>["methods"] {
-    const seen = new Set<string>()
-    const out: typeof methods = []
-    for (const method of methods) {
-      const key = `${method.type}:${method.label}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      out.push(method)
-    }
-    return out
-  }
-
   const state = Instance.state(async () => {
-    const pluginMethods = pipe(
-      await Plugin.list(),
-      filter((x) => x.auth?.provider !== undefined),
-      map((x) => [x.auth!.provider, x.auth!] as const),
-      fromEntries(),
-    )
-
-    const methods: Record<string, NonNullable<Hooks["auth"]>> = { ...pluginMethods }
+    const methods: Record<string, NonNullable<Hooks["auth"]>> = {}
     for (const providerId of ProviderAuthRegistry.listProviderIds()) {
       const core = ProviderAuthRegistry.getAuthHook(providerId)
       if (!core) continue
-      const existing = methods[providerId]
-      if (!existing) {
-        methods[providerId] = core as NonNullable<Hooks["auth"]>
-        continue
-      }
-      // Merge methods, preferring core methods first.
-      const merged = dedupeMethods([...core.methods, ...existing.methods])
-      methods[providerId] = {
-        ...existing,
-        methods: merged,
-      }
+      methods[providerId] = core as NonNullable<Hooks["auth"]>
     }
 
-    for (const providerId of Object.keys(methods)) {
-      const methodList = methods[providerId]?.methods ?? []
-      const hasApi = methodList.some((m) => m.type === "api")
-      if (!hasApi) {
-        methodList.push({
-          type: "api",
-          label: "API key",
-        } as any)
-      }
-      methods[providerId] = { ...methods[providerId]!, methods: methodList }
+    return {
+      methods,
+      pending: {} as Record<
+        string,
+        {
+          oauth: AuthOuathResult
+          namespace?: string
+          label?: string
+        }
+      >,
     }
-
-    return { methods, pending: {} as Record<string, AuthOuathResult> }
   })
 
   export const Method = z
@@ -100,13 +67,22 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       method: z.number(),
+      namespace: z.string().optional(),
+      label: z.string().optional(),
     }),
     async (input): Promise<Authorization | undefined> => {
       const auth = await state().then((s) => s.methods[input.providerID])
+      if (!auth) return undefined
       const method = auth.methods[input.method]
       if (method.type === "oauth") {
         const result = await method.authorize()
-        await state().then((s) => (s.pending[input.providerID] = result))
+        await state().then((s) => {
+          s.pending[input.providerID] = {
+            oauth: result,
+            namespace: input.namespace,
+            label: input.label,
+          }
+        })
         return {
           url: result.url,
           method: result.method,
@@ -121,9 +97,12 @@ export namespace ProviderAuth {
       providerID: z.string(),
       method: z.number(),
       code: z.string().optional(),
+      namespace: z.string().optional(),
+      label: z.string().optional(),
     }),
     async (input) => {
-      const match = await state().then((s) => s.pending[input.providerID])
+      const pending = await state().then((s) => s.pending[input.providerID])
+      const match = pending?.oauth
       if (!match) throw new OauthMissing({ providerID: input.providerID })
       let result
 
@@ -138,20 +117,39 @@ export namespace ProviderAuth {
 
       if (result?.type === "success") {
         if ("key" in result) {
-          await Auth.set(input.providerID, {
-            type: "api",
-            key: result.key,
+          await CredentialsMigrate.migrateIfNeeded()
+          await CredentialStore.upsertSingleton({
+            providerId: input.providerID,
+            namespace: "default",
+            kind: "api",
+            label: "default",
+            secret: { apiKey: result.key },
           })
         }
         if ("refresh" in result) {
           await CredentialsMigrate.migrateIfNeeded()
           const config = await Config.get()
-          const namespace = config.provider?.[input.providerID]?.auth?.namespace ?? "default"
+          const namespace = (input.namespace ?? pending?.namespace ?? config.provider?.[input.providerID]?.auth?.namespace ?? "default")
+            .trim() || "default"
+          const desiredLabel = (input.label ?? pending?.label)?.trim()
           const existingOauth = (await CredentialStore.findByProvider(input.providerID, namespace)).filter(
             (r) => r.meta.kind === "oauth",
           )
-          const hasDefault = existingOauth.some((r) => (r.meta.label ?? "") === "default")
-          const label = hasDefault ? `${input.providerID}-${new Date().toISOString()}` : "default"
+          const existingLabels = new Set(existingOauth.map((r) => r.meta.label ?? ""))
+          const labelBase = desiredLabel?.split("\n")[0]?.trim() || undefined
+
+          const label = (() => {
+            if (labelBase) {
+              if (!existingLabels.has(labelBase)) return labelBase
+              let n = 2
+              while (existingLabels.has(`${labelBase}-${n}`)) n++
+              return `${labelBase}-${n}`
+            }
+
+            const hasDefault = existingLabels.has("default")
+            return hasDefault ? `${input.providerID}-${new Date().toISOString()}` : "default"
+          })()
+
           const { type: _, provider: __, access, refresh, expires, ...extraFields } = result as any
 
           await CredentialStore.put({
@@ -181,9 +179,13 @@ export namespace ProviderAuth {
       key: z.string(),
     }),
     async (input) => {
-      await Auth.set(input.providerID, {
-        type: "api",
-        key: input.key,
+      await CredentialsMigrate.migrateIfNeeded()
+      await CredentialStore.upsertSingleton({
+        providerId: input.providerID,
+        namespace: "default",
+        kind: "api",
+        label: "default",
+        secret: { apiKey: input.key },
       })
     },
   )

@@ -52,5 +52,40 @@ describe("CredentialStore", () => {
     const decrypted = await CredentialStore.decryptSecret(second)
     expect(decrypted).toEqual({ apiKey: "key-2" })
   })
-})
 
+  test("maintains on-disk index for provider lookups", async () => {
+    await resetCredentialDir()
+
+    const id = "cred-idx-1"
+    await CredentialStore.put({
+      id,
+      providerId: "openai",
+      namespace: "default",
+      kind: "oauth",
+      label: "default",
+      secret: { accessToken: "t", refreshToken: "r" },
+    })
+
+    const indexPath = path.join(Global.Path.data, "credentials", "index.json")
+    const raw = await Bun.file(indexPath).json()
+    expect(raw).toMatchObject({
+      version: 1,
+      byProvider: {
+        openai: {
+          default: [id],
+        },
+      },
+    })
+
+    await CredentialStore.remove(id)
+    const after = await Bun.file(indexPath).json()
+    expect(after).toMatchObject({
+      version: 1,
+      byProvider: {
+        openai: {
+          default: [],
+        },
+      },
+    })
+  })
+})

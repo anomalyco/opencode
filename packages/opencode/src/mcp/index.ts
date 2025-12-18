@@ -12,7 +12,7 @@ import { Instance } from "../project/instance"
 import { withTimeout } from "@/util/timeout"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
-import { McpAuth } from "./auth"
+import { McpCredentials } from "./credentials"
 import open from "open"
 
 export namespace MCP {
@@ -540,7 +540,7 @@ export namespace MCP {
       await transport.finishAuth(authorizationCode)
 
       // Clear the code verifier after successful auth
-      await McpAuth.clearCodeVerifier(mcpName)
+      await McpCredentials.clearCodeVerifier(mcpName)
 
       // Now try to reconnect
       const cfg = await Config.get()
@@ -569,7 +569,7 @@ export namespace MCP {
    * Remove OAuth credentials for an MCP server.
    */
   export async function removeAuth(mcpName: string): Promise<void> {
-    await McpAuth.remove(mcpName)
+    await McpCredentials.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
     pendingOAuthTransports.delete(mcpName)
     await McpAuth.clearOAuthState(mcpName)
@@ -589,7 +589,7 @@ export namespace MCP {
    * Check if an MCP server has stored OAuth tokens.
    */
   export async function hasStoredTokens(mcpName: string): Promise<boolean> {
-    const entry = await McpAuth.get(mcpName)
+    const entry = await McpCredentials.get(mcpName)
     return !!entry?.tokens
   }
 }

@@ -23,6 +23,7 @@ export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
+  const { theme } = useTheme()
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
@@ -63,18 +64,55 @@ export function createDialogProviderOptions() {
           if (index == null) return
           const method = methods[index]
           if (method.type === "oauth") {
+            const rawNamespace = await DialogPrompt.show(dialog, "Namespace (optional)", {
+              placeholder: "default",
+              description: () => (
+                <box gap={1}>
+                  <text fg={theme.textMuted}>Leave blank to use the default namespace.</text>
+                </box>
+              ),
+            })
+            if (rawNamespace === null) return
+            const namespace = rawNamespace.split("\n")[0]?.trim() || undefined
+
+            const rawLabel = await DialogPrompt.show(dialog, "Account label (optional)", {
+              placeholder: "default",
+              description: () => (
+                <box gap={1}>
+                  <text fg={theme.textMuted}>Leave blank to auto-generate.</text>
+                </box>
+              ),
+            })
+            if (rawLabel === null) return
+            const label = rawLabel.split("\n")[0]?.trim() || undefined
             const result = await sdk.client.provider.oauth.authorize({
               providerID: provider.id,
               method: index,
+              namespace,
+              label,
             })
             if (result.data?.method === "code") {
               dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <CodeMethod
+                  providerID={provider.id}
+                  title={method.label}
+                  index={index}
+                  authorization={result.data!}
+                  namespace={namespace}
+                  label={label}
+                />
               ))
             }
             if (result.data?.method === "auto") {
               dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <AutoMethod
+                  providerID={provider.id}
+                  title={method.label}
+                  index={index}
+                  authorization={result.data!}
+                  namespace={namespace}
+                  label={label}
+                />
               ))
             }
           }
@@ -98,6 +136,8 @@ interface AutoMethodProps {
   providerID: string
   title: string
   authorization: ProviderAuthAuthorization
+  namespace?: string
+  label?: string
 }
 function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
@@ -109,6 +149,8 @@ function AutoMethod(props: AutoMethodProps) {
     const result = await sdk.client.provider.oauth.callback({
       providerID: props.providerID,
       method: props.index,
+      namespace: props.namespace,
+      label: props.label,
     })
     if (result.error) {
       dialog.clear()
@@ -141,6 +183,8 @@ interface CodeMethodProps {
   title: string
   providerID: string
   authorization: ProviderAuthAuthorization
+  namespace?: string
+  label?: string
 }
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
@@ -158,6 +202,8 @@ function CodeMethod(props: CodeMethodProps) {
           providerID: props.providerID,
           method: props.index,
           code: value,
+          namespace: props.namespace,
+          label: props.label,
         })
         if (!error) {
           await sdk.client.instance.dispose()

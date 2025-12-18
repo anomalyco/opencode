@@ -11,13 +11,13 @@ import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
-import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { CredentialStore, CredentialsMigrate } from "@/credentials"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -34,7 +34,8 @@ export namespace Config {
   }
 
   export const state = Instance.state(async () => {
-    const auth = await Auth.all()
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records: credentialRecords } = await CredentialStore.listAll()
     let result = await global()
 
     // Override with custom config if provided
@@ -55,12 +56,19 @@ export namespace Config {
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
-    for (const [key, value] of Object.entries(auth)) {
-      if (value.type === "wellknown") {
-        process.env[value.key] = value.token
-        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
-      }
+    for (const record of credentialRecords) {
+      if (record.meta.kind !== "wellknown") continue
+      const secret = await CredentialStore.decryptSecret(record)
+      if (!secret || typeof secret !== "object") continue
+      if (!("envKey" in secret) || !("token" in secret)) continue
+
+      const envKey = String((secret as any).envKey)
+      const token = String((secret as any).token)
+      process.env[envKey] = token
+
+      const providerUrl = record.meta.providerId
+      const wellknown = (await fetch(`${providerUrl}/.well-known/opencode`).then((x) => x.json())) as any
+      result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
     }
 
     result.agent = result.agent || {}

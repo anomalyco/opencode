@@ -5,10 +5,8 @@ import { mapValues, mergeDeep, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
-import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -69,7 +67,9 @@ export namespace Provider {
       const hasKey = await (async () => {
         const env = Env.all()
         if (input.env.some((item) => env[item])) return true
-        if (await Auth.get(input.id)) return true
+        await CredentialsMigrate.migrateIfNeeded()
+        const records = await CredentialStore.findByProvider(input.id, "default")
+        if (records.some((r) => r.meta.kind === "api")) return true
         return false
       })()
 
@@ -289,16 +289,23 @@ export namespace Provider {
       }
     },
     "sap-ai-core": async () => {
-      const auth = await Auth.get("sap-ai-core")
-      const envServiceKey = iife(() => {
-	        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
-	        if (envAICoreServiceKey) return envAICoreServiceKey
-		        if (auth && auth.type === "api" && auth.key) {
-		          Env.set("AICORE_SERVICE_KEY", auth.key)
-		          return auth.key
-		        }
-		        return undefined
-		      })
+      const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+      let envServiceKey = envAICoreServiceKey
+      if (!envServiceKey) {
+        await CredentialsMigrate.migrateIfNeeded()
+        const records = await CredentialStore.findByProvider("sap-ai-core", "default")
+        const apiRecord =
+          records.find((r) => r.meta.kind === "api" && (r.meta.label ?? "") === "default") ??
+          records.find((r) => r.meta.kind === "api")
+        if (apiRecord) {
+          const secret = await CredentialStore.decryptSecret(apiRecord)
+          const apiKey = secret && typeof secret === "object" && "apiKey" in secret ? String((secret as any).apiKey) : undefined
+          if (apiKey) {
+            Env.set("AICORE_SERVICE_KEY", apiKey)
+            envServiceKey = apiKey
+          }
+        }
+      }
       const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
       const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
 
@@ -628,61 +635,18 @@ export namespace Provider {
     }
 
     // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records: credentialRecords } = await CredentialStore.listAll()
+    for (const record of credentialRecords) {
+      if (record.meta.kind !== "api") continue
+      const providerID = record.meta.providerId
       if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
-        mergeProvider(providerID, {
-          source: "api",
-          key: provider.key,
-        })
-      }
-    }
-
-    for (const plugin of await Plugin.list()) {
-      if (!plugin.auth) continue
-      const providerID = plugin.auth.provider
-      if (disabled.has(providerID)) continue
-
-      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
-      let hasAuth = false
-      const auth = await Auth.get(providerID)
-      if (auth) hasAuth = true
-
-      // Special handling for github-copilot: also check for enterprise auth
-      if (providerID === "github-copilot" && !hasAuth) {
-        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
-        if (enterpriseAuth) hasAuth = true
-      }
-
-      if (!hasAuth) continue
-      if (!plugin.auth.loader) continue
-
-      // Load for the main provider if auth exists
-      if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        mergeProvider(plugin.auth.provider, {
-          source: "custom",
-          options: options,
-        })
-      }
-
-      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
-      if (providerID === "github-copilot") {
-        const enterpriseProviderID = "github-copilot-enterprise"
-        if (!disabled.has(enterpriseProviderID)) {
-          const enterpriseAuth = await Auth.get(enterpriseProviderID)
-          if (enterpriseAuth) {
-            const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
-              database[enterpriseProviderID],
-            )
-            mergeProvider(enterpriseProviderID, {
-              source: "custom",
-              options: enterpriseOptions,
-            })
-          }
-        }
-      }
+      const secret = await CredentialStore.decryptSecret(record)
+      if (!secret || typeof secret !== "object" || !("apiKey" in secret)) continue
+      mergeProvider(providerID, {
+        source: "api",
+        key: String((secret as any).apiKey),
+      })
     }
 
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {

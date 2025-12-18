@@ -137,6 +137,13 @@ export const GoogleGeminiSubscriptionAdapter: ProviderAuthAdapter = {
     return [makeOAuth("auto"), makeOAuth("code")]
   },
 
+  prepareRequest({ url }) {
+    // Avoid leaking API keys when the underlying SDK uses ?key= for API auth.
+    url.searchParams.delete("key")
+    url.searchParams.delete("api_key")
+    url.searchParams.delete("api-key")
+  },
+
   applyAuth(headers: Headers, secret: any) {
     if (secret && typeof secret === "object" && "accessToken" in secret) {
       headers.set("Authorization", `Bearer ${String((secret as any).accessToken)}`)

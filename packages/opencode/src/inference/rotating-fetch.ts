@@ -1,6 +1,25 @@
 import { CredentialPool, CredentialStore, CredentialsMigrate } from "@/credentials"
 import type { RotateDecision } from "@/provider-auth/adapter"
 import { ProviderAuthRegistry } from "@/provider-auth/registry"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "inference.rotating-fetch" })
+
+function buildRequestWithUrlAndHeaders(original: Request, url: URL, headers: Headers): Request {
+  const init: RequestInit = {
+    method: original.method,
+    headers,
+    signal: original.signal,
+  }
+
+  if (original.body) {
+    init.body = original.body as any
+    // Node fetch requires duplex when sending a stream body.
+    ;(init as any).duplex = (original as any).duplex ?? "half"
+  }
+
+  return new Request(url, init as any)
+}
 
 function parseRetryAfterMs(resp: Response): number | undefined {
   const msHeader = resp.headers.get("retry-after-ms") ?? resp.headers.get("Retry-After-Ms")
@@ -121,12 +140,14 @@ export namespace RotatingFetch {
         const secret = await CredentialStore.decryptSecret(record)
 
         const request = original.clone()
+        const url = new URL(request.url)
         const headers = new Headers(request.headers)
         // Avoid leaking API keys if present; subscription auth should win for this attempt.
         stripApiKeyHeaders(headers)
+        adapter.prepareRequest?.({ url, headers, request, secret })
         adapter.applyAuth(headers, secret)
 
-        const attemptRequest = new Request(request, { headers })
+        const attemptRequest = buildRequestWithUrlAndHeaders(request, url, headers)
         const resp = await baseFetch(attemptRequest)
         lastResponse = resp
 
@@ -136,18 +157,34 @@ export namespace RotatingFetch {
         if (activeDecision.rotatable && activeDecision.isAuthExpired) {
           if (adapter.refresh && (secret as any)?.refreshToken && !refreshed.has(chosenId)) {
             refreshed.add(chosenId)
+            log.info("refreshing oauth credential", {
+              providerId: opts.providerId,
+              canonicalProviderId,
+              namespace: opts.namespace,
+              credentialId: chosenId,
+              label: record.meta.label,
+            })
             try {
               const nextSecret = await adapter.refresh(secret)
               await CredentialStore.updateSecret(chosenId, nextSecret)
+              log.info("refreshed oauth credential", {
+                providerId: opts.providerId,
+                canonicalProviderId,
+                namespace: opts.namespace,
+                credentialId: chosenId,
+                label: record.meta.label,
+              })
               try {
                 resp.body?.cancel()
               } catch {}
 
               const retryReq = original.clone()
+              const retryUrl = new URL(retryReq.url)
               const retryHeaders = new Headers(retryReq.headers)
               stripApiKeyHeaders(retryHeaders)
+              adapter.prepareRequest?.({ url: retryUrl, headers: retryHeaders, request: retryReq, secret: nextSecret })
               adapter.applyAuth(retryHeaders, nextSecret)
-              const retryResp = await baseFetch(new Request(retryReq, { headers: retryHeaders }))
+              const retryResp = await baseFetch(buildRequestWithUrlAndHeaders(retryReq, retryUrl, retryHeaders))
               lastResponse = retryResp
 
               const retryDecision = await classifyResponse(adapter, retryResp)
@@ -159,6 +196,13 @@ export namespace RotatingFetch {
                 return activeResp
               }
             } catch {
+              log.warn("oauth credential refresh failed; will rotate", {
+                providerId: opts.providerId,
+                canonicalProviderId,
+                namespace: opts.namespace,
+                credentialId: chosenId,
+                label: record.meta.label,
+              })
               // fall through to rotate on auth failure
             }
           }
@@ -172,6 +216,19 @@ export namespace RotatingFetch {
           try {
             activeResp.body?.cancel()
           } catch {}
+          log.warn("rotating oauth credential", {
+            providerId: opts.providerId,
+            canonicalProviderId,
+            namespace: opts.namespace,
+            credentialId: chosenId,
+            label: record.meta.label,
+            status: activeResp.status,
+            reason: activeDecision.reason,
+            cooldownMs,
+            attempt: attempt + 1,
+            maxAttempts,
+            path: new URL(original.url).pathname,
+          })
           await CredentialStore.recordOutcome({ id: chosenId, statusCode: activeResp.status, ok: false, cooldownUntil })
           await CredentialPool.moveToBack(canonicalProviderId, opts.namespace, chosenId)
           continue
@@ -181,6 +238,13 @@ export namespace RotatingFetch {
         return activeResp
       }
 
+      log.error("oauth rotation exhausted credentials", {
+        providerId: opts.providerId,
+        canonicalProviderId,
+        namespace: opts.namespace,
+        attempted: Array.from(attempted),
+        maxAttempts,
+      })
       return lastResponse ?? baseFetch(input, init)
     }
   }
