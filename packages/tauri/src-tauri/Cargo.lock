@@ -2677,6 +2677,7 @@ dependencies = [
 name = "opencode-desktop"
 version = "0.0.0"
 dependencies = [
+ "gtk",
  "listeners",
  "serde",
  "serde_json",
@@ -2692,6 +2693,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tokio",
+ "webkit2gtk",
 ]
 
 [[package]]

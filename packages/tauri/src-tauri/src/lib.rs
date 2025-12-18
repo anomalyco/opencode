@@ -1,17 +1,19 @@
+mod window_customizer;
+
 use std::{
     collections::VecDeque,
     net::{SocketAddr, TcpListener},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-#[cfg(target_os = "macos")]
-use tauri::TitleBarStyle;
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
+
+use crate::window_customizer::PinchZoomDisablePlugin;
 
 #[derive(Clone)]
 struct ServerState(Arc<Mutex<Option<CommandChild>>>);
@@ -188,6 +190,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(PinchZoomDisablePlugin)
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             copy_logs_to_clipboard,
@@ -268,7 +271,7 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     window_builder = window_builder
-                        .title_bar_style(TitleBarStyle::Overlay)
+                        .title_bar_style(tauri::TitleBarStyle::Overlay)
                         .hidden_title(true);
                 }
 
