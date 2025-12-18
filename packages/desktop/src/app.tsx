@@ -1,5 +1,5 @@
 import "@/index.css"
-import { Show } from "solid-js"
+import { ErrorBoundary, Show } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
@@ -20,6 +20,7 @@ import Layout from "@/pages/layout"
 import Home from "@/pages/home"
 import DirectoryLayout from "@/pages/directory-layout"
 import Session from "@/pages/session"
+import { ErrorPage } from "./pages/error"
 
 declare global {
   interface Window {
@@ -38,48 +39,50 @@ const url =
 
 export function App() {
   return (
-    <MetaProvider>
-      <Font />
-      <DialogProvider>
-        <MarkedProvider>
-          <DiffComponentProvider component={Diff}>
-            <CodeComponentProvider component={Code}>
-              <GlobalSDKProvider url={url}>
-                <GlobalSyncProvider>
-                  <LayoutProvider>
-                    <NotificationProvider>
-                      <Router
-                        root={(props) => (
-                          <CommandProvider>
-                            <Layout>{props.children}</Layout>
-                          </CommandProvider>
-                        )}
-                      >
-                        <Route path="/" component={Home} />
-                        <Route path="/:dir" component={DirectoryLayout}>
-                          <Route path="/" component={() => <Navigate href="session" />} />
-                          <Route
-                            path="/session/:id?"
-                            component={(p) => (
-                              <Show when={p.params.id || true} keyed>
-                                <TerminalProvider>
-                                  <PromptProvider>
-                                    <Session />
-                                  </PromptProvider>
-                                </TerminalProvider>
-                              </Show>
-                            )}
-                          />
-                        </Route>
-                      </Router>
-                    </NotificationProvider>
-                  </LayoutProvider>
-                </GlobalSyncProvider>
-              </GlobalSDKProvider>
-            </CodeComponentProvider>
-          </DiffComponentProvider>
-        </MarkedProvider>
-      </DialogProvider>
-    </MetaProvider>
+    <ErrorBoundary fallback={ErrorPage}>
+      <MetaProvider>
+        <Font />
+        <DialogProvider>
+          <MarkedProvider>
+            <DiffComponentProvider component={Diff}>
+              <CodeComponentProvider component={Code}>
+                <GlobalSDKProvider url={url}>
+                  <GlobalSyncProvider>
+                    <LayoutProvider>
+                      <NotificationProvider>
+                        <Router
+                          root={(props) => (
+                            <CommandProvider>
+                              <Layout>{props.children}</Layout>
+                            </CommandProvider>
+                          )}
+                        >
+                          <Route path="/" component={Home} />
+                          <Route path="/:dir" component={DirectoryLayout}>
+                            <Route path="/" component={() => <Navigate href="session" />} />
+                            <Route
+                              path="/session/:id?"
+                              component={(p) => (
+                                <Show when={p.params.id || true} keyed>
+                                  <TerminalProvider>
+                                    <PromptProvider>
+                                      <Session />
+                                    </PromptProvider>
+                                  </TerminalProvider>
+                                </Show>
+                              )}
+                            />
+                          </Route>
+                        </Router>
+                      </NotificationProvider>
+                    </LayoutProvider>
+                  </GlobalSyncProvider>
+                </GlobalSDKProvider>
+              </CodeComponentProvider>
+            </DiffComponentProvider>
+          </MarkedProvider>
+        </DialogProvider>
+      </MetaProvider>
+    </ErrorBoundary>
   )
 }
