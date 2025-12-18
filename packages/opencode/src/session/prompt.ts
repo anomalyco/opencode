@@ -1333,6 +1333,20 @@ export namespace SessionPrompt {
       if (input.model) return Provider.parseModel(input.model)
       return await lastModel(input.sessionID)
     })()
+
+    try {
+      await Provider.getModel(model.providerID, model.modelID)
+    } catch (e) {
+      if (Provider.ModelNotFoundError.isInstance(e)) {
+        const { providerID, modelID, suggestions } = e.data
+        const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+        })
+      }
+      throw e
+    }
     const agent = await Agent.get(agentName)
 
     const parts =

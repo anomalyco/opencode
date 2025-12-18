@@ -271,6 +271,11 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.timeline"),
         },
         {
+          display: "/fork",
+          description: "fork from message",
+          onSelect: () => command.trigger("session.fork"),
+        },
+        {
           display: "/thinking",
           description: "toggle thinking visibility",
           onSelect: () => command.trigger("session.toggle.thinking"),
