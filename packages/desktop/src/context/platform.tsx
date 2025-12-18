@@ -19,6 +19,12 @@ export type Platform = {
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
+
+  /** Check for updates (Tauri only) */
+  checkUpdate?(): Promise<{ updateAvailable: boolean; version?: string }>
+
+  /** Install updates (Tauri only) */
+  update?(): Promise<void>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

@@ -1,4 +1,15 @@
-import { createEffect, createMemo, createSignal, For, Match, ParentProps, Show, Switch, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onMount,
+  ParentProps,
+  Show,
+  Switch,
+  type JSX,
+} from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors } from "@/context/layout"
@@ -28,7 +39,7 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { Toast } from "@opencode-ai/ui/toast"
+import { showToast, Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
@@ -46,14 +57,6 @@ export default function Layout(props: ParentProps) {
 
   let scrollContainerRef: HTMLDivElement | undefined
 
-  function scrollToSession(sessionId: string) {
-    if (!scrollContainerRef) return
-    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
-    if (element) {
-      element.scrollIntoView({ block: "center", behavior: "smooth" })
-    }
-  }
-
   const params = useParams()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
@@ -64,6 +67,30 @@ export default function Layout(props: ParentProps) {
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
+
+  onMount(async () => {
+    if (platform.checkUpdate && platform.update) {
+      const { updateAvailable, version } = await platform.checkUpdate()
+      if (updateAvailable) {
+        showToast({
+          persistent: true,
+          icon: "download",
+          title: "Update available",
+          description: `A new version of OpenCode (${version}) is now available to install.`,
+          actions: [
+            {
+              label: "Install and restart",
+              onClick: () => platform!.update!(),
+            },
+            {
+              label: "Not yet",
+              onClick: "dismiss",
+            },
+          ],
+        })
+      }
+    }
+  })
 
   function flattenSessions(sessions: Session[]): Session[] {
     const childrenMap = new Map<string, Session[]>()
@@ -85,6 +112,14 @@ export default function Layout(props: ParentProps) {
       if (!session.parentID) visit(session)
     }
     return result
+  }
+
+  function scrollToSession(sessionId: string) {
+    if (!scrollContainerRef) return
+    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
+    if (element) {
+      element.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
   }
 
   const currentSessions = createMemo(() => {
