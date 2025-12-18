@@ -302,7 +302,7 @@ export function Session() {
       value: "session.fork",
       keybind: "session_fork",
       category: "Session",
-onSelect: (dialog) => {
+      onSelect: (dialog) => {
         dialog.replace(() => (
           <DialogForkFromTimeline
             onMove={(messageID) => {
