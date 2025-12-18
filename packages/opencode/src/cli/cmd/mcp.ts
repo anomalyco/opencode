@@ -403,9 +403,34 @@ export const McpAddCommand = cmd({
   },
 })
 
+/**
+ * Import MCP servers from a base64-encoded mcp.json string.
+ *
+ * This command allows importing MCP server configurations that use the
+ * Claude/Cursor mcp.json format. The input should be base64-encoded JSON
+ * with the following structure:
+ *
+ * {
+ *   "mcpServers": {
+ *     "server-name": {
+ *       "command": "npx",           // For local servers
+ *       "args": ["-y", "mcp-server"],
+ *       "env": { "API_KEY": "..." }
+ *     },
+ *     "remote-server": {
+ *       "url": "https://example.com/mcp",  // For remote servers
+ *       "headers": { "Authorization": "Bearer ..." }
+ *     }
+ *   }
+ * }
+ *
+ * Example usage:
+ *   echo '{"mcpServers":{"my-server":{"url":"https://mcp.example.com"}}}' | base64
+ *   opencode mcp import <base64-output>
+ */
 export const McpImportCommand = cmd({
   command: "import <data>",
-  describe: "import MCP servers from a base64-encoded JSON string",
+  describe: "import MCP servers from a base64-encoded mcp.json string",
   builder: (yargs) =>
     yargs.positional("data", {
       describe: "base64-encoded mcp.json content",
