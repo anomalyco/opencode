@@ -436,6 +436,13 @@ export namespace MCP {
     // Start the callback server
     await McpOAuthCallback.ensureRunning()
 
+    // Generate and store a cryptographically secure state parameter BEFORE creating the provider
+    // The SDK will call provider.state() to read this value
+    const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+    await McpAuth.updateOAuthState(mcpName, oauthState)
+
     // Create a new auth provider for this flow
     // OAuth config is optional - if not provided, we'll use auto-discovery
     const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
@@ -491,24 +498,28 @@ export namespace MCP {
       return s.status[mcpName] ?? { status: "connected" }
     }
 
-    // Extract state from authorization URL to use as callback key
-    // If no state parameter, use mcpName as fallback
-    const authUrl = new URL(authorizationUrl)
-    let oauthState = mcpName
-
-    if (authUrl.searchParams.has("state")) {
-      oauthState = authUrl.searchParams.get("state")!
-    } else {
-      log.info("no state parameter in authorization URL, using mcpName as state", { mcpName })
-      authUrl.searchParams.set("state", oauthState)
+    // Get the state that was already generated and stored in startAuth()
+    const oauthState = await McpAuth.getOAuthState(mcpName)
+    if (!oauthState) {
+      throw new Error("OAuth state not found - this should not happen")
     }
 
-    // Open browser
-    log.info("opening browser for oauth", { mcpName, url: authUrl.toString(), state: oauthState })
-    await open(authUrl.toString())
+    // The SDK has already added the state parameter to the authorization URL
+    // We just need to open the browser
+    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
+    await open(authorizationUrl)
 
-    // Wait for callback using the OAuth state parameter (or mcpName as fallback)
+    // Wait for callback using the OAuth state parameter
     const code = await McpOAuthCallback.waitForCallback(oauthState)
+
+    // Validate and clear the state
+    const storedState = await McpAuth.getOAuthState(mcpName)
+    if (storedState !== oauthState) {
+      await McpAuth.clearOAuthState(mcpName)
+      throw new Error("OAuth state mismatch - potential CSRF attack")
+    }
+
+    await McpAuth.clearOAuthState(mcpName)
 
     // Finish auth
     return finishAuth(mcpName, code)
@@ -561,6 +572,7 @@ export namespace MCP {
     await McpAuth.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
     pendingOAuthTransports.delete(mcpName)
+    await McpAuth.clearOAuthState(mcpName)
     log.info("removed oauth credentials", { mcpName })
   }
 
