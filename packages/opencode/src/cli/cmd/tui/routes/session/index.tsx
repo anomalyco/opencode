@@ -1256,7 +1256,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const render = ToolRegistry.render(props.part.tool) ?? GenericTool
 
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
-    const input = (props.part.state as any).displayInput ?? props.part.state.input ?? {}
+    const input = props.part.state.displayInput ?? props.part.state.input ?? {}
     const container = ToolRegistry.container(props.part.tool)
     const permissions = sync.data.permission[props.message.sessionID] ?? []
     const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)

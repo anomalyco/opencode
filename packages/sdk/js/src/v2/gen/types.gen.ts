@@ -265,6 +265,7 @@ export type ToolStatePending = {
   input: {
     [key: string]: unknown
   }
+  displayInput?: unknown
   raw: string
 }
 
@@ -273,6 +274,7 @@ export type ToolStateRunning = {
   input: {
     [key: string]: unknown
   }
+  displayInput?: unknown
   title?: string
   metadata?: {
     [key: string]: unknown
@@ -287,6 +289,7 @@ export type ToolStateCompleted = {
   input: {
     [key: string]: unknown
   }
+  displayInput?: unknown
   output: string
   title: string
   metadata: {
@@ -305,6 +308,7 @@ export type ToolStateError = {
   input: {
     [key: string]: unknown
   }
+  displayInput?: unknown
   error: string
   metadata?: {
     [key: string]: unknown
