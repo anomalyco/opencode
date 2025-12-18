@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/tauri",
   "private": true,
-  "version": "1.0.164",
+  "version": "1.0.166",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo -b",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@opencode-ai/desktop": "workspace:*",
+    "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-opener": "^2",

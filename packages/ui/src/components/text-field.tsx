@@ -26,6 +26,7 @@ export interface TextFieldProps
   error?: string
   variant?: "normal" | "ghost"
   copyable?: boolean
+  multiline?: boolean
 }
 
 export function TextField(props: TextFieldProps) {
@@ -46,6 +47,7 @@ export function TextField(props: TextFieldProps) {
     "error",
     "variant",
     "copyable",
+    "multiline",
   ])
   const [copied, setCopied] = createSignal(false)
 
@@ -81,7 +83,12 @@ export function TextField(props: TextFieldProps) {
         </Kobalte.Label>
       </Show>
       <div data-slot="input-wrapper">
-        <Kobalte.Input {...others} data-slot="input-input" class={local.class} />
+        <Show
+          when={local.multiline}
+          fallback={<Kobalte.Input {...others} data-slot="input-input" class={local.class} />}
+        >
+          <Kobalte.TextArea {...others} autoResize data-slot="input-input" class={local.class} />
+        </Show>
         <Show when={local.copyable}>
           <Tooltip value={copied() ? "Copied" : "Copy to clipboard"} placement="top" gutter={8}>
             <IconButton
