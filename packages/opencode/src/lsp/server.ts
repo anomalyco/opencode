@@ -366,6 +366,10 @@ export namespace LSPServer {
     extensions: [".py", ".pyi"],
     root: NearestRoot(["pyproject.toml", "ty.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "pyrightconfig.json"]),
     async spawn(root) {
+      if(!Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+        return undefined
+      }
+
       let binary = Bun.which("ty")
 
       const initialization: Record<string, string> = {}
