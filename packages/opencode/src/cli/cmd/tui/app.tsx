@@ -478,12 +478,17 @@ function App() {
             return
           }
           
-          // Set prompt to command and submit
+          // Preserve existing prompt text as command arguments
           const current = promptRef.current
           if (current) {
+            const existingInput = current.current.input.trim()
+            const commandInput = existingInput
+              ? `/${commandName} ${existingInput}`
+              : `/${commandName}`
+            
             current.set({
-              input: `/${commandName}`,
-              parts: [],
+              input: commandInput,
+              parts: current.current.parts,
             })
             current.submit()
           }
