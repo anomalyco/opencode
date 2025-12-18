@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
-import { McpAuth } from "../../mcp/auth"
+import { McpCredentials } from "../../mcp/credentials"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
 import path from "path"
@@ -222,8 +222,7 @@ export const McpLogoutCommand = cmd({
         UI.empty()
         prompts.intro("MCP OAuth Logout")
 
-        const authPath = path.join(Global.Path.data, "mcp-auth.json")
-        const credentials = await McpAuth.all()
+        const credentials = await McpCredentials.all()
         const serverNames = Object.keys(credentials)
 
         if (serverNames.length === 0) {

@@ -5,7 +5,7 @@ import type {
   OAuthClientInformation,
   OAuthClientInformationFull,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { McpAuth } from "./auth"
+import { McpCredentials } from "./credentials"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "mcp.oauth" })
@@ -57,7 +57,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
     // Check stored client info (from dynamic registration)
     // Use getForUrl to validate credentials are for the current server URL
-    const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
+    const entry = await McpCredentials.getForUrl(this.mcpName, this.serverUrl)
     if (entry?.clientInfo) {
       // Check if client secret has expired
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
@@ -75,7 +75,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
-    await McpAuth.updateClientInfo(
+    await McpCredentials.updateClientInfo(
       this.mcpName,
       {
         clientId: info.client_id,
@@ -93,7 +93,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
   async tokens(): Promise<OAuthTokens | undefined> {
     // Use getForUrl to validate tokens are for the current server URL
-    const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
+    const entry = await McpCredentials.getForUrl(this.mcpName, this.serverUrl)
     if (!entry?.tokens) return undefined
 
     return {
@@ -108,7 +108,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
-    await McpAuth.updateTokens(
+    await McpCredentials.updateTokens(
       this.mcpName,
       {
         accessToken: tokens.access_token,
@@ -127,11 +127,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await McpAuth.updateCodeVerifier(this.mcpName, codeVerifier)
+    await McpCredentials.updateCodeVerifier(this.mcpName, codeVerifier)
   }
 
   async codeVerifier(): Promise<string> {
-    const entry = await McpAuth.get(this.mcpName)
+    const entry = await McpCredentials.get(this.mcpName)
     if (!entry?.codeVerifier) {
       throw new Error(`No code verifier saved for MCP server: ${this.mcpName}`)
     }
@@ -139,11 +139,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveState(state: string): Promise<void> {
-    await McpAuth.updateOAuthState(this.mcpName, state)
+    await McpCredentials.updateOAuthState(this.mcpName, state)
   }
 
   async state(): Promise<string> {
-    const entry = await McpAuth.get(this.mcpName)
+    const entry = await McpCredentials.get(this.mcpName)
     if (!entry?.oauthState) {
       throw new Error(`No OAuth state saved for MCP server: ${this.mcpName}`)
     }

@@ -11,13 +11,13 @@ import fs from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
-import { Auth } from "../auth"
 import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { CredentialStore, CredentialsMigrate } from "@/credentials"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -34,7 +34,8 @@ export namespace Config {
   }
 
   export const state = Instance.state(async () => {
-    const auth = await Auth.all()
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records: credentialRecords } = await CredentialStore.listAll()
     let result = await global()
 
     // Override with custom config if provided
@@ -55,12 +56,19 @@ export namespace Config {
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
-    for (const [key, value] of Object.entries(auth)) {
-      if (value.type === "wellknown") {
-        process.env[value.key] = value.token
-        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
-      }
+    for (const record of credentialRecords) {
+      if (record.meta.kind !== "wellknown") continue
+      const secret = await CredentialStore.decryptSecret(record)
+      if (!secret || typeof secret !== "object") continue
+      if (!("envKey" in secret) || !("token" in secret)) continue
+
+      const envKey = String((secret as any).envKey)
+      const token = String((secret as any).token)
+      process.env[envKey] = token
+
+      const providerUrl = record.meta.providerId
+      const wellknown = (await fetch(`${providerUrl}/.well-known/opencode`).then((x) => x.json())) as any
+      result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
     }
 
     result.agent = result.agent || {}
@@ -585,16 +593,38 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
-  export const Provider = ModelsDev.Provider.partial()
-    .extend({
-      whitelist: z.array(z.string()).optional(),
-      blacklist: z.array(z.string()).optional(),
-      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
-      options: z
-        .object({
-          apiKey: z.string().optional(),
-          baseURL: z.string().optional(),
-          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
+	  export const Provider = ModelsDev.Provider.partial()
+	    .extend({
+	      whitelist: z.array(z.string()).optional(),
+	      blacklist: z.array(z.string()).optional(),
+	      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+	      auth: z
+	        .object({
+	          mode: z
+	            .enum(["auto", "api", "subscription"])
+	            .optional()
+	            .describe(
+	              "Auth mode for this provider. 'auto' uses subscription OAuth when available, otherwise API key/env. 'api' forces API key/env. 'subscription' forces OAuth rotation.",
+	            ),
+	          namespace: z
+	            .string()
+	            .optional()
+	            .describe("Credential namespace to use for this provider (default: 'default')."),
+	          maxAttempts: z
+	            .number()
+	            .int()
+	            .positive()
+	            .optional()
+	            .describe("Max credentials to try per request when rotating (default: try all eligible)."),
+	        })
+	        .strict()
+	        .optional()
+	        .describe("Authentication settings for subscription OAuth rotation and API keys."),
+	      options: z
+	        .object({
+	          apiKey: z.string().optional(),
+	          baseURL: z.string().optional(),
+	          enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
           timeout: z
             .union([
