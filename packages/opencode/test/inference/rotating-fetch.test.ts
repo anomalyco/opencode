@@ -32,13 +32,13 @@ describe("RotatingFetch", () => {
       kind: "oauth",
       label: "second",
       secret: { accessToken: "t2", refreshToken: "r2" },
-	    })
+    })
 
-	    const seenAuth: Array<string | null> = []
-	    const baseFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-	      const req = new Request(input, init)
-	      const auth = req.headers.get("Authorization")
-	      seenAuth.push(auth)
+    const seenAuth: Array<string | null> = []
+    const baseFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const req = new Request(input, init)
+      const auth = req.headers.get("Authorization")
+      seenAuth.push(auth)
 
       if (auth === "Bearer t1") {
         return new Response("rate_limited", { status: 429, headers: { "Retry-After": "0" } })
@@ -225,5 +225,80 @@ describe("RotatingFetch", () => {
     })
 
     expect(resp.status).toBe(200)
+  })
+
+  test("falls back to next credential when first returns 401 auth expired", async () => {
+    await resetCredentials()
+
+    // This test verifies that on 401 (auth expired), if refresh fails or isn't available,
+    // the system rotates to the next credential and succeeds.
+    const id1 = "cred-primary"
+    const id2 = "cred-backup"
+
+    await CredentialStore.put({
+      id: id1,
+      providerId: "openai",
+      namespace: "default",
+      kind: "oauth",
+      label: "primary",
+      secret: { accessToken: "expired-token", refreshToken: "refresh-token" },
+    })
+    await CredentialStore.put({
+      id: id2,
+      providerId: "openai",
+      namespace: "default",
+      kind: "oauth",
+      label: "backup",
+      secret: { accessToken: "working-token", refreshToken: "refresh-token-2" },
+    })
+
+    const seenAuth: Array<string | null> = []
+
+    const baseFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const req = new Request(input, init)
+      const auth = req.headers.get("Authorization")
+      seenAuth.push(auth)
+
+      // First credential (expired-token) returns 401
+      if (auth === "Bearer expired-token") {
+        return new Response(JSON.stringify({ error: { type: "invalid_request_error" } }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        })
+      }
+      // Second credential works
+      if (auth === "Bearer working-token") {
+        return new Response("ok", { status: 200 })
+      }
+      return new Response("unexpected_auth", { status: 500 })
+    }
+
+    const rotating = RotatingFetch.create(baseFetch, { providerId: "openai", namespace: "default" })
+    const resp = await rotating("https://example.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    })
+
+    // Should succeed using the second credential after the first one failed
+    expect(resp.status).toBe(200)
+
+    // Verify both tokens were tried (first expired, then working)
+    expect(seenAuth).toContain("Bearer expired-token")
+    expect(seenAuth).toContain("Bearer working-token")
+
+    // Verify the first credential was marked with a failure
+    const updated1 = await CredentialStore.getRecordFile(id1)
+    expect(updated1?.meta.health.lastStatusCode).toBe(401)
+    expect((updated1?.meta.health.failureCount ?? 0) >= 1).toBe(true)
+
+    // Verify the second credential was marked as success
+    const updated2 = await CredentialStore.getRecordFile(id2)
+    expect(updated2?.meta.health.lastStatusCode).toBe(200)
+    expect((updated2?.meta.health.successCount ?? 0) >= 1).toBe(true)
+
+    // Verify pool order changed (working credential should be first now)
+    const ordered = await CredentialPool.getOrderedIds("openai", "default", [id1, id2])
+    expect(ordered[0]).toBe(id2)
   })
 })
