@@ -58,6 +58,7 @@ test("headers are passed to transports when oauth is enabled (default)", async (
             "test-server": {
               type: "remote",
               url: "https://example.com/mcp",
+              timeout: 250,
               headers: {
                 Authorization: "Bearer test-token",
                 "X-Custom-Header": "custom-value",
@@ -76,6 +77,7 @@ test("headers are passed to transports when oauth is enabled (default)", async (
       await MCP.add("test-server", {
         type: "remote",
         url: "https://example.com/mcp",
+        timeout: 250,
         headers: {
           Authorization: "Bearer test-token",
           "X-Custom-Header": "custom-value",
@@ -110,6 +112,7 @@ test("headers are passed to transports when oauth is explicitly disabled", async
         type: "remote",
         url: "https://example.com/mcp",
         oauth: false,
+        timeout: 250,
         headers: {
           Authorization: "Bearer test-token",
         },
@@ -140,6 +143,7 @@ test("no requestInit when headers are not provided", async () => {
       await MCP.add("test-server-no-headers", {
         type: "remote",
         url: "https://example.com/mcp",
+        timeout: 250,
       }).catch(() => {})
 
       expect(transportCalls.length).toBeGreaterThanOrEqual(1)

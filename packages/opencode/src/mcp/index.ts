@@ -441,7 +441,7 @@ export namespace MCP {
     const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("")
-    await McpAuth.updateOAuthState(mcpName, oauthState)
+    await McpCredentials.updateOAuthState(mcpName, oauthState)
 
     // Create a new auth provider for this flow
     // OAuth config is optional - if not provided, we'll use auto-discovery
@@ -499,7 +499,7 @@ export namespace MCP {
     }
 
     // Get the state that was already generated and stored in startAuth()
-    const oauthState = await McpAuth.getOAuthState(mcpName)
+    const oauthState = await McpCredentials.getOAuthState(mcpName)
     if (!oauthState) {
       throw new Error("OAuth state not found - this should not happen")
     }
@@ -513,13 +513,13 @@ export namespace MCP {
     const code = await McpOAuthCallback.waitForCallback(oauthState)
 
     // Validate and clear the state
-    const storedState = await McpAuth.getOAuthState(mcpName)
+    const storedState = await McpCredentials.getOAuthState(mcpName)
     if (storedState !== oauthState) {
-      await McpAuth.clearOAuthState(mcpName)
+      await McpCredentials.clearOAuthState(mcpName)
       throw new Error("OAuth state mismatch - potential CSRF attack")
     }
 
-    await McpAuth.clearOAuthState(mcpName)
+    await McpCredentials.clearOAuthState(mcpName)
 
     // Finish auth
     return finishAuth(mcpName, code)
@@ -572,7 +572,7 @@ export namespace MCP {
     await McpCredentials.remove(mcpName)
     McpOAuthCallback.cancelPending(mcpName)
     pendingOAuthTransports.delete(mcpName)
-    await McpAuth.clearOAuthState(mcpName)
+    await McpCredentials.clearOAuthState(mcpName)
     log.info("removed oauth credentials", { mcpName })
   }
 
