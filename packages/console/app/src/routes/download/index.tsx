@@ -8,6 +8,51 @@ import { Faq } from "~/component/faq"
 import desktopAppIcon from "../../asset/lander/opencode-desktop-icon.png"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
+import { createSignal, onMount, Show, JSX } from "solid-js"
+import { DownloadPlatform } from "./types"
+
+type OS = "macOS" | "Windows" | "Linux" | null
+
+function detectOS(): OS {
+  if (typeof navigator === "undefined") return null
+  const platform = navigator.platform.toLowerCase()
+  const userAgent = navigator.userAgent.toLowerCase()
+
+  if (platform.includes("mac") || userAgent.includes("mac")) return "macOS"
+  if (platform.includes("win") || userAgent.includes("win")) return "Windows"
+  if (platform.includes("linux") || userAgent.includes("linux")) return "Linux"
+  return null
+}
+
+function getDownloadPlatform(os: OS): DownloadPlatform {
+  switch (os) {
+    case "macOS":
+      return "darwin-aarch64-dmg"
+    case "Windows":
+      return "windows-x64-nsis"
+    case "Linux":
+      return "linux-x64-deb"
+    default:
+      return "darwin-aarch64-dmg"
+  }
+}
+
+function getDownloadHref(platform: DownloadPlatform) {
+  return `/download/${platform}`
+}
+
+function IconDownload(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path
+        d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="square"
+      />
+    </svg>
+  )
+}
 
 function CopyStatus() {
   return (
@@ -19,7 +64,12 @@ function CopyStatus() {
 }
 
 export default function Download() {
-  const downloadUrl = "https://github.com/sst/opencode/releases/latest/download"
+  const [detectedOS, setDetectedOS] = createSignal<OS>(null)
+
+  onMount(() => {
+    setDetectedOS(detectOS())
+  })
+
   const handleCopyClick = (command: string) => (event: Event) => {
     const button = event.currentTarget as HTMLButtonElement
     navigator.clipboard.writeText(command)
@@ -44,6 +94,12 @@ export default function Download() {
             <div data-component="hero-text">
               <h1>Download OpenCode</h1>
               <p>Available in Beta for macOS, Windows, and Linux</p>
+              <Show when={detectedOS()}>
+                <a href={getDownloadHref(getDownloadPlatform(detectedOS()))} data-component="download-button">
+                  <IconDownload />
+                  Download for {detectedOS()}
+                </a>
+              </Show>
             </div>
           </section>
 
@@ -113,7 +169,7 @@ export default function Download() {
                     macOS (<span data-slot="hide-narrow">Apple </span>Silicon)
                   </span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-darwin-aarch64.dmg"} data-component="action-button">
+                <a href={getDownloadHref("darwin-aarch64-dmg")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -129,7 +185,7 @@ export default function Download() {
                   </span>
                   <span>macOS (Intel)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-darwin-x64.dmg"} data-component="action-button">
+                <a href={getDownloadHref("darwin-x64-dmg")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -152,7 +208,7 @@ export default function Download() {
                   </span>
                   <span>Windows (x64)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-windows-x64.exe"} data-component="action-button">
+                <a href={getDownloadHref("windows-x64-nsis")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -168,7 +224,7 @@ export default function Download() {
                   </span>
                   <span>Linux (.deb)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-linux-amd64.deb"} data-component="action-button">
+                <a href={getDownloadHref("linux-x64-deb")} data-component="action-button">
                   Download
                 </a>
               </div>
@@ -184,7 +240,7 @@ export default function Download() {
                   </span>
                   <span>Linux (.rpm)</span>
                 </div>
-                <a href={downloadUrl + "/opencode-desktop-linux-x86_64.rpm"} data-component="action-button">
+                <a href={getDownloadHref("linux-x64-rpm")} data-component="action-button">
                   Download
                 </a>
               </div>

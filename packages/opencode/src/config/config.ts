@@ -219,7 +219,7 @@ export namespace Config {
         result[config.name] = parsed.data
         continue
       }
-      throw new InvalidError({ path: item }, { cause: parsed.error })
+      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
     }
     return result
   }
@@ -262,7 +262,7 @@ export namespace Config {
         result[config.name] = parsed.data
         continue
       }
-      throw new InvalidError({ path: item }, { cause: parsed.error })
+      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
     }
     return result
   }
@@ -441,6 +441,8 @@ export namespace Config {
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
       session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
+      session_fork: z.string().optional().default("none").describe("Fork session from message"),
+      session_rename: z.string().optional().default("none").describe("Rename session"),
       session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
@@ -560,6 +562,7 @@ export namespace Config {
       session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
       session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
+      terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
     })
     .strict()
     .meta({
