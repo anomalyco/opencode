@@ -14,6 +14,8 @@ import type {
   SessionStatus,
   ProviderListResponse,
   ProviderAuthMethod,
+  CredentialRecordMeta,
+  RotationStatsSnapshot,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -35,6 +37,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider_default: Record<string, string>
       provider_next: ProviderListResponse
       provider_auth: Record<string, ProviderAuthMethod[]>
+      credential: CredentialRecordMeta[]
+      rotation_stats: RotationStatsSnapshot | undefined
       agent: Agent[]
       command: Command[]
       permission: {
@@ -71,6 +75,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         connected: [],
       },
       provider_auth: {},
+      credential: [],
+      rotation_stats: undefined,
       config: {},
       status: "loading",
       agent: [],
@@ -288,6 +294,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
             sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
+            sdk.client.credential.list().then((x) => setStore("credential", x.data ?? [])),
+            sdk.client.debug.rotation().then((x) => setStore("rotation_stats", x.data)),
             sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
             sdk.client.path.get().then((x) => setStore("path", x.data!)),
           ]).then(() => {

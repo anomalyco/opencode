@@ -10,6 +10,14 @@ export function DialogStatus() {
   const { theme } = useTheme()
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
+  const rotationStats = createMemo(() => sync.data.rotation_stats)
+  const topRotations = createMemo(() => {
+    const stats = rotationStats()
+    if (!stats) return []
+    return Object.entries(stats.byProvider)
+      .toSorted((a, b) => (b[1].rotations ?? 0) - (a[1].rotations ?? 0))
+      .slice(0, 6)
+  })
 
   const plugins = createMemo(() => {
     const list = sync.data.config.plugin ?? []
@@ -133,6 +141,29 @@ export function DialogStatus() {
             )}
           </For>
         </box>
+      </Show>
+      <Show when={rotationStats()} fallback={<text fg={theme.text}>No Rotation Stats</text>}>
+        {(stats) => {
+          const ageMinutes = Math.max(0, Math.floor((Date.now() - stats().since) / 60_000))
+          return (
+            <box>
+              <text fg={theme.text}>OAuth Rotation (since {ageMinutes}m)</text>
+              <text fg={theme.textMuted}>
+                {stats().totals.requests} req • {stats().totals.attempts} attempts • {stats().totals.rotations} rotations •{" "}
+                {stats().totals.refreshSuccess}/{stats().totals.refreshAttempts} refresh
+              </text>
+              <Show when={topRotations().length > 0}>
+                <For each={topRotations()}>
+                  {([providerId, counts]) => (
+                    <text fg={theme.textMuted}>
+                      <b>{providerId}</b>: {counts.rotations} rot • {counts.rateLimited} 429 • {counts.authExpired} auth
+                    </text>
+                  )}
+                </For>
+              </Show>
+            </box>
+          )
+        }}
       </Show>
       <Show when={plugins().length > 0} fallback={<text fg={theme.text}>No Plugins</text>}>
         <box>
