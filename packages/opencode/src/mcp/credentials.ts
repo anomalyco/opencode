@@ -1,7 +1,7 @@
 import z from "zod"
 import { CredentialStore, CredentialsMigrate } from "@/credentials"
 
-export namespace McpAuth {
+export namespace McpCredentials {
   export const Tokens = z.object({
     accessToken: z.string(),
     refreshToken: z.string().optional(),
@@ -26,6 +26,7 @@ export namespace McpAuth {
     serverUrl: z.string().optional(), // Track the URL these credentials are for
   })
   export type Entry = z.infer<typeof Entry>
+
   const KIND = "mcp" as const
 
   async function ensureMigrated() {
@@ -39,11 +40,11 @@ export namespace McpAuth {
   export async function get(mcpName: string): Promise<Entry | undefined> {
     await ensureMigrated()
     const matches = await CredentialStore.findByProvider(providerId(mcpName), "default")
-    const record = matches[0]
+    const record = matches.find((r) => r.meta.kind === KIND)
     if (!record) return undefined
     const secret = await CredentialStore.decryptSecret(record)
-    if (!("entry" in secret)) return undefined
-    const parsed = Entry.safeParse(secret.entry)
+    if (!secret || typeof secret !== "object" || !("entry" in secret)) return undefined
+    const parsed = Entry.safeParse((secret as any).entry)
     return parsed.success ? parsed.data : undefined
   }
 
@@ -95,7 +96,7 @@ export namespace McpAuth {
   export async function remove(mcpName: string): Promise<void> {
     await ensureMigrated()
     const matches = await CredentialStore.findByProvider(providerId(mcpName), "default")
-    await Promise.all(matches.map((r) => CredentialStore.remove(r.meta.id)))
+    await Promise.all(matches.filter((r) => r.meta.kind === KIND).map((r) => CredentialStore.remove(r.meta.id)))
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
@@ -118,10 +119,9 @@ export namespace McpAuth {
 
   export async function clearCodeVerifier(mcpName: string): Promise<void> {
     const entry = await get(mcpName)
-    if (entry) {
-      delete entry.codeVerifier
-      await set(mcpName, entry)
-    }
+    if (!entry) return
+    delete entry.codeVerifier
+    await set(mcpName, entry)
   }
 
   export async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
@@ -143,3 +143,4 @@ export namespace McpAuth {
     }
   }
 }
+

@@ -155,4 +155,75 @@ describe("RotatingFetch", () => {
     expect(resp.status).toBe(200)
     expect(seenAuth).toEqual(["Bearer t1"])
   })
+
+  test("adapter prepareRequest can strip API key query params", async () => {
+    await resetCredentials()
+
+    await CredentialStore.put({
+      id: "cred-1",
+      providerId: "google",
+      namespace: "default",
+      kind: "oauth",
+      label: "default",
+      secret: { accessToken: "t1", refreshToken: "r1" },
+    })
+
+    const baseFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const req = new Request(input, init)
+      const url = new URL(req.url)
+      expect(url.searchParams.has("key")).toBe(false)
+      expect(url.searchParams.has("api_key")).toBe(false)
+      expect(req.headers.get("Authorization")).toBe("Bearer t1")
+      return new Response("ok", { status: 200 })
+    }
+
+    const rotating = RotatingFetch.create(baseFetch, { providerId: "google", namespace: "default" })
+    const resp = await rotating("https://example.com/v1/chat/completions?key=leak&api_key=leak2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    })
+
+    expect(resp.status).toBe(200)
+  })
+
+  test("adapter prepareRequest can rewrite base URL from credential metadata", async () => {
+    await resetCredentials()
+
+    await CredentialStore.put({
+      id: "cred-1",
+      providerId: "github-copilot",
+      namespace: "default",
+      kind: "oauth",
+      label: "default",
+      secret: {
+        accessToken: "copilot-token",
+        refreshToken: "github-token",
+        extra: {
+          endpoints: {
+            api: "https://alt.example.com/api",
+          },
+        },
+      },
+    })
+
+    const baseFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const req = new Request(input, init)
+      expect(req.url).toBe("https://alt.example.com/api/v1/chat/completions")
+      expect(req.headers.get("Authorization")).toBe("Bearer copilot-token")
+      expect(req.headers.get("editor-version")).toBeTruthy()
+      expect(req.headers.get("editor-plugin-version")).toBeTruthy()
+      expect(req.headers.get("user-agent")).toBeTruthy()
+      return new Response("ok", { status: 200 })
+    }
+
+    const rotating = RotatingFetch.create(baseFetch, { providerId: "github-copilot", namespace: "default" })
+    const resp = await rotating("https://api.githubcopilot.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    })
+
+    expect(resp.status).toBe(200)
+  })
 })

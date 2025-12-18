@@ -10,10 +10,23 @@ export type RotateDecision = {
   reason: string
 }
 
+export type PrepareRequestArgs = {
+  url: URL
+  headers: Headers
+  request: Request
+  secret: Credentials.Secret
+}
+
 export interface ProviderAuthAdapter {
   providerId: string
 
   authMethods(): ProviderAuthMethod[]
+
+  /**
+   * Optional request transformation hook for subscription auth.
+   * Implementations may mutate `url` and `headers` in-place.
+   */
+  prepareRequest?(args: PrepareRequestArgs): void
 
   /**
    * Apply authentication for inference calls.
@@ -38,4 +51,3 @@ export function isOAuthSuccessResult(
 ): result is { type: "success"; access: string; refresh: string; expires: number; provider?: string } {
   return result.type === "success" && "access" in result && "refresh" in result && "expires" in result
 }
-

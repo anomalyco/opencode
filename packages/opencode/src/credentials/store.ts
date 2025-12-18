@@ -7,6 +7,8 @@ import { VaultCrypto } from "@/vault/crypto"
 import { VaultFS } from "@/vault/fs"
 import { VaultLock } from "@/vault/lock"
 import { Credentials } from "./types"
+import { Log } from "@/util/log"
+import z from "zod"
 
 type PutInput = {
   id?: string
@@ -26,9 +28,24 @@ type UpsertSingletonInput = {
 }
 
 export namespace CredentialStore {
+  const log = Log.create({ service: "credentials.store" })
+
   const ROOT = path.join(Global.Path.data, "credentials")
   const RECORDS_DIR = path.join(ROOT, "records")
   const LOCK_PATH = path.join(ROOT, ".lock")
+  const INDEX_PATH = path.join(ROOT, "index.json")
+
+  const IndexFile = z
+    .object({
+      version: z.literal(1),
+      byProvider: z.record(z.string(), z.record(z.string(), z.array(z.string()))),
+    })
+    .strict()
+  type IndexFile = z.infer<typeof IndexFile>
+
+  const DEFAULT_INDEX: IndexFile = { version: 1, byProvider: {} }
+  const INDEX_CACHE_TTL_MS = 2_000
+  let indexCache: { loadedAt: number; value: IndexFile } | undefined
 
   async function ensureDirs() {
     await VaultFS.ensureDir(RECORDS_DIR)
@@ -42,6 +59,80 @@ export namespace CredentialStore {
     await ensureDirs()
     const entries = await fs.readdir(RECORDS_DIR).catch(() => [])
     return entries.some((x) => x.endsWith(".json"))
+  }
+
+  function cacheIndex(next: IndexFile): IndexFile {
+    indexCache = { loadedAt: Date.now(), value: next }
+    return next
+  }
+
+  async function readIndexFromDisk(): Promise<IndexFile | undefined> {
+    const json = await VaultFS.readJson<unknown>(INDEX_PATH)
+    const parsed = IndexFile.safeParse(json)
+    return parsed.success ? parsed.data : undefined
+  }
+
+  async function rebuildIndex(): Promise<IndexFile> {
+    const { records } = await listAll()
+    const byProvider: IndexFile["byProvider"] = {}
+    for (const record of records) {
+      const provider = record.meta.providerId
+      const ns = record.meta.namespace
+      byProvider[provider] ??= {}
+      byProvider[provider][ns] ??= []
+      byProvider[provider][ns].push(record.meta.id)
+    }
+
+    const index: IndexFile = { version: 1, byProvider }
+    await VaultLock.withLock(LOCK_PATH, async () => {
+      await VaultFS.atomicWriteJson(INDEX_PATH, index, 0o600)
+    })
+    return cacheIndex(index)
+  }
+
+  async function rebuildIndexLocked(): Promise<IndexFile> {
+    const { records } = await listAll()
+    const byProvider: IndexFile["byProvider"] = {}
+    for (const record of records) {
+      const provider = record.meta.providerId
+      const ns = record.meta.namespace
+      byProvider[provider] ??= {}
+      byProvider[provider][ns] ??= []
+      byProvider[provider][ns].push(record.meta.id)
+    }
+    const index: IndexFile = { version: 1, byProvider }
+    await VaultFS.atomicWriteJson(INDEX_PATH, index, 0o600)
+    return cacheIndex(index)
+  }
+
+  async function loadIndex(opts?: { force?: boolean }): Promise<IndexFile> {
+    const now = Date.now()
+    if (!opts?.force && indexCache && now - indexCache.loadedAt < INDEX_CACHE_TTL_MS) {
+      return indexCache.value
+    }
+
+    const onDisk = await readIndexFromDisk()
+    if (onDisk) return cacheIndex(onDisk)
+    return rebuildIndex()
+  }
+
+  async function loadIndexLocked(): Promise<IndexFile> {
+    const onDisk = await readIndexFromDisk()
+    if (onDisk) return cacheIndex(onDisk)
+    return rebuildIndexLocked()
+  }
+
+  function indexAdd(index: IndexFile, input: { providerId: string; namespace: string; id: string }) {
+    index.byProvider[input.providerId] ??= {}
+    index.byProvider[input.providerId][input.namespace] ??= []
+    const ids = index.byProvider[input.providerId][input.namespace]
+    if (!ids.includes(input.id)) ids.push(input.id)
+  }
+
+  function indexRemove(index: IndexFile, input: { providerId: string; namespace: string; id: string }) {
+    const ns = index.byProvider[input.providerId]?.[input.namespace]
+    if (!ns) return
+    index.byProvider[input.providerId][input.namespace] = ns.filter((x) => x !== input.id)
   }
 
   export async function listAll(): Promise<{
@@ -62,6 +153,10 @@ export namespace CredentialStore {
         continue
       }
       records.push(parsed.data)
+    }
+
+    if (errors.length > 0) {
+      log.error("credential record parse errors", { count: errors.length })
     }
 
     return { records, errors }
@@ -106,6 +201,10 @@ export namespace CredentialStore {
 
     await VaultLock.withLock(LOCK_PATH, async () => {
       await VaultFS.atomicWriteJson(recordPath(id), record, 0o600)
+      const index = await loadIndexLocked()
+      indexAdd(index, { providerId: input.providerId, namespace, id })
+      await VaultFS.atomicWriteJson(INDEX_PATH, index, 0o600)
+      cacheIndex(index)
     })
 
     return record
@@ -128,13 +227,32 @@ export namespace CredentialStore {
   export async function remove(id: string): Promise<void> {
     await ensureDirs()
     await VaultLock.withLock(LOCK_PATH, async () => {
+      const before = await getRecordFile(id)
       await fs.rm(recordPath(id), { force: true })
+      if (!before) {
+        await rebuildIndexLocked()
+        return
+      }
+
+      const index = await loadIndexLocked()
+      indexRemove(index, { providerId: before.meta.providerId, namespace: before.meta.namespace, id })
+      await VaultFS.atomicWriteJson(INDEX_PATH, index, 0o600)
+      cacheIndex(index)
     })
   }
 
   export async function findByProvider(providerId: string, namespace?: string): Promise<Credentials.RecordFile[]> {
-    const { records } = await listAll()
-    return records.filter((r) => r.meta.providerId === providerId && (!namespace || r.meta.namespace === namespace))
+    const index = await loadIndex()
+    const namespaces = index.byProvider[providerId] ?? {}
+    const ids = namespace ? namespaces[namespace] ?? [] : Object.values(namespaces).flat()
+    if (ids.length === 0) return []
+
+    const out: Credentials.RecordFile[] = []
+    for (const id of ids) {
+      const record = await getRecordFile(id)
+      if (record) out.push(record)
+    }
+    return out
   }
 
   export async function upsertSingleton(input: UpsertSingletonInput): Promise<Credentials.RecordFile> {
@@ -143,15 +261,13 @@ export namespace CredentialStore {
     const key = await VaultKey.load()
 
     return VaultLock.withLock(LOCK_PATH, async () => {
-      const glob = new Bun.Glob("*.json")
       let existing: Credentials.RecordFile | undefined
 
-      for await (const rel of glob.scan({ cwd: RECORDS_DIR, dot: false, onlyFiles: true })) {
-        const file = path.join(RECORDS_DIR, rel)
-        const json = await VaultFS.readJson<unknown>(file)
-        const parsed = Credentials.RecordFile.safeParse(json)
-        if (!parsed.success) continue
-        const record = parsed.data
+      const index = await loadIndexLocked()
+      const ids = index.byProvider[input.providerId]?.[input.namespace] ?? []
+      for (const id of ids) {
+        const record = await getRecordFile(id)
+        if (!record) continue
         if (
           record.meta.providerId === input.providerId &&
           record.meta.namespace === input.namespace &&
@@ -179,6 +295,9 @@ export namespace CredentialStore {
       }
 
       await VaultFS.atomicWriteJson(recordPath(id), record, 0o600)
+      indexAdd(index, { providerId: input.providerId, namespace: input.namespace, id })
+      await VaultFS.atomicWriteJson(INDEX_PATH, index, 0o600)
+      cacheIndex(index)
       return record
     })
   }

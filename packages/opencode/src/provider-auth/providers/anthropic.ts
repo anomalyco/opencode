@@ -1,7 +1,7 @@
 import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
 import { OAuthCallback } from "@/oauth/callback"
 import { PKCE, OAuthState } from "@/oauth/pkce"
-import type { ProviderAuthAdapter, ProviderAuthMethod } from "../adapter"
+import type { ProviderAuthAdapter, ProviderAuthMethod, RotateDecision } from "../adapter"
 
 const AUTH_URL = process.env["ANTHROPIC_AUTH_URL"] ?? "https://claude.ai/oauth/authorize"
 const TOKEN_URL = process.env["ANTHROPIC_TOKEN_URL"] ?? "https://console.anthropic.com/v1/oauth/token"
@@ -12,6 +12,23 @@ const SCOPES = process.env["ANTHROPIC_SCOPES"] ?? "org:create_api_key user:profi
 const REDIRECT = new URL(REDIRECT_URI)
 const CALLBACK_PORT = Number(REDIRECT.port || "54545")
 const CALLBACK_PATH = REDIRECT.pathname || "/callback"
+
+function parseRetryAfterMs(resp: Response): number | undefined {
+  const msHeader = resp.headers.get("retry-after-ms") ?? resp.headers.get("Retry-After-Ms")
+  if (msHeader) {
+    const ms = Number(msHeader.trim())
+    if (Number.isFinite(ms) && ms >= 0) return Math.floor(ms)
+  }
+  const raw = resp.headers.get("retry-after") ?? resp.headers.get("Retry-After")
+  if (!raw) return undefined
+  const trimmed = raw.trim()
+  if (!trimmed) return undefined
+  const seconds = Number(trimmed)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.floor(seconds * 1000)
+  const date = Date.parse(trimmed)
+  if (!Number.isNaN(date)) return Math.max(0, date - Date.now())
+  return undefined
+}
 
 function buildAuthUrl(state: string, codeChallenge: string): string {
   const url = new URL(AUTH_URL)
@@ -153,5 +170,56 @@ export const AnthropicSubscriptionAdapter: ProviderAuthAdapter = {
     if (!refresh) return secret
     const t = await refreshAccessToken(String(refresh))
     return { ...secret, accessToken: t.access, refreshToken: t.refresh, expiresAt: t.expires }
+  },
+
+  async classifyResponse(resp: Response): Promise<RotateDecision> {
+    if (resp.ok) return { rotatable: false, reason: "ok" }
+
+    if (resp.status === 401 || resp.status === 403) {
+      return { rotatable: true, isAuthExpired: true, reason: `auth_expired:${resp.status}` }
+    }
+
+    const retryAfterMs = parseRetryAfterMs(resp)
+    if (resp.status === 429) {
+      return { rotatable: true, cooldownMs: retryAfterMs ?? 30_000, reason: "rate_limited" }
+    }
+    if (resp.status === 503 || resp.status === 529) {
+      return { rotatable: true, cooldownMs: retryAfterMs ?? 30_000, reason: `overloaded:${resp.status}` }
+    }
+
+    const json = await resp.json().catch(() => undefined)
+    const errorType = String((json as any)?.error?.type ?? (json as any)?.error_type ?? (json as any)?.type ?? "")
+      .trim()
+      .toLowerCase()
+    const message = String((json as any)?.error?.message ?? (json as any)?.message ?? "").trim().toLowerCase()
+
+    const isRateLimited =
+      errorType.includes("rate_limit") ||
+      errorType.includes("throttle") ||
+      message.includes("rate limit") ||
+      message.includes("too many requests")
+
+    const isOverloaded =
+      errorType.includes("overloaded") ||
+      message.includes("overloaded") ||
+      message.includes("capacity") ||
+      message.includes("try again")
+
+    const isQuota =
+      errorType.includes("quota") ||
+      errorType.includes("billing") ||
+      errorType.includes("credit") ||
+      message.includes("quota") ||
+      message.includes("billing") ||
+      message.includes("credits") ||
+      message.includes("usage limit")
+
+    if (isRateLimited || isOverloaded || isQuota) {
+      const cooldownMs = retryAfterMs ?? (isQuota ? 5 * 60_000 : 30_000)
+      const reason = `anthropic:${errorType || "throttled"}`
+      return { rotatable: true, cooldownMs, reason }
+    }
+
+    return { rotatable: false, reason: `status:${resp.status}` }
   },
 }
