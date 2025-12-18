@@ -147,6 +147,14 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          },
+        },
       },
     )
   })
@@ -169,12 +177,16 @@ function App() {
   const promptRef = usePromptRef()
   const [consoleVisible, setConsoleVisible] = createSignal(false)
 
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+
   createEffect(() => {
     console.log(JSON.stringify(route.data))
   })
 
   // Update terminal window title based on current route and session
   createEffect(() => {
+    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
     if (route.data.type === "home") {
       renderer.setTerminalTitle("OpenCode")
       return
@@ -445,6 +457,21 @@ function App() {
         process.kill(0, "SIGTSTP")
       },
     },
+    {
+      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      value: "terminal.title.toggle",
+      keybind: "terminal_title_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setTerminalTitleEnabled((prev) => {
+          const next = !prev
+          kv.set("terminal_title_enabled", next)
+          if (!next) renderer.setTerminalTitle("")
+          return next
+        })
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
@@ -476,7 +503,6 @@ function App() {
 
   event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
