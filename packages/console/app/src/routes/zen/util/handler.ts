@@ -57,15 +57,17 @@ export async function handler(
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
+    const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     logger.metric({
       is_tream: isStream,
       session: sessionId,
       request: requestId,
+      client: ocClient,
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
-    const trialLimiter = createTrialLimiter(modelInfo.trial?.limit, ip)
+    const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
     const isTrial = await trialLimiter?.isTrial()
     const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
     await rateLimiter?.check()
@@ -286,11 +288,14 @@ export async function handler(
   }
 
   function validateModel(zenData: ZenData, reqModel: string) {
-    if (!(reqModel in zenData.models)) {
-      throw new ModelError(`Model ${reqModel} not supported`)
-    }
+    if (!(reqModel in zenData.models)) throw new ModelError(`Model ${reqModel} not supported`)
+
     const modelId = reqModel as keyof typeof zenData.models
-    const modelData = zenData.models[modelId]
+    const modelData = Array.isArray(zenData.models[modelId])
+      ? zenData.models[modelId].find((model) => opts.format === model.formatFilter)
+      : zenData.models[modelId]
+
+    if (!modelData) throw new ModelError(`Model ${reqModel} not supported for format ${opts.format}`)
 
     logger.metric({ model: modelId })
 

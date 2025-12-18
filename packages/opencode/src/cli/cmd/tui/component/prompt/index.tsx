@@ -44,6 +44,7 @@ export type PromptRef = {
   reset(): void
   blur(): void
   focus(): void
+  submit(): void
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
@@ -115,7 +116,7 @@ export function Prompt(props: PromptProps) {
   const sync = useSync()
   const dialog = useDialog()
   const toast = useToast()
-  const status = createMemo(() => sync.data.session_status[props.sessionID ?? ""] ?? { type: "idle" })
+  const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
@@ -447,11 +448,14 @@ export function Prompt(props: PromptProps) {
       })
       setStore("extmarkToPartIndex", new Map())
     },
+    submit() {
+      submit()
+    },
   })
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete.visible) return
+    if (autocomplete?.visible) return
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
@@ -490,6 +494,9 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+
+    // Capture mode before it gets reset
+    const currentMode = store.mode
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -539,7 +546,10 @@ export function Prompt(props: PromptProps) {
         ],
       })
     }
-    history.append(store.prompt)
+    history.append({
+      ...store.prompt,
+      mode: currentMode,
+    })
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -705,8 +715,8 @@ export function Prompt(props: PromptProps) {
           >
             <textarea
               placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
-              textColor={theme.text}
-              focusedTextColor={theme.text}
+              textColor={keybind.leader ? theme.textMuted : theme.text}
+              focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
               maxHeight={6}
               onContentChange={() => {
@@ -732,8 +742,12 @@ export function Prompt(props: PromptProps) {
                   return
                 }
                 if (keybind.match("app_exit", e)) {
-                  await exit()
-                  return
+                  if (store.prompt.input === "") {
+                    await exit()
+                    // Don't preventDefault - let textarea potentially handle the event
+                    e.preventDefault()
+                    return
+                  }
                 }
                 if (e.name === "!" && input.visualCursor.offset === 0) {
                   setStore("mode", "shell")
@@ -759,6 +773,7 @@ export function Prompt(props: PromptProps) {
                     if (item) {
                       input.setText(item.input)
                       setStore("prompt", item)
+                      setStore("mode", item.mode ?? "normal")
                       restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
                       if (direction === -1) input.cursorOffset = 0
@@ -850,7 +865,7 @@ export function Prompt(props: PromptProps) {
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={theme.text}>
+                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
                     {local.model.parsed().model}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
@@ -865,8 +880,7 @@ export function Prompt(props: PromptProps) {
           borderColor={highlight()}
           customBorderChars={{
             ...EmptyBorder,
-            // when the background is transparent, don't draw the vertical line
-            vertical: theme.background.a != 0 ? "╹" : " ",
+            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
           }}
         >
           <box
@@ -874,7 +888,7 @@ export function Prompt(props: PromptProps) {
             border={["bottom"]}
             borderColor={theme.backgroundElement}
             customBorderChars={
-              theme.background.a != 0
+              theme.backgroundElement.a !== 0
                 ? {
                     ...EmptyBorder,
                     horizontal: "▀",

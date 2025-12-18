@@ -31,7 +31,7 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-weak-base);
   background: var(--surface-float-base);
-  color: var(--text-inverted-base);
+  color: var(--text-invert-base);
   box-shadow: var(--shadow-md);
 
   [data-slot="toast-inner"] {
@@ -80,7 +80,8 @@
     justify-content: center;
 
     [data-component="icon"] {
-      color: rgba(253, 252, 252, 0.94);
+      color: var(--text-invert-stronger);
+      /* color: var(--icon-invert-base); */
     }
   }
 
@@ -93,7 +94,7 @@
   }
 
   [data-slot="toast-title"] {
-    color: var(--text-inverted-strong);
+    color: var(--text-invert-strong);
 
     /* text-14-medium */
     font-family: var(--font-family-sans);
@@ -107,7 +108,8 @@
   }
 
   [data-slot="toast-description"] {
-    color: var(--text-inverted-base);
+    color: var(--text-invert-base);
+    text-wrap-style: pretty;
 
     /* text-14-regular */
     font-family: var(--font-family-sans);
@@ -132,7 +134,7 @@
     padding: 0;
     cursor: pointer;
 
-    color: var(--text-inverted-strong);
+    color: var(--text-invert-strong);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
@@ -144,7 +146,7 @@
     }
 
     &:last-child {
-      color: var(--text-inverted-weak);
+      color: var(--text-invert-weak);
     }
   }
 

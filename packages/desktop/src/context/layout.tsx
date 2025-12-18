@@ -1,21 +1,16 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { Project } from "@opencode-ai/sdk/v2"
+import { persisted } from "@/utils/persist"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
 
-export function isAvatarColorKey(value: string): value is AvatarColorKey {
-  return AVATAR_COLOR_KEYS.includes(value as AvatarColorKey)
-}
-
 export function getAvatarColors(key?: string) {
-  if (key && isAvatarColorKey(key)) {
+  if (key && AVATAR_COLOR_KEYS.includes(key as AvatarColorKey)) {
     return {
       background: `var(--avatar-background-${key})`,
       foreground: `var(--avatar-text-${key})`,
@@ -27,14 +22,18 @@ export function getAvatarColors(key?: string) {
   }
 }
 
-type Dialog = "provider" | "model" | "connect"
+type SessionTabs = {
+  active?: string
+  all: string[]
+}
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
     const globalSdk = useGlobalSDK()
     const globalSync = useGlobalSync()
-    const [store, setStore] = makePersisted(
+    const [store, setStore, _, ready] = persisted(
+      "layout.v3",
       createStore({
         projects: [] as { worktree: string; expanded: boolean }[],
         sidebar: {
@@ -48,24 +47,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         review: {
           state: "pane" as "pane" | "tab",
         },
+        sessionTabs: {} as Record<string, SessionTabs>,
       }),
-      {
-        name: "default-layout.v7",
-      },
     )
-    const [ephemeral, setEphemeral] = createStore<{
-      connect: {
-        provider?: string
-        state?: "pending" | "complete" | "error"
-        error?: string
-      }
-      dialog: {
-        open?: Dialog
-      }
-    }>({
-      connect: {},
-      dialog: {},
-    })
+
     const usedColors = new Set<AvatarColorKey>()
 
     function pickAvailableColor(): AvatarColorKey {
@@ -97,31 +82,21 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const enriched = createMemo(() => store.projects.flatMap(enrich))
     const list = createMemo(() => enriched().flatMap(colorize))
 
-    async function loadProjectSessions(directory: string) {
-      const [, setStore] = globalSync.child(directory)
-      globalSdk.client.session.list({ directory }).then((x) => {
-        const sessions = (x.data ?? [])
-          .slice()
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .slice(0, 5)
-        setStore("session", sessions)
-      })
-    }
-
     onMount(() => {
       Promise.all(
         store.projects.map((project) => {
-          return loadProjectSessions(project.worktree)
+          return globalSync.project.loadSessions(project.worktree)
         }),
       )
     })
 
     return {
+      ready,
       projects: {
         list,
         open(directory: string) {
           if (store.projects.find((x) => x.worktree === directory)) return
-          loadProjectSessions(directory)
+          globalSync.project.loadSessions(directory)
           setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },
         close(directory: string) {
@@ -185,57 +160,85 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("review", "state", "tab")
         },
       },
-      dialog: {
-        opened: createMemo(() => ephemeral.dialog?.open),
-        open(dialog: Dialog) {
-          batch(() => {
-            // if (dialog !== "connect") {
-            //   setEphemeral("connect", {})
-            // }
-            setEphemeral("dialog", "open", dialog)
-          })
-        },
-        close(dialog: Dialog) {
-          if (ephemeral.dialog.open === dialog) {
-            setEphemeral(
-              produce((state) => {
-                state.dialog.open = undefined
-                state.connect = {}
+      tabs(sessionKey: string) {
+        const tabs = createMemo(() => store.sessionTabs[sessionKey] ?? { all: [] })
+        return {
+          tabs,
+          active: createMemo(() => tabs().active),
+          all: createMemo(() => tabs().all),
+          setActive(tab: string | undefined) {
+            if (!store.sessionTabs[sessionKey]) {
+              setStore("sessionTabs", sessionKey, { all: [], active: tab })
+            } else {
+              setStore("sessionTabs", sessionKey, "active", tab)
+            }
+          },
+          setAll(all: string[]) {
+            if (!store.sessionTabs[sessionKey]) {
+              setStore("sessionTabs", sessionKey, { all, active: undefined })
+            } else {
+              setStore("sessionTabs", sessionKey, "all", all)
+            }
+          },
+          async open(tab: string) {
+            if (tab === "chat") {
+              if (!store.sessionTabs[sessionKey]) {
+                setStore("sessionTabs", sessionKey, { all: [], active: undefined })
+              } else {
+                setStore("sessionTabs", sessionKey, "active", undefined)
+              }
+              return
+            }
+            const current = store.sessionTabs[sessionKey] ?? { all: [] }
+            if (tab !== "review") {
+              if (!current.all.includes(tab)) {
+                if (!store.sessionTabs[sessionKey]) {
+                  setStore("sessionTabs", sessionKey, { all: [tab], active: tab })
+                } else {
+                  setStore("sessionTabs", sessionKey, "all", [...current.all, tab])
+                  setStore("sessionTabs", sessionKey, "active", tab)
+                }
+                return
+              }
+            }
+            if (!store.sessionTabs[sessionKey]) {
+              setStore("sessionTabs", sessionKey, { all: [], active: tab })
+            } else {
+              setStore("sessionTabs", sessionKey, "active", tab)
+            }
+          },
+          close(tab: string) {
+            const current = store.sessionTabs[sessionKey]
+            if (!current) return
+            batch(() => {
+              setStore(
+                "sessionTabs",
+                sessionKey,
+                "all",
+                current.all.filter((x) => x !== tab),
+              )
+              if (current.active === tab) {
+                const index = current.all.findIndex((f) => f === tab)
+                const previous = current.all[Math.max(0, index - 1)]
+                setStore("sessionTabs", sessionKey, "active", previous)
+              }
+            })
+          },
+          move(tab: string, to: number) {
+            const current = store.sessionTabs[sessionKey]
+            if (!current) return
+            const index = current.all.findIndex((f) => f === tab)
+            if (index === -1) return
+            setStore(
+              "sessionTabs",
+              sessionKey,
+              "all",
+              produce((opened) => {
+                opened.splice(to, 0, opened.splice(index, 1)[0])
               }),
             )
-          }
-        },
-        connect(provider: string) {
-          setEphemeral(
-            produce((state) => {
-              state.dialog.open = "connect"
-              state.connect = { provider, state: "pending" }
-            }),
-          )
-        },
-      },
-      connect: {
-        provider: createMemo(() => ephemeral.connect.provider),
-        state: createMemo(() => ephemeral.connect.state),
-        complete() {
-          setEphemeral(
-            produce((state) => {
-              state.dialog.open = "model"
-              state.connect.state = "complete"
-            }),
-          )
-        },
-        error(message: string) {
-          setEphemeral(
-            produce((state) => {
-              state.connect.state = "error"
-              state.connect.error = message
-            }),
-          )
-        },
-        clear() {
-          setEphemeral("connect", {})
-        },
+          },
+        }
       },
     }
   },

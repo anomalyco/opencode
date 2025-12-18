@@ -21,7 +21,7 @@ on:
         required: false
         type: string
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+concurrency: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.version || inputs.bump }}
 
 permissions:
   id-token: write
@@ -31,7 +31,7 @@ permissions:
 jobs:
   publish:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'sst/opencode' && github.ref == 'refs/heads/dev'
+    if: github.repository == 'sst/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -63,6 +63,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - uses: actions/setup-node@v4
         with:
@@ -103,6 +109,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          ref: ${{ needs.publish.outputs.tagName }}
 
       - uses: apple-actions/import-codesign-certs@v2
         if: ${{ runner.os == 'macOS' }}
@@ -158,12 +165,18 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
+          OPENCODE_RELEASE_TAG: ${{ needs.publish.outputs.tagName }}
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
-      - run: cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage
+      - name: Install tauri-cli from portable appimage branch
         if: contains(matrix.settings.host, 'ubuntu')
+        run: |
+          cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage --force
+          echo "Installed tauri-cli version:"
+          cargo tauri --version
 
       - name: Build and upload artifacts
+        timeout-minutes: 20
         uses: tauri-apps/tauri-action@390cbe447412ced1303d35abe75287949e43437a
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -180,8 +193,25 @@ jobs:
           projectPath: packages/tauri
           uploadWorkflowArtifacts: true
           tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
-          args: --target ${{ matrix.settings.target }}
+          args: --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.publish.outputs.releaseId }}
           tagName: ${{ needs.publish.outputs.tagName }}
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
+          releaseDraft: true
+
+  publish-release:
+    needs:
+      - publish
+      - publish-tauri
+    if: needs.publish.outputs.tagName
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.publish.outputs.tagName }}
+
+      - run: gh release edit ${{ needs.publish.outputs.tagName }} --draft=false
+        env:
+          GH_TOKEN: ${{ github.token }}

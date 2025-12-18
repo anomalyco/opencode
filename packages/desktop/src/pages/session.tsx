@@ -1,4 +1,5 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo, createEffect } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo, createEffect, on } from "solid-js"
+import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
@@ -11,11 +12,10 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { Code } from "@opencode-ai/ui/code"
+import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { SelectDialog } from "@opencode-ai/ui/select-dialog"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -23,31 +23,323 @@ import {
   SortableProvider,
   closestCenter,
   createSortable,
-  useDragDropContext,
 } from "@thisbeyond/solid-dnd"
-import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
-import { useSession, type LocalPTY } from "@/context/session"
+import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectFile } from "@/components/dialog-select-file"
+import { DialogSelectModel } from "@/components/dialog-select-model"
+import { useCommand } from "@/context/command"
+import { useNavigate, useParams } from "@solidjs/router"
+import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
+import { useSDK } from "@/context/sdk"
+import { usePrompt } from "@/context/prompt"
+import { extractPromptFromParts } from "@/utils/prompt"
+import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
   const sync = useSync()
-  const session = useSession()
+  const terminal = useTerminal()
+  const dialog = useDialog()
+  const codeComponent = useCodeComponent()
+  const command = useCommand()
+  const params = useParams()
+  const navigate = useNavigate()
+  const sdk = useSDK()
+  const prompt = usePrompt()
+
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const tabs = createMemo(() => layout.tabs(sessionKey()))
+
+  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const revertMessageID = createMemo(() => info()?.revert?.messageID)
+  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const userMessages = createMemo(() =>
+    messages()
+      .filter((m) => m.role === "user")
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  )
+  // Visible user messages excludes reverted messages (those >= revertMessageID)
+  const visibleUserMessages = createMemo(() => {
+    const revert = revertMessageID()
+    if (!revert) return userMessages()
+    return userMessages().filter((m) => m.id < revert)
+  })
+  const lastUserMessage = createMemo(() => visibleUserMessages()?.at(-1))
+
+  const [messageStore, setMessageStore] = createStore<{ messageId?: string }>({})
+  const activeMessage = createMemo(() => {
+    if (!messageStore.messageId) return lastUserMessage()
+    // If the stored message is no longer visible (e.g., was reverted), fall back to last visible
+    const found = visibleUserMessages()?.find((m) => m.id === messageStore.messageId)
+    return found ?? lastUserMessage()
+  })
+  const setActiveMessage = (message: UserMessage | undefined) => {
+    setMessageStore("messageId", message?.id)
+  }
+
+  function navigateMessageByOffset(offset: number) {
+    const msgs = visibleUserMessages()
+    if (msgs.length === 0) return
+
+    const current = activeMessage()
+    const currentIndex = current ? msgs.findIndex((m) => m.id === current.id) : -1
+
+    let targetIndex: number
+    if (currentIndex === -1) {
+      targetIndex = offset > 0 ? 0 : msgs.length - 1
+    } else {
+      targetIndex = currentIndex + offset
+    }
+
+    if (targetIndex < 0 || targetIndex >= msgs.length) return
+
+    setActiveMessage(msgs[targetIndex])
+  }
+
+  const last = createMemo(
+    () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
+  )
+  const model = createMemo(() =>
+    last() ? sync.data.provider.all.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
+  )
+  const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+
+  const tokens = createMemo(() => {
+    if (!last()) return
+    const t = last().tokens
+    return t.input + t.output + t.reasoning + t.cache.read + t.cache.write
+  })
+
+  const context = createMemo(() => {
+    const total = tokens()
+    const limit = model()?.limit.context
+    if (!total || !limit) return 0
+    return Math.round((total / limit) * 100)
+  })
+
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
-    fileSelectOpen: false,
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
+    stepsExpanded: false,
   })
   let inputRef!: HTMLDivElement
 
-  const MOD = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform) ? "Meta" : "Control"
+  createEffect(() => {
+    if (!params.id) return
+    sync.session.sync(params.id)
+  })
+
+  createEffect(() => {
+    if (layout.terminal.opened()) {
+      if (terminal.all().length === 0) {
+        terminal.new()
+      }
+    }
+  })
+
+  createEffect(
+    on(
+      () => visibleUserMessages().at(-1)?.id,
+      (lastId, prevLastId) => {
+        if (lastId && prevLastId && lastId > prevLastId) {
+          setMessageStore("messageId", undefined)
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? { type: "idle" })
+
+  command.register(() => [
+    {
+      id: "session.new",
+      title: "New session",
+      description: "Create a new session",
+      category: "Session",
+      keybind: "mod+shift+s",
+      slash: "new",
+      onSelect: () => navigate(`/${params.dir}/session`),
+    },
+    {
+      id: "file.open",
+      title: "Open file",
+      description: "Search and open a file",
+      category: "File",
+      keybind: "mod+p",
+      slash: "open",
+      onSelect: () => dialog.show(() => <DialogSelectFile />),
+    },
+    // {
+    //   id: "theme.toggle",
+    //   title: "Toggle theme",
+    //   description: "Switch between themes",
+    //   category: "View",
+    //   keybind: "ctrl+t",
+    //   slash: "theme",
+    //   onSelect: () => {
+    //     const currentTheme = localStorage.getItem("theme") ?? "oc-1"
+    //     const themes = ["oc-1", "oc-2-paper"]
+    //     const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
+    //     localStorage.setItem("theme", nextTheme)
+    //     document.documentElement.setAttribute("data-theme", nextTheme)
+    //   },
+    // },
+    {
+      id: "terminal.toggle",
+      title: "Toggle terminal",
+      description: "Show or hide the terminal",
+      category: "View",
+      keybind: "ctrl+`",
+      slash: "terminal",
+      onSelect: () => layout.terminal.toggle(),
+    },
+    {
+      id: "terminal.new",
+      title: "New terminal",
+      description: "Create a new terminal tab",
+      category: "Terminal",
+      keybind: "ctrl+shift+`",
+      onSelect: () => terminal.new(),
+    },
+    {
+      id: "steps.toggle",
+      title: "Toggle steps",
+      description: "Show or hide the steps",
+      category: "View",
+      keybind: "mod+e",
+      slash: "steps",
+      disabled: !params.id,
+      onSelect: () => setStore("stepsExpanded", (x) => !x),
+    },
+    {
+      id: "message.previous",
+      title: "Previous message",
+      description: "Go to the previous user message",
+      category: "Session",
+      keybind: "mod+arrowup",
+      disabled: !params.id,
+      onSelect: () => navigateMessageByOffset(-1),
+    },
+    {
+      id: "message.next",
+      title: "Next message",
+      description: "Go to the next user message",
+      category: "Session",
+      keybind: "mod+arrowdown",
+      disabled: !params.id,
+      onSelect: () => navigateMessageByOffset(1),
+    },
+    {
+      id: "model.choose",
+      title: "Choose model",
+      description: "Select a different model",
+      category: "Model",
+      keybind: "mod+'",
+      slash: "model",
+      onSelect: () => dialog.show(() => <DialogSelectModel />),
+    },
+    {
+      id: "agent.cycle",
+      title: "Cycle agent",
+      description: "Switch to the next agent",
+      category: "Agent",
+      keybind: "mod+.",
+      slash: "agent",
+      onSelect: () => local.agent.move(1),
+    },
+    {
+      id: "agent.cycle.reverse",
+      title: "Cycle agent backwards",
+      description: "Switch to the previous agent",
+      category: "Agent",
+      keybind: "shift+mod+.",
+      onSelect: () => local.agent.move(-1),
+    },
+    {
+      id: "session.undo",
+      title: "Undo",
+      description: "Undo the last message",
+      category: "Session",
+      slash: "undo",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        if (status()?.type !== "idle") {
+          await sdk.client.session.abort({ sessionID }).catch(() => {})
+        }
+        const revert = info()?.revert?.messageID
+        // Find the last user message that's not already reverted
+        const message = userMessages().findLast((x) => !revert || x.id < revert)
+        if (!message) return
+        await sdk.client.session.revert({ sessionID, messageID: message.id })
+        // Restore the prompt from the reverted message
+        const parts = sync.data.part[message.id]
+        if (parts) {
+          const restored = extractPromptFromParts(parts)
+          prompt.set(restored)
+        }
+        // Navigate to the message before the reverted one (which will be the new last visible message)
+        const priorMessage = userMessages().findLast((x) => x.id < message.id)
+        setActiveMessage(priorMessage)
+      },
+    },
+    {
+      id: "session.redo",
+      title: "Redo",
+      description: "Redo the last undone message",
+      category: "Session",
+      slash: "redo",
+      disabled: !params.id || !info()?.revert?.messageID,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const revertMessageID = info()?.revert?.messageID
+        if (!revertMessageID) return
+        const nextMessage = userMessages().find((x) => x.id > revertMessageID)
+        if (!nextMessage) {
+          // Full unrevert - restore all messages and navigate to last
+          await sdk.client.session.unrevert({ sessionID })
+          prompt.reset()
+          // Navigate to the last message (the one that was at the revert point)
+          const lastMsg = userMessages().findLast((x) => x.id >= revertMessageID)
+          setActiveMessage(lastMsg)
+          return
+        }
+        // Partial redo - move forward to next message
+        await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
+        // Navigate to the message before the new revert point
+        const priorMsg = userMessages().findLast((x) => x.id < nextMessage.id)
+        setActiveMessage(priorMsg)
+      },
+    },
+  ])
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if ((document.activeElement as HTMLElement)?.dataset?.component === "terminal") return
+    if (dialog.active) return
+
+    const focused = document.activeElement === inputRef
+    if (focused) {
+      if (event.key === "Escape") inputRef?.blur()
+      return
+    }
+
+    if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
+      inputRef?.focus()
+    }
+  }
 
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown)
@@ -56,82 +348,6 @@ export default function Page() {
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown)
   })
-
-  createEffect(() => {
-    if (layout.terminal.opened()) {
-      if (session.terminal.all().length === 0) {
-        session.terminal.new()
-      }
-    }
-  })
-
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.getModifierState(MOD) && event.shiftKey && event.key.toLowerCase() === "p") {
-      event.preventDefault()
-      return
-    }
-    if (event.getModifierState(MOD) && event.key.toLowerCase() === "p") {
-      event.preventDefault()
-      setStore("fileSelectOpen", true)
-      return
-    }
-    if (event.ctrlKey && event.key.toLowerCase() === "t") {
-      event.preventDefault()
-      const currentTheme = localStorage.getItem("theme") ?? "oc-1"
-      const themes = ["oc-1", "oc-2-paper"]
-      const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
-      localStorage.setItem("theme", nextTheme)
-      document.documentElement.setAttribute("data-theme", nextTheme)
-      return
-    }
-    if (event.ctrlKey && event.key.toLowerCase() === "`") {
-      event.preventDefault()
-      if (event.shiftKey) {
-        session.terminal.new()
-        return
-      }
-      layout.terminal.toggle()
-      return
-    }
-
-    // @ts-expect-error
-    if (document.activeElement?.dataset?.component === "terminal") {
-      return
-    }
-
-    const focused = document.activeElement === inputRef
-    if (focused) {
-      if (event.key === "Escape") {
-        inputRef?.blur()
-      }
-      return
-    }
-
-    // if (local.file.active()) {
-    //   const active = local.file.active()!
-    //   if (event.key === "Enter" && active.selection) {
-    //     local.context.add({
-    //       type: "file",
-    //       path: active.path,
-    //       selection: { ...active.selection },
-    //     })
-    //     return
-    //   }
-    //
-    //   if (event.getModifierState(MOD)) {
-    //     if (event.key.toLowerCase() === "a") {
-    //       return
-    //     }
-    //     if (event.key.toLowerCase() === "c") {
-    //       return
-    //     }
-    //   }
-    // }
-
-    if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
-      inputRef?.focus()
-    }
-  }
 
   const resetClickTimer = () => {
     if (!store.clickTimer) return
@@ -166,11 +382,11 @@ export default function Page() {
   const handleDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const currentTabs = session.layout.tabs.all
+      const currentTabs = tabs().all()
       const fromIndex = currentTabs?.indexOf(draggable.id.toString())
       const toIndex = currentTabs?.indexOf(droppable.id.toString())
       if (fromIndex !== toIndex && toIndex !== undefined) {
-        session.layout.moveTab(draggable.id.toString(), toIndex)
+        tabs().move(draggable.id.toString(), toIndex)
       }
     }
   }
@@ -188,11 +404,11 @@ export default function Page() {
   const handleTerminalDragOver = (event: DragEvent) => {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const terminals = session.terminal.all()
-      const fromIndex = terminals.findIndex((t) => t.id === draggable.id.toString())
-      const toIndex = terminals.findIndex((t) => t.id === droppable.id.toString())
+      const terminals = terminal.all()
+      const fromIndex = terminals.findIndex((t: LocalPTY) => t.id === draggable.id.toString())
+      const toIndex = terminals.findIndex((t: LocalPTY) => t.id === droppable.id.toString())
       if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-        session.terminal.move(draggable.id.toString(), toIndex)
+        terminal.move(draggable.id.toString(), toIndex)
       }
     }
   }
@@ -210,8 +426,8 @@ export default function Page() {
           <Tabs.Trigger
             value={props.terminal.id}
             closeButton={
-              session.terminal.all().length > 1 && (
-                <IconButton icon="close" variant="ghost" onClick={() => session.terminal.close(props.terminal.id)} />
+              terminal.all().length > 1 && (
+                <IconButton icon="close" variant="ghost" onClick={() => terminal.close(props.terminal.id)} />
               )
             }
           >
@@ -279,7 +495,11 @@ export default function Page() {
         <div class="relative h-full">
           <Tabs.Trigger
             value={props.tab}
-            closeButton={<IconButton icon="close" variant="ghost" onClick={() => props.onTabClose(props.tab)} />}
+            closeButton={
+              <Tooltip value="Close tab" placement="bottom">
+                <IconButton icon="close" variant="ghost" onClick={() => props.onTabClose(props.tab)} />
+              </Tooltip>
+            }
             hideCloseButton
             onClick={() => props.onTabClick(props.tab)}
           >
@@ -292,37 +512,7 @@ export default function Page() {
     )
   }
 
-  const ConstrainDragYAxis = (): JSX.Element => {
-    const context = useDragDropContext()
-    if (!context) return <></>
-    const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
-    const transformer: Transformer = {
-      id: "constrain-y-axis",
-      order: 100,
-      callback: (transform) => ({ ...transform, y: 0 }),
-    }
-    onDragStart((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      addTransformer("draggables", id, transformer)
-    })
-    onDragEnd((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      removeTransformer("draggables", id, transformer.id)
-    })
-    return <></>
-  }
-
-  const getDraggableId = (event: unknown): string | undefined => {
-    if (typeof event !== "object" || event === null) return undefined
-    if (!("draggable" in event)) return undefined
-    const draggable = (event as { draggable?: { id?: unknown } }).draggable
-    if (!draggable) return undefined
-    return typeof draggable.id === "string" ? draggable.id : undefined
-  }
-
-  const wide = createMemo(() => layout.review.state() === "tab" || !session.diffs().length)
+  const wide = createMemo(() => layout.review.state() === "tab" || !diffs().length)
 
   return (
     <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
@@ -335,7 +525,7 @@ export default function Page() {
         >
           <DragDropSensors />
           <ConstrainDragYAxis />
-          <Tabs value={session.layout.tabs.active ?? "chat"} onChange={session.layout.openTab}>
+          <Tabs value={tabs().active() ?? "chat"} onChange={tabs().open}>
             <div class="sticky top-0 shrink-0 flex">
               <Tabs.List>
                 <Tabs.Trigger value="chat">
@@ -345,41 +535,41 @@ export default function Page() {
                       value={`${new Intl.NumberFormat("en-US", {
                         notation: "compact",
                         compactDisplay: "short",
-                      }).format(session.usage.tokens() ?? 0)} Tokens`}
+                      }).format(tokens() ?? 0)} Tokens`}
                       class="flex items-center gap-1.5"
                     >
-                      <ProgressCircle percentage={session.usage.context() ?? 0} />
-                      <div class="text-14-regular text-text-weak text-left w-7">{session.usage.context() ?? 0}%</div>
+                      <ProgressCircle percentage={context() ?? 0} />
+                      <div class="text-14-regular text-text-weak text-left w-7">{context() ?? 0}%</div>
                     </Tooltip>
                   </div>
                 </Tabs.Trigger>
-                <Show when={layout.review.state() === "tab" && session.diffs().length}>
+                <Show when={layout.review.state() === "tab" && diffs().length}>
                   <Tabs.Trigger
                     value="review"
                     closeButton={
-                      <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
+                      <Tooltip value="Close tab" placement="bottom">
+                        <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
+                      </Tooltip>
                     }
                   >
                     <div class="flex items-center gap-3">
-                      <Show when={session.diffs()}>
-                        <DiffChanges changes={session.diffs()} variant="bars" />
+                      <Show when={diffs()}>
+                        <DiffChanges changes={diffs()} variant="bars" />
                       </Show>
                       <div class="flex items-center gap-1.5">
                         <div>Review</div>
-                        <Show when={session.info()?.summary?.files}>
+                        <Show when={info()?.summary?.files}>
                           <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                            {session.info()?.summary?.files ?? 0}
+                            {info()?.summary?.files ?? 0}
                           </div>
                         </Show>
                       </div>
                     </div>
                   </Tabs.Trigger>
                 </Show>
-                <SortableProvider ids={session.layout.tabs.all ?? []}>
-                  <For each={session.layout.tabs.all ?? []}>
-                    {(tab) => (
-                      <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={session.layout.closeTab} />
-                    )}
+                <SortableProvider ids={tabs().all() ?? []}>
+                  <For each={tabs().all() ?? []}>
+                    {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={tabs().close} />}
                   </For>
                 </SortableProvider>
                 <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
@@ -388,13 +578,16 @@ export default function Page() {
                       icon="plus-small"
                       variant="ghost"
                       iconSize="large"
-                      onClick={() => setStore("fileSelectOpen", true)}
+                      onClick={() => dialog.show(() => <DialogSelectFile />)}
                     />
                   </Tooltip>
                 </div>
               </Tabs.List>
             </div>
-            <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
+            <Tabs.Content
+              value="chat"
+              class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden contain-strict"
+            >
               <div
                 classList={{
                   "w-full flex-1 min-h-0": true,
@@ -405,37 +598,41 @@ export default function Page() {
                 <div
                   classList={{
                     "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
-                    "max-w-146 mx-auto": !wide(),
+                    "max-w-200 mx-auto": !wide(),
                   }}
                 >
                   <Switch>
-                    <Match when={session.id}>
+                    <Match when={params.id}>
                       <div class="flex items-start justify-start h-full min-h-0">
                         <SessionMessageRail
-                          messages={session.messages.user()}
-                          current={session.messages.active()}
-                          onMessageSelect={session.messages.setActive}
+                          messages={visibleUserMessages()}
+                          current={activeMessage()}
+                          onMessageSelect={setActiveMessage}
                           wide={wide()}
                         />
-                        <SessionTurn
-                          sessionID={session.id!}
-                          messageID={session.messages.active()?.id!}
-                          classes={{
-                            root: "pb-20 flex-1 min-w-0",
-                            content: "pb-20",
-                            container:
-                              "w-full " +
-                              (wide()
-                                ? "max-w-146 mx-auto px-6"
-                                : session.messages.user().length > 1
-                                  ? "pr-6 pl-18"
-                                  : "px-6"),
-                          }}
-                        />
+                        <Show when={activeMessage()}>
+                          <SessionTurn
+                            sessionID={params.id!}
+                            messageID={activeMessage()!.id}
+                            stepsExpanded={store.stepsExpanded}
+                            onStepsExpandedChange={(expanded) => setStore("stepsExpanded", expanded)}
+                            classes={{
+                              root: "pb-20 flex-1 min-w-0",
+                              content: "pb-20",
+                              container:
+                                "w-full " +
+                                (wide()
+                                  ? "max-w-200 mx-auto px-6"
+                                  : visibleUserMessages().length > 1
+                                    ? "pr-6 pl-18"
+                                    : "px-6"),
+                            }}
+                          />
+                        </Show>
                       </div>
                     </Match>
                     <Match when={true}>
-                      <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-146 mx-auto px-6">
+                      <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
                         <div class="text-20-medium text-text-weaker">New session</div>
                         <div class="flex justify-center items-center gap-3">
                           <Icon name="folder" size="small" />
@@ -461,7 +658,7 @@ export default function Page() {
                     </Match>
                   </Switch>
                   <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
-                    <div class="w-full max-w-146 px-6">
+                    <div class="w-full max-w-200 px-6">
                       <PromptInput
                         ref={(el) => {
                           inputRef = el
@@ -470,10 +667,10 @@ export default function Page() {
                     </div>
                   </div>
                 </div>
-                <Show when={layout.review.state() === "pane" && session.diffs().length}>
+                <Show when={layout.review.state() === "pane" && diffs().length}>
                   <div
                     classList={{
-                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base": true,
+                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base contain-strict": true,
                     }}
                   >
                     <SessionReview
@@ -482,7 +679,7 @@ export default function Page() {
                         header: "px-6",
                         container: "px-6",
                       }}
-                      diffs={session.diffs()}
+                      diffs={diffs()}
                       actions={
                         <Tooltip value="Open in tab">
                           <IconButton
@@ -490,7 +687,7 @@ export default function Page() {
                             variant="ghost"
                             onClick={() => {
                               layout.review.tab()
-                              session.layout.setActiveTab("review")
+                              tabs().setActive("review")
                             }}
                           />
                         </Tooltip>
@@ -500,8 +697,8 @@ export default function Page() {
                 </Show>
               </div>
             </Tabs.Content>
-            <Show when={layout.review.state() === "tab" && session.diffs().length}>
-              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
+            <Show when={layout.review.state() === "tab" && diffs().length}>
+              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden contain-strict">
                 <div
                   classList={{
                     "relative pt-3 flex-1 min-h-0 overflow-hidden": true,
@@ -513,13 +710,13 @@ export default function Page() {
                       header: "px-6",
                       container: "px-6",
                     }}
-                    diffs={session.diffs()}
+                    diffs={diffs()}
                     split
                   />
                 </div>
               </Tabs.Content>
             </Show>
-            <For each={session.layout.tabs.all}>
+            <For each={tabs().all()}>
               {(tab) => {
                 const [file] = createResource(
                   () => tab,
@@ -535,7 +732,8 @@ export default function Page() {
                     <Switch>
                       <Match when={file()}>
                         {(f) => (
-                          <Code
+                          <Dynamic
+                            component={codeComponent}
                             file={{
                               name: f().path,
                               contents: f().content?.content ?? "",
@@ -573,78 +771,14 @@ export default function Page() {
             </Show>
           </DragOverlay>
         </DragDropProvider>
-        <Show when={session.layout.tabs.active}>
-          <div class="absolute inset-x-0 px-6 max-w-146 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
+        <Show when={tabs().active()}>
+          <div class="absolute inset-x-0 px-6 max-w-200 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
             <PromptInput
               ref={(el) => {
                 inputRef = el
               }}
             />
           </div>
-        </Show>
-        <div class="hidden shrink-0 w-56 p-2 h-full overflow-y-auto">
-          {/* <FileTree path="" onFileClick={ handleTabClick} /> */}
-        </div>
-        <div class="hidden shrink-0 w-56 p-2">
-          <Show
-            when={local.file.changes().length}
-            fallback={<div class="px-2 text-xs text-text-muted">No changes</div>}
-          >
-            <ul class="">
-              <For each={local.file.changes()}>
-                {(path) => (
-                  <li>
-                    <button
-                      onClick={() => local.file.open(path, { view: "diff-unified", pinned: true })}
-                      class="w-full flex items-center px-2 py-0.5 gap-x-2 text-text-muted grow min-w-0 hover:bg-background-element"
-                    >
-                      <FileIcon node={{ path, type: "file" }} class="shrink-0 size-3" />
-                      <span class="text-xs text-text whitespace-nowrap">{getFilename(path)}</span>
-                      <span class="text-xs text-text-muted/60 whitespace-nowrap truncate min-w-0">
-                        {getDirectory(path)}
-                      </span>
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
-        </div>
-        <Show when={store.fileSelectOpen}>
-          <SelectDialog
-            defaultOpen
-            title="Select file"
-            placeholder="Search files"
-            emptyMessage="No files found"
-            items={local.file.searchFiles}
-            key={(x) => x}
-            onOpenChange={(open) => setStore("fileSelectOpen", open)}
-            onSelect={(x) => {
-              if (x) {
-                return session.layout.openTab("file://" + x)
-              }
-              return undefined
-            }}
-          >
-            {(i) => (
-              <div
-                classList={{
-                  "w-full flex items-center justify-between rounded-md": true,
-                }}
-              >
-                <div class="flex items-center gap-x-2 grow min-w-0">
-                  <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular">
-                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                      {getDirectory(i)}
-                    </span>
-                    <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-x-1 text-text-muted/40 shrink-0"></div>
-              </div>
-            )}
-          </SelectDialog>
         </Show>
       </div>
       <Show when={layout.terminal.opened()}>
@@ -669,25 +803,21 @@ export default function Page() {
           >
             <DragDropSensors />
             <ConstrainDragYAxis />
-            <Tabs variant="alt" value={session.terminal.active()} onChange={session.terminal.open}>
+            <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
               <Tabs.List class="h-10">
-                <SortableProvider ids={session.terminal.all().map((t) => t.id)}>
-                  <For each={session.terminal.all()}>{(terminal) => <SortableTerminalTab terminal={terminal} />}</For>
+                <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                  <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                 </SortableProvider>
                 <div class="h-full flex items-center justify-center">
-                  <Tooltip value="Open file" class="flex items-center">
-                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={session.terminal.new} />
+                  <Tooltip value="New Terminal" class="flex items-center">
+                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
                   </Tooltip>
                 </div>
               </Tabs.List>
-              <For each={session.terminal.all()}>
-                {(terminal) => (
-                  <Tabs.Content value={terminal.id}>
-                    <Terminal
-                      pty={terminal}
-                      onCleanup={session.terminal.update}
-                      onConnectError={() => session.terminal.clone(terminal.id)}
-                    />
+              <For each={terminal.all()}>
+                {(pty) => (
+                  <Tabs.Content value={pty.id}>
+                    <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
                   </Tabs.Content>
                 )}
               </For>
@@ -695,9 +825,9 @@ export default function Page() {
             <DragOverlay>
               <Show when={store.activeTerminalDraggable}>
                 {(draggedId) => {
-                  const terminal = createMemo(() => session.terminal.all().find((t) => t.id === draggedId()))
+                  const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
                   return (
-                    <Show when={terminal()}>
+                    <Show when={pty()}>
                       {(t) => (
                         <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
                           {t().title}
