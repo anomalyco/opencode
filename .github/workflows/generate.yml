@@ -14,6 +14,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,14 +26,30 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Generate SDK
-        run: |
-          bun ./packages/sdk/js/script/build.ts
-          (cd packages/opencode && bun dev generate > ../sdk/openapi.json)
-          bun x prettier --write packages/sdk/openapi.json
+      - name: Generate
+        run: ./script/generate.ts
 
-      - name: Format
-        run: ./script/format.ts
+      - name: Commit and push
+        id: push
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "chore: generate"
+          git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify
+
+      - name: Comment on failure
+        if: failure()
+        run: |
+          MESSAGE=$'Failed to push generated code. Please run locally and push:\n```\n./script/generate.ts\ngit add -A && git commit -m "chore: generate" && git push\n```'
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            gh pr comment ${{ github.event.pull_request.number }} --body "$MESSAGE"
+          else
+            gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body="$MESSAGE"
+          fi
         env:
-          CI: true
-          PUSH_BRANCH: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
