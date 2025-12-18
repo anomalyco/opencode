@@ -1,9 +1,9 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createMemo } from "solid-js"
-import { makePersisted } from "@solid-primitives/storage"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
+import { persisted } from "@/utils/persist"
 
 export type LocalPTY = {
   id: string
@@ -21,19 +21,18 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const params = useParams()
     const name = createMemo(() => `${params.dir}/terminal${params.id ? "/" + params.id : ""}.v1`)
 
-    const [store, setStore] = makePersisted(
+    const [store, setStore, _, ready] = persisted(
+      name(),
       createStore<{
         active?: string
         all: LocalPTY[]
       }>({
         all: [],
       }),
-      {
-        name: name(),
-      },
     )
 
     return {
+      ready,
       all: createMemo(() => Object.values(store.all)),
       active: createMemo(() => store.active),
       new() {
