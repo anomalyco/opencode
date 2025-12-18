@@ -51,7 +51,6 @@ export namespace LSPServer {
     global?: boolean
     root: RootFunction
     spawn(root: string): Promise<Handle | undefined>
-    experimental?: boolean,
   }
 
   export const Deno: Info = {
@@ -412,7 +411,6 @@ export namespace LSPServer {
         initialization,
       }
     },
-    experimental: true,
   }
 
   export const Pyright: Info = {
