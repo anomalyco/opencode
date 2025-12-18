@@ -2,7 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
-import { spawn } from "./bun-spawn"
+import { spawnWrapper } from "./spawn-wrapper"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
@@ -67,7 +67,8 @@ export namespace Installation {
     const checks = [
       {
         name: "npm" as const,
-        command: () => spawn(["npm", "list", "-g", "--depth=0"], { throws: false }).text(),
+        // Changed to spawnWrapper because of a bug in Bun.$ with npm and Ctrl+C handling in Windows
+        command: () => spawnWrapper(["npm", "list", "-g", "--depth=0"], { throws: false }).text(),
       },
       {
         name: "yarn" as const,
@@ -181,7 +182,8 @@ export namespace Installation {
     }
 
     const registry = await iife(async () => {
-      const r = (await spawn(["npm", "config", "get", "registry"], { throws: false }).text()).trim()
+      // Changed to spawnWrapper because of a bug in Bun.$ with npm and Ctrl+C handling in Windows
+      const r = (await spawnWrapper(["npm", "config", "get", "registry"], { throws: false }).text()).trim()
       const reg = r || "https://registry.npmjs.org"
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
