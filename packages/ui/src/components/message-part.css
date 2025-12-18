@@ -152,9 +152,22 @@
   align-items: flex-start;
   justify-content: flex-start;
 
+  [data-component="markdown"] {
+    width: 100%;
+    min-width: 0;
+
+    pre {
+      margin: 0;
+      padding: 0;
+      background-color: transparent !important;
+      border: none !important;
+    }
+  }
+
   pre {
     margin: 0;
     padding: 0;
+    background: none;
   }
 
   &[data-scrollable] {
@@ -270,5 +283,41 @@
       text-decoration: line-through;
       color: var(--text-weaker);
     }
+  }
+}
+
+[data-component="diagnostics"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background-color: var(--surface-critical-weak);
+  border-top: 1px solid var(--border-critical-base);
+
+  [data-slot="diagnostic"] {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+  }
+
+  [data-slot="diagnostic-label"] {
+    color: var(--text-on-critical-base);
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: -0.5px;
+    flex-shrink: 0;
+  }
+
+  [data-slot="diagnostic-location"] {
+    color: var(--text-on-critical-weak);
+    flex-shrink: 0;
+  }
+
+  [data-slot="diagnostic-message"] {
+    color: var(--text-on-critical-base);
+    word-break: break-word;
   }
 }
