@@ -1,5 +1,5 @@
 import { type Tool } from "ai"
-import { experimental_createMCPClient } from "@ai-sdk/mcp"
+import { experimental_createMCPClient, type experimental_MCPClient as MCPClient } from "@ai-sdk/mcp"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
@@ -77,6 +77,9 @@ export namespace MCP {
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
 
+  // Prompt cache types
+  type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
+
   const state = Instance.state(
     async () => {
       const cfg = await Config.get()
@@ -120,6 +123,36 @@ export namespace MCP {
       pendingOAuthTransports.clear()
     },
   )
+
+  // Helper function to fetch prompts for a specific client
+  async function fetchPromptsForClient(clientName: string, client: Client) {
+    const prompts = await client.listPrompts().catch((e) => {
+      log.error("failed to get prompts", { clientName, error: e.message })
+      return undefined
+    })
+
+    if (!prompts) {
+      return
+    }
+
+    const commands: Record<string, PromptInfo & { client: string }> = {}
+
+    for (const prompt of prompts.prompts) {
+      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const sanitizedPromptName = prompt.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const key =
+        "mcp." +
+        sanitizedClientName +
+        "." +
+        sanitizedPromptName +
+        "(" +
+        prompt.arguments?.map((arg) => arg.name.replace(/[^a-zA-Z0-9_-]/g, "_")).join(",") +
+        ")"
+
+      commands[key] = { ...prompt, client: clientName }
+    }
+    return commands
+  }
 
   export async function add(name: string, mcp: Config.Mcp) {
     const s = await state()
@@ -410,6 +443,55 @@ export namespace MCP {
         result[sanitizedClientName + "_" + sanitizedToolName] = tool
       }
     }
+    return result
+  }
+
+  export async function prompts() {
+    const s = await state()
+    const clientsSnapshot = await clients()
+
+    const prompts = Object.fromEntries<PromptInfo & { client: string }>(
+      (
+        await Promise.all(
+          Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
+            if (s.status[clientName]?.status !== "connected") {
+              return []
+            }
+
+            return Object.entries((await fetchPromptsForClient(clientName, client)) ?? {})
+          }),
+        )
+      ).flat(),
+    )
+
+    return prompts
+  }
+
+  export async function getPrompt(clientName: string, name: string, args?: Record<string, unknown>) {
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[clientName]
+
+    if (!client) {
+      log.warn("client not found for prompt", {
+        clientName,
+      })
+      return undefined
+    }
+
+    const result = await client
+      .getPrompt({
+        name: name,
+        arguments: args,
+      })
+      .catch((e) => {
+        log.error("failed to get prompt from MCP server", {
+          clientName,
+          promptName: name,
+          error: e.message,
+        })
+        return undefined
+      })
+
     return result
   }
 

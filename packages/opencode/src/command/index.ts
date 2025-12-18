@@ -6,6 +6,12 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import { MCP } from "../mcp"
+
+// workaround for zod not supporting async functions natively
+// https://zod.dev/v4/changelog?id=zfunction
+const createAsyncFunctionSchema = <T extends z.ZodFunction>(schema: T) =>
+  z.custom<Parameters<T["implementAsync"]>[0]>((fn) => schema.implementAsync(fn as never))
 
 export namespace Command {
   export const Event = {
@@ -26,7 +32,11 @@ export namespace Command {
       description: z.string().optional(),
       agent: z.string().optional(),
       model: z.string().optional(),
-      template: z.string(),
+      template: createAsyncFunctionSchema(
+        z.function({
+          output: z.promise(z.string()),
+        }),
+      ),
       subtask: z.boolean().optional(),
     })
     .meta({
@@ -46,12 +56,12 @@ export namespace Command {
       [Default.INIT]: {
         name: Default.INIT,
         description: "create/update AGENTS.md",
-        template: PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
+        template: () => PROMPT_INITIALIZE.replace("${path}", Instance.worktree),
       },
       [Default.REVIEW]: {
         name: Default.REVIEW,
         description: "review changes [commit|branch|pr], defaults to uncommitted",
-        template: PROMPT_REVIEW.replace("${path}", Instance.worktree),
+        template: () => PROMPT_REVIEW.replace("${path}", Instance.worktree),
         subtask: true,
       },
     }
@@ -62,8 +72,29 @@ export namespace Command {
         agent: command.agent,
         model: command.model,
         description: command.description,
-        template: command.template,
+        template: () => command.template,
         subtask: command.subtask,
+      }
+    }
+    for (const [name, prompt] of Object.entries(await MCP.prompts())) {
+      result[name] = {
+        name,
+        description: prompt.description,
+        template: async () => {
+          const template = await MCP.getPrompt(
+            prompt.client,
+            prompt.name,
+            prompt.arguments
+              ? // substitute each argument with $1, $2, etc.
+                Object.fromEntries(prompt.arguments?.map((argument, i) => [argument.name, `$${i + 1}`]))
+              : {},
+          )
+          return (
+            template?.messages
+              .map((message) => (message.content.type === "text" ? message.content.text : ""))
+              .join("\n") || ""
+          )
+        },
       }
     }
 
