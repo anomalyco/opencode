@@ -8,6 +8,12 @@ const transportCalls: Array<{
 }> = []
 
 // Mock the transport constructors to capture their arguments
+mock.module("@ai-sdk/mcp", () => ({
+  experimental_createMCPClient: async () => {
+    throw new Error("Mock MCP client cannot connect")
+  },
+}))
+
 mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     constructor(url: URL, options?: { authProvider?: unknown; requestInit?: RequestInit }) {
@@ -47,7 +53,9 @@ const { MCP } = await import("../../src/mcp/index")
 const { Instance } = await import("../../src/project/instance")
 const { tmpdir } = await import("../fixture/fixture")
 
-test("headers are passed to transports when oauth is enabled (default)", async () => {
+test(
+  "headers are passed to transports when oauth is enabled (default)",
+  async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -58,6 +66,7 @@ test("headers are passed to transports when oauth is enabled (default)", async (
             "test-server": {
               type: "remote",
               url: "https://example.com/mcp",
+              timeout: 250,
               headers: {
                 Authorization: "Bearer test-token",
                 "X-Custom-Header": "custom-value",
@@ -76,6 +85,7 @@ test("headers are passed to transports when oauth is enabled (default)", async (
       await MCP.add("test-server", {
         type: "remote",
         url: "https://example.com/mcp",
+        timeout: 250,
         headers: {
           Authorization: "Bearer test-token",
           "X-Custom-Header": "custom-value",
@@ -96,9 +106,13 @@ test("headers are passed to transports when oauth is enabled (default)", async (
       }
     },
   })
-})
+  },
+  20_000,
+)
 
-test("headers are passed to transports when oauth is explicitly disabled", async () => {
+test(
+  "headers are passed to transports when oauth is explicitly disabled",
+  async () => {
   await using tmp = await tmpdir()
 
   await Instance.provide({
@@ -110,6 +124,7 @@ test("headers are passed to transports when oauth is explicitly disabled", async
         type: "remote",
         url: "https://example.com/mcp",
         oauth: false,
+        timeout: 250,
         headers: {
           Authorization: "Bearer test-token",
         },
@@ -127,9 +142,13 @@ test("headers are passed to transports when oauth is explicitly disabled", async
       }
     },
   })
-})
+  },
+  20_000,
+)
 
-test("no requestInit when headers are not provided", async () => {
+test(
+  "no requestInit when headers are not provided",
+  async () => {
   await using tmp = await tmpdir()
 
   await Instance.provide({
@@ -140,6 +159,7 @@ test("no requestInit when headers are not provided", async () => {
       await MCP.add("test-server-no-headers", {
         type: "remote",
         url: "https://example.com/mcp",
+        timeout: 250,
       }).catch(() => {})
 
       expect(transportCalls.length).toBeGreaterThanOrEqual(1)
@@ -150,4 +170,6 @@ test("no requestInit when headers are not provided", async () => {
       }
     },
   })
-})
+  },
+  20_000,
+)

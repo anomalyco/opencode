@@ -24,7 +24,8 @@ import { Permission } from "../permission"
 import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
-import { Auth } from "../auth"
+import { CredentialStore, Credentials, CredentialsMigrate } from "@/credentials"
+import { RotationStats } from "@/inference/rotation-stats"
 import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
@@ -1582,14 +1583,18 @@ export namespace Server {
           "json",
           z.object({
             method: z.number().meta({ description: "Auth method index" }),
+            namespace: z.string().optional().meta({ description: "Credential namespace (optional)" }),
+            label: z.string().optional().meta({ description: "Credential label (optional)" }),
           }),
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          const { method } = c.req.valid("json")
+          const { method, namespace, label } = c.req.valid("json")
           const result = await ProviderAuth.authorize({
             providerID,
             method,
+            namespace,
+            label,
           })
           return c.json(result)
         },
@@ -1623,15 +1628,19 @@ export namespace Server {
           z.object({
             method: z.number().meta({ description: "Auth method index" }),
             code: z.string().optional().meta({ description: "OAuth authorization code" }),
+            namespace: z.string().optional().meta({ description: "Credential namespace (optional)" }),
+            label: z.string().optional().meta({ description: "Credential label (optional)" }),
           }),
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          const { method, code } = c.req.valid("json")
+          const { method, code, namespace, label } = c.req.valid("json")
           await ProviderAuth.callback({
             providerID,
             method,
             code,
+            namespace,
+            label,
           })
           return c.json(true)
         },
@@ -2439,12 +2448,159 @@ export namespace Server {
             providerID: z.string(),
           }),
         ),
-        validator("json", Auth.Info),
+        validator(
+          "json",
+          z
+            .discriminatedUnion("type", [
+              z
+                .object({
+                  type: z.literal("api"),
+                  key: z.string(),
+                })
+                .meta({ ref: "ApiAuth" }),
+              z
+                .object({
+                  type: z.literal("wellknown"),
+                  key: z.string(),
+                  token: z.string(),
+                })
+                .meta({ ref: "WellKnownAuth" }),
+            ])
+            .meta({ ref: "Auth" }),
+        ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
           const info = c.req.valid("json")
-          await Auth.set(providerID, info)
+          await CredentialsMigrate.migrateIfNeeded()
+          if (info.type === "api") {
+            await CredentialStore.upsertSingleton({
+              providerId: providerID,
+              namespace: "default",
+              kind: "api",
+              label: "default",
+              secret: { apiKey: info.key },
+            })
+          } else {
+            await CredentialStore.upsertSingleton({
+              providerId: providerID,
+              namespace: "default",
+              kind: "wellknown",
+              label: "default",
+              secret: { envKey: info.key, token: info.token },
+            })
+          }
           return c.json(true)
+        },
+      )
+      .get(
+        "/credential",
+        describeRoute({
+          summary: "List credentials",
+          description: "List credential records (metadata only).",
+          operationId: "credential.list",
+          responses: {
+            200: {
+              description: "Credential records",
+              content: {
+                "application/json": {
+                  schema: resolver(Credentials.RecordMeta.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await CredentialsMigrate.migrateIfNeeded()
+          const { records } = await CredentialStore.listAll()
+          return c.json(records.map((r) => r.meta))
+        },
+      )
+      .patch(
+        "/credential/:credentialID",
+        describeRoute({
+          summary: "Update credential",
+          description: "Update a credential record's metadata (e.g. label).",
+          operationId: "credential.update",
+          responses: {
+            200: {
+              description: "Updated credential meta",
+              content: {
+                "application/json": {
+                  schema: resolver(Credentials.RecordMeta),
+                },
+              },
+            },
+            ...errors(404),
+            ...errors(400),
+          },
+        }),
+        validator("param", z.object({ credentialID: z.string() })),
+        validator(
+          "json",
+          z.object({
+            label: z.string().min(1).meta({ description: "New label" }),
+          }),
+        ),
+        async (c) => {
+          await CredentialsMigrate.migrateIfNeeded()
+          const id = c.req.valid("param").credentialID
+          const { label } = c.req.valid("json")
+          const updated = await CredentialStore.update(id, { meta: { label } })
+          if (!updated) {
+            throw new Storage.NotFoundError({ message: "Credential not found" })
+          }
+          return c.json(updated.meta)
+        },
+      )
+      .delete(
+        "/credential/:credentialID",
+        describeRoute({
+          summary: "Remove credential",
+          description: "Remove a credential record.",
+          operationId: "credential.remove",
+          responses: {
+            200: {
+              description: "Removed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ credentialID: z.string() })),
+        async (c) => {
+          await CredentialsMigrate.migrateIfNeeded()
+          const id = c.req.valid("param").credentialID
+          const record = await CredentialStore.getRecordFile(id)
+          if (!record) {
+            throw new Storage.NotFoundError({ message: "Credential not found" })
+          }
+          await CredentialStore.remove(id)
+          return c.json(true)
+        },
+      )
+      .get(
+        "/debug/rotation",
+        describeRoute({
+          summary: "Rotation stats",
+          description: "In-memory counters for same-request OAuth rotation events.",
+          operationId: "debug.rotation",
+          responses: {
+            200: {
+              description: "Rotation stats snapshot",
+              content: {
+                "application/json": {
+                  schema: resolver(RotationStats.Snapshot),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(RotationStats.snapshot())
         },
       )
       .get(

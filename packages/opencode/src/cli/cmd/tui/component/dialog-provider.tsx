@@ -9,6 +9,7 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
+import { DialogCredentials } from "./dialog-credentials"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -23,17 +24,35 @@ export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
+  const { theme } = useTheme()
+
+  const oauthCounts = createMemo(() => {
+    const counts = new Map<string, number>()
+    for (const c of sync.data.credential) {
+      if (c.kind !== "oauth") continue
+      counts.set(c.providerId, (counts.get(c.providerId) ?? 0) + 1)
+    }
+    return counts
+  })
+
   const options = createMemo(() => {
-    return pipe(
+    const counts = oauthCounts()
+    const providerOptions = pipe(
       sync.data.provider_next.all,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => ({
         title: provider.name,
         value: provider.id,
-        description: {
-          opencode: "(Recommended)",
-          anthropic: "(Claude Max or API key)",
-        }[provider.id],
+        description: (() => {
+          const base =
+            {
+              opencode: "(Recommended)",
+              anthropic: "(Claude Max or API key)",
+            }[provider.id] ?? ""
+          const n = counts.get(provider.id) ?? 0
+          const suffix = n > 0 ? ` (${n} account${n === 1 ? "" : "s"})` : ""
+          return `${base}${suffix}`.trim() || undefined
+        })(),
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
           const methods = sync.data.provider_auth[provider.id] ?? [
@@ -63,27 +82,78 @@ export function createDialogProviderOptions() {
           if (index == null) return
           const method = methods[index]
           if (method.type === "oauth") {
+            const rawNamespace = await DialogPrompt.show(dialog, "Namespace (optional)", {
+              placeholder: "default",
+              description: () => (
+                <box gap={1}>
+                  <text fg={theme.textMuted}>Leave blank to use the default namespace.</text>
+                </box>
+              ),
+            })
+            if (rawNamespace === null) return
+            const namespace = rawNamespace.split("\n")[0]?.trim() || undefined
+
+            const rawLabel = await DialogPrompt.show(dialog, "Account label (optional)", {
+              placeholder: "default",
+              description: () => (
+                <box gap={1}>
+                  <text fg={theme.textMuted}>Leave blank to auto-generate.</text>
+                </box>
+              ),
+            })
+            if (rawLabel === null) return
+            const label = rawLabel.split("\n")[0]?.trim() || undefined
+
             const result = await sdk.client.provider.oauth.authorize({
               providerID: provider.id,
               method: index,
+              namespace,
+              label,
             })
             if (result.data?.method === "code") {
               dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <CodeMethod
+                  providerID={provider.id}
+                  title={method.label}
+                  index={index}
+                  authorization={result.data!}
+                  namespace={namespace}
+                  label={label}
+                />
               ))
             }
             if (result.data?.method === "auto") {
               dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
+                <AutoMethod
+                  providerID={provider.id}
+                  title={method.label}
+                  index={index}
+                  authorization={result.data!}
+                  namespace={namespace}
+                  label={label}
+                />
               ))
             }
           }
           if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
+            dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
           }
         },
       })),
     )
+
+    return [
+      {
+        title: "Manage connected accounts",
+        value: "__manage__",
+        description: "View, rename, or remove stored credentials",
+        category: "Manage",
+        async onSelect() {
+          dialog.replace(() => <DialogCredentials />)
+        },
+      },
+      ...providerOptions,
+    ]
   })
   return options
 }
@@ -98,6 +168,8 @@ interface AutoMethodProps {
   providerID: string
   title: string
   authorization: ProviderAuthAuthorization
+  namespace?: string
+  label?: string
 }
 function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
@@ -109,6 +181,8 @@ function AutoMethod(props: AutoMethodProps) {
     const result = await sdk.client.provider.oauth.callback({
       providerID: props.providerID,
       method: props.index,
+      namespace: props.namespace,
+      label: props.label,
     })
     if (result.error) {
       dialog.clear()
@@ -141,6 +215,8 @@ interface CodeMethodProps {
   title: string
   providerID: string
   authorization: ProviderAuthAuthorization
+  namespace?: string
+  label?: string
 }
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
@@ -158,6 +234,8 @@ function CodeMethod(props: CodeMethodProps) {
           providerID: props.providerID,
           method: props.index,
           code: value,
+          namespace: props.namespace,
+          label: props.label,
         })
         if (!error) {
           await sdk.client.instance.dispose()

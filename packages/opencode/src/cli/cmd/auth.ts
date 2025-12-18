@@ -1,4 +1,3 @@
-import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
@@ -8,11 +7,65 @@ import path from "path"
 import os from "os"
 import { Config } from "../../config/config"
 import { Global } from "../../global"
-import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
+import { CredentialStore, CredentialsMigrate } from "../../credentials"
+import { ProviderAuthRegistry } from "../../provider-auth/registry"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
+
+async function storeOAuthCredential(args: {
+  providerId: string
+  access: string
+  refresh?: string
+  expires?: number
+  namespace?: string
+  label?: string
+  extra?: Record<string, unknown>
+}) {
+  await CredentialsMigrate.migrateIfNeeded()
+  const config = await Config.get()
+  const namespace = (args.namespace ?? config.provider?.[args.providerId]?.auth?.namespace ?? "default").trim() || "default"
+  const existingOauth = (await CredentialStore.findByProvider(args.providerId, namespace)).filter((r) => r.meta.kind === "oauth")
+  const existingLabels = new Set(existingOauth.map((r) => r.meta.label ?? ""))
+  const labelBase = args.label?.split("\n")[0]?.trim() || undefined
+
+  const label = (() => {
+    if (labelBase) {
+      if (!existingLabels.has(labelBase)) return labelBase
+      let n = 2
+      while (existingLabels.has(`${labelBase}-${n}`)) n++
+      return `${labelBase}-${n}`
+    }
+
+    const hasDefault = existingLabels.has("default")
+    return hasDefault ? `${args.providerId}-${new Date().toISOString()}` : "default"
+  })()
+
+  await CredentialStore.put({
+    providerId: args.providerId,
+    namespace,
+    kind: "oauth",
+    label,
+    secret: {
+      accessToken: args.access,
+      refreshToken: args.refresh || undefined,
+      expiresAt: args.expires || undefined,
+      extra: args.extra,
+    },
+  })
+}
+
+async function storeApiCredential(args: { providerId: string; apiKey: string }) {
+  await CredentialsMigrate.migrateIfNeeded()
+  await CredentialStore.upsertSingleton({
+    providerId: args.providerId,
+    namespace: "default",
+    kind: "api",
+    label: "default",
+    secret: { apiKey: args.apiKey },
+  })
+}
 
 /**
  * Handle plugin-based authentication flow.
@@ -34,6 +87,26 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
     index = parseInt(method)
   }
   const method = plugin.auth.methods[index]
+
+  let namespace: string | undefined
+  let label: string | undefined
+  if (method.type === "oauth") {
+    const config = await Config.get()
+    const defaultNs = config.provider?.[provider]?.auth?.namespace ?? "default"
+    const rawNamespace = await prompts.text({
+      message: "Namespace (optional)",
+      placeholder: defaultNs,
+    })
+    if (prompts.isCancel(rawNamespace)) throw new UI.CancelledError()
+    namespace = rawNamespace.split("\n")[0]?.trim() || defaultNs
+
+    const rawLabel = await prompts.text({
+      message: "Account label (optional)",
+      placeholder: "default",
+    })
+    if (prompts.isCancel(rawLabel)) throw new UI.CancelledError()
+    label = rawLabel.split("\n")[0]?.trim() || undefined
+  }
 
   // Handle prompts for all auth types
   await new Promise((resolve) => setTimeout(resolve, 10))
@@ -79,24 +152,23 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       if (result.type === "failed") {
         spinner.stop("Failed to authorize", 1)
       }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        if ("refresh" in result) {
-          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
-        }
-        if ("key" in result) {
-          await Auth.set(saveProvider, {
-            type: "api",
-            key: result.key,
-          })
-        }
+	      if (result.type === "success") {
+	        const saveProvider = result.provider ?? provider
+	        if ("refresh" in result) {
+	          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+	          await storeOAuthCredential({
+	            providerId: saveProvider,
+	            refresh,
+	            access,
+	            expires,
+              namespace,
+              label,
+	            extra: extraFields,
+	          })
+	        }
+		        if ("key" in result) {
+		          await storeApiCredential({ providerId: saveProvider, apiKey: result.key })
+		        }
         spinner.stop("Login successful")
       }
     }
@@ -111,27 +183,26 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       if (result.type === "failed") {
         prompts.log.error("Failed to authorize")
       }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        if ("refresh" in result) {
-          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
-            type: "oauth",
-            refresh,
-            access,
-            expires,
-            ...extraFields,
-          })
-        }
-        if ("key" in result) {
-          await Auth.set(saveProvider, {
-            type: "api",
-            key: result.key,
-          })
-        }
-        prompts.log.success("Login successful")
-      }
-    }
+	      if (result.type === "success") {
+	        const saveProvider = result.provider ?? provider
+	        if ("refresh" in result) {
+	          const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+	          await storeOAuthCredential({
+	            providerId: saveProvider,
+	            refresh,
+	            access,
+	            expires,
+              namespace,
+              label,
+	            extra: extraFields,
+	          })
+		        }
+		        if ("key" in result) {
+		          await storeApiCredential({ providerId: saveProvider, apiKey: result.key })
+		        }
+	        prompts.log.success("Login successful")
+	      }
+	    }
 
     prompts.outro("Done")
     return true
@@ -143,14 +214,11 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       if (result.type === "failed") {
         prompts.log.error("Failed to authorize")
       }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        await Auth.set(saveProvider, {
-          type: "api",
-          key: result.key,
-        })
-        prompts.log.success("Login successful")
-      }
+	      if (result.type === "success") {
+	        const saveProvider = result.provider ?? provider
+	        await storeApiCredential({ providerId: saveProvider, apiKey: result.key })
+	        prompts.log.success("Login successful")
+	      }
       prompts.outro("Done")
       return true
     }
@@ -173,19 +241,32 @@ export const AuthListCommand = cmd({
   describe: "list providers",
   async handler() {
     UI.empty()
-    const authPath = path.join(Global.Path.data, "auth.json")
+    const authPath = path.join(Global.Path.data, "credentials")
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records, errors } = await CredentialStore.listAll()
     const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+    const sorted = [...records].sort((a, b) => {
+      if (a.meta.providerId !== b.meta.providerId) return a.meta.providerId.localeCompare(b.meta.providerId)
+      if (a.meta.namespace !== b.meta.namespace) return a.meta.namespace.localeCompare(b.meta.namespace)
+      return a.meta.createdAt - b.meta.createdAt
+    })
+    for (const record of sorted) {
+      const name = database[record.meta.providerId]?.name || record.meta.providerId
+      const label = record.meta.label
+        ? `${record.meta.namespace}/${record.meta.label}`
+        : `${record.meta.namespace}/${record.meta.id}`
+      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${record.meta.kind} ${label}`)
     }
 
-    prompts.outro(`${results.length} credentials`)
+    if (errors.length > 0) {
+      prompts.log.warn(`${errors.length} credential file(s) could not be read/validated.`)
+    }
+
+    prompts.outro(`${records.length} credential record` + (records.length === 1 ? "" : "s"))
 
     // Environment variables section
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
@@ -240,16 +321,19 @@ export const AuthLoginCommand = cmd({
             prompts.log.error("Failed")
             prompts.outro("Done")
             return
-          }
-          const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
-            type: "wellknown",
-            key: wellknown.auth.env,
-            token: token.trim(),
-          })
-          prompts.log.success("Logged into " + args.url)
-          prompts.outro("Done")
-          return
+	          }
+	          const token = await new Response(proc.stdout).text()
+	          await CredentialsMigrate.migrateIfNeeded()
+	          await CredentialStore.upsertSingleton({
+	            providerId: args.url,
+	            namespace: "default",
+	            kind: "wellknown",
+	            label: "default",
+	            secret: { envKey: wellknown.auth.env, token: token.trim() },
+	          })
+	          prompts.log.success("Logged into " + args.url)
+	          prompts.outro("Done")
+	          return
         }
         await ModelsDev.refresh().catch(() => {})
 
@@ -302,15 +386,15 @@ export const AuthLoginCommand = cmd({
               label: "Other",
             },
           ],
-        })
+	        })
 
-        if (prompts.isCancel(provider)) throw new UI.CancelledError()
+	        if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
-          if (handled) return
-        }
+	        const core = ProviderAuthRegistry.getAuthHook(provider)
+	        if (core) {
+	          const handled = await handlePluginAuth({ auth: core as any }, provider)
+	          if (handled) return
+	        }
 
         if (provider === "other") {
           provider = await prompts.text({
@@ -318,15 +402,14 @@ export const AuthLoginCommand = cmd({
             validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
           })
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
-          provider = provider.replace(/^@ai-sdk\//, "")
-          if (prompts.isCancel(provider)) throw new UI.CancelledError()
+	          provider = provider.replace(/^@ai-sdk\//, "")
+	          if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-          // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
-            if (handled) return
-          }
+	          const core = ProviderAuthRegistry.getAuthHook(provider)
+	          if (core) {
+	            const handled = await handlePluginAuth({ auth: core as any }, provider)
+	            if (handled) return
+	          }
 
           prompts.log.warn(
             `This only stores a credential for ${provider} - you will need configure it in opencode.json, check the docs for examples.`,
@@ -349,17 +432,14 @@ export const AuthLoginCommand = cmd({
           prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
         }
 
-        const key = await prompts.password({
-          message: "Enter your API key",
-          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-        })
-        if (prompts.isCancel(key)) throw new UI.CancelledError()
-        await Auth.set(provider, {
-          type: "api",
-          key,
-        })
+	        const key = await prompts.password({
+	          message: "Enter your API key",
+	          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+	        })
+	        if (prompts.isCancel(key)) throw new UI.CancelledError()
+	        await storeApiCredential({ providerId: provider, apiKey: key })
 
-        prompts.outro("Done")
+	        prompts.outro("Done")
       },
     })
   },
@@ -370,22 +450,55 @@ export const AuthLogoutCommand = cmd({
   describe: "log out from a configured provider",
   async handler() {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
+    await CredentialsMigrate.migrateIfNeeded()
+    const { records } = await CredentialStore.listAll()
+    const providers = Array.from(new Set(records.map((r) => r.meta.providerId)))
     prompts.intro("Remove credential")
-    if (credentials.length === 0) {
+    if (providers.length === 0) {
       prompts.log.error("No credentials found")
       return
     }
     const database = await ModelsDev.get()
     const providerID = await prompts.select({
       message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
+      options: providers.map((key) => {
+        const name = database[key]?.name || key
+        const count = records.filter((r) => r.meta.providerId === key).length
+        return {
+          label: `${name} ${UI.Style.TEXT_DIM}(${count})`,
+          value: key,
+        }
+      }),
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
-    prompts.outro("Logout successful")
-  },
-})
+	    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
+
+      const matches = records
+        .filter((r) => r.meta.providerId === providerID)
+        .sort((a, b) => {
+          if (a.meta.namespace !== b.meta.namespace) return a.meta.namespace.localeCompare(b.meta.namespace)
+          if ((a.meta.label ?? "") !== (b.meta.label ?? "")) return (a.meta.label ?? "").localeCompare(b.meta.label ?? "")
+          return a.meta.createdAt - b.meta.createdAt
+        })
+
+      if (matches.length === 0) {
+        prompts.log.error("No credentials found for provider")
+        prompts.outro("Done")
+        return
+      }
+
+      const selected = await prompts.multiselect({
+        message: "Select credential(s) to remove",
+        options: matches.map((r) => {
+          const label = r.meta.label ? `${r.meta.namespace}/${r.meta.label}` : `${r.meta.namespace}/${r.meta.id}`
+          return {
+            label,
+            value: r.meta.id,
+            hint: r.meta.kind,
+          }
+        }),
+      })
+      if (prompts.isCancel(selected)) throw new UI.CancelledError()
+      await Promise.all(selected.map((id) => CredentialStore.remove(id)))
+      prompts.outro("Logout successful")
+	  },
+	})

@@ -1236,6 +1236,23 @@ export type ProviderConfig = {
   }
   whitelist?: Array<string>
   blacklist?: Array<string>
+  /**
+   * Authentication settings for subscription OAuth rotation and API keys.
+   */
+  auth?: {
+    /**
+     * Auth mode for this provider. 'auto' uses subscription OAuth when available, otherwise API key/env. 'api' forces API key/env. 'subscription' forces OAuth rotation.
+     */
+    mode?: "auto" | "api" | "subscription"
+    /**
+     * Credential namespace to use for this provider (default: 'default').
+     */
+    namespace?: string
+    /**
+     * Max credentials to try per request when rotating (default: try all eligible).
+     */
+    maxAttempts?: number
+  }
   options?: {
     apiKey?: string
     baseURL?: string
@@ -1827,14 +1844,6 @@ export type FormatterStatus = {
   enabled: boolean
 }
 
-export type OAuth = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-  enterpriseUrl?: string
-}
-
 export type ApiAuth = {
   type: "api"
   key: string
@@ -1846,7 +1855,48 @@ export type WellKnownAuth = {
   token: string
 }
 
-export type Auth = OAuth | ApiAuth | WellKnownAuth
+export type Auth = ApiAuth | WellKnownAuth
+
+export type CredentialKind = "oauth" | "api" | "wellknown" | "mcp"
+
+export type CredentialHealth = {
+  cooldownUntil?: number
+  lastStatusCode?: number
+  lastErrorAt?: number
+  successCount?: number
+  failureCount?: number
+}
+
+export type CredentialRecordMeta = {
+  id: string
+  providerId: string
+  namespace?: string
+  label?: string
+  kind: CredentialKind
+  createdAt: number
+  updatedAt: number
+  health?: CredentialHealth
+}
+
+export type RotationStatsCounts = {
+  requests: number
+  attempts: number
+  rotations: number
+  exhausted: number
+  refreshAttempts: number
+  refreshSuccess: number
+  refreshFailure: number
+  rateLimited: number
+  authExpired: number
+}
+
+export type RotationStatsSnapshot = {
+  since: number
+  totals: RotationStatsCounts
+  byProvider: {
+    [key: string]: RotationStatsCounts
+  }
+}
 
 export type GlobalEventData = {
   body?: never
@@ -3294,6 +3344,14 @@ export type ProviderOauthAuthorizeData = {
      * Auth method index
      */
     method: number
+    /**
+     * Credential namespace (optional)
+     */
+    namespace?: string
+    /**
+     * Credential label (optional)
+     */
+    label?: string
   }
   path: {
     /**
@@ -3335,6 +3393,14 @@ export type ProviderOauthCallbackData = {
      * OAuth authorization code
      */
     code?: string
+    /**
+     * Credential namespace (optional)
+     */
+    namespace?: string
+    /**
+     * Credential label (optional)
+     */
+    label?: string
   }
   path: {
     /**
@@ -4114,6 +4180,109 @@ export type AuthSetResponses = {
 }
 
 export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
+
+export type CredentialListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/credential"
+}
+
+export type CredentialListResponses = {
+  /**
+   * Credential records
+   */
+  200: Array<CredentialRecordMeta>
+}
+
+export type CredentialListResponse = CredentialListResponses[keyof CredentialListResponses]
+
+export type CredentialRemoveData = {
+  body?: never
+  path: {
+    credentialID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/credential/{credentialID}"
+}
+
+export type CredentialRemoveErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CredentialRemoveError = CredentialRemoveErrors[keyof CredentialRemoveErrors]
+
+export type CredentialRemoveResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type CredentialRemoveResponse = CredentialRemoveResponses[keyof CredentialRemoveResponses]
+
+export type CredentialUpdateData = {
+  body?: {
+    /**
+     * New label
+     */
+    label: string
+  }
+  path: {
+    credentialID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/credential/{credentialID}"
+}
+
+export type CredentialUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CredentialUpdateError = CredentialUpdateErrors[keyof CredentialUpdateErrors]
+
+export type CredentialUpdateResponses = {
+  /**
+   * Updated credential meta
+   */
+  200: CredentialRecordMeta
+}
+
+export type CredentialUpdateResponse = CredentialUpdateResponses[keyof CredentialUpdateResponses]
+
+export type DebugRotationData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/debug/rotation"
+}
+
+export type DebugRotationResponses = {
+  /**
+   * Rotation stats snapshot
+   */
+  200: RotationStatsSnapshot
+}
+
+export type DebugRotationResponse = DebugRotationResponses[keyof DebugRotationResponses]
 
 export type EventSubscribeData = {
   body?: never
