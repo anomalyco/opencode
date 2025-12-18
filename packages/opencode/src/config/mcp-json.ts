@@ -11,39 +11,39 @@ import { parse as parseJsonc, type ParseError as JsoncParseError } from "jsonc-p
 const log = Log.create({ service: "mcp-json" })
 
 // Schema for local/stdio MCP server (Claude/Cursor format)
-const McpJsonLocalServer = z.object({
+export const McpJsonLocalServer = z.object({
   command: z.string(),
   args: z.array(z.string()).optional(),
   env: z.record(z.string(), z.string()).optional(),
 })
 
 // Schema for remote HTTP/SSE MCP server (Claude/Cursor format)
-const McpJsonRemoteServer = z.object({
+export const McpJsonRemoteServer = z.object({
   url: z.string(),
   headers: z.record(z.string(), z.string()).optional(),
 })
 
 // Combined server schema - discriminated by presence of url vs command
-const McpJsonServer = z.union([McpJsonRemoteServer, McpJsonLocalServer])
-type McpJsonServer = z.infer<typeof McpJsonServer>
+export const McpJsonServer = z.union([McpJsonRemoteServer, McpJsonLocalServer])
+export type McpJsonServer = z.infer<typeof McpJsonServer>
 
 // Root mcp.json schema
-const McpJson = z.object({
+export const McpJson = z.object({
   mcpServers: z.record(z.string(), McpJsonServer).optional(),
 })
-type McpJson = z.infer<typeof McpJson>
+export type McpJson = z.infer<typeof McpJson>
 
 /**
  * Normalize environment variable syntax from ${env:VAR} (Claude/Cursor style) to {env:VAR} (OpenCode style)
  */
-function normalizeEnvSyntax(value: string): string {
+export function normalizeEnvSyntax(value: string): string {
   return value.replace(/\$\{env:([^}]+)\}/g, "{env:$1}")
 }
 
 /**
  * Transform mcp.json format to OpenCode's internal MCP config format
  */
-function transform(mcpJson: McpJson): Record<string, Config.Mcp> {
+export function transformMcpJson(mcpJson: McpJson): Record<string, Config.Mcp> {
   const result: Record<string, Config.Mcp> = {}
   if (!mcpJson.mcpServers) return result
 
@@ -104,7 +104,7 @@ async function loadFile(filepath: string): Promise<Record<string, Config.Mcp>> {
     return {}
   }
 
-  return transform(parsed.data)
+  return transformMcpJson(parsed.data)
 }
 
 /**

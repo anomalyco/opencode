@@ -7,8 +7,9 @@ import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
+import { McpJson, transformMcpJson } from "../../config/mcp-json"
+import { parse as parseJsonc } from "jsonc-parser"
 import path from "path"
-import os from "os"
 import { Global } from "../../global"
 
 export const McpCommand = cmd({
@@ -19,6 +20,7 @@ export const McpCommand = cmd({
       .command(McpListCommand)
       .command(McpAuthCommand)
       .command(McpLogoutCommand)
+      .command(McpImportCommand)
       .demandCommand(),
   async handler() {},
 })
@@ -398,5 +400,158 @@ export const McpAddCommand = cmd({
     }
 
     prompts.outro("MCP server added successfully")
+  },
+})
+
+export const McpImportCommand = cmd({
+  command: "import <data>",
+  describe: "import MCP servers from a base64-encoded JSON string",
+  builder: (yargs) =>
+    yargs.positional("data", {
+      describe: "base64-encoded mcp.json content",
+      type: "string",
+      demandOption: true,
+    }),
+  async handler(args) {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Import MCP Servers")
+
+        // Decode base64
+        let decoded: string
+        try {
+          decoded = Buffer.from(args.data, "base64").toString("utf-8")
+        } catch {
+          prompts.log.error("Invalid base64 encoding")
+          prompts.outro("Import failed")
+          return
+        }
+
+        // Parse JSON
+        let data: unknown
+        try {
+          data = parseJsonc(decoded, [], { allowTrailingComma: true })
+        } catch {
+          prompts.log.error("Invalid JSON")
+          prompts.outro("Import failed")
+          return
+        }
+
+        // Validate against mcp.json schema
+        const parsed = McpJson.safeParse(data)
+        if (!parsed.success) {
+          prompts.log.error("Invalid mcp.json format:")
+          for (const issue of parsed.error.issues) {
+            prompts.log.error(`  ${issue.path.join(".")}: ${issue.message}`)
+          }
+          prompts.outro("Import failed")
+          return
+        }
+
+        if (!parsed.data.mcpServers || Object.keys(parsed.data.mcpServers).length === 0) {
+          prompts.log.warn("No MCP servers found in the provided data")
+          prompts.outro("Import cancelled")
+          return
+        }
+
+        // Transform to OpenCode format
+        const servers = transformMcpJson(parsed.data)
+        const serverNames = Object.keys(servers)
+
+        // Show preview
+        prompts.log.info(`Found ${serverNames.length} MCP server(s):`)
+        for (const [name, config] of Object.entries(servers)) {
+          const typeHint = config.type === "remote" ? config.url : config.command.join(" ")
+          prompts.log.info(`  - ${name} (${config.type}): ${typeHint}`)
+        }
+
+        // Confirm import
+        const confirm = await prompts.confirm({
+          message: "Import these servers?",
+        })
+        if (prompts.isCancel(confirm) || !confirm) {
+          prompts.outro("Import cancelled")
+          return
+        }
+
+        // Ask for location
+        const location = await prompts.select({
+          message: "Where do you want to save the configuration?",
+          options: [
+            {
+              label: "Project",
+              value: "project",
+              hint: path.join(Instance.directory, "opencode.json"),
+            },
+            {
+              label: "Global",
+              value: "global",
+              hint: path.join(Global.Path.config, "opencode.json"),
+            },
+          ],
+        })
+        if (prompts.isCancel(location)) {
+          prompts.outro("Import cancelled")
+          return
+        }
+
+        const configPath =
+          location === "project"
+            ? path.join(Instance.directory, "opencode.json")
+            : path.join(Global.Path.config, "opencode.json")
+
+        // Load existing config or create new one
+        let existingConfig: Config.Info = {}
+        const existingText = await Bun.file(configPath)
+          .text()
+          .catch(() => null)
+
+        if (existingText) {
+          try {
+            existingConfig = parseJsonc(existingText, [], { allowTrailingComma: true }) as Config.Info
+          } catch {
+            prompts.log.warn("Could not parse existing config, will create new one")
+          }
+        }
+
+        // Check for conflicts
+        const existingMcp = existingConfig.mcp ?? {}
+        const conflicts = serverNames.filter((name) => name in existingMcp)
+
+        if (conflicts.length > 0) {
+          prompts.log.warn(`The following servers already exist: ${conflicts.join(", ")}`)
+          const overwrite = await prompts.confirm({
+            message: "Overwrite existing servers?",
+            initialValue: false,
+          })
+          if (prompts.isCancel(overwrite)) {
+            prompts.outro("Import cancelled")
+            return
+          }
+          if (!overwrite) {
+            // Remove conflicting servers from import
+            for (const name of conflicts) {
+              delete servers[name]
+            }
+            if (Object.keys(servers).length === 0) {
+              prompts.log.warn("No new servers to import after removing conflicts")
+              prompts.outro("Import cancelled")
+              return
+            }
+          }
+        }
+
+        // Merge and write
+        existingConfig.$schema = existingConfig.$schema ?? "https://opencode.ai/config.json"
+        existingConfig.mcp = { ...existingMcp, ...servers }
+
+        await Bun.write(configPath, JSON.stringify(existingConfig, null, 2))
+
+        prompts.log.success(`Imported ${Object.keys(servers).length} server(s) to ${configPath}`)
+        prompts.outro("Import complete")
+      },
+    })
   },
 })
