@@ -3,7 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { batch, createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -137,11 +137,11 @@ export function SessionTurn(
   })
   const hasDiffs = createMemo(() => message().summary?.diffs?.length)
   const isShellMode = createMemo(() => {
-    if (parts().some((p) => p.type !== "text" || !p.synthetic)) return false
+    if (parts().some((p) => p?.type !== "text" || !p?.synthetic)) return false
     if (assistantParts().length !== 1) return false
     const assistantPart = assistantParts()[0]
-    if (assistantPart.type !== "tool") return false
-    if (assistantPart.tool !== "bash") return false
+    if (assistantPart?.type !== "tool") return false
+    if (assistantPart?.tool !== "bash") return false
     return true
   })
 
@@ -161,11 +161,11 @@ export function SessionTurn(
   }
 
   let scrollRef: HTMLDivElement | undefined
-  let lastScrollTop = 0
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
+    lastScrollTop: 0,
     autoScrolled: false,
     userScrolled: false,
     stickyHeaderHeight: 0,
@@ -195,11 +195,11 @@ export function SessionTurn(
     const { scrollTop } = scrollRef
     // only mark as user scrolled if they actively scrolled upward
     // content growth increases scrollHeight but never decreases scrollTop
-    const scrolledUp = scrollTop < lastScrollTop - 10
+    const scrolledUp = scrollTop < store.lastScrollTop - 10
     if (scrolledUp && working()) {
       setStore("userScrolled", true)
     }
-    lastScrollTop = scrollTop
+    setStore("lastScrollTop", scrollTop)
   }
 
   function handleInteraction() {
@@ -212,8 +212,10 @@ export function SessionTurn(
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
       requestAnimationFrame(() => {
-        lastScrollTop = scrollRef?.scrollTop ?? 0
-        setStore("autoScrolled", false)
+        batch(() => {
+          setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
+          setStore("autoScrolled", false)
+        })
       })
     })
   }
