@@ -329,7 +329,7 @@ describe("ProviderTransform.message - Claude tool interleaving", () => {
     expect(assistantParts.slice(firstToolCallIndex).every((p) => p.type === "tool-call")).toBe(true)
 
     const toolCalls = assistantParts.filter((p) => p.type === "tool-call")
-    expect(toolCalls.map((p) => p.toolCallId)).toEqual(["bad_id", "ok"])
+    expect(toolCalls.map((p) => p.toolCallId)).toEqual(["opencode_YmFkOmlk", "ok"])
 
     const toolResults = result[1].content as any[]
     expect(toolResults).toHaveLength(toolCalls.length)

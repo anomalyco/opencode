@@ -30,19 +30,6 @@ export namespace ProviderTransform {
       type UserContent = Exclude<UserModelMessage["content"], string>
       type UserPart = UserContent[number]
 
-      function isToolCallIdSafe(toolCallId: string) {
-        return /^[a-zA-Z0-9_-]+$/.test(toolCallId)
-      }
-
-      function coerceToolCallId(toolCallId: string) {
-        if (isToolCallIdSafe(toolCallId)) return toolCallId
-        return toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_")
-      }
-
-      function encodeToolCallId(toolCallId: string) {
-        return `opencode_${Buffer.from(toolCallId).toString("base64url")}`
-      }
-
       function isToolCallPart(part: unknown): part is ToolCallPart {
         if (!part) return false
         if (typeof part !== "object") return false
@@ -66,73 +53,53 @@ export namespace ProviderTransform {
         return typeof toolName === "string" && toolName.length > 0
       }
 
-      function buildToolCallIdMap(input: ModelMessage[]) {
-        const ids: string[] = []
-        const seen = new Set<string>()
+      function sanitizeToolParts(input: ModelMessage[]): ModelMessage[] {
+        const safe = /^[a-zA-Z0-9_-]+$/
+        const map = new Map<string, string>()
+        const safeIds = new Set<string>()
 
-        function addToolCallId(toolCallId: string) {
-          if (seen.has(toolCallId)) return
-          seen.add(toolCallId)
-          ids.push(toolCallId)
+        function reserve(part: unknown) {
+          if (!part) return
+          if (typeof part !== "object") return
+          if (Array.isArray(part)) return
+          const toolCallId = (part as { toolCallId?: unknown }).toolCallId
+          if (typeof toolCallId !== "string") return
+          if (!safe.test(toolCallId)) return
+          safeIds.add(toolCallId)
         }
 
         for (const msg of input) {
           if (msg.role === "assistant" && Array.isArray(msg.content)) {
-            for (const part of msg.content) {
-              if (isToolCallPart(part) || isToolResultPart(part)) {
-                addToolCallId(part.toolCallId)
-              }
-            }
+            for (const part of msg.content) reserve(part)
           }
 
           if (msg.role === "tool") {
-            for (const part of msg.content) {
-              if (!part) continue
-              if (typeof part !== "object") continue
-              if (Array.isArray(part)) continue
-              const toolCallId = (part as { toolCallId?: unknown }).toolCallId
-              if (typeof toolCallId !== "string" || toolCallId.length === 0) continue
-              addToolCallId(toolCallId)
-            }
+            for (const part of msg.content) reserve(part)
           }
         }
 
-        const safeById = new Map<string, boolean>()
-        const idsByCandidate = new Map<string, string[]>()
-
-        for (const id of ids) {
-          const safe = isToolCallIdSafe(id)
-          safeById.set(id, safe)
-          const candidate = safe ? id : coerceToolCallId(id)
-          const existing = idsByCandidate.get(candidate)
-          if (existing) {
-            existing.push(id)
-            continue
-          }
-          idsByCandidate.set(candidate, [id])
+        function encode(text: string) {
+          return `opencode_${Buffer.from(text).toString("base64url")}`
         }
 
-        const result = new Map<string, string>()
-        const used = new Set<string>()
+        function sanitizeToolCallId(toolCallId: string) {
+          const existing = map.get(toolCallId)
+          if (existing) return existing
 
-        for (const [candidate, candidateIds] of idsByCandidate) {
-          const keep = candidateIds.find((id) => id === candidate && safeById.get(id) === true) ?? candidateIds[0]
-
-          for (const id of candidateIds) {
-            let output = id === keep ? candidate : encodeToolCallId(id)
-            while (used.has(output)) {
-              output = encodeToolCallId(output)
-            }
-            used.add(output)
-            result.set(id, output)
+          if (safe.test(toolCallId)) {
+            safeIds.add(toolCallId)
+            map.set(toolCallId, toolCallId)
+            return toolCallId
           }
+
+          let next = encode(toolCallId)
+          while (safeIds.has(next)) {
+            next = encode(next)
+          }
+
+          map.set(toolCallId, next)
+          return next
         }
-
-        return result
-      }
-
-      function sanitizeToolParts(input: ModelMessage[]): ModelMessage[] {
-        const toolCallIdMap = buildToolCallIdMap(input)
 
         return input.map((msg) => {
           if (msg.role === "assistant") {
@@ -141,14 +108,14 @@ export namespace ProviderTransform {
               if (isToolCallPart(part)) {
                 return {
                   ...part,
-                  toolCallId: toolCallIdMap.get(part.toolCallId) ?? part.toolCallId,
+                  toolCallId: sanitizeToolCallId(part.toolCallId),
                 }
               }
 
               if (isToolResultPart(part)) {
                 return {
                   ...part,
-                  toolCallId: toolCallIdMap.get(part.toolCallId) ?? part.toolCallId,
+                  toolCallId: sanitizeToolCallId(part.toolCallId),
                 }
               }
 
@@ -161,13 +128,10 @@ export namespace ProviderTransform {
           }
 
           if (msg.role === "tool") {
-            const nextContent = msg.content.map((part) => {
-              const toolCallId = toolCallIdMap.get(part.toolCallId) ?? part.toolCallId
-              return {
-                ...part,
-                toolCallId,
-              }
-            }) satisfies ToolModelMessage["content"]
+            const nextContent = msg.content.map((part) => ({
+              ...part,
+              toolCallId: sanitizeToolCallId(part.toolCallId),
+            })) satisfies ToolModelMessage["content"]
             return {
               ...msg,
               content: nextContent,
