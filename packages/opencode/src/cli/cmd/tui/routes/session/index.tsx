@@ -66,6 +66,7 @@ import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
+import { DialogSubagent } from "./dialog-subagent.tsx"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1532,9 +1533,21 @@ ToolRegistry.register<typeof TaskTool>({
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
+    const dialog = useDialog()
+    const renderer = useRenderer()
+    const [hover, setHover] = createSignal(false)
 
     return (
-      <>
+      <box
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+        onMouseUp={() => {
+          const id = props.metadata.sessionId
+          if (renderer.getSelection()?.getSelectedText() || !id) return
+          dialog.replace(() => <DialogSubagent sessionID={id} />)
+        }}
+      >
         <ToolTitle icon="◉" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
           {Locale.titlecase(props.input.subagent_type ?? "unknown")} Task "{props.input.description}"
         </ToolTitle>
@@ -1557,7 +1570,7 @@ ToolRegistry.register<typeof TaskTool>({
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
           <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
         </text>
-      </>
+      </box>
     )
   },
 })
