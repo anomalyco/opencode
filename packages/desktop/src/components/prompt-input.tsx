@@ -1004,15 +1004,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <Tooltip placement="top" value="Attach image">
-              <IconButton
-                type="button"
-                icon="photo"
-                variant="ghost"
-                class="h-10 w-8"
-                onClick={() => fileInputRef.click()}
-              />
-            </Tooltip>
+            <Show when={store.mode === "normal"}>
+              <Tooltip placement="top" value="Attach image">
+                <IconButton
+                  type="button"
+                  icon="photo"
+                  variant="ghost"
+                  class="h-10 w-8"
+                  onClick={() => fileInputRef.click()}
+                />
+              </Tooltip>
+            </Show>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}
