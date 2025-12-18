@@ -70,6 +70,7 @@ export function SessionTurn(
   )
   const summary = createMemo(() => message().summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
+  const hasSteps = createMemo(() => assistantParts()?.some((p) => p?.type === "tool"))
 
   const currentTask = createMemo(
     () =>
@@ -315,7 +316,7 @@ export function SessionTurn(
                           <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
                         </Match>
                         <Match when={true}>
-                          <h1>{message().summary?.title ?? "New message"}</h1>
+                          <h1>{message().summary?.title}</h1>
                         </Match>
                       </Switch>
                     </div>
@@ -326,47 +327,49 @@ export function SessionTurn(
                   <Message message={message()} parts={parts()} />
                 </div>
                 {/* Trigger (sticky) */}
-                <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
-                  <Button
-                    data-expandable={assistantMessages().length > 0}
-                    data-slot="session-turn-collapsible-trigger-content"
-                    variant="ghost"
-                    size="small"
-                    onClick={() => {
-                      if (assistantMessages().length === 0) return
-                      const next = !store.stepsExpanded
-                      setStore("stepsExpanded", next)
-                      props.onStepsExpandedChange?.(next)
-                    }}
-                  >
-                    <Show when={working()}>
-                      <Spinner />
-                    </Show>
-                    <Switch>
-                      <Match when={retry()}>
-                        <span data-slot="session-turn-retry-message">
-                          {(() => {
-                            const r = retry()
-                            if (!r) return ""
-                            return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
-                          })()}
-                        </span>
-                        <span data-slot="session-turn-retry-seconds">
-                          · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
-                        </span>
-                        <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                      </Match>
-                      <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                      <Match when={store.stepsExpanded}>Hide steps</Match>
-                      <Match when={!store.stepsExpanded}>Show steps</Match>
-                    </Switch>
-                    <span>·</span>
-                    <span>{store.duration}</span>
-                    <Show when={assistantMessages().length > 0}>
-                      <Icon name="chevron-grabber-vertical" size="small" />
-                    </Show>
-                  </Button>
-                </div>
+                <Show when={working() || hasSteps()}>
+                  <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
+                    <Button
+                      data-expandable={assistantMessages().length > 0}
+                      data-slot="session-turn-collapsible-trigger-content"
+                      variant="ghost"
+                      size="small"
+                      onClick={() => {
+                        if (assistantMessages().length === 0) return
+                        const next = !store.stepsExpanded
+                        setStore("stepsExpanded", next)
+                        props.onStepsExpandedChange?.(next)
+                      }}
+                    >
+                      <Show when={working()}>
+                        <Spinner />
+                      </Show>
+                      <Switch>
+                        <Match when={retry()}>
+                          <span data-slot="session-turn-retry-message">
+                            {(() => {
+                              const r = retry()
+                              if (!r) return ""
+                              return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                            })()}
+                          </span>
+                          <span data-slot="session-turn-retry-seconds">
+                            · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
+                          </span>
+                          <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                        </Match>
+                        <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
+                        <Match when={store.stepsExpanded}>Hide steps</Match>
+                        <Match when={!store.stepsExpanded}>Show steps</Match>
+                      </Switch>
+                      <span>·</span>
+                      <span>{store.duration}</span>
+                      <Show when={assistantMessages().length > 0}>
+                        <Icon name="chevron-grabber-vertical" size="small" />
+                      </Show>
+                    </Button>
+                  </div>
+                </Show>
                 {/* Response */}
                 <Show when={store.stepsExpanded && assistantMessages().length > 0}>
                   <div data-slot="session-turn-collapsible-content-inner">
