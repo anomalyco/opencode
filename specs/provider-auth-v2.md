@@ -8,6 +8,8 @@ This RFC proposes and documents a **core** OpenCode refactor that adds:
 - A **multi-credential store** for OAuth subscriptions (and other credential kinds), enabling multiple accounts per provider.
 - **Same-request credential rotation** on `HTTP 429` (rate limiting) and refresh-on-`401/403` where supported.
 - A single, composable integration point: **fetch-level middleware** (no proxy/sidecar required).
+- Optional **model discovery** for OpenAI/OpenAI-compatible providers (`/models`), cached locally.
+- A user-facing way to **manage connected accounts** (TUI + server endpoints) and to **manage the vault key** (CLI).
 
 This enables “subscription pools” (user-context OAuth sessions) and “API key mode” (developer credits) to coexist cleanly.
 
@@ -30,6 +32,10 @@ This enables “subscription pools” (user-context OAuth sessions) and “API k
 - Vault key:
   - Loaded from `OPENCODE_VAULT_KEY` (base64 32 bytes) **or**
   - Generated and persisted to `Global.Path.config/vault.key` (mode `0600`).
+- Vault key UX (explicit, no OS keychain):
+  - `opencode auth vault init` (create `vault.key`)
+  - `opencode auth vault export [--output <file>]` (print base64 key for backup/migration)
+  - `opencode auth vault import [--file <path> | --key <base64>]` (restore key)
 - Encryption:
   - `AES-256-GCM` with random nonce per record.
 - IO semantics:
@@ -132,23 +138,49 @@ Schema:
 - TUI: `Connect a provider` dialog
   - Choose provider → choose auth method (OAuth or API key)
   - OAuth adds a new encrypted record (multi-account)
+- TUI: `Manage connected accounts`
+  - List credential records grouped by provider
+  - Rename labels and remove credentials
 - CLI:
   - `opencode auth login`
   - `opencode auth list` shows credential records (provider/kind/namespace/label)
   - `opencode auth logout` removes all records for a provider
+  - `opencode auth vault init|export|import` manages the local vault key
+
+### Credential management endpoints (for UI)
+
+The server exposes credential metadata (never decrypted secrets) for management UI:
+
+- `GET /credential` (list `Credentials.RecordMeta[]`)
+- `PATCH /credential/:credentialID` (update `label`)
+- `DELETE /credential/:credentialID`
+
+### Rotation stats
+
+OpenCode tracks in-memory counters for same-request OAuth rotation:
+
+- requests / attempts / rotations / refresh successes / exhausted
+
+Exposed via:
+
+- `GET /debug/rotation` (for UI)
+- Shown in TUI `Status` dialog
 
 ## Migration
 
-On first run with an empty v2 store:
+Migration is **idempotent** and can run even if the v2 store already contains records.
 
 - `auth.json` → migrated into v2 records (OAuth records become multi-account entries)
 - `mcp-auth.json` → migrated into v2 “mcp:” provider records
 
+Each legacy provider entry is fingerprinted and tracked in:
+
+- `Global.Path.data/credentials/migrations.json`
+
 Code:
 - `packages/opencode/src/credentials/migrate.ts`
-- Compatibility wrappers:
-  - `packages/opencode/src/auth/index.ts`
-  - `packages/opencode/src/mcp/auth.ts`
+- MCP credential access:
+  - `packages/opencode/src/mcp/credentials.ts`
 
 ## Testing
 
@@ -161,3 +193,24 @@ Code:
 - `packages/opencode/test/credentials/*`
 - `packages/opencode/test/inference/rotating-fetch.test.ts`
 
+## Model discovery (opt-in)
+
+OpenCode can optionally discover model IDs from OpenAI/OpenAI-compatible providers by calling upstream `/models` and caching results under `Global.Path.cache/model-discovery/*`.
+
+Config:
+
+```jsonc
+{
+  "provider": {
+    "openai": {
+      "options": {
+        "discoverModels": true
+      }
+    }
+  }
+}
+```
+
+Notes:
+- Discovery is additive (never removes or overwrites curated IDs).
+- Discovery can use subscription rotation when `auth.mode` is `auto|subscription` and OAuth credentials exist.
