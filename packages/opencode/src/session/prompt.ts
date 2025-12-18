@@ -608,8 +608,8 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const displayArgs = (args as Record<string, unknown>).displayInput ?? args
-          const execArgs: Record<string, unknown> = { ...args }
+          const displayArgs = args.displayInput ?? args
+          const execArgs = args
           delete execArgs.displayInput
           const result = await item.execute(execArgs, {
             sessionID: input.sessionID,
@@ -622,7 +622,7 @@ export namespace SessionPrompt {
               const match = input.processor.partFromToolCall(options.toolCallId)
               if (match && match.state.status === "running") {
                 // Keep in-memory toolcall state in sync so processor can preserve display input
-                // This is so plugins can transform how bash is displayed. See #5321 
+                // This is so plugins can transform how bash is displayed. See #5321
                 match.state = {
                   ...match.state,
                   title: val.title,
@@ -683,10 +683,8 @@ export namespace SessionPrompt {
             args,
           },
         )
-        const displayInput = (args as any).displayInput
-        const execArgs = { ...args } as any
-        delete execArgs.displayInput
-        const result = await execute(execArgs, opts)
+        delete args.displayInput
+        const result = await execute(args, opts)
 
         await Plugin.trigger(
           "tool.execute.after",
