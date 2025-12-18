@@ -1,7 +1,7 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
-import { batch, createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -53,14 +53,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     filter: "",
   })
 
-  createEffect(() => {
-    if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
-      }
-    }
-  })
+  createEffect(
+    on(
+      () => props.current,
+      (current) => {
+        if (current) {
+          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+          if (currentIndex >= 0) {
+            setStore("selected", currentIndex)
+          }
+        }
+      },
+    ),
+  )
 
   let input: InputRenderable
 
@@ -98,18 +103,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const selected = createMemo(() => flat()[store.selected])
 
-  createEffect(() => {
-    store.filter
-    if (store.filter.length > 0) {
-      setStore("selected", 0)
-    } else if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
+  createEffect(
+    on([() => store.filter, () => props.current], ([filter, current]) => {
+      if (filter.length > 0) {
+        setStore("selected", 0)
+      } else if (current) {
+        const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+        if (currentIndex >= 0) {
+          setStore("selected", currentIndex)
+        }
       }
-    }
-    scroll.scrollTo(0)
-  })
+      scroll.scrollTo(0)
+    }),
+  )
 
   function move(direction: number) {
     let next = store.selected + direction
