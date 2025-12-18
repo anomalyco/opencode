@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { Flag } from "@/flag/flag"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
@@ -193,7 +194,8 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+        const explicitDirectory = c.req.query("directory") || c.req.header("x-opencode-directory")
+        const directory = explicitDirectory || (Flag.OPENCODE_CLIENT === "desktop" ? Global.Path.home : process.cwd())
         return Instance.provide({
           directory,
           init: InstanceBootstrap,

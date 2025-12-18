@@ -33,6 +33,45 @@ export type PluginInput = {
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
+export type PluginScope = "global" | "project"
+export type PluginDefinition<T extends Hooks = Hooks> = {
+  readonly scope: PluginScope
+  readonly plugin: (input: PluginInput) => Promise<T>
+}
+
+/**
+ * Define a plugin with explicit scope.
+ * 
+ * @param options.scope - "global" (loads always) or "project" (loads only in project context, default)
+ * @param options.plugin - The plugin function
+ * 
+ * @example
+ * // Auth plugin (global scope)
+ * export default definePlugin({
+ *   scope: "global",
+ *   plugin: async (input) => ({
+ *     auth: { provider: "my-provider", ... }
+ *   })
+ * })
+ * 
+ * @example
+ * // Project plugin (default scope)
+ * export default definePlugin({
+ *   plugin: async (input) => ({
+ *     "chat.message": async (input, output) => { ... }
+ *   })
+ * })
+ */
+export function definePlugin<T extends Hooks>(options: {
+  scope?: PluginScope
+  plugin: (input: PluginInput) => Promise<T>
+}): PluginDefinition<T> {
+  return {
+    scope: options.scope ?? "project",
+    plugin: options.plugin,
+  }
+}
+
 export type AuthHook = {
   provider: string
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
