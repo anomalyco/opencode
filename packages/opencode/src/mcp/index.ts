@@ -1,7 +1,7 @@
 import { type Tool } from "ai"
 import { experimental_createMCPClient } from "@ai-sdk/mcp"
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
+import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import { Config } from "../config/config"
@@ -17,6 +17,25 @@ import open from "open"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
+
+  type RemoteTransportConstructors = {
+    StreamableHTTPClientTransport: typeof import("@modelcontextprotocol/sdk/client/streamableHttp.js").StreamableHTTPClientTransport
+    SSEClientTransport: typeof import("@modelcontextprotocol/sdk/client/sse.js").SSEClientTransport
+  }
+
+  let remoteTransportConstructors: Promise<RemoteTransportConstructors> | undefined
+
+  async function getRemoteTransportConstructors(): Promise<RemoteTransportConstructors> {
+    remoteTransportConstructors ??= Promise.all([
+      import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
+      import("@modelcontextprotocol/sdk/client/sse.js"),
+    ]).then(([streamable, sse]) => ({
+      StreamableHTTPClientTransport: streamable.StreamableHTTPClientTransport,
+      SSEClientTransport: sse.SSEClientTransport,
+    }))
+
+    return remoteTransportConstructors
+  }
 
   export const Failed = NamedError.create(
     "MCPFailed",
@@ -184,6 +203,7 @@ export namespace MCP {
         )
       }
 
+      const { StreamableHTTPClientTransport, SSEClientTransport } = await getRemoteTransportConstructors()
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
@@ -463,6 +483,7 @@ export namespace MCP {
     )
 
     // Create transport with auth provider
+    const { StreamableHTTPClientTransport } = await getRemoteTransportConstructors()
     const transport = new StreamableHTTPClientTransport(new URL(mcpConfig.url), {
       authProvider,
     })
