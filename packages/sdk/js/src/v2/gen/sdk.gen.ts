@@ -1559,6 +1559,8 @@ export class Oauth extends HeyApiClient {
       providerID: string
       directory?: string
       method?: number
+      namespace?: string
+      label?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1570,6 +1572,8 @@ export class Oauth extends HeyApiClient {
             { in: "path", key: "providerID" },
             { in: "query", key: "directory" },
             { in: "body", key: "method" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "label" },
           ],
         },
       ],
@@ -1601,6 +1605,8 @@ export class Oauth extends HeyApiClient {
       directory?: string
       method?: number
       code?: string
+      namespace?: string
+      label?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1613,6 +1619,8 @@ export class Oauth extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "method" },
             { in: "body", key: "code" },
+            { in: "body", key: "namespace" },
+            { in: "body", key: "label" },
           ],
         },
       ],

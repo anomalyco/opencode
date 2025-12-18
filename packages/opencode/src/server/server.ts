@@ -24,7 +24,7 @@ import { Permission } from "../permission"
 import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
-import { Auth } from "../auth"
+import { CredentialStore, CredentialsMigrate } from "@/credentials"
 import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
@@ -1582,14 +1582,18 @@ export namespace Server {
           "json",
           z.object({
             method: z.number().meta({ description: "Auth method index" }),
+            namespace: z.string().optional().meta({ description: "Credential namespace (optional)" }),
+            label: z.string().optional().meta({ description: "Credential label (optional)" }),
           }),
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          const { method } = c.req.valid("json")
+          const { method, namespace, label } = c.req.valid("json")
           const result = await ProviderAuth.authorize({
             providerID,
             method,
+            namespace,
+            label,
           })
           return c.json(result)
         },
@@ -1623,15 +1627,19 @@ export namespace Server {
           z.object({
             method: z.number().meta({ description: "Auth method index" }),
             code: z.string().optional().meta({ description: "OAuth authorization code" }),
+            namespace: z.string().optional().meta({ description: "Credential namespace (optional)" }),
+            label: z.string().optional().meta({ description: "Credential label (optional)" }),
           }),
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          const { method, code } = c.req.valid("json")
+          const { method, code, namespace, label } = c.req.valid("json")
           await ProviderAuth.callback({
             providerID,
             method,
             code,
+            namespace,
+            label,
           })
           return c.json(true)
         },
@@ -2439,11 +2447,47 @@ export namespace Server {
             providerID: z.string(),
           }),
         ),
-        validator("json", Auth.Info),
+        validator(
+          "json",
+          z
+            .discriminatedUnion("type", [
+              z
+                .object({
+                  type: z.literal("api"),
+                  key: z.string(),
+                })
+                .meta({ ref: "ApiAuth" }),
+              z
+                .object({
+                  type: z.literal("wellknown"),
+                  key: z.string(),
+                  token: z.string(),
+                })
+                .meta({ ref: "WellKnownAuth" }),
+            ])
+            .meta({ ref: "Auth" }),
+        ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
           const info = c.req.valid("json")
-          await Auth.set(providerID, info)
+          await CredentialsMigrate.migrateIfNeeded()
+          if (info.type === "api") {
+            await CredentialStore.upsertSingleton({
+              providerId: providerID,
+              namespace: "default",
+              kind: "api",
+              label: "default",
+              secret: { apiKey: info.key },
+            })
+          } else {
+            await CredentialStore.upsertSingleton({
+              providerId: providerID,
+              namespace: "default",
+              kind: "wellknown",
+              label: "default",
+              secret: { envKey: info.key, token: info.token },
+            })
+          }
           return c.json(true)
         },
       )
