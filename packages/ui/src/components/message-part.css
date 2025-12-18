@@ -152,9 +152,22 @@
   align-items: flex-start;
   justify-content: flex-start;
 
+  [data-component="markdown"] {
+    width: 100%;
+    min-width: 0;
+
+    pre {
+      margin: 0;
+      padding: 0;
+      background-color: transparent !important;
+      border: none !important;
+    }
+  }
+
   pre {
     margin: 0;
     padding: 0;
+    background: none;
   }
 
   &[data-scrollable] {
