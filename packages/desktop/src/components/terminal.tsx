@@ -148,6 +148,7 @@ export const Terminal = (props: TerminalProps) => {
     <div
       ref={container}
       data-component="terminal"
+      data-prevent-autofocus
       classList={{
         ...(local.classList ?? {}),
         "size-full px-6 py-3 font-mono": true,

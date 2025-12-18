@@ -3,17 +3,15 @@ import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "@/util/locale"
-import { DialogMessage } from "./dialog-message"
+import { useSDK } from "@tui/context/sdk"
+import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
-import type { PromptInfo } from "../../component/prompt/history"
 
-export function DialogTimeline(props: {
-  sessionID: string
-  onMove: (messageID: string) => void
-  setPrompt?: (prompt: PromptInfo) => void
-}) {
+export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
   const sync = useSync()
   const dialog = useDialog()
+  const sdk = useSDK()
+  const route = useRoute()
 
   onMount(() => {
     dialog.setSize("large")
@@ -32,10 +30,16 @@ export function DialogTimeline(props: {
         title: part.text.replace(/\n/g, " "),
         value: message.id,
         footer: Locale.time(message.time.created),
-        onSelect: (dialog) => {
-          dialog.replace(() => (
-            <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
-          ))
+        onSelect: async (dialog) => {
+          const forked = await sdk.client.session.fork({
+            sessionID: props.sessionID,
+            messageID: message.id,
+          })
+          route.navigate({
+            sessionID: forked.data!.id,
+            type: "session",
+          })
+          dialog.clear()
         },
       })
     }
@@ -43,5 +47,5 @@ export function DialogTimeline(props: {
     return result
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Timeline" options={options()} />
+  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork from message" options={options()} />
 }

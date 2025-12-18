@@ -21,6 +21,7 @@ import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand, formatKeybind } from "@/context/command"
 import { persisted } from "@/utils/persist"
+import { Identifier } from "@opencode-ai/util/identifier"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -99,6 +100,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     placeholder: number
     dragging: boolean
     imageAttachments: ImageAttachmentPart[]
+    mode: "normal" | "shell"
+    applyingHistory: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -106,6 +109,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     dragging: false,
     imageAttachments: [],
+    mode: "normal",
+    applyingHistory: false,
   })
 
   const MAX_HISTORY = 100
@@ -133,10 +138,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
+    setStore("applyingHistory", true)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
       setCursorPosition(editorRef, length)
+      setStore("applyingHistory", false)
     })
   }
 
@@ -427,21 +434,42 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const rawParts = parseFromDOM()
     const cursorPosition = getCursorPosition(editorRef)
     const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
+    const trimmed = rawText.replace(/\u200B/g, "").trim()
+    const hasNonText = rawParts.some((part) => part.type !== "text")
+    const shouldReset = trimmed.length === 0 && !hasNonText
 
-    const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-    const slashMatch = rawText.match(/^\/(\S*)$/)
+    if (shouldReset) {
+      setStore("popover", null)
+      if (store.historyIndex >= 0 && !store.applyingHistory) {
+        setStore("historyIndex", -1)
+        setStore("savedPrompt", null)
+      }
+      if (prompt.dirty()) {
+        prompt.set(DEFAULT_PROMPT, 0)
+      }
+      return
+    }
 
-    if (atMatch) {
-      onInput(atMatch[1])
-      setStore("popover", "file")
-    } else if (slashMatch) {
-      slashOnInput(slashMatch[1])
-      setStore("popover", "slash")
+    const shellMode = store.mode === "shell"
+
+    if (!shellMode) {
+      const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
+      const slashMatch = rawText.match(/^\/(\S*)$/)
+
+      if (atMatch) {
+        onInput(atMatch[1])
+        setStore("popover", "file")
+      } else if (slashMatch) {
+        slashOnInput(slashMatch[1])
+        setStore("popover", "slash")
+      } else {
+        setStore("popover", null)
+      }
     } else {
       setStore("popover", null)
     }
 
-    if (store.historyIndex >= 0) {
+    if (store.historyIndex >= 0 && !store.applyingHistory) {
       setStore("historyIndex", -1)
       setStore("savedPrompt", null)
     }
@@ -579,6 +607,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "!" && store.mode === "normal") {
+      const cursorPosition = getCursorPosition(editorRef)
+      if (cursorPosition === 0) {
+        setStore("mode", "shell")
+        setStore("popover", null)
+        event.preventDefault()
+        return
+      }
+    }
+    if (store.mode === "shell") {
+      const { collapsed, cursorPosition, textLength } = getCaretState()
+      if (event.key === "Escape") {
+        setStore("mode", "normal")
+        event.preventDefault()
+        return
+      }
+      if (event.key === "Backspace" && collapsed && cursorPosition === 0 && textLength === 0) {
+        setStore("mode", "normal")
+        event.preventDefault()
+        return
+      }
+    }
+
     if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       if (store.popover === "file") {
         onKeyDown(event)
@@ -665,6 +716,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
         : ""
       return {
+        id: Identifier.ascending("part"),
         type: "file" as const,
         mime: "text/plain",
         url: `file://${absolute}${query}`,
@@ -682,16 +734,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
 
     const imageAttachmentParts = store.imageAttachments.map((attachment) => ({
+      id: Identifier.ascending("part"),
       type: "file" as const,
       mime: attachment.mime,
       url: attachment.dataUrl,
       filename: attachment.filename,
     }))
 
+    const isShellMode = store.mode === "shell"
     tabs().setActive(undefined)
     editorRef.innerHTML = ""
     prompt.set([{ type: "text", content: "", start: 0, end: 0 }], 0)
     setStore("imageAttachments", [])
+    setStore("mode", "normal")
+
+    const model = {
+      modelID: local.model.current()!.id,
+      providerID: local.model.current()!.provider.id,
+    }
+    const agent = local.agent.current()!.name
+
+    if (isShellMode) {
+      sdk.client.session.shell({
+        sessionID: existing.id,
+        agent,
+        model,
+        command: text,
+      })
+      return
+    }
 
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
@@ -702,27 +773,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           sessionID: existing.id,
           command: commandName,
           arguments: args.join(" "),
-          agent: local.agent.current()!.name,
-          model: `${local.model.current()!.provider.id}/${local.model.current()!.id}`,
+          agent,
+          model: `${model.providerID}/${model.modelID}`,
         })
         return
       }
     }
 
-    const model = {
-      modelID: local.model.current()!.id,
-      providerID: local.model.current()!.provider.id,
+    const messageID = Identifier.ascending("message")
+    const textPart = {
+      id: Identifier.ascending("part"),
+      type: "text" as const,
+      text,
     }
-    const agent = local.agent.current()!.name
+    const requestParts = [textPart, ...fileAttachmentParts, ...imageAttachmentParts]
+    const optimisticParts = requestParts.map((part) => ({
+      ...part,
+      sessionID: existing.id,
+      messageID,
+    }))
 
     sync.session.addOptimisticMessage({
       sessionID: existing.id,
-      text,
-      parts: [
-        { type: "text", text } as import("@opencode-ai/sdk/v2/client").Part,
-        ...(fileAttachmentParts as import("@opencode-ai/sdk/v2/client").Part[]),
-        ...(imageAttachmentParts as import("@opencode-ai/sdk/v2/client").Part[]),
-      ],
+      messageID,
+      parts: optimisticParts,
       agent,
       model,
     })
@@ -731,14 +805,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sessionID: existing.id,
       agent,
       model,
-      parts: [
-        {
-          type: "text",
-          text,
-        },
-        ...fileAttachmentParts,
-        ...imageAttachmentParts,
-      ],
+      messageID,
+      parts: requestParts,
     })
   }
 
@@ -879,34 +947,50 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             classList={{
               "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&>[data-type=file]]:text-icon-info-active": true,
+              "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
             <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
-              Ask anything... "{PLACEHOLDERS[store.placeholder]}"
+              {store.mode === "shell"
+                ? "Enter shell command..."
+                : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
             </div>
           </Show>
         </div>
         <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
-            <Select
-              options={local.agent.list().map((agent) => agent.name)}
-              current={local.agent.current().name}
-              onSelect={local.agent.set}
-              class="capitalize"
-              variant="ghost"
-            />
-            <Button
-              as="div"
-              variant="ghost"
-              onClick={() =>
-                dialog.show(() => (providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />))
-              }
-            >
-              {local.model.current()?.name ?? "Select model"}
-              <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
-              <Icon name="chevron-down" size="small" />
-            </Button>
+            <Switch>
+              <Match when={store.mode === "shell"}>
+                <div class="flex items-center gap-2 px-2 h-6">
+                  <Icon name="console" size="small" class="text-icon-primary" />
+                  <span class="text-12-regular text-text-primary">Shell</span>
+                  <span class="text-12-regular text-text-weak">esc to exit</span>
+                </div>
+              </Match>
+              <Match when={store.mode === "normal"}>
+                <Select
+                  options={local.agent.list().map((agent) => agent.name)}
+                  current={local.agent.current().name}
+                  onSelect={local.agent.set}
+                  class="capitalize"
+                  variant="ghost"
+                />
+                <Button
+                  as="div"
+                  variant="ghost"
+                  onClick={() =>
+                    dialog.show(() =>
+                      providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
+                    )
+                  }
+                >
+                  {local.model.current()?.name ?? "Select model"}
+                  <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
+                  <Icon name="chevron-down" size="small" />
+                </Button>
+              </Match>
+            </Switch>
           </div>
           <div class="flex items-center gap-1 absolute right-2 bottom-2">
             <input

@@ -327,11 +327,15 @@ export default function Page() {
   ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if ((document.activeElement as HTMLElement)?.dataset?.component === "terminal") return
+    const activeElement = document.activeElement as HTMLElement | undefined
+    if (activeElement) {
+      const isProtected = activeElement.closest("[data-prevent-autofocus]")
+      const isInput = /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName) || activeElement.isContentEditable
+      if (isProtected || isInput) return
+    }
     if (dialog.active) return
 
-    const focused = document.activeElement === inputRef
-    if (focused) {
+    if (activeElement === inputRef) {
       if (event.key === "Escape") inputRef?.blur()
       return
     }

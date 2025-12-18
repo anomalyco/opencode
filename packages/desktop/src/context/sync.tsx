@@ -33,14 +33,13 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         addOptimisticMessage(input: {
           sessionID: string
-          text: string
+          messageID: string
           parts: Part[]
           agent: string
           model: { providerID: string; modelID: string }
         }) {
-          const messageID = crypto.randomUUID()
           const message: Message = {
-            id: messageID,
+            id: input.messageID,
             sessionID: input.sessionID,
             role: "user",
             time: { created: Date.now() },
@@ -53,15 +52,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (!messages) {
                 draft.message[input.sessionID] = [message]
               } else {
-                const result = Binary.search(messages, messageID, (m) => m.id)
+                const result = Binary.search(messages, input.messageID, (m) => m.id)
                 messages.splice(result.index, 0, message)
               }
-              draft.part[messageID] = input.parts.map((part, i) => ({
-                ...part,
-                id: `${messageID}-${i}`,
-                sessionID: input.sessionID,
-                messageID,
-              }))
+              draft.part[input.messageID] = input.parts.slice()
             }),
           )
         },

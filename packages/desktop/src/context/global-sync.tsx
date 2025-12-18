@@ -107,7 +107,7 @@ function createGlobalSync() {
           .slice()
           .filter((s) => !s.time.archived)
           .sort((a, b) => a.id.localeCompare(b.id))
-        // Include sessions up to the limit, plus any updated in the last hour
+        // Include up to the limit, plus any updated in the last 4 hours
         const sessions = nonArchived.filter((s, i) => {
           if (i < store.limit) return true
           const updated = new Date(s.time.updated).getTime()
