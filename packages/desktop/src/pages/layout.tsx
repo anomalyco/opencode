@@ -358,7 +358,7 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class="relative size-5 shrink-0 rounded-sm overflow-hidden">
+      <div class="relative size-5 shrink-0 rounded-sm">
         <Avatar
           fallback={name()}
           src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
