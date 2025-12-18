@@ -5982,6 +5982,9 @@
               },
               "agent": {
                 "type": "string"
+              },
+              "command": {
+                "type": "string"
               }
             },
             "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
@@ -7408,6 +7411,11 @@
             "description": "Suspend terminal",
             "default": "ctrl+z",
             "type": "string"
+          },
+          "terminal_title_toggle": {
+            "description": "Toggle terminal title",
+            "default": "none",
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -8485,6 +8493,9 @@
             "type": "string"
           },
           "agent": {
+            "type": "string"
+          },
+          "command": {
             "type": "string"
           }
         },

@@ -417,6 +417,7 @@ export type Part =
       prompt: string
       description: string
       agent: string
+      command?: string
     }
   | ReasoningPart
   | FilePart
@@ -1109,6 +1110,10 @@ export type KeybindsConfig = {
    * Suspend terminal
    */
   terminal_suspend?: string
+  /**
+   * Toggle terminal title
+   */
+  terminal_title_toggle?: string
 }
 
 export type AgentConfig = {
@@ -1610,6 +1615,7 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  command?: string
 }
 
 export type Command = {

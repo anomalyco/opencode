@@ -1,6 +1,5 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { Binary } from "@opencode-ai/util/binary"
@@ -8,6 +7,7 @@ import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { makeAudioPlayer } from "@solid-primitives/audio"
 import idleSound from "@opencode-ai/ui/audio/staplebops-01.aac"
 import errorSound from "@opencode-ai/ui/audio/nope-03.aac"
+import { persisted } from "@/utils/persist"
 
 type NotificationBase = {
   directory?: string
@@ -31,27 +31,27 @@ export type Notification = TurnCompleteNotification | ErrorNotification
 export const { use: useNotification, provider: NotificationProvider } = createSimpleContext({
   name: "Notification",
   init: () => {
-    const idlePlayer = makeAudioPlayer(idleSound)
-    const errorPlayer = makeAudioPlayer(errorSound)
+    let idlePlayer: ReturnType<typeof makeAudioPlayer> | undefined
+    let errorPlayer: ReturnType<typeof makeAudioPlayer> | undefined
+
+    try {
+      idlePlayer = makeAudioPlayer(idleSound)
+      errorPlayer = makeAudioPlayer(errorSound)
+    } catch (err) {
+      console.log("Failed to load audio", err)
+    }
+
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
 
-    const [store, setStore] = makePersisted(
+    const [store, setStore, _, ready] = persisted(
+      "notification.v1",
       createStore({
         list: [] as Notification[],
       }),
-      {
-        name: "notification.v1",
-      },
     )
 
-    // onMount(() => {
-    //   const daysToKeep = 7
-    //   // setStore("list", (n) => n.filter((n) => !n.viewed && n.time + 1000 * 60 * 60 * 24 * daysToKeep < Date.now()))
-    // })
-
     globalSDK.event.listen((e) => {
-      console.log(e)
       const directory = e.name
       const event = e.details
       const base = {
@@ -66,7 +66,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
           const isChild = match.found && syncStore.session[match.index].parentID
           if (isChild) break
-          idlePlayer.play()
+          try {
+            idlePlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "turn-complete",
@@ -82,7 +84,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             const isChild = match.found && syncStore.session[match.index].parentID
             if (isChild) break
           }
-          errorPlayer.play()
+          try {
+            errorPlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "error",
@@ -95,6 +99,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     })
 
     return {
+      ready,
       session: {
         all(session: string) {
           return store.list.filter((n) => n.session === session)
