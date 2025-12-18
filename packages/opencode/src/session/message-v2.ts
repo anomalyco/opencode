@@ -207,6 +207,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("pending"),
       input: z.record(z.string(), z.any()),
+      displayInput: z.any().optional(),
       raw: z.string(),
     })
     .meta({
@@ -219,6 +220,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("running"),
       input: z.record(z.string(), z.any()),
+      displayInput: z.any().optional(),
       title: z.string().optional(),
       metadata: z.record(z.string(), z.any()).optional(),
       time: z.object({
@@ -234,6 +236,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("completed"),
       input: z.record(z.string(), z.any()),
+      displayInput: z.any().optional(),
       output: z.string(),
       title: z.string(),
       metadata: z.record(z.string(), z.any()),
@@ -253,6 +256,7 @@ export namespace MessageV2 {
     .object({
       status: z.literal("error"),
       input: z.record(z.string(), z.any()),
+      displayInput: z.any().optional(),
       error: z.string(),
       metadata: z.record(z.string(), z.any()).optional(),
       time: z.object({
@@ -510,9 +514,9 @@ export namespace MessageV2 {
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
-                toolCallId: part.callID,
-                input: part.state.input,
-                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                 toolCallId: part.callID,
+                 input: part.state.displayInput ?? part.state.input,
+                 output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
                 callProviderMetadata: part.metadata,
               })
             }
@@ -520,9 +524,9 @@ export namespace MessageV2 {
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-error",
-                toolCallId: part.callID,
-                input: part.state.input,
-                errorText: part.state.error,
+                 toolCallId: part.callID,
+                 input: part.state.displayInput ?? part.state.input,
+                 errorText: part.state.error,
                 callProviderMetadata: part.metadata,
               })
           }
