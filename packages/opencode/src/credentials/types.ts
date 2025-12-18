@@ -1,5 +1,5 @@
 import z from "zod"
-import { type VaultEncryptedBlobV1 } from "@/vault/crypto"
+import { type VaultEncryptedBlob } from "@/vault/crypto"
 
 export namespace Credentials {
   export const Kind = z.enum(["oauth", "api", "wellknown", "mcp"]).meta({ ref: "CredentialKind" })
@@ -12,11 +12,11 @@ export namespace Credentials {
       lastErrorAt: z.number().optional(),
       successCount: z.number().default(0),
       failureCount: z.number().default(0),
-	    })
-	    .strict()
-	    .default(() => ({ successCount: 0, failureCount: 0 }))
-	    .meta({ ref: "CredentialHealth" })
-	  export type Health = z.infer<typeof Health>
+    })
+    .strict()
+    .default(() => ({ successCount: 0, failureCount: 0 }))
+    .meta({ ref: "CredentialHealth" })
+  export type Health = z.infer<typeof Health>
 
   export const RecordMeta = z
     .object({
@@ -33,17 +33,15 @@ export namespace Credentials {
     .meta({ ref: "CredentialRecordMeta" })
   export type RecordMeta = z.infer<typeof RecordMeta>
 
-  export const EncryptedBlob = z
-    .object({
-      v: z.literal(1),
-      alg: z.literal("AES-256-GCM"),
-      nonce_b64: z.string(),
-      tag_b64: z.string(),
-      data_b64: z.string(),
-    })
-    .strict()
-    .meta({ ref: "VaultEncryptedBlobV1" })
-  export type EncryptedBlob = VaultEncryptedBlobV1
+  export const EncryptedBlob = z.object({
+    v: z.literal(2),
+    alg: z.literal("AES-256-GCM"),
+    nonce_b64: z.string(),
+    tag_b64: z.string(),
+    data_b64: z.string(),
+    aad_b64: z.string(),
+  }).strict().meta({ ref: "VaultEncryptedBlob" })
+  export type EncryptedBlob = VaultEncryptedBlob
 
   export const RecordFile = z
     .object({

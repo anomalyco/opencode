@@ -174,7 +174,7 @@ export namespace CredentialStore {
 
   export async function decryptSecret(record: Credentials.RecordFile): Promise<Credentials.Secret> {
     const key = await VaultKey.load()
-    return VaultCrypto.decryptJson(key, record.secret) as Credentials.Secret
+    return VaultCrypto.decryptJson(key, record.secret, record.meta.id) as Credentials.Secret
   }
 
   export async function put(input: PutInput): Promise<Credentials.RecordFile> {
@@ -198,7 +198,7 @@ export namespace CredentialStore {
           failureCount: 0,
         },
       },
-      secret: VaultCrypto.encryptJson(key, input.secret),
+      secret: VaultCrypto.encryptJson(key, input.secret, id),
     }
 
     await VaultLock.withLock(LOCK_PATH, async () => {
@@ -293,7 +293,7 @@ export namespace CredentialStore {
           updatedAt: now,
           health: existing?.meta.health ?? { successCount: 0, failureCount: 0 },
         },
-        secret: VaultCrypto.encryptJson(key, input.secret),
+        secret: VaultCrypto.encryptJson(key, input.secret, id),
       }
 
       await VaultFS.atomicWriteJson(recordPath(id), record, 0o600)
@@ -306,7 +306,7 @@ export namespace CredentialStore {
 
   export async function updateSecret(id: string, secret: Credentials.Secret) {
     const key = await VaultKey.load()
-    return updateWith(id, (existing) => ({ ...existing, secret: VaultCrypto.encryptJson(key, secret) }))
+    return updateWith(id, (existing) => ({ ...existing, secret: VaultCrypto.encryptJson(key, secret, id) }))
   }
 
   export async function updateHealth(id: string, patch: Partial<Credentials.RecordFile["meta"]["health"]>) {
