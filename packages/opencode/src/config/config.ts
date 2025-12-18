@@ -559,6 +559,7 @@ export namespace Config {
       session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
       session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
+      terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
     })
     .strict()
     .meta({
