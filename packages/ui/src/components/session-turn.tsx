@@ -25,7 +25,8 @@ export function SessionTurn(
     sessionID: string
     messageID: string
     stepsExpanded?: boolean
-    onStepsExpandedChange?: (expanded: boolean) => void
+    onStepsExpandedToggle?: () => void
+    onUserInteracted?: () => void
     classes?: {
       root?: string
       content?: string
@@ -171,7 +172,6 @@ export function SessionTurn(
     stickyHeaderHeight: 0,
     retrySeconds: 0,
     status: rawStatus(),
-    stepsExpanded: props.stepsExpanded ?? working(),
     duration: duration(),
   })
 
@@ -192,18 +192,26 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef || store.autoScrolled) return
-    const { scrollTop } = scrollRef
-    // only mark as user scrolled if they actively scrolled upward
-    // content growth increases scrollHeight but never decreases scrollTop
+    const scrollTop = scrollRef.scrollTop
+    const reset = scrollTop <= 0 && store.lastScrollTop > 100 && working() && !store.userScrolled
+    if (reset) {
+      setStore("lastScrollTop", scrollTop)
+      requestAnimationFrame(scrollToBottom)
+      return
+    }
     const scrolledUp = scrollTop < store.lastScrollTop - 10
     if (scrolledUp && working()) {
       setStore("userScrolled", true)
+      props.onUserInteracted?.()
     }
     setStore("lastScrollTop", scrollTop)
   }
 
   function handleInteraction() {
-    if (working()) setStore("userScrolled", true)
+    if (working()) {
+      setStore("userScrolled", true)
+      props.onUserInteracted?.()
+    }
   }
 
   function scrollToBottom() {
@@ -243,12 +251,6 @@ export function SessionTurn(
   )
 
   createEffect(() => {
-    if (props.stepsExpanded !== undefined) {
-      setStore("stepsExpanded", props.stepsExpanded)
-    }
-  })
-
-  createEffect(() => {
     const timer = setInterval(() => {
       setStore("duration", duration())
     }, 1000)
@@ -262,7 +264,6 @@ export function SessionTurn(
     if (newStatus === store.status || !newStatus) return
 
     const timeSinceLastChange = Date.now() - lastStatusChange
-
     if (timeSinceLastChange >= 2500) {
       setStore("status", newStatus)
       lastStatusChange = Date.now()
@@ -279,19 +280,6 @@ export function SessionTurn(
       }, 2500 - timeSinceLastChange) as unknown as number
     }
   })
-
-  createEffect((prev) => {
-    const isWorking = working()
-    if (!prev && isWorking) {
-      setStore("stepsExpanded", true)
-      props.onStepsExpandedChange?.(true)
-    }
-    if (prev && !isWorking && !store.userScrolled) {
-      setStore("stepsExpanded", false)
-      props.onStepsExpandedChange?.(false)
-    }
-    return isWorking
-  }, working())
 
   return (
     <div data-component="session-turn" class={props.classes?.root}>
@@ -336,12 +324,7 @@ export function SessionTurn(
                       data-slot="session-turn-collapsible-trigger-content"
                       variant="ghost"
                       size="small"
-                      onClick={() => {
-                        if (assistantMessages().length === 0) return
-                        const next = !store.stepsExpanded
-                        setStore("stepsExpanded", next)
-                        props.onStepsExpandedChange?.(next)
-                      }}
+                      onClick={props.onStepsExpandedToggle ?? (() => {})}
                     >
                       <Show when={working()}>
                         <Spinner />
@@ -361,8 +344,8 @@ export function SessionTurn(
                           <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                         </Match>
                         <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                        <Match when={store.stepsExpanded}>Hide steps</Match>
-                        <Match when={!store.stepsExpanded}>Show steps</Match>
+                        <Match when={props.stepsExpanded}>Hide steps</Match>
+                        <Match when={!props.stepsExpanded}>Show steps</Match>
                       </Switch>
                       <span>·</span>
                       <span>{store.duration}</span>
@@ -373,7 +356,7 @@ export function SessionTurn(
                   </div>
                 </Show>
                 {/* Response */}
-                <Show when={store.stepsExpanded && assistantMessages().length > 0}>
+                <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                   <div data-slot="session-turn-collapsible-content-inner">
                     <For each={assistantMessages()}>
                       {(assistantMessage) => {
@@ -472,7 +455,7 @@ export function SessionTurn(
                     </Accordion>
                   </div>
                 </Show>
-                <Show when={error() && !store.stepsExpanded}>
+                <Show when={error() && !props.stepsExpanded}>
                   <Card variant="error" class="error-card">
                     {error()?.data?.message as string}
                   </Card>
