@@ -211,7 +211,7 @@ pub fn run() {
                     loop {
                         if timestamp.elapsed() > Duration::from_secs(7) {
                             let res = app.dialog()
-                              .message("Failed to spawn OpenCode CLI. Copy logs using the button below and send them to the team for assistance.")
+                              .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
                               .title("Startup Failed")
                               .buttons(MessageDialogButtons::OkCancelCustom("Copy Logs And Exit".to_string(), "Exit".to_string()))
                               .blocking_show_with_result();
