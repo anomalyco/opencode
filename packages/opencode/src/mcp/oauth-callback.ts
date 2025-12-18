@@ -81,9 +81,19 @@ export namespace McpOAuthCallback {
 
         log.info("received oauth callback", { hasCode: !!code, state, error })
 
+        // Enforce state parameter presence
+        if (!state) {
+          const errorMsg = "Missing required state parameter - potential CSRF attack"
+          log.error("oauth callback missing state parameter", { url: url.toString() })
+          return new Response(HTML_ERROR(errorMsg), {
+            status: 400,
+            headers: { "Content-Type": "text/html" },
+          })
+        }
+
         if (error) {
           const errorMsg = errorDescription || error
-          if (state && pendingAuths.has(state)) {
+          if (pendingAuths.has(state)) {
             const pending = pendingAuths.get(state)!
             clearTimeout(pending.timeout)
             pendingAuths.delete(state)
@@ -101,33 +111,20 @@ export namespace McpOAuthCallback {
           })
         }
 
-        // Try to find the pending auth by state parameter, or if no state, use the single pending auth
-        let pending: PendingAuth | undefined
-        let pendingKey: string | undefined
-
-        if (state && pendingAuths.has(state)) {
-          pending = pendingAuths.get(state)!
-          pendingKey = state
-        } else if (!state && pendingAuths.size === 1) {
-          // No state parameter but only one pending auth - use it
-          const [key, value] = pendingAuths.entries().next().value as [string, PendingAuth]
-          pending = value
-          pendingKey = key
-          log.info("no state parameter, using single pending auth", { key })
-        }
-
-        if (!pending || !pendingKey) {
-          const errorMsg = !state
-            ? "No state parameter provided and multiple pending authorizations"
-            : "Unknown or expired authorization request"
+        // Validate state parameter
+        if (!pendingAuths.has(state)) {
+          const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
+          log.error("oauth callback with invalid state", { state, pendingStates: Array.from(pendingAuths.keys()) })
           return new Response(HTML_ERROR(errorMsg), {
             status: 400,
             headers: { "Content-Type": "text/html" },
           })
         }
 
+        const pending = pendingAuths.get(state)!
+
         clearTimeout(pending.timeout)
-        pendingAuths.delete(pendingKey)
+        pendingAuths.delete(state)
         pending.resolve(code)
 
         return new Response(HTML_SUCCESS, {
@@ -139,16 +136,16 @@ export namespace McpOAuthCallback {
     log.info("oauth callback server started", { port: OAUTH_CALLBACK_PORT })
   }
 
-  export function waitForCallback(mcpName: string): Promise<string> {
+  export function waitForCallback(oauthState: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        if (pendingAuths.has(mcpName)) {
-          pendingAuths.delete(mcpName)
+        if (pendingAuths.has(oauthState)) {
+          pendingAuths.delete(oauthState)
           reject(new Error("OAuth callback timeout - authorization took too long"))
         }
       }, CALLBACK_TIMEOUT_MS)
 
-      pendingAuths.set(mcpName, { resolve, reject, timeout })
+      pendingAuths.set(oauthState, { resolve, reject, timeout })
     })
   }
 
