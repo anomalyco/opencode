@@ -47,7 +47,7 @@ jobs:
         run: |
           MESSAGE=$'Failed to push generated code. Please run locally and push:\n```\n./script/generate.ts\ngit add -A && git commit -m "chore: generate" && git push\n```'
           if [ -n "${{ github.event.pull_request.number }}" ]; then
-            gh pr comment ${{ github.event.pull_request.number }} --body "$MESSAGE"
+            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "$MESSAGE"
           else
             gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body="$MESSAGE"
           fi
