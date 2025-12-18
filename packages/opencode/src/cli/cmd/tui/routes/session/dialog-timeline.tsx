@@ -24,7 +24,9 @@ export function DialogTimeline(props: {
     const result = [] as DialogSelectOption<string>[]
     for (const message of messages) {
       if (message.role !== "user") continue
-      const part = (sync.data.part[message.id] ?? []).find((x) => x.type === "text" && !x.synthetic && !x.ignored,) as TextPart
+      const part = (sync.data.part[message.id] ?? []).find(
+        (x) => x.type === "text" && !x.synthetic && !x.ignored,
+      ) as TextPart
       if (!part) continue
       result.push({
         title: part.text.replace(/\n/g, " "),

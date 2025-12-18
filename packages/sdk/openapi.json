@@ -7077,6 +7077,16 @@
             "default": "<leader>g",
             "type": "string"
           },
+          "session_fork": {
+            "description": "Fork session from message",
+            "default": "none",
+            "type": "string"
+          },
+          "session_rename": {
+            "description": "Rename session",
+            "default": "none",
+            "type": "string"
+          },
           "session_share": {
             "description": "Share current session",
             "default": "none",
