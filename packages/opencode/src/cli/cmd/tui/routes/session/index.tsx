@@ -1529,7 +1529,7 @@ ToolRegistry.register<typeof ListTool>({
 
 ToolRegistry.register<typeof TaskTool>({
   name: "task",
-  container: "block",
+  container: "inline",
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
@@ -1539,9 +1539,17 @@ ToolRegistry.register<typeof TaskTool>({
 
     return (
       <box
+        border={["left"]}
+        customBorderChars={SplitBorder.customBorderChars}
+        borderColor={theme.background}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        marginTop={1}
+        gap={1}
+        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
-        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
         onMouseUp={() => {
           const id = props.metadata.sessionId
           if (renderer.getSelection()?.getSelectedText() || !id) return
