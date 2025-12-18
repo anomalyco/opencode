@@ -3,6 +3,76 @@ import { ProviderTransform } from "../../src/provider/transform"
 
 const OUTPUT_TOKEN_MAX = 32000
 
+describe("ProviderTransform.options - setCacheKey", () => {
+  const sessionID = "test-session-123"
+
+  const mockModel = {
+    id: "anthropic/claude-3-5-sonnet",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude 3.5 Sonnet",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("should set promptCacheKey when providerOptions.setCacheKey is true", () => {
+    const result = ProviderTransform.options(mockModel, sessionID, { setCacheKey: true })
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should not set promptCacheKey when providerOptions.setCacheKey is false", () => {
+    const result = ProviderTransform.options(mockModel, sessionID, { setCacheKey: false })
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should not set promptCacheKey when providerOptions is undefined", () => {
+    const result = ProviderTransform.options(mockModel, sessionID, undefined)
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should not set promptCacheKey when providerOptions does not have setCacheKey", () => {
+    const result = ProviderTransform.options(mockModel, sessionID, {})
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should set promptCacheKey for openai provider regardless of setCacheKey", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options(openaiModel, sessionID, {})
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+})
+
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {
     const modelLimit = 100000
@@ -144,6 +214,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       status: "active",
       options: {},
       headers: {},
+      release_date: "2023-04-01",
     })
 
     expect(result).toHaveLength(1)
@@ -204,6 +275,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       status: "active",
       options: {},
       headers: {},
+      release_date: "2023-04-01",
     })
 
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Thinking...")
@@ -250,6 +322,7 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       status: "active",
       options: {},
       headers: {},
+      release_date: "2023-04-01",
     })
 
     expect(result[0].content).toEqual([
@@ -257,5 +330,108 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       { type: "text", text: "Answer" },
     ])
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.message - empty image handling", () => {
+  const mockModel = {
+    id: "anthropic/claude-3-5-sonnet",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude 3.5 Sonnet",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("should replace empty base64 image with error text", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is in this image?" },
+          { type: "image", image: "data:image/png;base64," },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "What is in this image?" })
+    expect(result[0].content[1]).toEqual({
+      type: "text",
+      text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
+    })
+  })
+
+  test("should keep valid base64 images unchanged", () => {
+    const validBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What is in this image?" },
+          { type: "image", image: `data:image/png;base64,${validBase64}` },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "What is in this image?" })
+    expect(result[0].content[1]).toEqual({ type: "image", image: `data:image/png;base64,${validBase64}` })
+  })
+
+  test("should handle mixed valid and empty images", () => {
+    const validBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Compare these images" },
+          { type: "image", image: `data:image/png;base64,${validBase64}` },
+          { type: "image", image: "data:image/jpeg;base64," },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mockModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(3)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Compare these images" })
+    expect(result[0].content[1]).toEqual({ type: "image", image: `data:image/png;base64,${validBase64}` })
+    expect(result[0].content[2]).toEqual({
+      type: "text",
+      text: "ERROR: Image file is empty or corrupted. Please provide a valid image.",
+    })
   })
 })

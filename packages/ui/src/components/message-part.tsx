@@ -1,7 +1,8 @@
-import { Component, createMemo, For, Match, Show, Switch } from "solid-js"
+import { Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
   AssistantMessage,
+  FilePart,
   Message as MessageType,
   Part as PartType,
   TextPart,
@@ -10,6 +11,7 @@ import {
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
+import { useCodeComponent } from "../context/code"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Card } from "./card"
@@ -18,6 +20,45 @@ import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
+import { checksum } from "@opencode-ai/util/encode"
+
+interface Diagnostic {
+  range: {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  }
+  message: string
+  severity?: number
+}
+
+function getDiagnostics(
+  diagnosticsByFile: Record<string, Diagnostic[]> | undefined,
+  filePath: string | undefined,
+): Diagnostic[] {
+  if (!diagnosticsByFile || !filePath) return []
+  const diagnostics = diagnosticsByFile[filePath] ?? []
+  return diagnostics.filter((d) => d.severity === 1).slice(0, 3)
+}
+
+function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
+  return (
+    <Show when={props.diagnostics.length > 0}>
+      <div data-component="diagnostics">
+        <For each={props.diagnostics}>
+          {(diagnostic) => (
+            <div data-slot="diagnostic">
+              <span data-slot="diagnostic-label">Error</span>
+              <span data-slot="diagnostic-location">
+                [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]
+              </span>
+              <span data-slot="diagnostic-message">{diagnostic.message}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  )
+}
 
 export interface MessageProps {
   message: MessageType
@@ -74,13 +115,93 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
-  const text = createMemo(() =>
-    props.parts
-      ?.filter((p) => p.type === "text" && !(p as TextPart).synthetic)
-      ?.map((p) => (p as TextPart).text)
-      ?.join(""),
+  const textPart = createMemo(
+    () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
-  return <div data-component="user-message">{text()}</div>
+
+  const text = createMemo(() => textPart()?.text || "")
+
+  const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
+
+  const attachments = createMemo(() =>
+    files()?.filter((f) => {
+      const mime = f.mime
+      return mime.startsWith("image/") || mime === "application/pdf"
+    }),
+  )
+
+  const inlineFiles = createMemo(() =>
+    files().filter((f) => {
+      const mime = f.mime
+      return !mime.startsWith("image/") && mime !== "application/pdf" && f.source?.text?.start !== undefined
+    }),
+  )
+
+  return (
+    <div data-component="user-message">
+      <Show when={attachments().length > 0}>
+        <div data-slot="user-message-attachments">
+          <For each={attachments()}>
+            {(file) => (
+              <div data-slot="user-message-attachment" data-type={file.mime.startsWith("image/") ? "image" : "file"}>
+                <Show
+                  when={file.mime.startsWith("image/") && file.url}
+                  fallback={
+                    <div data-slot="user-message-attachment-icon">
+                      <Icon name="folder" />
+                    </div>
+                  }
+                >
+                  <img data-slot="user-message-attachment-image" src={file.url} alt={file.filename ?? "attachment"} />
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show when={text()}>
+        <div data-slot="user-message-text">
+          <HighlightedText text={text()} references={inlineFiles()} />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function HighlightedText(props: { text: string; references: FilePart[] }) {
+  const segments = createMemo(() => {
+    const text = props.text
+    const refs = [...props.references].sort((a, b) => (a.source?.text?.start ?? 0) - (b.source?.text?.start ?? 0))
+
+    const result: { text: string; highlight?: boolean }[] = []
+    let lastIndex = 0
+
+    for (const ref of refs) {
+      const start = ref.source?.text?.start
+      const end = ref.source?.text?.end
+
+      if (start === undefined || end === undefined || start < lastIndex) continue
+
+      if (start > lastIndex) {
+        result.push({ text: text.slice(lastIndex, start) })
+      }
+
+      result.push({ text: text.slice(start, end), highlight: true })
+      lastIndex = end
+    }
+
+    if (lastIndex < text.length) {
+      result.push({ text: text.slice(lastIndex) })
+    }
+
+    return result
+  })
+
+  return (
+    <For each={segments()}>
+      {(segment) => <span classList={{ "text-text-strong font-medium": segment.highlight }}>{segment.text}</span>}
+    </For>
+  )
 }
 
 export function Part(props: MessagePartProps) {
@@ -220,8 +341,12 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -240,8 +365,12 @@ ToolRegistry.register({
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -263,8 +392,12 @@ ToolRegistry.register({
           args,
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -288,8 +421,12 @@ ToolRegistry.register({
           ),
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -308,8 +445,12 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -341,6 +482,7 @@ ToolRegistry.register({
   name: "edit",
   render(props) {
     const diffComponent = useDiffComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
         defaultOpen
@@ -379,6 +521,7 @@ ToolRegistry.register({
             />
           </div>
         </Show>
+        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </BasicTool>
     )
   },
@@ -387,8 +530,11 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "write",
   render(props) {
+    const codeComponent = useCodeComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
+        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="write-trigger">
@@ -405,9 +551,20 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.input.content}>
+          <div data-component="write-content">
+            <Dynamic
+              component={codeComponent}
+              file={{
+                name: props.input.filePath,
+                contents: props.input.content,
+                cacheKey: checksum(props.input.content),
+              }}
+              overflow="scroll"
+            />
+          </div>
         </Show>
+        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </BasicTool>
     )
   },
@@ -418,6 +575,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        defaultOpen
         icon="checklist"
         trigger={{
           title: "To-dos",

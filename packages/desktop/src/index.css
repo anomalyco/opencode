@@ -1,6 +1,11 @@
 @import "@opencode-ai/ui/styles/tailwind";
 
 :root {
+  html,
+  body {
+    touch-action: manipulation;
+  }
+
   a {
     cursor: default;
   }

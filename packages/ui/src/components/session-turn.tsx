@@ -24,6 +24,8 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    stepsExpanded?: boolean
+    onStepsExpandedChange?: (expanded: boolean) => void
     classes?: {
       root?: string
       content?: string
@@ -46,28 +48,51 @@ export function SessionTurn(
         type: "idle",
       },
   )
-  const working = createMemo(() => status()?.type !== "idle")
+  const working = createMemo(() => status()?.type !== "idle" && message()?.id === userMessages().at(-1)?.id)
+  const retry = createMemo(() => {
+    const s = status()
+    if (s.type !== "retry") return
+    return s
+  })
 
   let scrollRef: HTMLDivElement | undefined
+  let lastScrollTop = 0
   const [state, setState] = createStore({
     contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
+    autoScrolled: false,
     userScrolled: false,
     stickyHeaderHeight: 0,
-    scrollY: 0,
-    autoScrolling: false,
+    retrySeconds: 0,
+  })
+
+  createEffect(() => {
+    const r = retry()
+    if (!r) {
+      setState("retrySeconds", 0)
+      return
+    }
+    const updateSeconds = () => {
+      const next = r.next
+      if (next) setState("retrySeconds", Math.max(0, Math.round((next - Date.now()) / 1000)))
+    }
+    updateSeconds()
+
+    const timer = setInterval(updateSeconds, 1000)
+    onCleanup(() => clearInterval(timer))
   })
 
   function handleScroll() {
-    if (!scrollRef) return
-    setState("scrollY", scrollRef.scrollTop)
-    if (state.autoScrolling) return
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef
-    const atBottom = scrollHeight - scrollTop - clientHeight < 50
-    if (!atBottom && working()) {
+    if (!scrollRef || state.autoScrolled) return
+    const { scrollTop } = scrollRef
+    // only mark as user scrolled if they actively scrolled upward
+    // content growth increases scrollHeight but never decreases scrollTop
+    const scrolledUp = scrollTop < lastScrollTop - 10
+    if (scrolledUp && working()) {
       setState("userScrolled", true)
     }
+    lastScrollTop = scrollTop
   }
 
   function handleInteraction() {
@@ -77,28 +102,24 @@ export function SessionTurn(
   }
 
   function scrollToBottom() {
-    if (!scrollRef || state.userScrolled || !working() || state.autoScrolling) return
-    setState("autoScrolling", true)
+    if (!scrollRef || state.userScrolled || !working()) return
+    setState("autoScrolled", true)
     requestAnimationFrame(() => {
-      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "auto" })
+      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
       requestAnimationFrame(() => {
-        setState("autoScrolling", false)
+        lastScrollTop = scrollRef?.scrollTop ?? 0
+        setState("autoScrolled", false)
       })
     })
   }
+
+  createResizeObserver(() => state.contentRef, scrollToBottom)
 
   createEffect(() => {
     if (!working()) {
       setState("userScrolled", false)
     }
   })
-
-  createResizeObserver(
-    () => state.contentRef,
-    () => {
-      scrollToBottom()
-    },
-  )
 
   createResizeObserver(
     () => state.stickyTitleRef,
@@ -117,9 +138,9 @@ export function SessionTurn(
   )
 
   return (
-    <div data-component="session-turn" class={props.classes?.root} style={{ "--scroll-y": `${state.scrollY}px` }}>
+    <div data-component="session-turn" class={props.classes?.root}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div ref={(el) => setState("contentRef", el)} onClick={handleInteraction}>
+        <div onClick={handleInteraction}>
           <Show when={message()}>
             {(message) => {
               const assistantMessages = createMemo(() => {
@@ -223,8 +244,14 @@ export function SessionTurn(
 
               const [store, setStore] = createStore({
                 status: rawStatus(),
-                stepsExpanded: true,
+                stepsExpanded: props.stepsExpanded ?? working(),
                 duration: duration(),
+              })
+
+              createEffect(() => {
+                if (props.stepsExpanded !== undefined) {
+                  setStore("stepsExpanded", props.stepsExpanded)
+                }
               })
 
               createEffect(() => {
@@ -261,14 +288,20 @@ export function SessionTurn(
 
               createEffect((prev) => {
                 const isWorking = working()
+                if (!prev && isWorking) {
+                  setStore("stepsExpanded", true)
+                  props.onStepsExpandedChange?.(true)
+                }
                 if (prev && !isWorking && !state.userScrolled) {
                   setStore("stepsExpanded", false)
+                  props.onStepsExpandedChange?.(false)
                 }
                 return isWorking
               }, working())
 
               return (
                 <div
+                  ref={(el) => setState("contentRef", el)}
                   data-message={message().id}
                   data-slot="session-turn-message-container"
                   class={props.classes?.container}
@@ -296,26 +329,47 @@ export function SessionTurn(
                   {/* Trigger (sticky) */}
                   <div ref={(el) => setState("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
                     <Button
+                      data-expandable={assistantMessages().length > 0}
                       data-slot="session-turn-collapsible-trigger-content"
                       variant="ghost"
                       size="small"
-                      onClick={() => setStore("stepsExpanded", !store.stepsExpanded)}
+                      onClick={() => {
+                        if (assistantMessages().length === 0) return
+                        const next = !store.stepsExpanded
+                        setStore("stepsExpanded", next)
+                        props.onStepsExpandedChange?.(next)
+                      }}
                     >
                       <Show when={working()}>
                         <Spinner />
                       </Show>
                       <Switch>
+                        <Match when={retry()}>
+                          <span data-slot="session-turn-retry-message">
+                            {(() => {
+                              const r = retry()
+                              if (!r) return ""
+                              return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                            })()}
+                          </span>
+                          <span data-slot="session-turn-retry-seconds">
+                            · retrying {state.retrySeconds > 0 ? `in ${state.retrySeconds}s ` : ""}
+                          </span>
+                          <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                        </Match>
                         <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                         <Match when={store.stepsExpanded}>Hide steps</Match>
                         <Match when={!store.stepsExpanded}>Show steps</Match>
                       </Switch>
                       <span>·</span>
                       <span>{store.duration}</span>
-                      <Icon name="chevron-grabber-vertical" size="small" />
+                      <Show when={assistantMessages().length > 0}>
+                        <Icon name="chevron-grabber-vertical" size="small" />
+                      </Show>
                     </Button>
                   </div>
                   {/* Response */}
-                  <Show when={store.stepsExpanded}>
+                  <Show when={store.stepsExpanded && assistantMessages().length > 0}>
                     <div data-slot="session-turn-collapsible-content-inner">
                       <For each={assistantMessages()}>
                         {(assistantMessage) => {

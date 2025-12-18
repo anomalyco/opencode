@@ -5982,6 +5982,9 @@
               },
               "agent": {
                 "type": "string"
+              },
+              "command": {
+                "type": "string"
               }
             },
             "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
@@ -7169,6 +7172,16 @@
             "default": "shift+f2",
             "type": "string"
           },
+          "model_cycle_favorite": {
+            "description": "Next favorite model",
+            "default": "none",
+            "type": "string"
+          },
+          "model_cycle_favorite_reverse": {
+            "description": "Previous favorite model",
+            "default": "none",
+            "type": "string"
+          },
           "command_list": {
             "description": "List available commands",
             "default": "ctrl+p",
@@ -7397,6 +7410,11 @@
           "terminal_suspend": {
             "description": "Suspend terminal",
             "default": "ctrl+z",
+            "type": "string"
+          },
+          "terminal_title_toggle": {
+            "description": "Toggle terminal title",
+            "default": "none",
             "type": "string"
           }
         },
@@ -7992,6 +8010,15 @@
               },
               "explore": {
                 "$ref": "#/components/schemas/AgentConfig"
+              },
+              "title": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "summary": {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              "compaction": {
+                "$ref": "#/components/schemas/AgentConfig"
               }
             },
             "additionalProperties": {
@@ -8467,6 +8494,9 @@
           },
           "agent": {
             "type": "string"
+          },
+          "command": {
+            "type": "string"
           }
         },
         "required": ["type", "prompt", "description", "agent"]
@@ -8681,9 +8711,24 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "release_date": {
+            "type": "string"
           }
         },
-        "required": ["id", "providerID", "api", "name", "capabilities", "cost", "limit", "status", "options", "headers"]
+        "required": [
+          "id",
+          "providerID",
+          "api",
+          "name",
+          "capabilities",
+          "cost",
+          "limit",
+          "status",
+          "options",
+          "headers",
+          "release_date"
+        ]
       },
       "Provider": {
         "type": "object",

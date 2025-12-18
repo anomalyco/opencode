@@ -1,7 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
 import { streamText, wrapLanguageModel, type ModelMessage, type StreamTextResult, type Tool, type ToolSet } from "ai"
-import { mergeDeep, pipe } from "remeda"
+import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -15,7 +15,7 @@ import { Flag } from "@/flag/flag"
 export namespace LLM {
   const log = Log.create({ service: "llm" })
 
-  export const OUTPUT_TOKEN_MAX = 32_000
+  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
   export type StreamInput = {
     user: MessageV2.User
@@ -60,6 +60,21 @@ export namespace LLM {
         .join("\n"),
     )
 
+    const header = system[0]
+    const original = clone(system)
+    await Plugin.trigger("experimental.chat.system.transform", {}, { system })
+    if (system.length === 0) {
+      system.push(...original)
+    }
+    // rejoin to maintain 2-part structure for caching if header unchanged
+    if (system.length > 2 && system[0] === header) {
+      const rest = system.slice(1)
+      system.length = 0
+      system.push(header, rest.join("\n"))
+    }
+
+    const provider = await Provider.getProvider(input.model.providerID)
+
     const params = await Plugin.trigger(
       "chat.params",
       {
@@ -74,9 +89,10 @@ export namespace LLM {
           ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
+        topK: ProviderTransform.topK(input.model),
         options: pipe(
           {},
-          mergeDeep(ProviderTransform.options(input.model, input.sessionID)),
+          mergeDeep(ProviderTransform.options(input.model, input.sessionID, provider.options)),
           input.small ? mergeDeep(ProviderTransform.smallOptions(input.model)) : mergeDeep({}),
           mergeDeep(input.model.options),
           mergeDeep(input.agent.options),
@@ -126,6 +142,7 @@ export namespace LLM {
       },
       temperature: params.temperature,
       topP: params.topP,
+      topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,

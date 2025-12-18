@@ -44,6 +44,7 @@ export type PromptRef = {
   reset(): void
   blur(): void
   focus(): void
+  submit(): void
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
@@ -115,7 +116,7 @@ export function Prompt(props: PromptProps) {
   const sync = useSync()
   const dialog = useDialog()
   const toast = useToast()
-  const status = createMemo(() => sync.data.session_status[props.sessionID ?? ""] ?? { type: "idle" })
+  const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
   const command = useCommandDialog()
   const renderer = useRenderer()
@@ -447,11 +448,14 @@ export function Prompt(props: PromptProps) {
       })
       setStore("extmarkToPartIndex", new Map())
     },
+    submit() {
+      submit()
+    },
   })
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete.visible) return
+    if (autocomplete?.visible) return
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
@@ -490,6 +494,9 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+
+    // Capture mode before it gets reset
+    const currentMode = store.mode
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -539,7 +546,10 @@ export function Prompt(props: PromptProps) {
         ],
       })
     }
-    history.append(store.prompt)
+    history.append({
+      ...store.prompt,
+      mode: currentMode,
+    })
     input.extmarks.clear()
     setStore("prompt", {
       input: "",
@@ -763,6 +773,7 @@ export function Prompt(props: PromptProps) {
                     if (item) {
                       input.setText(item.input)
                       setStore("prompt", item)
+                      setStore("mode", item.mode ?? "normal")
                       restoreExtmarksFromParts(item.parts)
                       e.preventDefault()
                       if (direction === -1) input.cursorOffset = 0
@@ -869,17 +880,24 @@ export function Prompt(props: PromptProps) {
           borderColor={highlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: "╹",
+            vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
           }}
         >
           <box
             height={1}
             border={["bottom"]}
             borderColor={theme.backgroundElement}
-            customBorderChars={{
-              ...EmptyBorder,
-              horizontal: "▀",
-            }}
+            customBorderChars={
+              theme.backgroundElement.a !== 0
+                ? {
+                    ...EmptyBorder,
+                    horizontal: "▀",
+                  }
+                : {
+                    ...EmptyBorder,
+                    horizontal: " ",
+                  }
+            }
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
