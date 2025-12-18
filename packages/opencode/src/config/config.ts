@@ -18,6 +18,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { loadAllMcpJson } from "./mcp-json"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -133,6 +134,14 @@ export namespace Config {
     }
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
+
+    // Load mcp.json files from standard locations (Claude/Cursor compatibility)
+    // These have lower priority than opencode.json mcp config
+    const mcpJsonServers = await loadAllMcpJson()
+    if (Object.keys(mcpJsonServers).length > 0) {
+      // Merge mcp.json servers with lower priority (opencode.json mcp config takes precedence)
+      result.mcp = { ...mcpJsonServers, ...result.mcp }
+    }
 
     return {
       config: result,
