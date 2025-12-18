@@ -134,7 +134,7 @@
     padding: 0;
     cursor: pointer;
 
-    color: var(--text-invert-strong);
+    color: var(--text-invert-weak);
     font-family: var(--font-family-sans);
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
@@ -145,8 +145,8 @@
       text-decoration: underline;
     }
 
-    &:last-child {
-      color: var(--text-invert-weak);
+    &:first-child {
+      color: var(--text-invert-strong);
     }
   }
 
