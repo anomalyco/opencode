@@ -6,34 +6,6 @@ import { Script } from "@opencode-ai/script"
 
 const notes = [] as string[]
 
-const team = [
-  "actions-user",
-  "opencode",
-  "rekram1-node",
-  "thdxr",
-  "kommander",
-  "jayair",
-  "fwang",
-  "adamdotdevin",
-  "iamdavidhill",
-  "opencode-agent[bot]",
-]
-
-function getAreaFromPath(file: string): string {
-  if (file.startsWith("packages/")) {
-    const parts = file.replace("packages/", "").split("/")
-    if (parts[0] === "extensions" && parts[1]) return `extensions/${parts[1]}`
-    return parts[0] || "other"
-  }
-  if (file.startsWith("sdks/")) {
-    const name = file.replace("sdks/", "").split("/")[0] || "other"
-    return `extensions/${name}`
-  }
-  const rootDir = file.split("/")[0]
-  if (rootDir && !rootDir.includes(".")) return rootDir
-  return "other"
-}
-
 console.log("=== publishing ===\n")
 
 if (!Script.preview) {
@@ -44,59 +16,13 @@ if (!Script.preview) {
     })
     .then((data: any) => data.version)
 
-  // Fetch commit authors from GitHub API (hash -> login)
-  const compare =
-    await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {sha: .sha, login: .author.login, message: .commit.message}'`.text()
-  const authorByHash = new Map<string, string>()
-  const contributors = new Map<string, string[]>()
+  const log =
+    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/desktop`.text()
 
-  for (const line of compare.split("\n").filter(Boolean)) {
-    const { sha, login, message } = JSON.parse(line) as { sha: string; login: string | null; message: string }
-    const shortHash = sha.slice(0, 7)
-    if (login) authorByHash.set(shortHash, login)
-
-    const title = message.split("\n")[0] || ""
-    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
-    if (login && !team.includes(login)) {
-      if (!contributors.has(login)) contributors.set(login, [])
-      contributors.get(login)?.push(title)
-    }
-  }
-
-  // Batch-fetch files for all commits (hash -> areas)
-  const diffLog = await $`git log v${previous}..HEAD --name-only --format="%h"`.text()
-  const areasByHash = new Map<string, Set<string>>()
-  let currentHash: string | null = null
-
-  for (const rawLine of diffLog.split("\n")) {
-    const line = rawLine.trim()
-    if (!line) continue
-    if (/^[0-9a-f]{7}$/i.test(line)) {
-      currentHash = line
-      if (!areasByHash.has(currentHash)) areasByHash.set(currentHash, new Set())
-      continue
-    }
-    if (currentHash) {
-      areasByHash.get(currentHash)!.add(getAreaFromPath(line))
-    }
-  }
-
-  // Build commit lines with author and areas
-  const log = await $`git log v${previous}..HEAD --oneline --format="%h %s"`.text()
-  const commitLines = log.split("\n").filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:|release:)/i))
-
-  const commitsWithMeta = commitLines
-    .map((line) => {
-      const hash = line.split(" ")[0]
-      if (!hash) return null
-      const author = authorByHash.get(hash)
-      const authorStr = author ? ` [author: ${author}]` : ""
-      const areas = areasByHash.get(hash)
-      const areaStr = areas && areas.size > 0 ? ` [areas: ${[...areas].join(", ")}]` : " [areas: other]"
-      return `${line}${authorStr}${areaStr}`
-    })
-    .filter(Boolean) as string[]
-  const commits = commitsWithMeta.join("\n")
+  const commits = log
+    .split("\n")
+    .filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
+    .join("\n")
 
   const opencode = await createOpencode()
   const session = await opencode.client.session.create()
@@ -109,72 +35,37 @@ if (!Script.preview) {
       body: {
         model: {
           providerID: "opencode",
-          modelID: "gemini-3-flash",
+          modelID: "claude-haiku-4-5",
         },
         parts: [
           {
             type: "text",
             text: `
-Analyze these commits and generate a changelog of all notable user facing changes, grouped by area.
+          Analyze these commits and generate a changelog of all notable user facing changes.
 
-Each commit below includes:
-- [author: username] showing the GitHub username of the commit author
-- [areas: ...] showing which areas of the codebase were modified
+          Commits between ${previous} and HEAD:
+          ${commits}
 
-Commits between ${previous} and HEAD:
-${commits}
+          - Do NOT make general statements about "improvements", be very specific about what was changed.
+          - Do NOT include any information about code changes if they do not affect the user facing changes.
+          - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
+          - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG)
+          - If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
 
-Group the changes into these categories based on the [areas: ...] tags (omit any category with no changes):
-- **TUI**: Changes to "opencode" area (the terminal/CLI interface)
-- **Desktop**: Changes to "desktop" or "tauri" areas (the desktop application)
-- **SDK**: Changes to "sdk" or "plugin" areas (the SDK and plugin system)
-- **Extensions**: Changes to "extensions/zed", "extensions/vscode", or "github" areas (editor extensions and GitHub Action)
-- **Other**: Any user-facing changes that don't fit the above categories
+          IMPORTANT: ONLY return a bulleted list of changes, do not include any other information. Do not include a preamble like "Based on my analysis..."
 
-Excluded areas (omit these entirely unless they contain user-facing changes like refactors that may affect behavior):
-- "nix", "infra", "script" - CI/build infrastructure
-- "ui", "docs", "web", "console", "enterprise", "function", "util", "identity", "slack" - internal packages
-
-Rules:
-- Use the [areas: ...] tags to determine the correct category. If a commit touches multiple areas, put it in the most relevant user-facing category.
-- ONLY include commits that have user-facing impact. Omit purely internal changes (CI, build scripts, internal tooling).
-- However, DO include refactors that touch user-facing code - refactors can introduce bugs or change behavior.
-- Do NOT make general statements about "improvements", be very specific about what was changed.
-- For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
-- DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG).
-- If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
-- Omit categories that have no changes.
-- For community contributors: if the [author: username] is NOT in the team list, add (@username) at the end of the changelog entry. This is REQUIRED for all non-team contributors.
-- The team members are: ${team.join(", ")}. Do NOT add @ mentions for team members.
-
-IMPORTANT: ONLY return the grouped changelog, do not include any other information. Do not include a preamble like "Based on my analysis..." or "Here is the changelog..."
-
-<example>
-## TUI
-- Added experimental support for the Ty language server (@OpeOginni)
-- Added /fork slash command for keyboard-friendly session forking (@ariane-emory)
-- Increased retry attempts for failed requests
-- Fixed model validation before executing slash commands (@devxoul)
-
-## Desktop
-- Added shell mode support
-- Fixed prompt history navigation and optimistic prompt duplication
-- Disabled pinch-to-zoom on Linux (@Brendonovich)
-
-## Extensions
-- Added OIDC_BASE_URL support for custom GitHub App installations (@elithrar)
-</example>
-`,
+          <example>
+          - Added ability to @ mention agents
+          - Fixed a bug where the TUI would render improperly on some terminals
+          </example>
+          `,
           },
         ],
       },
     })
     .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
   for (const line of raw?.split("\n") ?? []) {
-    if (line.startsWith("## ")) {
-      if (notes.length > 0) notes.push("")
-      notes.push(line)
-    } else if (line.startsWith("- ")) {
+    if (line.startsWith("- ")) {
       notes.push(line)
     }
   }
@@ -183,11 +74,42 @@ IMPORTANT: ONLY return the grouped changelog, do not include any other informati
   console.log("-----------------------------")
   opencode.server.close()
 
+  // Get contributors
+  const team = [
+    "actions-user",
+    "opencode",
+    "rekram1-node",
+    "thdxr",
+    "kommander",
+    "jayair",
+    "fwang",
+    "adamdotdevin",
+    "iamdavidhill",
+    "opencode-agent[bot]",
+  ]
+  const compare =
+    await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
+  const contributors = new Map<string, string[]>()
+
+  for (const line of compare.split("\n").filter(Boolean)) {
+    const { login, message } = JSON.parse(line) as { login: string | null; message: string }
+    const title = message.split("\n")[0] ?? ""
+    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
+
+    if (login && !team.includes(login)) {
+      if (!contributors.has(login)) contributors.set(login, [])
+      contributors.get(login)?.push(title)
+    }
+  }
+
   if (contributors.size > 0) {
     notes.push("")
     notes.push(`**Thank you to ${contributors.size} community contributor${contributors.size > 1 ? "s" : ""}:**`)
-    for (const username of contributors.keys()) {
-      notes.push(`- @${username}`)
+    for (const [username, userCommits] of contributors) {
+      notes.push(`- @${username}:`)
+      for (const commit of userCommits) {
+        notes.push(`  - ${commit}`)
+      }
     }
   }
 }
