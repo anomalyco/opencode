@@ -698,7 +698,7 @@ export namespace ACP {
         })
 
       const availableModes = agents
-        .filter((agent) => agent.mode !== "subagent")
+        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
         .map((agent) => ({
           id: agent.name,
           name: agent.name,

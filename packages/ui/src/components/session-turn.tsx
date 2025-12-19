@@ -60,10 +60,10 @@ export function SessionTurn(
   const assistantMessages = createMemo(() => {
     return messages().filter((m) => m.role === "assistant" && m.parentID == message().id) as AssistantMessage[]
   })
-  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]))
+  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]) ?? [])
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
-  const parts = createMemo(() => data.store.part[message().id])
+  const parts = createMemo(() => data.store.part[message().id] ?? [])
   const lastTextPart = createMemo(() =>
     assistantParts()
       .filter((p) => p?.type === "text")
@@ -71,7 +71,7 @@ export function SessionTurn(
   )
   const summary = createMemo(() => message().summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
-  const hasSteps = createMemo(() => assistantParts()?.some((p) => p?.type === "tool"))
+  const hasSteps = createMemo(() => assistantParts().some((p) => p?.type === "tool"))
 
   const currentTask = createMemo(
     () =>
@@ -193,14 +193,17 @@ export function SessionTurn(
   function handleScroll() {
     if (!scrollRef || store.autoScrolled) return
     const scrollTop = scrollRef.scrollTop
-    const reset = scrollTop <= 0 && store.lastScrollTop > 100 && working() && !store.userScrolled
+    console.log("scrollTop", scrollTop)
+    console.log("clientHeight", store.contentRef?.clientHeight)
+    const reset = scrollTop <= 0 && store.lastScrollTop > 0 && working() && !store.userScrolled
     if (reset) {
       setStore("lastScrollTop", scrollTop)
       requestAnimationFrame(scrollToBottom)
       return
     }
-    const scrolledUp = scrollTop < store.lastScrollTop - 10
+    const scrolledUp = scrollTop < store.lastScrollTop - 50
     if (scrolledUp && working()) {
+      console.log("scrolled up")
       setStore("userScrolled", true)
       props.onUserInteracted?.()
     }
