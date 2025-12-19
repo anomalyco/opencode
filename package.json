@@ -50,7 +50,7 @@
       "vite": "7.1.4",
       "@solidjs/meta": "0.29.4",
       "@solidjs/router": "0.15.4",
-      "@solidjs/start": "https://pkg.pr.new/@solidjs/start@57aeb22",
+      "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
       "solid-js": "1.9.10",
       "vite-plugin-solid": "2.11.10"
     }
@@ -64,7 +64,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
-    "@octokit/rest": "22.0.1",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "typescript": "catalog:"
