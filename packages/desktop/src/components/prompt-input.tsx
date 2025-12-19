@@ -124,6 +124,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       entries: [],
     }),
   )
+  const [shellHistory, setShellHistory] = persisted(
+    "prompt-history-shell.v1",
+    createStore<{
+      entries: Prompt[]
+    }>({
+      entries: [],
+    }),
+  )
 
   const clonePromptParts = (prompt: Prompt): Prompt =>
     prompt.map((part) => {
@@ -555,7 +563,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sessionID: params.id!,
     })
 
-  const addToHistory = (prompt: Prompt) => {
+  const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
       .map((p) => ("content" in p ? p.content : ""))
       .join("")
@@ -563,19 +571,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!text) return
 
     const entry = clonePromptParts(prompt)
-    const lastEntry = history.entries[0]
+    const currentHistory = mode === "shell" ? shellHistory : history
+    const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
+    const lastEntry = currentHistory.entries[0]
     if (lastEntry) {
       const lastText = lastEntry.map((p) => ("content" in p ? p.content : "")).join("")
       if (lastText === text) return
     }
 
-    setHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
+    setCurrentHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
   }
 
   const navigateHistory = (direction: "up" | "down") => {
     if (store.userHasEdited) return false
 
-    const entries = history.entries
+    const entries = store.mode === "shell" ? shellHistory.entries : history.entries
     const current = store.historyIndex
 
     if (direction === "up") {
@@ -703,7 +713,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    addToHistory(currentPrompt)
+    addToHistory(currentPrompt, store.mode)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
     setStore("userHasEdited", false)
