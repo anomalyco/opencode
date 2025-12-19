@@ -1298,7 +1298,7 @@ export type McpOAuthConfig = {
    */
   clientSecret?: string
   /**
-   * OAuth scopes to request during authorization
+   * OAuth scopes to request (optional). Most servers handle scope negotiation automatically during authorization. Only specify to request specific scopes.
    */
   scope?: string
 }

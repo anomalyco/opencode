@@ -46,7 +46,7 @@ export const McpListCommand = cmd({
 
         for (const [name, serverConfig] of Object.entries(mcpServers)) {
           const status = statuses[name]
-          const hasOAuth = serverConfig.type === "remote" && !!serverConfig.oauth
+          const hasOAuth = serverConfig.type === "remote" && serverConfig.oauth !== false
           const hasStoredTokens = await MCP.hasStoredTokens(name)
 
           let statusIcon: string
@@ -109,21 +109,21 @@ export const McpAuthCommand = cmd({
         const mcpServers = config.mcp ?? {}
 
         // Get OAuth-enabled servers
-        const oauthServers = Object.entries(mcpServers).filter(([_, cfg]) => cfg.type === "remote" && !!cfg.oauth)
+        const oauthServers = Object.entries(mcpServers).filter(
+          ([_, cfg]) => cfg.type === "remote" && cfg.oauth !== false,
+        )
 
         if (oauthServers.length === 0) {
-          prompts.log.warn("No OAuth-enabled MCP servers configured")
-          prompts.log.info("Add OAuth config to a remote MCP server in opencode.json:")
+          prompts.log.warn("No remote MCP servers configured")
+          prompts.log.info("Add a remote MCP server in opencode.json:")
           prompts.log.info(`
   "mcp": {
     "my-server": {
       "type": "remote",
-      "url": "https://example.com/mcp",
-      "oauth": {
-        "scope": "tools:read"
-      }
+      "url": "https://example.com/mcp"
     }
   }`)
+          prompts.log.info("OAuth is auto-detected. Use 'oauth: false' to disable.")
           prompts.outro("Done")
           return
         }
@@ -149,8 +149,8 @@ export const McpAuthCommand = cmd({
           return
         }
 
-        if (serverConfig.type !== "remote" || !serverConfig.oauth) {
-          prompts.log.error(`MCP server ${serverName} does not have OAuth configured`)
+        if (serverConfig.type !== "remote" || serverConfig.oauth === false) {
+          prompts.log.error(`MCP server ${serverName} has OAuth disabled`)
           prompts.outro("Done")
           return
         }

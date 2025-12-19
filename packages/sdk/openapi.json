@@ -7795,7 +7795,7 @@
             "type": "string"
           },
           "scope": {
-            "description": "OAuth scopes to request during authorization",
+            "description": "OAuth scopes to request (optional). Most servers handle scope negotiation automatically during authorization. Only specify to request specific scopes.",
             "type": "string"
           }
         },
