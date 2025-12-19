@@ -87,27 +87,6 @@ export namespace File {
     const tops = ["image", "audio", "video", "font", "model", "multipart"]
     if (tops.includes(top)) return true
 
-    if (type === "application/octet-stream") {
-      const ext = file.name?.split(".").pop()?.toLowerCase()
-      const textExtensions = [
-        "py",
-        "go",
-        "rb",
-        "swift",
-        "kt",
-        "rs",
-        "scala",
-        "r",
-        "lua",
-        "pl",
-        "sh",
-        "bash",
-        "zsh",
-        "fish",
-      ]
-      if (ext && textExtensions.includes(ext)) return false
-    }
-
     const bins = [
       "zip",
       "gzip",
