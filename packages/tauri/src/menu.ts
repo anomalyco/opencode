@@ -16,7 +16,7 @@ export async function createMenu() {
           }),
           await MenuItem.new({
             enabled: UPDATER_ENABLED,
-            action: () => runUpdater(),
+            action: () => runUpdater({ alertOnFail: true }),
             text: "Check For Updates...",
           }),
           await PredefinedMenuItem.new({

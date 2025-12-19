@@ -112,13 +112,21 @@ export async function handler(
           headers.delete("content-length")
           headers.delete("x-opencode-request")
           headers.delete("x-opencode-session")
+          headers.delete("x-opencode-project")
+          headers.delete("x-opencode-client")
           return headers
         })(),
         body: reqBody,
       })
 
       // Try another provider => stop retrying if using fallback provider
-      if (res.status !== 200 && modelInfo.fallbackProvider && providerInfo.id !== modelInfo.fallbackProvider) {
+      if (
+        res.status !== 200 &&
+        // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
+        res.status !== 404 &&
+        modelInfo.fallbackProvider &&
+        providerInfo.id !== modelInfo.fallbackProvider
+      ) {
         return retriableRequest({
           excludeProviders: [...retry.excludeProviders, providerInfo.id],
           retryCount: retry.retryCount + 1,
@@ -136,6 +144,9 @@ export async function handler(
 
     // Store sticky provider
     await stickyTracker?.set(providerInfo.id)
+
+    // Temporarily change 404 to 400 status code b/c solid start automatically override 404 response
+    const resStatus = res.status === 404 ? 400 : res.status
 
     // Scrub response headers
     const resHeaders = new Headers()
@@ -162,7 +173,7 @@ export async function handler(
       await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
       await reload(authInfo)
       return new Response(body, {
-        status: res.status,
+        status: resStatus,
         statusText: res.statusText,
         headers: resHeaders,
       })
@@ -240,7 +251,7 @@ export async function handler(
     })
 
     return new Response(stream, {
-      status: res.status,
+      status: resStatus,
       statusText: res.statusText,
       headers: resHeaders,
     })

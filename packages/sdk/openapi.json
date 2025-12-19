@@ -5982,6 +5982,9 @@
               },
               "agent": {
                 "type": "string"
+              },
+              "command": {
+                "type": "string"
               }
             },
             "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
@@ -7074,6 +7077,16 @@
             "default": "<leader>g",
             "type": "string"
           },
+          "session_fork": {
+            "description": "Fork session from message",
+            "default": "none",
+            "type": "string"
+          },
+          "session_rename": {
+            "description": "Rename session",
+            "default": "none",
+            "type": "string"
+          },
           "session_share": {
             "description": "Share current session",
             "default": "none",
@@ -7407,6 +7420,11 @@
           "terminal_suspend": {
             "description": "Suspend terminal",
             "default": "ctrl+z",
+            "type": "string"
+          },
+          "terminal_title_toggle": {
+            "description": "Toggle terminal title",
+            "default": "none",
             "type": "string"
           }
         },
@@ -8485,6 +8503,9 @@
             "type": "string"
           },
           "agent": {
+            "type": "string"
+          },
+          "command": {
             "type": "string"
           }
         },

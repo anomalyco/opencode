@@ -1,9 +1,9 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createMemo } from "solid-js"
-import { makePersisted } from "@solid-primitives/storage"
 import { useParams } from "@solidjs/router"
 import { TextSelection } from "./local"
+import { persisted } from "@/utils/persist"
 
 interface PartBase {
   content: string
@@ -77,7 +77,8 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const params = useParams()
     const name = createMemo(() => `${params.dir}/prompt${params.id ? "/" + params.id : ""}.v1`)
 
-    const [store, setStore] = makePersisted(
+    const [store, setStore, _, ready] = persisted(
+      name(),
       createStore<{
         prompt: Prompt
         cursor?: number
@@ -85,12 +86,10 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         prompt: clonePrompt(DEFAULT_PROMPT),
         cursor: undefined,
       }),
-      {
-        name: name(),
-      },
     )
 
     return {
+      ready,
       current: createMemo(() => store.prompt),
       cursor: createMemo(() => store.cursor),
       dirty: createMemo(() => !isPromptEqual(store.prompt, DEFAULT_PROMPT)),

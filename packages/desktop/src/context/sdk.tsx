@@ -13,6 +13,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       baseUrl: globalSDK.url,
       signal: abort.signal,
       directory: props.directory,
+      throwOnError: true,
     })
 
     const emitter = createGlobalEmitter<{

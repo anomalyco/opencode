@@ -32,7 +32,7 @@
 
 [data-component="session-message-rail"][data-wide] [data-slot="session-message-rail-full"] {
   margin-top: 0.125rem;
-  left: calc(((100% - min(100%, 36.5rem)) / 2) - 1.5rem);
+  left: calc(((100% - min(100%, 50rem)) / 2) - 1.5rem);
   transform: translateX(-100%);
 }
 
