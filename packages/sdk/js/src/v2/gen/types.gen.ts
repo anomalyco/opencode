@@ -815,6 +815,10 @@ export type KeybindsConfig = {
    */
   sidebar_toggle?: string
   /**
+   * Toggle sessions sidebar
+   */
+  sessions_sidebar_toggle?: string
+  /**
    * Toggle session scrollbar
    */
   scrollbar_toggle?: string

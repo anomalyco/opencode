@@ -462,9 +462,8 @@ export function Autocomplete(props: {
       onKeyDown(e: KeyEvent) {
         if (store.visible) {
           const name = e.name?.toLowerCase()
-          const ctrlOnly = e.ctrl && !e.meta && !e.shift
-          const isNavUp = name === "up" || (ctrlOnly && name === "p")
-          const isNavDown = name === "down" || (ctrlOnly && name === "n")
+          const isNavUp = name === "up"
+          const isNavDown = name === "down"
 
           if (isNavUp) {
             move(-1)
