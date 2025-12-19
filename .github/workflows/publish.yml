@@ -41,18 +41,6 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Setup SSH for AUR
-        if: inputs.bump || inputs.version
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pacman-package-manager
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
-
       - name: Install OpenCode
         if: inputs.bump || inputs.version
         run: bun i -g opencode-ai@1.0.169
@@ -77,7 +65,7 @@ jobs:
 
       - name: Publish
         id: publish
-        run: ./script/publish.ts
+        run: ./script/publish-start.ts
         env:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
@@ -212,6 +200,23 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.publish.outputs.tagName }}
 
-      - run: gh release edit ${{ needs.publish.outputs.tagName }} --draft=false
+      - uses: ./.github/actions/setup-bun
+
+      - name: Setup SSH for AUR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pacman-package-manager
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
+
+      - run: ./script/publish-complete.ts
         env:
-          GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          OPENCODE_BUMP: ${{ inputs.bump }}
+          OPENCODE_VERSION: ${{ inputs.version }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          OPENCODE_RELEASE_TAG: ${{ needs.publish.outputs.tagName }}
