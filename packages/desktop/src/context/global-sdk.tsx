@@ -6,24 +6,28 @@ import { usePlatform } from "./platform"
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
   init: (props: { url: string }) => {
-    const platform = usePlatform()
+    const eventSdk = createOpencodeClient({
+      baseUrl: props.url,
+      signal: AbortSignal.timeout(1000 * 60 * 10),
+      throwOnError: true,
+    })
+    const emitter = createGlobalEmitter<{
+      [key: string]: Event
+    }>()
 
+    eventSdk.global.event().then(async (events) => {
+      for await (const event of events.stream) {
+        // console.log("event", event)
+        emitter.emit(event.directory ?? "global", event.payload)
+      }
+    })
+
+    const platform = usePlatform()
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: AbortSignal.timeout(1000 * 60 * 10),
       fetch: platform.fetch,
       throwOnError: true,
-    })
-
-    const emitter = createGlobalEmitter<{
-      [key: string]: Event
-    }>()
-
-    sdk.global.event().then(async (events) => {
-      for await (const event of events.stream) {
-        // console.log("event", event)
-        emitter.emit(event.directory ?? "global", event.payload)
-      }
     })
 
     return { url: props.url, client: sdk, event: emitter }

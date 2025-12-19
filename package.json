@@ -50,7 +50,7 @@
       "vite": "7.1.4",
       "@solidjs/meta": "0.29.4",
       "@solidjs/router": "0.15.4",
-      "@solidjs/start": "https://pkg.pr.new/@solidjs/start@57aeb22",
+      "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
       "solid-js": "1.9.10",
       "vite-plugin-solid": "2.11.10"
     }
