@@ -1287,7 +1287,7 @@ export namespace SessionPrompt {
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
 
-    const templateCommand = await command.template()
+    const templateCommand = await command.template
 
     const placeholders = templateCommand.match(placeholderRegex) ?? []
     let last = 0
