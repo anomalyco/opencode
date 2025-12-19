@@ -28,6 +28,22 @@ export namespace Locale {
     }
   }
 
+  export function relativeTime(input: number): string {
+    const now = Date.now()
+    const diff = now - input
+    const seconds = Math.floor(diff / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (seconds < 60) return "now"
+    if (minutes < 60) return `${minutes}m`
+    if (hours < 24) return `${hours}h`
+    if (days < 7) return `${days}d`
+    if (days < 30) return `${Math.floor(days / 7)}w`
+    return `${Math.floor(days / 30)}mo`
+  }
+
   export function number(num: number): string {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + "M"
