@@ -185,37 +185,23 @@ export async function generateChangelog(previous: string, current: string): Prom
 
   const commits = commitsWithMeta.join("\n")
 
-  if (!commits.trim()) {
-    console.error("No commits found to generate changelog")
-  }
-
   // Generate changelog via LLM
   // different port to not conflict with dev running opencode
+  const opencode = await createOpencode({ port: 8192 })
   let raw: string | undefined
   try {
-    const opencode = await createOpencode({ port: 8192 })
-    try {
-      const session = await opencode.client.session.create()
-      if (!session.data?.id) {
-        console.error("Failed to create session:", session)
-        throw new Error("Failed to create session")
-      }
-      const response = await opencode.client.session.prompt({
-        path: { id: session.data.id },
+    const session = await opencode.client.session.create()
+    raw = await opencode.client.session
+      .prompt({
+        path: { id: session.data!.id },
         body: {
           model: { providerID: "opencode", modelID: MODEL },
           parts: [{ type: "text", text: buildPrompt(previous, commits) }],
         },
       })
-      if (!response.data?.parts) {
-        console.error("Empty response from LLM:", response)
-      }
-      raw = response.data?.parts?.find((y) => y.type === "text")?.text
-    } finally {
-      opencode.server.close()
-    }
-  } catch (err) {
-    console.error("Failed to generate changelog via LLM:", err)
+      .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
+  } finally {
+    opencode.server.close()
   }
 
   const notes = parseChangelog(raw ?? "")
