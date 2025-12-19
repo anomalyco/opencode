@@ -89,6 +89,11 @@ const platform: Platform = {
 
 createMenu()
 
+// Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
+root?.addEventListener("mousewheel", (e) => {
+  e.stopPropagation()
+})
+
 render(() => {
   return (
     <PlatformProvider value={platform}>
