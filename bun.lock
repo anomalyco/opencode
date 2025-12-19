@@ -367,6 +367,7 @@
         "@tauri-apps/plugin-updater": "~2",
         "@tauri-apps/plugin-window-state": "~2",
         "solid-js": "catalog:",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@actions/artifact": "4.0.0",
