@@ -9,7 +9,17 @@ import { Resource } from "@opencode-ai/console-resource"
 
 export namespace ZenData {
   const FormatSchema = z.enum(["anthropic", "google", "openai", "oa-compat"])
+  const TrialSchema = z.object({
+    provider: z.string(),
+    limits: z.array(
+      z.object({
+        limit: z.number(),
+        client: z.enum(["cli", "desktop"]).optional(),
+      }),
+    ),
+  })
   export type Format = z.infer<typeof FormatSchema>
+  export type Trial = z.infer<typeof TrialSchema>
 
   const ModelCostSchema = z.object({
     input: z.number(),
@@ -24,12 +34,9 @@ export namespace ZenData {
     cost: ModelCostSchema,
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
-    trial: z
-      .object({
-        limit: z.number(),
-        provider: z.string(),
-      })
-      .optional(),
+    byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
+    stickyProvider: z.boolean().optional(),
+    trial: TrialSchema.optional(),
     rateLimit: z.number().optional(),
     fallbackProvider: z.string().optional(),
     providers: z.array(
@@ -51,7 +58,7 @@ export namespace ZenData {
   })
 
   const ModelsSchema = z.object({
-    models: z.record(z.string(), ModelSchema),
+    models: z.record(z.string(), z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))])),
     providers: z.record(z.string(), ProviderSchema),
   })
 
@@ -61,7 +68,11 @@ export namespace ZenData {
 
   export const list = fn(z.void(), () => {
     const json = JSON.parse(
-      Resource.ZEN_MODELS1.value + Resource.ZEN_MODELS2.value + Resource.ZEN_MODELS3.value + Resource.ZEN_MODELS4.value,
+      Resource.ZEN_MODELS1.value +
+        Resource.ZEN_MODELS2.value +
+        Resource.ZEN_MODELS3.value +
+        Resource.ZEN_MODELS4.value +
+        Resource.ZEN_MODELS5.value,
     )
     return ModelsSchema.parse(json)
   })

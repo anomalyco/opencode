@@ -22,11 +22,7 @@ export function IconButton(props: ComponentProps<"button"> & IconButtonProps) {
         [split.class ?? ""]: !!split.class,
       }}
     >
-      <Icon
-        data-slot="icon-button-icon"
-        name={props.icon}
-        size={split.iconSize ?? (split.size === "large" ? "normal" : "small")}
-      />
+      <Icon name={props.icon} size={split.iconSize ?? (split.size === "large" ? "normal" : "small")} />
     </Kobalte>
   )
 }
