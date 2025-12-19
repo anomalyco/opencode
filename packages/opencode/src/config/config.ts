@@ -850,72 +850,69 @@ export namespace Config {
     return load(text, filepath)
   }
 
-  async function load(text: string, configFilepath: string) {
-    text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
+  async function expandTemplates(value: any, configDir: string, configFilepath: string): Promise<void> {
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        if (typeof value[i] === "string") {
+          value[i] = await expandString(value[i], configDir, configFilepath)
+        } else {
+          await expandTemplates(value[i], configDir, configFilepath)
+        }
+      }
+      return
+    }
+
+    if (value && typeof value === "object") {
+      for (const key in value) {
+        if (typeof value[key] === "string") {
+          value[key] = await expandString(value[key], configDir, configFilepath)
+        } else {
+          await expandTemplates(value[key], configDir, configFilepath)
+        }
+      }
+      return
+    }
+  }
+
+  async function expandString(str: string, configDir: string, configFilepath: string): Promise<string> {
+    // Expand {env:VAR} templates
+    str = str.replace(/\{env:([^}]+)\}/g, (_, varName) => {
       return process.env[varName] || ""
     })
 
-    const fileRegex = /\{file:[^}]+\}/g
-    const fileMatches = text.match(fileRegex)
+    // Expand {file:path} templates
+    const fileMatches = str.match(/\{file:[^}]+\}/g)
     if (fileMatches) {
-      const configDir = path.dirname(configFilepath)
-      const lines = text.split("\n")
-
-      // Track positions of all matches in the original text
-      const matchPositions: Array<{ match: string; index: number; lineNum: number }> = []
-      let currentIndex = 0
-
       for (const match of fileMatches) {
-        const index = text.indexOf(match, currentIndex)
-        if (index === -1) continue
-
-        // Count line number
-        const beforeMatch = text.substring(0, index)
-        const lineNum = beforeMatch.split("\n").length - 1
-
-        matchPositions.push({ match, index, lineNum })
-        currentIndex = index + match.length
-      }
-
-      // Process matches in reverse order to preserve indices
-      for (let i = matchPositions.length - 1; i >= 0; i--) {
-        const { match, index, lineNum } = matchPositions[i]
-        const line = lines[lineNum]
-
-        // Skip if this specific occurrence is on a commented line
-        if (line.trim().startsWith("//")) {
-          continue
-        }
-
         let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         if (filePath.startsWith("~/")) {
           filePath = path.join(os.homedir(), filePath.slice(2))
         }
         const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = (
-          await Bun.file(resolvedPath)
-            .text()
-            .catch((error) => {
-              const errMsg = `bad file reference: "${match}"`
-              if (error.code === "ENOENT") {
-                throw new InvalidError(
-                  {
-                    path: configFilepath,
-                    message: errMsg + ` ${resolvedPath} does not exist`,
-                  },
-                  { cause: error },
-                )
-              }
-              throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
-            })
-        ).trim()
-        // escape newlines/quotes, strip outer quotes
-        const replacement = JSON.stringify(fileContent).slice(1, -1)
-        // Replace at the specific index
-        text = text.substring(0, index) + replacement + text.substring(index + match.length)
+        const fileContent = await Bun.file(resolvedPath)
+          .text()
+          .catch((error) => {
+            const errMsg = `bad file reference: "${match}"`
+            if (error.code === "ENOENT") {
+              throw new InvalidError(
+                {
+                  path: configFilepath,
+                  message: errMsg + ` ${resolvedPath} does not exist`,
+                },
+                { cause: error },
+              )
+            }
+            throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
+          })
+        str = str.replace(match, fileContent.trim())
       }
     }
 
+    return str
+  }
+
+  async function load(text: string, configFilepath: string) {
+    // Parse JSONC first, letting the parser handle comments correctly
     const errors: JsoncParseError[] = []
     const data = parseJsonc(text, errors, { allowTrailingComma: true })
     if (errors.length) {
@@ -939,6 +936,10 @@ export namespace Config {
         message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
       })
     }
+
+    // Expand templates in the parsed object tree
+    const configDir = path.dirname(configFilepath)
+    await expandTemplates(data, configDir, configFilepath)
 
     const parsed = Info.safeParse(data)
     if (parsed.success) {
