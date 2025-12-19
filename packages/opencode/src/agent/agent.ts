@@ -9,8 +9,10 @@ import { mergeDeep } from "remeda"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_EXPLORE_WARPGREP from "./prompt/explore-warpgrep.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import { Env } from "../env"
 
 export namespace Agent {
   export const Info = z
@@ -149,7 +151,7 @@ export namespace Agent {
           ...defaultTools,
         },
         description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
-        prompt: PROMPT_EXPLORE,
+        prompt: Env.get("MORPH_API_KEY") ? PROMPT_EXPLORE_WARPGREP : PROMPT_EXPLORE,
         options: {},
         permission: agentPermission,
         mode: "subagent",

@@ -20,8 +20,10 @@ import z from "zod"
 import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
+import { WarpGrepTool } from "./warpgrep"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
+import { Env } from "../env"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -102,6 +104,7 @@ export namespace ToolRegistry {
       TodoReadTool,
       WebSearchTool,
       CodeSearchTool,
+      WarpGrepTool,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...custom,
     ]
@@ -119,6 +122,10 @@ export namespace ToolRegistry {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
             return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
+          // Enable warpgrep only when MORPH_API_KEY is set
+          if (t.id === "warpgrep") {
+            return !!Env.get("MORPH_API_KEY")
           }
           return true
         })
