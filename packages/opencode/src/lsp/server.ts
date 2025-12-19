@@ -4,7 +4,7 @@ import os from "os"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { $ } from "bun"
+import { $, readableStreamToText } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
@@ -216,6 +216,77 @@ export namespace LSPServer {
     },
   }
 
+  export const Oxlint: Info = {
+    id: "oxlint",
+    root: NearestRoot([
+      ".oxlintrc.json",
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      "package.json",
+    ]),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".astro", ".svelte"],
+    async spawn(root) {
+      const ext = process.platform === "win32" ? ".cmd" : ""
+
+      const serverTarget = path.join("node_modules", ".bin", "oxc_language_server" + ext)
+      const lintTarget = path.join("node_modules", ".bin", "oxlint" + ext)
+
+      const resolveBin = async (target: string) => {
+        const localBin = path.join(root, target)
+        if (await Bun.file(localBin).exists()) return localBin
+
+        const candidates = Filesystem.up({
+          targets: [target],
+          start: root,
+          stop: Instance.worktree,
+        })
+        const first = await candidates.next()
+        await candidates.return()
+        if (first.value) return first.value
+
+        return undefined
+      }
+
+      let lintBin = await resolveBin(lintTarget)
+      if (!lintBin) {
+        const found = Bun.which("oxlint")
+        if (found) lintBin = found
+      }
+
+      if (lintBin) {
+        const proc = Bun.spawn([lintBin, "--help"], { stdout: "pipe" })
+        await proc.exited
+        const help = await readableStreamToText(proc.stdout)
+        if (help.includes("--lsp")) {
+          return {
+            process: spawn(lintBin, ["--lsp"], {
+              cwd: root,
+            }),
+          }
+        }
+      }
+
+      let serverBin = await resolveBin(serverTarget)
+      if (!serverBin) {
+        const found = Bun.which("oxc_language_server")
+        if (found) serverBin = found
+      }
+      if (serverBin) {
+        return {
+          process: spawn(serverBin, [], {
+            cwd: root,
+          }),
+        }
+      }
+
+      log.info("oxlint not found, please install oxlint")
+      return
+    },
+  }
+
   export const Biome: Info = {
     id: "biome",
     root: NearestRoot([
@@ -357,6 +428,70 @@ export namespace LSPServer {
         process: spawn(bin!, ["--lsp"], {
           cwd: root,
         }),
+      }
+    },
+  }
+
+  export const Ty: Info = {
+    id: "ty",
+    extensions: [".py", ".pyi"],
+    root: NearestRoot([
+      "pyproject.toml",
+      "ty.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements.txt",
+      "Pipfile",
+      "pyrightconfig.json",
+    ]),
+    async spawn(root) {
+      if (!Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+        return undefined
+      }
+
+      let binary = Bun.which("ty")
+
+      const initialization: Record<string, string> = {}
+
+      const potentialVenvPaths = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
+        (p): p is string => p !== undefined,
+      )
+      for (const venvPath of potentialVenvPaths) {
+        const isWindows = process.platform === "win32"
+        const potentialPythonPath = isWindows
+          ? path.join(venvPath, "Scripts", "python.exe")
+          : path.join(venvPath, "bin", "python")
+        if (await Bun.file(potentialPythonPath).exists()) {
+          initialization["pythonPath"] = potentialPythonPath
+          break
+        }
+      }
+
+      if (!binary) {
+        for (const venvPath of potentialVenvPaths) {
+          const isWindows = process.platform === "win32"
+          const potentialTyPath = isWindows
+            ? path.join(venvPath, "Scripts", "ty.exe")
+            : path.join(venvPath, "bin", "ty")
+          if (await Bun.file(potentialTyPath).exists()) {
+            binary = potentialTyPath
+            break
+          }
+        }
+      }
+
+      if (!binary) {
+        log.error("ty not found, please install ty first")
+        return
+      }
+
+      const proc = spawn(binary, ["server"], {
+        cwd: root,
+      })
+
+      return {
+        process: proc,
+        initialization,
       }
     },
   }
