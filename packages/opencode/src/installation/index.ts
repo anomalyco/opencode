@@ -183,7 +183,7 @@ export namespace Installation {
 
     const registry = await iife(async () => {
       // Changed to spawnWrapper because of a bug in Bun.$ with npm and Ctrl+C handling in Windows
-      const r = (await spawnWrapper(["npm", "config", "get", "registry"], { throws: false })).stdout.trim()
+      const r = (await spawnWrapper(["npm", "config", "get", "registry"], { throws: false, quiet: true })).stdout.trim()
       const reg = r || "https://registry.npmjs.org"
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
