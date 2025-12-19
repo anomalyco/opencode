@@ -928,7 +928,7 @@
                 "properties": {
                   "parentID": {
                     "type": "string",
-                    "pattern": "^ses_.*"
+                    "pattern": "^ses.*"
                   },
                   "title": {
                     "type": "string"
@@ -1012,7 +1012,7 @@
             "name": "sessionID",
             "schema": {
               "type": "string",
-              "pattern": "^ses_.*"
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -1074,7 +1074,7 @@
             "name": "sessionID",
             "schema": {
               "type": "string",
-              "pattern": "^ses_.*"
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -1219,7 +1219,7 @@
             "name": "sessionID",
             "schema": {
               "type": "string",
-              "pattern": "^ses_.*"
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -1405,7 +1405,7 @@
                   },
                   "messageID": {
                     "type": "string",
-                    "pattern": "^msg_.*"
+                    "pattern": "^msg.*"
                   }
                 },
                 "required": ["modelID", "providerID", "messageID"]
@@ -1437,7 +1437,7 @@
             "name": "sessionID",
             "schema": {
               "type": "string",
-              "pattern": "^ses_.*"
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -1464,7 +1464,7 @@
                 "properties": {
                   "messageID": {
                     "type": "string",
-                    "pattern": "^msg_.*"
+                    "pattern": "^msg.*"
                   }
                 }
               }
@@ -1617,7 +1617,7 @@
             "name": "sessionID",
             "schema": {
               "type": "string",
-              "pattern": "^ses_.*"
+              "pattern": "^ses.*"
             },
             "required": true
           }
@@ -1689,7 +1689,7 @@
             "name": "messageID",
             "schema": {
               "type": "string",
-              "pattern": "^msg_.*"
+              "pattern": "^msg.*"
             }
           }
         ],
@@ -1977,7 +1977,7 @@
                 "properties": {
                   "messageID": {
                     "type": "string",
-                    "pattern": "^msg_.*"
+                    "pattern": "^msg.*"
                   },
                   "model": {
                     "type": "object",
@@ -2182,7 +2182,7 @@
                 "properties": {
                   "messageID": {
                     "type": "string",
-                    "pattern": "^msg_.*"
+                    "pattern": "^msg.*"
                   },
                   "model": {
                     "type": "object",
@@ -2322,7 +2322,7 @@
                 "properties": {
                   "messageID": {
                     "type": "string",
-                    "pattern": "^msg_.*"
+                    "pattern": "^msg.*"
                   },
                   "agent": {
                     "type": "string"
@@ -2505,11 +2505,11 @@
                 "properties": {
                   "messageID": {
                     "type": "string",
-                    "pattern": "^msg_.*"
+                    "pattern": "^msg.*"
                   },
                   "partID": {
                     "type": "string",
-                    "pattern": "^prt_.*"
+                    "pattern": "^prt.*"
                   }
                 },
                 "required": ["messageID"]
@@ -6343,14 +6343,14 @@
               },
               "sessionID": {
                 "type": "string",
-                "pattern": "^ses_.*"
+                "pattern": "^ses.*"
               },
               "arguments": {
                 "type": "string"
               },
               "messageID": {
                 "type": "string",
-                "pattern": "^msg_.*"
+                "pattern": "^msg.*"
               }
             },
             "required": ["name", "sessionID", "arguments", "messageID"]
@@ -6363,7 +6363,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^ses_.*"
+            "pattern": "^ses.*"
           },
           "projectID": {
             "type": "string"
@@ -6373,7 +6373,7 @@
           },
           "parentID": {
             "type": "string",
-            "pattern": "^ses_.*"
+            "pattern": "^ses.*"
           },
           "summary": {
             "type": "object",
@@ -6719,7 +6719,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^pty_.*"
+            "pattern": "^pty.*"
           },
           "title": {
             "type": "string"
@@ -6796,7 +6796,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "pattern": "^pty_.*"
+                "pattern": "^pty.*"
               },
               "exitCode": {
                 "type": "number"
@@ -6819,7 +6819,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "pattern": "^pty_.*"
+                "pattern": "^pty.*"
               }
             },
             "required": ["id"]
