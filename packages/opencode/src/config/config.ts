@@ -850,7 +850,7 @@ export namespace Config {
     return load(text, filepath)
   }
 
-  async function expandTemplates(value: any, configDir: string, configFilepath: string): Promise<void> {
+  async function expandTemplates(value: unknown, configDir: string, configFilepath: string): Promise<void> {
     // First pass: collect all file references
     const fileRefs = new Map<string, string>() // match -> resolvedPath
     collectFileReferences(value, configDir, fileRefs)
