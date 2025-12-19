@@ -67,10 +67,11 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
 import { DialogSubagent } from "./dialog-subagent.tsx"
+import { DialogToolOutput } from "./dialog-tool-output.tsx"
 
 addDefaultParsers(parsers.parsers)
 
-class CustomSpeedScroll implements ScrollAcceleration {
+export class CustomSpeedScroll implements ScrollAcceleration {
   constructor(private speed: number) {}
 
   tick(_now?: number): number {
@@ -79,6 +80,8 @@ class CustomSpeedScroll implements ScrollAcceleration {
 
   reset(): void {}
 }
+
+type ToolOutputPreview = { tool: string; output: string } | null
 
 const context = createContext<{
   width: number
@@ -90,6 +93,7 @@ const context = createContext<{
   userMessageMarkdown: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
+  setToolOutputPreview: (preview: ToolOutputPreview) => void
 }>()
 
 function use() {
@@ -127,6 +131,7 @@ export function Session() {
   const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(kv.get("user_message_markdown", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
+  const [toolOutputPreview, setToolOutputPreview] = createSignal<ToolOutputPreview>(null)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -870,6 +875,7 @@ export function Session() {
         userMessageMarkdown,
         diffWrapMode,
         sync,
+        setToolOutputPreview,
       }}
     >
       <box flexDirection="row">
@@ -1015,6 +1021,15 @@ export function Session() {
           <Sidebar sessionID={route.sessionID} />
         </Show>
       </box>
+      <Show when={toolOutputPreview()} keyed>
+        {(preview) => (
+          <DialogToolOutput
+            tool={preview.tool}
+            output={preview.output}
+            onClose={() => setToolOutputPreview(null)}
+          />
+        )}
+      </Show>
     </context.Provider>
   )
 }
@@ -1270,8 +1285,9 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const { theme } = useTheme()
-  const { showDetails } = use()
+  const { showDetails, setToolOutputPreview } = use()
   const sync = useSync()
+  const renderer = useRenderer()
   const [margin, setMargin] = createSignal(0)
   const component = createMemo(() => {
     // Hide tool if showDetails is false and tool completed successfully
@@ -1294,6 +1310,17 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
     const permission = permissions[permissionIndex]
 
+    const output = props.part.state.status === "completed" ? props.part.state.output : undefined
+    const isClickable = container === "inline" && props.part.tool !== "bash" && output
+
+    const onMouseUp = isClickable
+      ? (event: any) => {
+          if (event.modifiers?.ctrl || event.modifiers?.meta) return
+          if (renderer.getSelection()?.getSelectedText()) return
+          setToolOutputPreview({ tool: props.part.tool, output })
+        }
+      : undefined
+
     const style: BoxProps =
       container === "block" || permission
         ? {
@@ -1315,6 +1342,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
       <box
         marginTop={margin()}
         {...style}
+        onMouseUp={onMouseUp}
         renderBefore={function () {
           const el = this as BoxRenderable
           const parent = el.parent
