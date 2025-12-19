@@ -60,10 +60,10 @@ export function SessionTurn(
   const assistantMessages = createMemo(() => {
     return messages().filter((m) => m.role === "assistant" && m.parentID == message().id) as AssistantMessage[]
   })
-  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]))
+  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]) ?? [])
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
-  const parts = createMemo(() => data.store.part[message().id])
+  const parts = createMemo(() => data.store.part[message().id] ?? [])
   const lastTextPart = createMemo(() =>
     assistantParts()
       .filter((p) => p?.type === "text")
@@ -71,7 +71,7 @@ export function SessionTurn(
   )
   const summary = createMemo(() => message().summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
-  const hasSteps = createMemo(() => assistantParts()?.some((p) => p?.type === "tool"))
+  const hasSteps = createMemo(() => assistantParts().some((p) => p?.type === "tool"))
 
   const currentTask = createMemo(
     () =>
