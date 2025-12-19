@@ -3,7 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { batch, createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -25,7 +25,8 @@ export function SessionTurn(
     sessionID: string
     messageID: string
     stepsExpanded?: boolean
-    onStepsExpandedChange?: (expanded: boolean) => void
+    onStepsExpandedToggle?: () => void
+    onUserInteracted?: () => void
     classes?: {
       root?: string
       content?: string
@@ -59,10 +60,10 @@ export function SessionTurn(
   const assistantMessages = createMemo(() => {
     return messages().filter((m) => m.role === "assistant" && m.parentID == message().id) as AssistantMessage[]
   })
-  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]))
+  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]) ?? [])
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
-  const parts = createMemo(() => data.store.part[message().id])
+  const parts = createMemo(() => data.store.part[message().id] ?? [])
   const lastTextPart = createMemo(() =>
     assistantParts()
       .filter((p) => p?.type === "text")
@@ -70,6 +71,7 @@ export function SessionTurn(
   )
   const summary = createMemo(() => message().summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
+  const hasSteps = createMemo(() => assistantParts().some((p) => p?.type === "tool"))
 
   const currentTask = createMemo(
     () =>
@@ -136,11 +138,11 @@ export function SessionTurn(
   })
   const hasDiffs = createMemo(() => message().summary?.diffs?.length)
   const isShellMode = createMemo(() => {
-    if (parts().some((p) => p.type !== "text" || !p.synthetic)) return false
+    if (parts().some((p) => p?.type !== "text" || !p?.synthetic)) return false
     if (assistantParts().length !== 1) return false
     const assistantPart = assistantParts()[0]
-    if (assistantPart.type !== "tool") return false
-    if (assistantPart.tool !== "bash") return false
+    if (assistantPart?.type !== "tool") return false
+    if (assistantPart?.tool !== "bash") return false
     return true
   })
 
@@ -160,17 +162,16 @@ export function SessionTurn(
   }
 
   let scrollRef: HTMLDivElement | undefined
-  let lastScrollTop = 0
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
+    lastScrollTop: 0,
     autoScrolled: false,
     userScrolled: false,
     stickyHeaderHeight: 0,
     retrySeconds: 0,
     status: rawStatus(),
-    stepsExpanded: props.stepsExpanded ?? working(),
     duration: duration(),
   })
 
@@ -191,18 +192,26 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef || store.autoScrolled) return
-    const { scrollTop } = scrollRef
-    // only mark as user scrolled if they actively scrolled upward
-    // content growth increases scrollHeight but never decreases scrollTop
-    const scrolledUp = scrollTop < lastScrollTop - 10
+    const scrollTop = scrollRef.scrollTop
+    const reset = scrollTop <= 0 && store.lastScrollTop > 100 && working() && !store.userScrolled
+    if (reset) {
+      setStore("lastScrollTop", scrollTop)
+      requestAnimationFrame(scrollToBottom)
+      return
+    }
+    const scrolledUp = scrollTop < store.lastScrollTop - 10
     if (scrolledUp && working()) {
       setStore("userScrolled", true)
+      props.onUserInteracted?.()
     }
-    lastScrollTop = scrollTop
+    setStore("lastScrollTop", scrollTop)
   }
 
   function handleInteraction() {
-    if (working()) setStore("userScrolled", true)
+    if (working()) {
+      setStore("userScrolled", true)
+      props.onUserInteracted?.()
+    }
   }
 
   function scrollToBottom() {
@@ -211,8 +220,10 @@ export function SessionTurn(
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
       requestAnimationFrame(() => {
-        lastScrollTop = scrollRef?.scrollTop ?? 0
-        setStore("autoScrolled", false)
+        batch(() => {
+          setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
+          setStore("autoScrolled", false)
+        })
       })
     })
   }
@@ -240,12 +251,6 @@ export function SessionTurn(
   )
 
   createEffect(() => {
-    if (props.stepsExpanded !== undefined) {
-      setStore("stepsExpanded", props.stepsExpanded)
-    }
-  })
-
-  createEffect(() => {
     const timer = setInterval(() => {
       setStore("duration", duration())
     }, 1000)
@@ -259,7 +264,6 @@ export function SessionTurn(
     if (newStatus === store.status || !newStatus) return
 
     const timeSinceLastChange = Date.now() - lastStatusChange
-
     if (timeSinceLastChange >= 2500) {
       setStore("status", newStatus)
       lastStatusChange = Date.now()
@@ -276,19 +280,6 @@ export function SessionTurn(
       }, 2500 - timeSinceLastChange) as unknown as number
     }
   })
-
-  createEffect((prev) => {
-    const isWorking = working()
-    if (!prev && isWorking) {
-      setStore("stepsExpanded", true)
-      props.onStepsExpandedChange?.(true)
-    }
-    if (prev && !isWorking && !store.userScrolled) {
-      setStore("stepsExpanded", false)
-      props.onStepsExpandedChange?.(false)
-    }
-    return isWorking
-  }, working())
 
   return (
     <div data-component="session-turn" class={props.classes?.root}>
@@ -315,7 +306,7 @@ export function SessionTurn(
                           <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
                         </Match>
                         <Match when={true}>
-                          <h1>{message().summary?.title ?? "New message"}</h1>
+                          <h1>{message().summary?.title}</h1>
                         </Match>
                       </Switch>
                     </div>
@@ -326,49 +317,46 @@ export function SessionTurn(
                   <Message message={message()} parts={parts()} />
                 </div>
                 {/* Trigger (sticky) */}
-                <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
-                  <Button
-                    data-expandable={assistantMessages().length > 0}
-                    data-slot="session-turn-collapsible-trigger-content"
-                    variant="ghost"
-                    size="small"
-                    onClick={() => {
-                      if (assistantMessages().length === 0) return
-                      const next = !store.stepsExpanded
-                      setStore("stepsExpanded", next)
-                      props.onStepsExpandedChange?.(next)
-                    }}
-                  >
-                    <Show when={working()}>
-                      <Spinner />
-                    </Show>
-                    <Switch>
-                      <Match when={retry()}>
-                        <span data-slot="session-turn-retry-message">
-                          {(() => {
-                            const r = retry()
-                            if (!r) return ""
-                            return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
-                          })()}
-                        </span>
-                        <span data-slot="session-turn-retry-seconds">
-                          · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
-                        </span>
-                        <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                      </Match>
-                      <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                      <Match when={store.stepsExpanded}>Hide steps</Match>
-                      <Match when={!store.stepsExpanded}>Show steps</Match>
-                    </Switch>
-                    <span>·</span>
-                    <span>{store.duration}</span>
-                    <Show when={assistantMessages().length > 0}>
-                      <Icon name="chevron-grabber-vertical" size="small" />
-                    </Show>
-                  </Button>
-                </div>
+                <Show when={working() || hasSteps()}>
+                  <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
+                    <Button
+                      data-expandable={assistantMessages().length > 0}
+                      data-slot="session-turn-collapsible-trigger-content"
+                      variant="ghost"
+                      size="small"
+                      onClick={props.onStepsExpandedToggle ?? (() => {})}
+                    >
+                      <Show when={working()}>
+                        <Spinner />
+                      </Show>
+                      <Switch>
+                        <Match when={retry()}>
+                          <span data-slot="session-turn-retry-message">
+                            {(() => {
+                              const r = retry()
+                              if (!r) return ""
+                              return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                            })()}
+                          </span>
+                          <span data-slot="session-turn-retry-seconds">
+                            · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
+                          </span>
+                          <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                        </Match>
+                        <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
+                        <Match when={props.stepsExpanded}>Hide steps</Match>
+                        <Match when={!props.stepsExpanded}>Show steps</Match>
+                      </Switch>
+                      <span>·</span>
+                      <span>{store.duration}</span>
+                      <Show when={assistantMessages().length > 0}>
+                        <Icon name="chevron-grabber-vertical" size="small" />
+                      </Show>
+                    </Button>
+                  </div>
+                </Show>
                 {/* Response */}
-                <Show when={store.stepsExpanded && assistantMessages().length > 0}>
+                <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                   <div data-slot="session-turn-collapsible-content-inner">
                     <For each={assistantMessages()}>
                       {(assistantMessage) => {
@@ -467,7 +455,7 @@ export function SessionTurn(
                     </Accordion>
                   </div>
                 </Show>
-                <Show when={error() && !store.stepsExpanded}>
+                <Show when={error() && !props.stepsExpanded}>
                   <Card variant="error" class="error-card">
                     {error()?.data?.message as string}
                   </Card>

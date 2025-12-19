@@ -66,6 +66,7 @@ import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
+import { DialogSubagent } from "./dialog-subagent.tsx"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1528,13 +1529,33 @@ ToolRegistry.register<typeof ListTool>({
 
 ToolRegistry.register<typeof TaskTool>({
   name: "task",
-  container: "block",
+  container: "inline",
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
+    const dialog = useDialog()
+    const renderer = useRenderer()
+    const [hover, setHover] = createSignal(false)
 
     return (
-      <>
+      <box
+        border={["left"]}
+        customBorderChars={SplitBorder.customBorderChars}
+        borderColor={theme.background}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        marginTop={1}
+        gap={1}
+        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={() => {
+          const id = props.metadata.sessionId
+          if (renderer.getSelection()?.getSelectedText() || !id) return
+          dialog.replace(() => <DialogSubagent sessionID={id} />)
+        }}
+      >
         <ToolTitle icon="◉" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
           {Locale.titlecase(props.input.subagent_type ?? "unknown")} Task "{props.input.description}"
         </ToolTitle>
@@ -1557,7 +1578,7 @@ ToolRegistry.register<typeof TaskTool>({
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
           <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
         </text>
-      </>
+      </box>
     )
   },
 })

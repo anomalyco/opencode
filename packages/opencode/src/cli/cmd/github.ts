@@ -418,6 +418,7 @@ export const GithubRunCommand = cmd({
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = payload.comment.id
       const useGithubToken = normalizeUseGithubToken()
+      const commentType = context.eventName === "pull_request_review_comment" ? "pr_review" : "issue"
 
       try {
         if (useGithubToken) {
@@ -443,7 +444,7 @@ export const GithubRunCommand = cmd({
         }
         await assertPermissions()
 
-        await addReaction()
+        await addReaction(commentType)
 
         // Setup opencode session
         const repoData = await fetchRepo()
@@ -476,7 +477,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction()
+            await removeReaction(commentType)
           }
           // Fork PR
           else {
@@ -491,7 +492,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction()
+            await removeReaction(commentType)
           }
         }
         // Issue
@@ -512,10 +513,10 @@ export const GithubRunCommand = cmd({
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
             await createComment(`Created PR #${pr}${footer({ image: true })}`)
-            await removeReaction()
+            await removeReaction(commentType)
           } else {
             await createComment(`${response}${footer({ image: true })}`)
-            await removeReaction()
+            await removeReaction(commentType)
           }
         }
       } catch (e: any) {
@@ -528,7 +529,7 @@ export const GithubRunCommand = cmd({
           msg = e.message
         }
         await createComment(`${msg}${footer()}`)
-        await removeReaction()
+        await removeReaction(commentType)
         core.setFailed(msg)
         // Also output the clean error message for the action to capture
         //core.setOutput("prepare_error", e.message);
@@ -977,8 +978,16 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
       }
 
-      async function addReaction() {
+      async function addReaction(commentType: "issue" | "pr_review") {
         console.log("Adding reaction...")
+        if (commentType === "pr_review") {
+          return await octoRest.rest.reactions.createForPullRequestReviewComment({
+            owner,
+            repo,
+            comment_id: triggerCommentId,
+            content: AGENT_REACTION,
+          })
+        }
         return await octoRest.rest.reactions.createForIssueComment({
           owner,
           repo,
@@ -987,8 +996,28 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         })
       }
 
-      async function removeReaction() {
+      async function removeReaction(commentType: "issue" | "pr_review") {
         console.log("Removing reaction...")
+        if (commentType === "pr_review") {
+          const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
+            owner,
+            repo,
+            comment_id: triggerCommentId,
+            content: AGENT_REACTION,
+          })
+
+          const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
+          if (!eyesReaction) return
+
+          await octoRest.rest.reactions.deleteForPullRequestComment({
+            owner,
+            repo,
+            comment_id: triggerCommentId,
+            reaction_id: eyesReaction.id,
+          })
+          return
+        }
+
         const reactions = await octoRest.rest.reactions.listForIssueComment({
           owner,
           repo,

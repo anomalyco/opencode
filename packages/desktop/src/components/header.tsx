@@ -24,11 +24,6 @@ export function Header(props: {
   const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const params = useParams()
-  const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
-  const store = createMemo(() => globalSync.child(currentDirectory())[0])
-  const sessions = createMemo(() => store().session ?? [])
-  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
-  const shareEnabled = createMemo(() => store().config.share !== "disabled")
 
   return (
     <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
@@ -45,101 +40,116 @@ export function Header(props: {
         <Mark class="shrink-0" />
       </A>
       <div class="pl-4 px-6 flex items-center justify-between gap-4 w-full">
-        <Show when={params.dir && layout.projects.list().length > 0}>
-          <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2">
-              <Select
-                options={layout.projects.list().map((project) => project.worktree)}
-                current={currentDirectory()}
-                label={(x) => getFilename(x)}
-                onSelect={(x) => (x ? props.navigateToProject(x) : undefined)}
-                class="text-14-regular text-text-base"
-                variant="ghost"
-              >
-                {/* @ts-ignore */}
-                {(i) => (
+        <Show when={layout.projects.list().length > 0 && params.dir}>
+          {(directory) => {
+            const currentDirectory = createMemo(() => base64Decode(directory()))
+            const store = createMemo(() => globalSync.child(currentDirectory())[0])
+            const sessions = createMemo(() => store().session ?? [])
+            const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+            const shareEnabled = createMemo(() => store().config.share !== "disabled")
+            return (
+              <>
+                <div class="flex items-center gap-3">
                   <div class="flex items-center gap-2">
-                    <Icon name="folder" size="small" />
-                    <div class="text-text-strong">{getFilename(i)}</div>
+                    <Select
+                      options={layout.projects.list().map((project) => project.worktree)}
+                      current={currentDirectory()}
+                      label={(x) => getFilename(x)}
+                      onSelect={(x) => (x ? props.navigateToProject(x) : undefined)}
+                      class="text-14-regular text-text-base"
+                      variant="ghost"
+                    >
+                      {/* @ts-ignore */}
+                      {(i) => (
+                        <div class="flex items-center gap-2">
+                          <Icon name="folder" size="small" />
+                          <div class="text-text-strong">{getFilename(i)}</div>
+                        </div>
+                      )}
+                    </Select>
+                    <div class="text-text-weaker">/</div>
+                    <Select
+                      options={sessions()}
+                      current={currentSession()}
+                      placeholder="New session"
+                      label={(x) => x.title}
+                      value={(x) => x.id}
+                      onSelect={props.navigateToSession}
+                      class="text-14-regular text-text-base max-w-md"
+                      variant="ghost"
+                    />
                   </div>
-                )}
-              </Select>
-              <div class="text-text-weaker">/</div>
-              <Select
-                options={sessions()}
-                current={currentSession()}
-                placeholder="New session"
-                label={(x) => x.title}
-                value={(x) => x.id}
-                onSelect={props.navigateToSession}
-                class="text-14-regular text-text-base max-w-md"
-                variant="ghost"
-              />
-            </div>
-            <Show when={currentSession()}>
-              <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
-                New session
-              </Button>
-            </Show>
-          </div>
-          <div class="flex items-center gap-4">
-            <Tooltip
-              class="shrink-0"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle terminal</span>
-                  <span class="text-icon-base text-12-medium">Ctrl `</span>
+                  <Show when={currentSession()}>
+                    <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
+                      New session
+                    </Button>
+                  </Show>
                 </div>
-              }
-            >
-              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
-                <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                  <Icon
-                    size="small"
-                    name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
-                    class="group-hover/terminal-toggle:hidden"
-                  />
-                  <Icon
-                    size="small"
-                    name="layout-bottom-partial"
-                    class="hidden group-hover/terminal-toggle:inline-block"
-                  />
-                  <Icon
-                    size="small"
-                    name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
-                    class="hidden group-active/terminal-toggle:inline-block"
-                  />
-                </div>
-              </Button>
-            </Tooltip>
-            <Show when={shareEnabled() && currentSession()}>
-              <Popover
-                title="Share session"
-                trigger={
-                  <Tooltip class="shrink-0" value="Share session">
-                    <IconButton icon="share" variant="ghost" class="" />
+                <div class="flex items-center gap-4">
+                  <Tooltip
+                    class="shrink-0"
+                    value={
+                      <div class="flex items-center gap-2">
+                        <span>Toggle terminal</span>
+                        <span class="text-icon-base text-12-medium">Ctrl `</span>
+                      </div>
+                    }
+                  >
+                    <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
+                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                        <Icon
+                          size="small"
+                          name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                          class="group-hover/terminal-toggle:hidden"
+                        />
+                        <Icon
+                          size="small"
+                          name="layout-bottom-partial"
+                          class="hidden group-hover/terminal-toggle:inline-block"
+                        />
+                        <Icon
+                          size="small"
+                          name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                          class="hidden group-active/terminal-toggle:inline-block"
+                        />
+                      </div>
+                    </Button>
                   </Tooltip>
-                }
-              >
-                {iife(() => {
-                  const [url] = createResource(
-                    () => currentSession(),
-                    async (session) => {
-                      if (!session) return
-                      let shareURL = session.share?.url
-                      if (!shareURL) {
-                        shareURL = await globalSDK.client.session
-                          .share({ sessionID: session.id, directory: currentDirectory() })
-                          .then((r) => r.data?.share?.url)
+                  <Show when={shareEnabled() && currentSession()}>
+                    <Popover
+                      title="Share session"
+                      trigger={
+                        <Tooltip class="shrink-0" value="Share session">
+                          <IconButton icon="share" variant="ghost" class="" />
+                        </Tooltip>
                       }
-                      return shareURL
-                    },
-                  )
-                  return <Show when={url()}>{(url) => <TextField value={url()} readOnly copyable class="w-72" />}</Show>
-                })}
-              </Popover>
-            </Show>
-          </div>
+                    >
+                      {iife(() => {
+                        const [url] = createResource(
+                          () => currentSession(),
+                          async (session) => {
+                            if (!session) return
+                            let shareURL = session.share?.url
+                            if (!shareURL) {
+                              shareURL = await globalSDK.client.session
+                                .share({ sessionID: session.id, directory: currentDirectory() })
+                                .then((r) => r.data?.share?.url)
+                            }
+                            return shareURL
+                          },
+                        )
+                        return (
+                          <Show when={url()}>
+                            {(url) => <TextField value={url()} readOnly copyable class="w-72" />}
+                          </Show>
+                        )
+                      })}
+                    </Popover>
+                  </Show>
+                </div>
+              </>
+            )
+          }}
         </Show>
       </div>
     </header>
