@@ -186,13 +186,14 @@ If you have client credentials from the MCP server provider, you can configure t
       "url": "https://mcp.example.com/mcp",
       "oauth": {
         "clientId": "{env:MY_MCP_CLIENT_ID}",
-        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
-        "scope": "tools:read tools:execute"
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}"
       }
     }
   }
 }
 ```
+
+OAuth scopes are typically handled automatically during authorization. You don't need to specify them manually unless you need specific permissions.
 
 #### Disabling OAuth
 
@@ -221,7 +222,7 @@ If you want to disable automatic OAuth for a server (e.g., for servers that use 
 | `oauth`        | Object \| false |          | OAuth config object, or `false` to disable OAuth auto-detection.                 |
 | `clientId`     | String          |          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
 | `clientSecret` | String          |          | OAuth client secret, if required by the authorization server.                    |
-| `scope`        | String          |          | OAuth scopes to request during authorization.                                    |
+| `scope`        | String          |          | OAuth scopes (handled automatically by default, only specify to override).       |
 
 #### Authenticating
 
