@@ -102,6 +102,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
+    userHasEdited: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -111,6 +112,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
+    userHasEdited: false,
   })
 
   const MAX_HISTORY = 100
@@ -139,6 +141,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
+    setStore("userHasEdited", false)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -440,6 +443,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (shouldReset) {
       setStore("popover", null)
+      setStore("userHasEdited", false)
       if (store.historyIndex >= 0 && !store.applyingHistory) {
         setStore("historyIndex", -1)
         setStore("savedPrompt", null)
@@ -472,6 +476,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.historyIndex >= 0 && !store.applyingHistory) {
       setStore("historyIndex", -1)
       setStore("savedPrompt", null)
+    }
+
+    if (!store.applyingHistory) {
+      setStore("userHasEdited", true)
     }
 
     prompt.set(rawParts, cursorPosition)
@@ -565,6 +573,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const navigateHistory = (direction: "up" | "down") => {
+    if (store.userHasEdited) return false
+
     const entries = history.entries
     const current = store.historyIndex
 
@@ -696,6 +706,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addToHistory(currentPrompt)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
+    setStore("userHasEdited", false)
 
     let existing = info()
     if (!existing) {
