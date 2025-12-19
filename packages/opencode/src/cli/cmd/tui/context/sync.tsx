@@ -255,9 +255,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const exit = useExit()
+    const args = useArgs()
 
     async function bootstrap() {
-      const args = useArgs()
       const sessionListPromise = sdk.client.session.list().then((x) =>
         setStore(
           "session",
@@ -280,11 +280,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }),
         sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", x.data ?? [])),
         sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", x.data!)),
+        ...(args.continue ? [sessionListPromise] : []),
       ]
-
-      if (args.continue) {
-        blockingRequests.push(sessionListPromise)
-      }
 
       await Promise.all(blockingRequests)
         .then(() => {
