@@ -43,7 +43,7 @@ jobs:
 
       - name: Install OpenCode
         if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai@1.0.143
+        run: bun i -g opencode-ai@1.0.169
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
