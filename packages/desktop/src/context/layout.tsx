@@ -61,21 +61,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     function enrich(project: { worktree: string; expanded: boolean }) {
       const metadata = globalSync.data.project.find((x) => x.worktree === project.worktree)
-      if (!metadata) return []
       return [
         {
           ...project,
-          ...metadata,
+          ...(metadata ?? {}),
         },
       ]
     }
 
-    function colorize(project: Project & { expanded: boolean }) {
+    function colorize(project: Partial<Project> & { worktree: string; expanded: boolean }) {
       if (project.icon?.color) return project
       const color = pickAvailableColor()
       usedColors.add(color)
       project.icon = { ...project.icon, color }
-      globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      if (project.id) {
+        globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      }
       return project
     }
 
@@ -95,7 +96,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          if (store.projects.find((x) => x.worktree === directory)) return
+          if (store.projects.find((x) => x.worktree === directory)) {
+            return
+          }
           globalSync.project.loadSessions(directory)
           setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },

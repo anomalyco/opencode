@@ -517,7 +517,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
+  const SortableProject = (props: { project: Project & { worktree: string; expanded: boolean } }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
