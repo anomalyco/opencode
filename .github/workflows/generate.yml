@@ -30,7 +30,6 @@ jobs:
         run: ./script/generate.ts
 
       - name: Commit and push
-        id: push
         run: |
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
@@ -40,16 +39,15 @@ jobs:
           git config --local user.name "GitHub Action"
           git add -A
           git commit -m "chore: generate"
-          git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify
-
-      - name: Comment on failure
-        if: failure()
-        run: |
-          MESSAGE=$'Failed to push generated code. Please run locally and push:\n```\n./script/generate.ts\ngit add -A && git commit -m "chore: generate" && git push\n```'
-          if [ -n "${{ github.event.pull_request.number }}" ]; then
-            gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body "$MESSAGE"
-          else
-            gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body="$MESSAGE"
+          if ! git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify; then
+            echo ""
+            echo "============================================"
+            echo "Failed to push generated code."
+            echo "Please run locally and push:"
+            echo ""
+            echo "  ./script/generate.ts"
+            echo "  git add -A && git commit -m \"chore: generate\" && git push"
+            echo ""
+            echo "============================================"
+            exit 1
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
