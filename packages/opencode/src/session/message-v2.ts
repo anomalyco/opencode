@@ -514,9 +514,9 @@ export namespace MessageV2 {
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-available",
-                 toolCallId: part.callID,
-                 input: part.state.displayInput ?? part.state.input,
-                 output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                toolCallId: part.callID,
+                input: part.state.displayInput ?? part.state.input,
+                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
                 callProviderMetadata: part.metadata,
               })
             }
@@ -524,9 +524,9 @@ export namespace MessageV2 {
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,
                 state: "output-error",
-                 toolCallId: part.callID,
-                 input: part.state.displayInput ?? part.state.input,
-                 errorText: part.state.error,
+                toolCallId: part.callID,
+                input: part.state.displayInput ?? part.state.input,
+                errorText: part.state.error,
                 callProviderMetadata: part.metadata,
               })
           }

@@ -608,9 +608,8 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const displayArgs = args.displayInput ?? args
-          const execArgs = args
-          delete execArgs.displayInput
+          const { displayInput, ...execArgs } = args
+          const displayArgs = displayInput ?? args
           const result = await item.execute(execArgs, {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
@@ -664,7 +663,14 @@ export namespace SessionPrompt {
       if (!execute) continue
 
       // Wrap execute to add plugin hooks and format output
-      const schema = (item.inputSchema as any).jsonSchema
+      const schema = (
+        item.inputSchema as {
+          jsonSchema?: {
+            type?: string
+            properties?: Record<string, unknown>
+          }
+        }
+      ).jsonSchema
       if (schema && schema.type === "object" && schema.properties) {
         schema.properties.displayInput = {
           type: "object",
@@ -683,8 +689,8 @@ export namespace SessionPrompt {
             args,
           },
         )
-        delete args.displayInput
-        const result = await execute(args, opts)
+        const { displayInput: _, ...execArgs } = args
+        const result = await execute(execArgs, opts)
 
         await Plugin.trigger(
           "tool.execute.after",

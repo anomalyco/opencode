@@ -122,8 +122,10 @@ export namespace SessionProcessor {
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
-                    const { displayInput, ...execArgs } = value.input as any
-                    const displayArgs = displayInput ?? value.input
+                  const { displayInput, ...execArgs } = value.input as Record<string, unknown> & {
+                    displayInput?: unknown
+                  }
+                  const displayArgs = displayInput ?? value.input
                     const part = await Session.updatePart({
                       ...match,
                       tool: value.toolName,
