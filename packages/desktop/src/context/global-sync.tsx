@@ -21,6 +21,8 @@ import { Binary } from "@opencode-ai/util/binary"
 import { useGlobalSDK } from "./global-sdk"
 import { ErrorPage, type InitError } from "../pages/error"
 import { createContext, useContext, onMount, type ParentProps, Switch, Match } from "solid-js"
+import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
 
 type State = {
   ready: boolean
@@ -72,6 +74,7 @@ function createGlobalSync() {
 
   const children: Record<string, ReturnType<typeof createStore<State>>> = {}
   function child(directory: string) {
+    if (!directory) console.error("No directory provided")
     if (!children[directory]) {
       setGlobalStore("children", directory, {
         project: "",
@@ -117,11 +120,13 @@ function createGlobalSync() {
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
-        setGlobalStore("error", err)
+        const project = getFilename(directory)
+        showToast({ title: `Failed to load sessions for ${project}`, description: err.message })
       })
   }
 
   async function bootstrapInstance(directory: string) {
+    if (!directory) return
     const [, setStore] = child(directory)
     const sdk = createOpencodeClient({
       baseUrl: globalSDK.url,

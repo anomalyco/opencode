@@ -3,7 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { batch, createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -25,7 +25,8 @@ export function SessionTurn(
     sessionID: string
     messageID: string
     stepsExpanded?: boolean
-    onStepsExpandedChange?: (expanded: boolean) => void
+    onStepsExpandedToggle?: () => void
+    onUserInteracted?: () => void
     classes?: {
       root?: string
       content?: string
@@ -59,10 +60,10 @@ export function SessionTurn(
   const assistantMessages = createMemo(() => {
     return messages().filter((m) => m.role === "assistant" && m.parentID == message().id) as AssistantMessage[]
   })
-  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]))
+  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]) ?? [])
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
-  const parts = createMemo(() => data.store.part[message().id])
+  const parts = createMemo(() => data.store.part[message().id] ?? [])
   const lastTextPart = createMemo(() =>
     assistantParts()
       .filter((p) => p?.type === "text")
@@ -70,7 +71,7 @@ export function SessionTurn(
   )
   const summary = createMemo(() => message().summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
-  const hasSteps = createMemo(() => assistantParts()?.some((p) => p?.type === "tool"))
+  const hasSteps = createMemo(() => assistantParts().some((p) => p?.type === "tool"))
 
   const currentTask = createMemo(
     () =>
@@ -137,11 +138,11 @@ export function SessionTurn(
   })
   const hasDiffs = createMemo(() => message().summary?.diffs?.length)
   const isShellMode = createMemo(() => {
-    if (parts().some((p) => p.type !== "text" || !p.synthetic)) return false
+    if (parts().some((p) => p?.type !== "text" || !p?.synthetic)) return false
     if (assistantParts().length !== 1) return false
     const assistantPart = assistantParts()[0]
-    if (assistantPart.type !== "tool") return false
-    if (assistantPart.tool !== "bash") return false
+    if (assistantPart?.type !== "tool") return false
+    if (assistantPart?.tool !== "bash") return false
     return true
   })
 
@@ -161,17 +162,16 @@ export function SessionTurn(
   }
 
   let scrollRef: HTMLDivElement | undefined
-  let lastScrollTop = 0
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
+    lastScrollTop: 0,
     autoScrolled: false,
     userScrolled: false,
     stickyHeaderHeight: 0,
     retrySeconds: 0,
     status: rawStatus(),
-    stepsExpanded: props.stepsExpanded ?? working(),
     duration: duration(),
   })
 
@@ -192,18 +192,29 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef || store.autoScrolled) return
-    const { scrollTop } = scrollRef
-    // only mark as user scrolled if they actively scrolled upward
-    // content growth increases scrollHeight but never decreases scrollTop
-    const scrolledUp = scrollTop < lastScrollTop - 10
-    if (scrolledUp && working()) {
-      setStore("userScrolled", true)
+    const scrollTop = scrollRef.scrollTop
+    console.log("scrollTop", scrollTop)
+    console.log("clientHeight", store.contentRef?.clientHeight)
+    const reset = scrollTop <= 0 && store.lastScrollTop > 0 && working() && !store.userScrolled
+    if (reset) {
+      setStore("lastScrollTop", scrollTop)
+      requestAnimationFrame(scrollToBottom)
+      return
     }
-    lastScrollTop = scrollTop
+    const scrolledUp = scrollTop < store.lastScrollTop - 50
+    if (scrolledUp && working()) {
+      console.log("scrolled up")
+      setStore("userScrolled", true)
+      props.onUserInteracted?.()
+    }
+    setStore("lastScrollTop", scrollTop)
   }
 
   function handleInteraction() {
-    if (working()) setStore("userScrolled", true)
+    if (working()) {
+      setStore("userScrolled", true)
+      props.onUserInteracted?.()
+    }
   }
 
   function scrollToBottom() {
@@ -212,8 +223,10 @@ export function SessionTurn(
     requestAnimationFrame(() => {
       scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
       requestAnimationFrame(() => {
-        lastScrollTop = scrollRef?.scrollTop ?? 0
-        setStore("autoScrolled", false)
+        batch(() => {
+          setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
+          setStore("autoScrolled", false)
+        })
       })
     })
   }
@@ -241,12 +254,6 @@ export function SessionTurn(
   )
 
   createEffect(() => {
-    if (props.stepsExpanded !== undefined) {
-      setStore("stepsExpanded", props.stepsExpanded)
-    }
-  })
-
-  createEffect(() => {
     const timer = setInterval(() => {
       setStore("duration", duration())
     }, 1000)
@@ -260,7 +267,6 @@ export function SessionTurn(
     if (newStatus === store.status || !newStatus) return
 
     const timeSinceLastChange = Date.now() - lastStatusChange
-
     if (timeSinceLastChange >= 2500) {
       setStore("status", newStatus)
       lastStatusChange = Date.now()
@@ -277,19 +283,6 @@ export function SessionTurn(
       }, 2500 - timeSinceLastChange) as unknown as number
     }
   })
-
-  createEffect((prev) => {
-    const isWorking = working()
-    if (!prev && isWorking) {
-      setStore("stepsExpanded", true)
-      props.onStepsExpandedChange?.(true)
-    }
-    if (prev && !isWorking && !store.userScrolled) {
-      setStore("stepsExpanded", false)
-      props.onStepsExpandedChange?.(false)
-    }
-    return isWorking
-  }, working())
 
   return (
     <div data-component="session-turn" class={props.classes?.root}>
@@ -334,12 +327,7 @@ export function SessionTurn(
                       data-slot="session-turn-collapsible-trigger-content"
                       variant="ghost"
                       size="small"
-                      onClick={() => {
-                        if (assistantMessages().length === 0) return
-                        const next = !store.stepsExpanded
-                        setStore("stepsExpanded", next)
-                        props.onStepsExpandedChange?.(next)
-                      }}
+                      onClick={props.onStepsExpandedToggle ?? (() => {})}
                     >
                       <Show when={working()}>
                         <Spinner />
@@ -359,8 +347,8 @@ export function SessionTurn(
                           <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                         </Match>
                         <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                        <Match when={store.stepsExpanded}>Hide steps</Match>
-                        <Match when={!store.stepsExpanded}>Show steps</Match>
+                        <Match when={props.stepsExpanded}>Hide steps</Match>
+                        <Match when={!props.stepsExpanded}>Show steps</Match>
                       </Switch>
                       <span>·</span>
                       <span>{store.duration}</span>
@@ -371,7 +359,7 @@ export function SessionTurn(
                   </div>
                 </Show>
                 {/* Response */}
-                <Show when={store.stepsExpanded && assistantMessages().length > 0}>
+                <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                   <div data-slot="session-turn-collapsible-content-inner">
                     <For each={assistantMessages()}>
                       {(assistantMessage) => {
@@ -470,7 +458,7 @@ export function SessionTurn(
                     </Accordion>
                   </div>
                 </Show>
-                <Show when={error() && !store.stepsExpanded}>
+                <Show when={error() && !props.stepsExpanded}>
                   <Card variant="error" class="error-card">
                     {error()?.data?.message as string}
                   </Card>
