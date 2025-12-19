@@ -1,4 +1,4 @@
-import { AssistantMessage, ToolPart } from "@opencode-ai/sdk/v2/client"
+import { AssistantMessage, Part as PartType, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -20,6 +20,45 @@ import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 
+function computeStatusFromPart(part: PartType | undefined): string | undefined {
+  if (!part) return undefined
+
+  if (part.type === "tool") {
+    switch (part.tool) {
+      case "task":
+        return "Delegating work"
+      case "todowrite":
+      case "todoread":
+        return "Planning next steps"
+      case "read":
+        return "Gathering context"
+      case "list":
+      case "grep":
+      case "glob":
+        return "Searching the codebase"
+      case "webfetch":
+        return "Searching the web"
+      case "edit":
+      case "write":
+        return "Making edits"
+      case "bash":
+        return "Running commands"
+      default:
+        return undefined
+    }
+  }
+  if (part.type === "reasoning") {
+    const text = part.text ?? ""
+    const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
+    if (match) return `Thinking · ${match[1].trim()}`
+    return "Thinking"
+  }
+  if (part.type === "text") {
+    return "Gathering thoughts"
+  }
+  return undefined
+}
+
 export function SessionTurn(
   props: ParentProps<{
     sessionID: string
@@ -36,119 +75,152 @@ export function SessionTurn(
 ) {
   const data = useData()
   const diffComponent = useDiffComponent()
-  const messages = createMemo(() => data.store.message[props.sessionID] ?? [])
-  const userMessages = createMemo(() =>
-    messages()
-      .filter((m) => m.role === "user")
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  )
-  const lastUserMessage = createMemo(() => userMessages().at(-1)!)
-  const message = createMemo(() => userMessages().find((m) => m.id === props.messageID)!)
+
+  const derived = createMemo(() => {
+    const allMessages = data.store.message[props.sessionID] ?? []
+    const userMessages = allMessages.filter((m) => m.role === "user").sort((a, b) => a.id.localeCompare(b.id))
+    const lastUserMessage = userMessages.at(-1)
+    const message = userMessages.find((m) => m.id === props.messageID)
+
+    if (!message) {
+      return {
+        message: undefined,
+        parts: [] as PartType[],
+        assistantMessages: [] as AssistantMessage[],
+        assistantParts: [] as PartType[],
+        lastAssistantMessage: undefined as AssistantMessage | undefined,
+        lastTextPart: undefined as PartType | undefined,
+        error: undefined,
+        hasSteps: false,
+        isShellMode: false,
+        rawStatus: undefined as string | undefined,
+        isLastUserMessage: false,
+      }
+    }
+
+    const parts = data.store.part[message.id] ?? []
+    const assistantMessages = allMessages.filter(
+      (m) => m.role === "assistant" && m.parentID === message.id,
+    ) as AssistantMessage[]
+
+    const assistantParts: PartType[] = []
+    for (const m of assistantMessages) {
+      const msgParts = data.store.part[m.id]
+      if (msgParts) {
+        for (const p of msgParts) {
+          if (p) assistantParts.push(p)
+        }
+      }
+    }
+
+    const lastAssistantMessage = assistantMessages.at(-1)
+    const error = assistantMessages.find((m) => m.error)?.error
+
+    let lastTextPart: PartType | undefined
+    for (let i = assistantParts.length - 1; i >= 0; i--) {
+      if (assistantParts[i]?.type === "text") {
+        lastTextPart = assistantParts[i]
+        break
+      }
+    }
+
+    const hasSteps = assistantParts.some((p) => p?.type === "tool")
+
+    let isShellMode = false
+    if (parts.every((p) => p?.type === "text" && p?.synthetic) && assistantParts.length === 1) {
+      const assistantPart = assistantParts[0]
+      if (assistantPart?.type === "tool" && assistantPart?.tool === "bash") {
+        isShellMode = true
+      }
+    }
+
+    let resolvedParts = assistantParts
+    const currentTask = assistantParts.findLast(
+      (p) =>
+        p &&
+        p.type === "tool" &&
+        p.tool === "task" &&
+        p.state &&
+        "metadata" in p.state &&
+        p.state.metadata &&
+        p.state.metadata.sessionId &&
+        p.state.status === "running",
+    ) as ToolPart | undefined
+
+    if (currentTask?.state && "metadata" in currentTask.state && currentTask.state.metadata?.sessionId) {
+      const taskMessages = data.store.message[currentTask.state.metadata.sessionId as string]?.filter(
+        (m) => m.role === "assistant",
+      )
+      if (taskMessages) {
+        const taskParts: PartType[] = []
+        for (const m of taskMessages) {
+          const msgParts = data.store.part[m.id]
+          if (msgParts) {
+            for (const p of msgParts) {
+              if (p) taskParts.push(p)
+            }
+          }
+        }
+        if (taskParts.length > 0) {
+          resolvedParts = taskParts
+        }
+      }
+    }
+
+    const lastPart = resolvedParts.at(-1)
+    const rawStatus = computeStatusFromPart(lastPart)
+
+    return {
+      message,
+      parts,
+      assistantMessages,
+      assistantParts,
+      lastAssistantMessage,
+      lastTextPart,
+      error,
+      hasSteps,
+      isShellMode,
+      rawStatus,
+      isLastUserMessage: message.id === lastUserMessage?.id,
+    }
+  })
+
+  const message = () => derived().message
+  const parts = () => derived().parts
+  const assistantMessages = () => derived().assistantMessages
+  const assistantParts = () => derived().assistantParts
+  const lastAssistantMessage = () => derived().lastAssistantMessage
+  const lastTextPart = () => derived().lastTextPart
+  const error = () => derived().error
+  const hasSteps = () => derived().hasSteps
+  const isShellMode = () => derived().isShellMode
+  const rawStatus = () => derived().rawStatus
+
   const status = createMemo(
     () =>
       data.store.session_status[props.sessionID] ?? {
         type: "idle",
       },
   )
-  const working = createMemo(() => status().type !== "idle" && message().id === lastUserMessage().id)
+  const working = createMemo(() => status().type !== "idle" && derived().isLastUserMessage)
   const retry = createMemo(() => {
     const s = status()
     if (s.type !== "retry") return
     return s
   })
 
-  const assistantMessages = createMemo(() => {
-    return messages().filter((m) => m.role === "assistant" && m.parentID == message().id) as AssistantMessage[]
-  })
-  const assistantParts = createMemo(() => assistantMessages().flatMap((m) => data.store.part[m.id]) ?? [])
-  const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
-  const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
-  const parts = createMemo(() => data.store.part[message().id] ?? [])
-  const lastTextPart = createMemo(() =>
-    assistantParts()
-      .filter((p) => p?.type === "text")
-      .at(-1),
-  )
-  const summary = createMemo(() => message().summary?.body)
-  const response = createMemo(() => lastTextPart()?.text)
-  const hasSteps = createMemo(() => assistantParts().some((p) => p?.type === "tool"))
-
-  const currentTask = createMemo(
-    () =>
-      assistantParts().findLast(
-        (p) =>
-          p &&
-          p.type === "tool" &&
-          p.tool === "task" &&
-          p.state &&
-          "metadata" in p.state &&
-          p.state.metadata &&
-          p.state.metadata.sessionId &&
-          p.state.status === "running",
-      ) as ToolPart,
-  )
-  const resolvedParts = createMemo(() => {
-    let resolved = assistantParts()
-    const task = currentTask()
-    if (task && task.state && "metadata" in task.state && task.state.metadata?.sessionId) {
-      const messages = data.store.message[task.state.metadata.sessionId as string]?.filter(
-        (m) => m.role === "assistant",
-      )
-      resolved = messages?.flatMap((m) => data.store.part[m.id]) ?? assistantParts()
-    }
-    return resolved
-  })
-  const lastPart = createMemo(() => resolvedParts().slice(-1)?.at(0))
-  const rawStatus = createMemo(() => {
-    const last = lastPart()
-    if (!last) return undefined
-
-    if (last.type === "tool") {
-      switch (last.tool) {
-        case "task":
-          return "Delegating work"
-        case "todowrite":
-        case "todoread":
-          return "Planning next steps"
-        case "read":
-          return "Gathering context"
-        case "list":
-        case "grep":
-        case "glob":
-          return "Searching the codebase"
-        case "webfetch":
-          return "Searching the web"
-        case "edit":
-        case "write":
-          return "Making edits"
-        case "bash":
-          return "Running commands"
-        default:
-          break
-      }
-    } else if (last.type === "reasoning") {
-      const text = last.text ?? ""
-      const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
-      if (match) return `Thinking · ${match[1].trim()}`
-      return "Thinking"
-    } else if (last.type === "text") {
-      return "Gathering thoughts"
-    }
-    return undefined
-  })
-  const hasDiffs = createMemo(() => message().summary?.diffs?.length)
-  const isShellMode = createMemo(() => {
-    if (parts().some((p) => p?.type !== "text" || !p?.synthetic)) return false
-    if (assistantParts().length !== 1) return false
-    const assistantPart = assistantParts()[0]
-    if (assistantPart?.type !== "tool") return false
-    if (assistantPart?.tool !== "bash") return false
-    return true
-  })
+  const summary = () => message()?.summary?.body
+  const response = () => {
+    const part = lastTextPart()
+    return part?.type === "text" ? (part as TextPart).text : undefined
+  }
+  const hasDiffs = () => message()?.summary?.diffs?.length
 
   function duration() {
+    const msg = message()
+    if (!msg) return ""
     const completed = lastAssistantMessage()?.time.completed
-    const from = DateTime.fromMillis(message().time.created)
+    const from = DateTime.fromMillis(msg.time.created)
     const to = completed ? DateTime.fromMillis(completed) : DateTime.now()
     const interval = Interval.fromDateTimes(from, to)
     const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
@@ -167,8 +239,11 @@ export function SessionTurn(
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
     lastScrollTop: 0,
+    lastScrollHeight: 0,
+    lastContainerWidth: 0,
     autoScrolled: false,
     userScrolled: false,
+    reflowing: false,
     stickyHeaderHeight: 0,
     retrySeconds: 0,
     status: rawStatus(),
@@ -192,22 +267,61 @@ export function SessionTurn(
 
   function handleScroll() {
     if (!scrollRef || store.autoScrolled) return
+
     const scrollTop = scrollRef.scrollTop
-    console.log("scrollTop", scrollTop)
-    console.log("clientHeight", store.contentRef?.clientHeight)
+    const scrollHeight = scrollRef.scrollHeight
+
+    // If we're in a reflow state (width just changed), don't interpret as user scroll
+    if (store.reflowing) {
+      batch(() => {
+        setStore("lastScrollTop", scrollTop)
+        setStore("lastScrollHeight", scrollHeight)
+      })
+      return
+    }
+
+    // Check if this looks like a reflow-induced scroll adjustment
+    // When width changes, scrollHeight changes and browser adjusts scrollTop proportionally
+    const scrollHeightChanged = Math.abs(scrollHeight - store.lastScrollHeight) > 10
+    const scrollTopDelta = scrollTop - store.lastScrollTop
+
+    // If scrollHeight decreased (content got shorter due to wider width),
+    // and scrollTop decreased proportionally, this is reflow, not user scroll
+    if (scrollHeightChanged && scrollTopDelta < 0) {
+      const heightRatio = store.lastScrollHeight > 0 ? scrollHeight / store.lastScrollHeight : 1
+      const expectedScrollTop = store.lastScrollTop * heightRatio
+      const tolerance = 100 // Allow some tolerance for the adjustment
+      if (Math.abs(scrollTop - expectedScrollTop) < tolerance) {
+        // This is a proportional adjustment from reflow, not user scrolling
+        batch(() => {
+          setStore("lastScrollTop", scrollTop)
+          setStore("lastScrollHeight", scrollHeight)
+        })
+        return
+      }
+    }
+
     const reset = scrollTop <= 0 && store.lastScrollTop > 0 && working() && !store.userScrolled
     if (reset) {
-      setStore("lastScrollTop", scrollTop)
+      batch(() => {
+        setStore("lastScrollTop", scrollTop)
+        setStore("lastScrollHeight", scrollHeight)
+      })
       requestAnimationFrame(scrollToBottom)
       return
     }
-    const scrolledUp = scrollTop < store.lastScrollTop - 50
+
+    // Only count as user scroll if scrollTop decreased without a corresponding scrollHeight change
+    const scrolledUp = scrollTop < store.lastScrollTop - 50 && !scrollHeightChanged
     if (scrolledUp && working()) {
-      console.log("scrolled up")
       setStore("userScrolled", true)
       props.onUserInteracted?.()
     }
-    setStore("lastScrollTop", scrollTop)
+
+    batch(() => {
+      setStore("lastScrollTop", scrollTop)
+      setStore("lastScrollHeight", scrollHeight)
+    })
   }
 
   function handleInteraction() {
@@ -225,13 +339,39 @@ export function SessionTurn(
       requestAnimationFrame(() => {
         batch(() => {
           setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
+          setStore("lastScrollHeight", scrollRef?.scrollHeight ?? 0)
           setStore("autoScrolled", false)
         })
       })
     })
   }
 
-  createResizeObserver(() => store.contentRef, scrollToBottom)
+  // Track width changes to detect reflow situations
+  createResizeObserver(
+    () => store.contentRef,
+    ({ width }) => {
+      const widthChanged = Math.abs(width - store.lastContainerWidth) > 5
+      if (widthChanged && store.lastContainerWidth > 0) {
+        // Width changed - mark as reflowing to ignore scroll adjustments
+        setStore("reflowing", true)
+        // Clear reflow state after browser has had time to adjust
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setStore("reflowing", false)
+            // Restore auto-scroll if we're still working
+            if (working() && !store.userScrolled) {
+              scrollToBottom()
+            }
+          })
+        })
+      } else {
+        if (!store.reflowing) {
+          scrollToBottom()
+        }
+      }
+      setStore("lastContainerWidth", width)
+    },
+  )
 
   createEffect(() => {
     if (!working()) setStore("userScrolled", false)
@@ -288,184 +428,201 @@ export function SessionTurn(
     <div data-component="session-turn" class={props.classes?.root}>
       <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
         <div onClick={handleInteraction}>
-          <div
-            ref={(el) => setStore("contentRef", el)}
-            data-message={message().id}
-            data-slot="session-turn-message-container"
-            class={props.classes?.container}
-            style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
-          >
-            <Switch>
-              <Match when={isShellMode()}>
-                <Part part={assistantParts()[0]} message={message()} defaultOpen />
-              </Match>
-              <Match when={true}>
-                {/* Title (sticky) */}
-                <div ref={(el) => setStore("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
-                  <div data-slot="session-turn-message-header">
-                    <div data-slot="session-turn-message-title">
-                      <Switch>
-                        <Match when={working()}>
-                          <Typewriter as="h1" text={message().summary?.title} data-slot="session-turn-typewriter" />
-                        </Match>
-                        <Match when={true}>
-                          <h1>{message().summary?.title}</h1>
-                        </Match>
-                      </Switch>
-                    </div>
-                  </div>
-                </div>
-                {/* User Message */}
-                <div data-slot="session-turn-message-content">
-                  <Message message={message()} parts={parts()} />
-                </div>
-                {/* Trigger (sticky) */}
-                <Show when={working() || hasSteps()}>
-                  <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
-                    <Button
-                      data-expandable={assistantMessages().length > 0}
-                      data-slot="session-turn-collapsible-trigger-content"
-                      variant="ghost"
-                      size="small"
-                      onClick={props.onStepsExpandedToggle ?? (() => {})}
-                    >
-                      <Show when={working()}>
-                        <Spinner />
-                      </Show>
-                      <Switch>
-                        <Match when={retry()}>
-                          <span data-slot="session-turn-retry-message">
-                            {(() => {
-                              const r = retry()
-                              if (!r) return ""
-                              return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
-                            })()}
-                          </span>
-                          <span data-slot="session-turn-retry-seconds">
-                            · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
-                          </span>
-                          <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                        </Match>
-                        <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                        <Match when={props.stepsExpanded}>Hide steps</Match>
-                        <Match when={!props.stepsExpanded}>Show steps</Match>
-                      </Switch>
-                      <span>·</span>
-                      <span>{store.duration}</span>
-                      <Show when={assistantMessages().length > 0}>
-                        <Icon name="chevron-grabber-vertical" size="small" />
-                      </Show>
-                    </Button>
-                  </div>
-                </Show>
-                {/* Response */}
-                <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                  <div data-slot="session-turn-collapsible-content-inner">
-                    <For each={assistantMessages()}>
-                      {(assistantMessage) => {
-                        const parts = createMemo(() => data.store.part[assistantMessage.id] ?? [])
-                        const last = createMemo(() =>
-                          parts()
-                            .filter((p) => p?.type === "text")
-                            .at(-1),
-                        )
-                        return (
+          <Show when={message()}>
+            {(msg) => (
+              <div
+                ref={(el) => setStore("contentRef", el)}
+                data-message={msg().id}
+                data-slot="session-turn-message-container"
+                class={props.classes?.container}
+                style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
+              >
+                <Switch>
+                  <Match when={isShellMode()}>
+                    <Part part={assistantParts()[0]} message={msg()} defaultOpen />
+                  </Match>
+                  <Match when={true}>
+                    {/* Title (sticky) */}
+                    <div ref={(el) => setStore("stickyTitleRef", el)} data-slot="session-turn-sticky-title">
+                      <div data-slot="session-turn-message-header">
+                        <div data-slot="session-turn-message-title">
                           <Switch>
-                            <Match when={response() && lastTextPart()?.id === last()?.id}>
-                              <Message message={assistantMessage} parts={parts().filter((p) => p?.id !== last()?.id)} />
+                            <Match when={working()}>
+                              <Typewriter as="h1" text={msg().summary?.title} data-slot="session-turn-typewriter" />
                             </Match>
                             <Match when={true}>
-                              <Message message={assistantMessage} parts={parts()} />
+                              <h1>{msg().summary?.title}</h1>
                             </Match>
                           </Switch>
-                        )
-                      }}
-                    </For>
-                    <Show when={error()}>
+                        </div>
+                      </div>
+                    </div>
+                    {/* User Message */}
+                    <div data-slot="session-turn-message-content">
+                      <Message message={msg()} parts={parts()} />
+                    </div>
+                    {/* Trigger (sticky) */}
+                    <Show when={working() || hasSteps()}>
+                      <div ref={(el) => setStore("stickyTriggerRef", el)} data-slot="session-turn-response-trigger">
+                        <Button
+                          data-expandable={assistantMessages().length > 0}
+                          data-slot="session-turn-collapsible-trigger-content"
+                          variant="ghost"
+                          size="small"
+                          onClick={props.onStepsExpandedToggle ?? (() => {})}
+                        >
+                          <Show when={working()}>
+                            <Spinner />
+                          </Show>
+                          <Switch>
+                            <Match when={retry()}>
+                              <span data-slot="session-turn-retry-message">
+                                {(() => {
+                                  const r = retry()
+                                  if (!r) return ""
+                                  return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                                })()}
+                              </span>
+                              <span data-slot="session-turn-retry-seconds">
+                                · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
+                              </span>
+                              <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
+                            </Match>
+                            <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
+                            <Match when={props.stepsExpanded}>Hide steps</Match>
+                            <Match when={!props.stepsExpanded}>Show steps</Match>
+                          </Switch>
+                          <span>·</span>
+                          <span>{store.duration}</span>
+                          <Show when={assistantMessages().length > 0}>
+                            <Icon name="chevron-grabber-vertical" size="small" />
+                          </Show>
+                        </Button>
+                      </div>
+                    </Show>
+                    {/* Response */}
+                    <Show when={props.stepsExpanded && assistantMessages().length > 0}>
+                      <div data-slot="session-turn-collapsible-content-inner">
+                        <For each={assistantMessages()}>
+                          {(assistantMessage) => {
+                            const parts = createMemo(() => data.store.part[assistantMessage.id] ?? [])
+                            const last = createMemo(() =>
+                              parts()
+                                .filter((p) => p?.type === "text")
+                                .at(-1),
+                            )
+                            return (
+                              <Switch>
+                                <Match when={response() && lastTextPart()?.id === last()?.id}>
+                                  <Message
+                                    message={assistantMessage}
+                                    parts={parts().filter((p) => p?.id !== last()?.id)}
+                                  />
+                                </Match>
+                                <Match when={true}>
+                                  <Message message={assistantMessage} parts={parts()} />
+                                </Match>
+                              </Switch>
+                            )
+                          }}
+                        </For>
+                        <Show when={error()}>
+                          <Card variant="error" class="error-card">
+                            {error()?.data?.message as string}
+                          </Card>
+                        </Show>
+                      </div>
+                    </Show>
+                    {/* Summary */}
+                    <Show when={!working()}>
+                      <div data-slot="session-turn-summary-section">
+                        <div data-slot="session-turn-summary-header">
+                          <Switch>
+                            <Match when={summary()}>
+                              {(summary) => (
+                                <>
+                                  <h2 data-slot="session-turn-summary-title">Summary</h2>
+                                  <Markdown
+                                    data-slot="session-turn-markdown"
+                                    data-diffs={hasDiffs()}
+                                    text={summary()}
+                                  />
+                                </>
+                              )}
+                            </Match>
+                            <Match when={response()}>
+                              {(response) => (
+                                <>
+                                  <h2 data-slot="session-turn-summary-title">Response</h2>
+                                  <Markdown
+                                    data-slot="session-turn-markdown"
+                                    data-diffs={hasDiffs()}
+                                    text={response()}
+                                  />
+                                </>
+                              )}
+                            </Match>
+                          </Switch>
+                        </div>
+                        <Accordion data-slot="session-turn-accordion" multiple>
+                          <For each={msg().summary?.diffs ?? []}>
+                            {(diff) => (
+                              <Accordion.Item value={diff.file}>
+                                <StickyAccordionHeader>
+                                  <Accordion.Trigger>
+                                    <div data-slot="session-turn-accordion-trigger-content">
+                                      <div data-slot="session-turn-file-info">
+                                        <FileIcon
+                                          node={{ path: diff.file, type: "file" }}
+                                          data-slot="session-turn-file-icon"
+                                        />
+                                        <div data-slot="session-turn-file-path">
+                                          <Show when={diff.file.includes("/")}>
+                                            <span data-slot="session-turn-directory">
+                                              {getDirectory(diff.file)}&lrm;
+                                            </span>
+                                          </Show>
+                                          <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
+                                        </div>
+                                      </div>
+                                      <div data-slot="session-turn-accordion-actions">
+                                        <DiffChanges changes={diff} />
+                                        <Icon name="chevron-grabber-vertical" size="small" />
+                                      </div>
+                                    </div>
+                                  </Accordion.Trigger>
+                                </StickyAccordionHeader>
+                                <Accordion.Content data-slot="session-turn-accordion-content">
+                                  <Dynamic
+                                    component={diffComponent}
+                                    before={{
+                                      name: diff.file!,
+                                      contents: diff.before!,
+                                      cacheKey: checksum(diff.before!),
+                                    }}
+                                    after={{
+                                      name: diff.file!,
+                                      contents: diff.after!,
+                                      cacheKey: checksum(diff.after!),
+                                    }}
+                                  />
+                                </Accordion.Content>
+                              </Accordion.Item>
+                            )}
+                          </For>
+                        </Accordion>
+                      </div>
+                    </Show>
+                    <Show when={error() && !props.stepsExpanded}>
                       <Card variant="error" class="error-card">
                         {error()?.data?.message as string}
                       </Card>
                     </Show>
-                  </div>
-                </Show>
-                {/* Summary */}
-                <Show when={!working()}>
-                  <div data-slot="session-turn-summary-section">
-                    <div data-slot="session-turn-summary-header">
-                      <Switch>
-                        <Match when={summary()}>
-                          {(summary) => (
-                            <>
-                              <h2 data-slot="session-turn-summary-title">Summary</h2>
-                              <Markdown data-slot="session-turn-markdown" data-diffs={hasDiffs()} text={summary()} />
-                            </>
-                          )}
-                        </Match>
-                        <Match when={response()}>
-                          {(response) => (
-                            <>
-                              <h2 data-slot="session-turn-summary-title">Response</h2>
-                              <Markdown data-slot="session-turn-markdown" data-diffs={hasDiffs()} text={response()} />
-                            </>
-                          )}
-                        </Match>
-                      </Switch>
-                    </div>
-                    <Accordion data-slot="session-turn-accordion" multiple>
-                      <For each={message().summary?.diffs ?? []}>
-                        {(diff) => (
-                          <Accordion.Item value={diff.file}>
-                            <StickyAccordionHeader>
-                              <Accordion.Trigger>
-                                <div data-slot="session-turn-accordion-trigger-content">
-                                  <div data-slot="session-turn-file-info">
-                                    <FileIcon
-                                      node={{ path: diff.file, type: "file" }}
-                                      data-slot="session-turn-file-icon"
-                                    />
-                                    <div data-slot="session-turn-file-path">
-                                      <Show when={diff.file.includes("/")}>
-                                        <span data-slot="session-turn-directory">{getDirectory(diff.file)}&lrm;</span>
-                                      </Show>
-                                      <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
-                                    </div>
-                                  </div>
-                                  <div data-slot="session-turn-accordion-actions">
-                                    <DiffChanges changes={diff} />
-                                    <Icon name="chevron-grabber-vertical" size="small" />
-                                  </div>
-                                </div>
-                              </Accordion.Trigger>
-                            </StickyAccordionHeader>
-                            <Accordion.Content data-slot="session-turn-accordion-content">
-                              <Dynamic
-                                component={diffComponent}
-                                before={{
-                                  name: diff.file!,
-                                  contents: diff.before!,
-                                  cacheKey: checksum(diff.before!),
-                                }}
-                                after={{
-                                  name: diff.file!,
-                                  contents: diff.after!,
-                                  cacheKey: checksum(diff.after!),
-                                }}
-                              />
-                            </Accordion.Content>
-                          </Accordion.Item>
-                        )}
-                      </For>
-                    </Accordion>
-                  </div>
-                </Show>
-                <Show when={error() && !props.stepsExpanded}>
-                  <Card variant="error" class="error-card">
-                    {error()?.data?.message as string}
-                  </Card>
-                </Show>
-              </Match>
-            </Switch>
-          </div>
+                  </Match>
+                </Switch>
+              </div>
+            )}
+          </Show>
           {props.children}
         </div>
       </div>

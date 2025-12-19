@@ -502,6 +502,7 @@ ToolRegistry.register({
   render(props) {
     const diffComponent = useDiffComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    console.log(props)
     return (
       <BasicTool
         {...props}
@@ -531,12 +532,14 @@ ToolRegistry.register({
             <Dynamic
               component={diffComponent}
               before={{
-                name: getFilename(props.metadata.filediff.path),
+                name: props.metadata.filediff.path,
                 contents: props.metadata.filediff.before,
+                cacheKey: checksum(props.metadata.filediff.before),
               }}
               after={{
-                name: getFilename(props.metadata.filediff.path),
+                name: props.metadata.filediff.path,
                 contents: props.metadata.filediff.after,
+                cacheKey: checksum(props.metadata.filediff.after),
               }}
             />
           </div>
