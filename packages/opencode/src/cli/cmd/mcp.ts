@@ -109,7 +109,7 @@ export const McpAuthCommand = cmd({
         const mcpServers = config.mcp ?? {}
 
         // Get OAuth-enabled servers
-        const oauthServers = []
+        const oauthServers: Array<[string, Config.Mcp]> = []
         for (const [name, cfg] of Object.entries(mcpServers)) {
           if (await MCP.supportsOAuth(name)) {
             oauthServers.push([name, cfg])
