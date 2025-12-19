@@ -406,10 +406,10 @@ export function Autocomplete(props: {
     if (next < scroll.scrollTop) {
       scroll.scrollBy(next - scroll.scrollTop)
     } else if (next + 1 > scrollBottom) {
-      scroll.scrollBy((next + 1) - scrollBottom)
+      scroll.scrollBy(next + 1 - scrollBottom)
     }
   }
- 
+
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
@@ -522,7 +522,12 @@ export function Autocomplete(props: {
       {...SplitBorder}
       borderColor={theme.border}
     >
-      <scrollbox ref={(r: ScrollBoxRenderable) => (scroll = r)}  backgroundColor={theme.backgroundMenu} height={height()}>
+      <scrollbox
+        ref={(r: ScrollBoxRenderable) => (scroll = r)}
+        backgroundColor={theme.backgroundMenu}
+        height={height()}
+        scrollbarOptions={{ visible: false }}
+      >
         <For
           each={options()}
           fallback={
