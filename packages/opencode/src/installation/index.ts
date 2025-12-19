@@ -68,15 +68,15 @@ export namespace Installation {
     const checks = [
       {
         name: "npm" as const,
-        command: () => spawnWrapper(["npm", "list", "-g", "--depth=0"], { throws: false }).text(),
+        command: () => spawnWrapper(["npm", "list", "-g", "--depth=0"], { throws: false }).then(result => result.stdout),
       },
       {
         name: "yarn" as const,
-        command: () => spawnWrapper(["yarn", "global", "list"], { throws: false }).text(),
+        command: () => spawnWrapper(["yarn", "global", "list"], { throws: false }).then(result => result.stdout),
       },
       {
         name: "pnpm" as const,
-        command: () => spawnWrapper(["pnpm", "list", "-g", "--depth=0"], { throws: false }).text(),
+        command: () => spawnWrapper(["pnpm", "list", "-g", "--depth=0"], { throws: false }).then(result => result.stdout),
       },
       {
         name: "bun" as const,
@@ -131,10 +131,10 @@ export namespace Installation {
         })
         break
       case "npm":
-        cmd = spawnWrapper(["npm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false }).exec()
+        cmd = spawnWrapper(["npm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false })
         break
       case "pnpm":
-        cmd = spawnWrapper(["pnpm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false }).exec()
+        cmd = spawnWrapper(["pnpm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false })
         break
       case "bun":
         cmd = $`bun install -g opencode-ai@${target}`.quiet().throws(false)
@@ -183,7 +183,7 @@ export namespace Installation {
 
     const registry = await iife(async () => {
       // Changed to spawnWrapper because of a bug in Bun.$ with npm and Ctrl+C handling in Windows
-      const r = (await spawnWrapper(["npm", "config", "get", "registry"], { throws: false }).text()).trim()
+      const r = (await spawnWrapper(["npm", "config", "get", "registry"], { throws: false })).stdout.trim()
       const reg = r || "https://registry.npmjs.org"
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })

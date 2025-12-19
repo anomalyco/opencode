@@ -198,8 +198,8 @@ export namespace LSPServer {
         await fs.rename(extractedPath, finalPath)
 
         // Use spawnWrapper to avoid Bun.$ signal handling issues on Windows
-        await spawnWrapper(["npm", "install"], { cwd: finalPath, quiet: true }).exec()
-        await spawnWrapper(["npm", "run", "compile"], { cwd: finalPath, quiet: true }).exec()
+        await spawnWrapper(["npm", "install"], { cwd: finalPath, quiet: true })
+        await spawnWrapper(["npm", "run", "compile"], { cwd: finalPath, quiet: true })
 
         log.info("installed VS Code ESLint server", { serverPath })
       }
