@@ -161,7 +161,7 @@ export namespace McpOAuthCallback {
   export async function isPortInUse(): Promise<boolean> {
     return new Promise((resolve) => {
       Bun.connect({
-        hostname: "127.0.0.1",
+        hostname: "localhost",
         port: OAUTH_CALLBACK_PORT,
         socket: {
           open(socket) {
