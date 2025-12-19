@@ -73,6 +73,7 @@ export namespace File {
 
   async function shouldEncode(file: BunFile): Promise<boolean> {
     const type = file.type?.toLowerCase()
+    log.info("shouldEncode", { type })
     if (!type) return false
 
     if (type.startsWith("text/")) return false
@@ -92,7 +93,6 @@ export namespace File {
       "bzip",
       "compressed",
       "binary",
-      "stream",
       "pdf",
       "msword",
       "powerpoint",
