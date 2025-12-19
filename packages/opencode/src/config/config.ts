@@ -882,7 +882,7 @@ export namespace Config {
     replaceTemplates(value, fileContents)
   }
 
-  function collectFileReferences(value: any, configDir: string, fileRefs: Map<string, string>): void {
+  function collectFileReferences(value: unknown, configDir: string, fileRefs: Map<string, string>): void {
     if (Array.isArray(value)) {
       for (const item of value) {
         if (typeof item === "string") {
@@ -895,11 +895,13 @@ export namespace Config {
     }
 
     if (value && typeof value === "object") {
-      for (const key in value) {
-        if (typeof value[key] === "string") {
-          extractFileReferences(value[key], configDir, fileRefs)
+      const obj = value as Record<string, unknown>
+      for (const key in obj) {
+        const val = obj[key]
+        if (typeof val === "string") {
+          extractFileReferences(val, configDir, fileRefs)
         } else {
-          collectFileReferences(value[key], configDir, fileRefs)
+          collectFileReferences(val, configDir, fileRefs)
         }
       }
       return
@@ -922,7 +924,7 @@ export namespace Config {
     }
   }
 
-  function replaceTemplates(value: any, fileContents: Map<string, string>): void {
+  function replaceTemplates(value: unknown, fileContents: Map<string, string>): void {
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
         if (typeof value[i] === "string") {
@@ -935,11 +937,13 @@ export namespace Config {
     }
 
     if (value && typeof value === "object") {
-      for (const key in value) {
-        if (typeof value[key] === "string") {
-          value[key] = expandString(value[key], fileContents)
+      const obj = value as Record<string, unknown>
+      for (const key in obj) {
+        const val = obj[key]
+        if (typeof val === "string") {
+          obj[key] = expandString(val, fileContents)
         } else {
-          replaceTemplates(value[key], fileContents)
+          replaceTemplates(val, fileContents)
         }
       }
       return
