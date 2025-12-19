@@ -271,7 +271,6 @@ export function SessionTurn(
     const scrollTop = scrollRef.scrollTop
     const scrollHeight = scrollRef.scrollHeight
 
-    // If we're in a reflow state (width just changed), don't interpret as user scroll
     if (store.reflowing) {
       batch(() => {
         setStore("lastScrollTop", scrollTop)
@@ -280,19 +279,13 @@ export function SessionTurn(
       return
     }
 
-    // Check if this looks like a reflow-induced scroll adjustment
-    // When width changes, scrollHeight changes and browser adjusts scrollTop proportionally
     const scrollHeightChanged = Math.abs(scrollHeight - store.lastScrollHeight) > 10
     const scrollTopDelta = scrollTop - store.lastScrollTop
 
-    // If scrollHeight decreased (content got shorter due to wider width),
-    // and scrollTop decreased proportionally, this is reflow, not user scroll
     if (scrollHeightChanged && scrollTopDelta < 0) {
       const heightRatio = store.lastScrollHeight > 0 ? scrollHeight / store.lastScrollHeight : 1
       const expectedScrollTop = store.lastScrollTop * heightRatio
-      const tolerance = 100 // Allow some tolerance for the adjustment
-      if (Math.abs(scrollTop - expectedScrollTop) < tolerance) {
-        // This is a proportional adjustment from reflow, not user scrolling
+      if (Math.abs(scrollTop - expectedScrollTop) < 100) {
         batch(() => {
           setStore("lastScrollTop", scrollTop)
           setStore("lastScrollHeight", scrollHeight)
@@ -311,7 +304,6 @@ export function SessionTurn(
       return
     }
 
-    // Only count as user scroll if scrollTop decreased without a corresponding scrollHeight change
     const scrolledUp = scrollTop < store.lastScrollTop - 50 && !scrollHeightChanged
     if (scrolledUp && working()) {
       setStore("userScrolled", true)
@@ -346,28 +338,22 @@ export function SessionTurn(
     })
   }
 
-  // Track width changes to detect reflow situations
   createResizeObserver(
     () => store.contentRef,
     ({ width }) => {
       const widthChanged = Math.abs(width - store.lastContainerWidth) > 5
       if (widthChanged && store.lastContainerWidth > 0) {
-        // Width changed - mark as reflowing to ignore scroll adjustments
         setStore("reflowing", true)
-        // Clear reflow state after browser has had time to adjust
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             setStore("reflowing", false)
-            // Restore auto-scroll if we're still working
             if (working() && !store.userScrolled) {
               scrollToBottom()
             }
           })
         })
-      } else {
-        if (!store.reflowing) {
-          scrollToBottom()
-        }
+      } else if (!store.reflowing) {
+        scrollToBottom()
       }
       setStore("lastContainerWidth", width)
     },

@@ -502,7 +502,6 @@ ToolRegistry.register({
   render(props) {
     const diffComponent = useDiffComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
-    console.log(props)
     return (
       <BasicTool
         {...props}
