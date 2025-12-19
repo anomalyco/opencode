@@ -851,45 +851,15 @@ export namespace Config {
   }
 
   async function expandTemplates(value: any, configDir: string, configFilepath: string): Promise<void> {
-    if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) {
-        if (typeof value[i] === "string") {
-          value[i] = await expandString(value[i], configDir, configFilepath)
-        } else {
-          await expandTemplates(value[i], configDir, configFilepath)
-        }
-      }
-      return
-    }
+    // First pass: collect all file references
+    const fileRefs = new Map<string, string>() // match -> resolvedPath
+    collectFileReferences(value, configDir, fileRefs)
 
-    if (value && typeof value === "object") {
-      for (const key in value) {
-        if (typeof value[key] === "string") {
-          value[key] = await expandString(value[key], configDir, configFilepath)
-        } else {
-          await expandTemplates(value[key], configDir, configFilepath)
-        }
-      }
-      return
-    }
-  }
-
-  async function expandString(str: string, configDir: string, configFilepath: string): Promise<string> {
-    // Expand {env:VAR} templates
-    str = str.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-      return process.env[varName] || ""
-    })
-
-    // Expand {file:path} templates
-    const fileMatches = str.match(/\{file:[^}]+\}/g)
-    if (fileMatches) {
-      for (const match of fileMatches) {
-        let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
-        if (filePath.startsWith("~/")) {
-          filePath = path.join(os.homedir(), filePath.slice(2))
-        }
-        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
-        const fileContent = await Bun.file(resolvedPath)
+    // Read all files in parallel
+    const fileContents = new Map<string, string>()
+    await Promise.all(
+      Array.from(fileRefs.entries()).map(async ([match, resolvedPath]) => {
+        const content = await Bun.file(resolvedPath)
           .text()
           .catch((error) => {
             const errMsg = `bad file reference: "${match}"`
@@ -904,8 +874,87 @@ export namespace Config {
             }
             throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
           })
-        str = str.replace(match, fileContent.trim())
+        fileContents.set(match, content.trim())
+      }),
+    )
+
+    // Second pass: expand templates in-place
+    replaceTemplates(value, fileContents)
+  }
+
+  function collectFileReferences(value: any, configDir: string, fileRefs: Map<string, string>): void {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string") {
+          extractFileReferences(item, configDir, fileRefs)
+        } else {
+          collectFileReferences(item, configDir, fileRefs)
+        }
       }
+      return
+    }
+
+    if (value && typeof value === "object") {
+      for (const key in value) {
+        if (typeof value[key] === "string") {
+          extractFileReferences(value[key], configDir, fileRefs)
+        } else {
+          collectFileReferences(value[key], configDir, fileRefs)
+        }
+      }
+      return
+    }
+  }
+
+  function extractFileReferences(str: string, configDir: string, fileRefs: Map<string, string>): void {
+    const fileMatches = str.match(/\{file:[^}]+\}/g)
+    if (fileMatches) {
+      for (const match of fileMatches) {
+        if (fileRefs.has(match)) continue
+
+        let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
+        if (filePath.startsWith("~/")) {
+          filePath = path.join(os.homedir(), filePath.slice(2))
+        }
+        const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+        fileRefs.set(match, resolvedPath)
+      }
+    }
+  }
+
+  function replaceTemplates(value: any, fileContents: Map<string, string>): void {
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        if (typeof value[i] === "string") {
+          value[i] = expandString(value[i], fileContents)
+        } else {
+          replaceTemplates(value[i], fileContents)
+        }
+      }
+      return
+    }
+
+    if (value && typeof value === "object") {
+      for (const key in value) {
+        if (typeof value[key] === "string") {
+          value[key] = expandString(value[key], fileContents)
+        } else {
+          replaceTemplates(value[key], fileContents)
+        }
+      }
+      return
+    }
+  }
+
+  function expandString(str: string, fileContents: Map<string, string>): string {
+    // Expand {env:VAR} templates
+    str = str.replace(/\{env:([^}]+)\}/g, (_, varName) => {
+      return process.env[varName] || ""
+    })
+
+    // Expand {file:path} templates
+    for (const [match, content] of fileContents) {
+      str = str.replaceAll(match, content)
     }
 
     return str
