@@ -148,6 +148,105 @@ test("handles file inclusion substitution", async () => {
   })
 })
 
+test("reproduces shadowing bug: file reference fails when same path appears in comment", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const promptsDir = path.join(dir, "prompts")
+      await fs.mkdir(promptsDir, { recursive: true })
+      await Bun.write(path.join(promptsDir, "precise.md"), "This is the precise prompt.")
+
+      // Write JSONC with comment containing same file reference
+      await Bun.write(
+        path.join(dir, "opencode.jsonc"),
+        `{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    // "experimental": {
+    //   "prompt": "{file:./prompts/precise.md}"
+    // },
+    "precise": {
+      "prompt": "{file:./prompts/precise.md}"
+    }
+  }
+}`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // BUG: The prompt remains as "{file:./prompts/precise.md}" instead of being expanded
+      // because findIndex finds the commented line first
+      expect(config.agent?.["precise"]?.prompt).toBe("This is the precise prompt.")
+    },
+  })
+})
+
+test("handles multiple agents with different file references", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const promptsDir = path.join(dir, "prompts")
+      await fs.mkdir(promptsDir, { recursive: true })
+      await Bun.write(path.join(promptsDir, "prompt-a.md"), "Prompt A content")
+      await Bun.write(path.join(promptsDir, "prompt-b.md"), "Prompt B content")
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            agent_a: {
+              prompt: "{file:./prompts/prompt-a.md}",
+            },
+            agent_b: {
+              prompt: "{file:./prompts/prompt-b.md}",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["agent_a"]?.prompt).toBe("Prompt A content")
+      expect(config.agent?.["agent_b"]?.prompt).toBe("Prompt B content")
+    },
+  })
+})
+
+test("throws error when file inclusion reference fails", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            test: {
+              prompt: "{file:./prompts/precise.md}",
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      try {
+        await Config.get()
+        expect.unreachable()
+      } catch (error: any) {
+        expect(error.name).toBe("ConfigInvalidError")
+        expect(error.data.message).toMatch(/bad file reference/)
+        expect(error.data.message).toMatch(/precise\.md does not exist/)
+      }
+    },
+  })
+})
+
 test("validates config schema and throws on invalid fields", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -855,16 +855,38 @@ export namespace Config {
       return process.env[varName] || ""
     })
 
-    const fileMatches = text.match(/\{file:[^}]+\}/g)
+    const fileRegex = /\{file:[^}]+\}/g
+    const fileMatches = text.match(fileRegex)
     if (fileMatches) {
       const configDir = path.dirname(configFilepath)
       const lines = text.split("\n")
 
+      // Track positions of all matches in the original text
+      const matchPositions: Array<{ match: string; index: number; lineNum: number }> = []
+      let currentIndex = 0
+
       for (const match of fileMatches) {
-        const lineIndex = lines.findIndex((line) => line.includes(match))
-        if (lineIndex !== -1 && lines[lineIndex].trim().startsWith("//")) {
-          continue // Skip if line is commented
+        const index = text.indexOf(match, currentIndex)
+        if (index === -1) continue
+
+        // Count line number
+        const beforeMatch = text.substring(0, index)
+        const lineNum = beforeMatch.split("\n").length - 1
+
+        matchPositions.push({ match, index, lineNum })
+        currentIndex = index + match.length
+      }
+
+      // Process matches in reverse order to preserve indices
+      for (let i = matchPositions.length - 1; i >= 0; i--) {
+        const { match, index, lineNum } = matchPositions[i]
+        const line = lines[lineNum]
+
+        // Skip if this specific occurrence is on a commented line
+        if (line.trim().startsWith("//")) {
+          continue
         }
+
         let filePath = match.replace(/^\{file:/, "").replace(/\}$/, "")
         if (filePath.startsWith("~/")) {
           filePath = path.join(os.homedir(), filePath.slice(2))
@@ -888,7 +910,9 @@ export namespace Config {
             })
         ).trim()
         // escape newlines/quotes, strip outer quotes
-        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
+        const replacement = JSON.stringify(fileContent).slice(1, -1)
+        // Replace at the specific index
+        text = text.substring(0, index) + replacement + text.substring(index + match.length)
       }
     }
 
