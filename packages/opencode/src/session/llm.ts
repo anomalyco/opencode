@@ -46,11 +46,16 @@ export namespace LLM {
     })
     const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), Config.get()])
 
-    const system = SystemPrompt.header(input.model.providerID)
+    const system =
+      input.agent.context === "none" ? [] : SystemPrompt.header(input.model.providerID)
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+        ...(input.agent.prompt
+          ? [input.agent.prompt]
+          : input.agent.context === "none"
+            ? []
+            : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
         ...input.system,
         // any custom prompt from last user message

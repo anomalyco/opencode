@@ -18,6 +18,7 @@ export namespace Agent {
       name: z.string(),
       description: z.string().optional(),
       mode: z.enum(["subagent", "primary", "all"]),
+      context: z.enum(["full", "none"]).optional(),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
       topP: z.number().optional(),
@@ -244,6 +245,18 @@ export namespace Agent {
       if (permission ?? cfg.permission) {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})
       }
+    }
+    result.chat = {
+      name: "chat",
+      description: "Raw chat agent with no context or tools",
+      mode: "primary",
+      native: true,
+      context: "none",
+      tools: {
+        "*": false,
+      },
+      options: {},
+      permission: agentPermission,
     }
     return result
   })
