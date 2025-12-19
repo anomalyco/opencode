@@ -1,6 +1,7 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { streamText, wrapLanguageModel, type ModelMessage, type StreamTextResult, type Tool, type ToolSet } from "ai"
+import { streamText, wrapLanguageModel, type ModelMessage, type StreamTextResult, type Tool, type ToolSet, tool, jsonSchema } from "ai"
+import { z } from "zod"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -112,6 +113,26 @@ export namespace LLM {
     )
 
     const tools = await resolveTools(input)
+    const isACP = provider?.type === "acp"
+
+    const finalTools = isACP
+      ? new Proxy(tools, {
+          get(target, prop, receiver) {
+            if (typeof prop === "string" && !Reflect.has(target, prop)) {
+              return tool({
+                description: "Tool handled by ACP provider",
+                inputSchema: jsonSchema({ type: "object", additionalProperties: true }),
+                execute: async () => "Handled by ACP provider",
+              })
+            }
+            return Reflect.get(target, prop, receiver)
+          },
+          has(target, prop) {
+            if (typeof prop === "string") return true
+            return Reflect.has(target, prop)
+          },
+        })
+      : tools
 
     return streamText({
       onError(error) {
@@ -121,7 +142,7 @@ export namespace LLM {
       },
       async experimental_repairToolCall(failed) {
         const lower = failed.toolCall.toolName.toLowerCase()
-        if (lower !== failed.toolCall.toolName && tools[lower]) {
+        if (lower !== failed.toolCall.toolName && finalTools[lower]) {
           l.info("repairing tool call", {
             tool: failed.toolCall.toolName,
             repaired: lower,
@@ -144,8 +165,8 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      tools,
+      activeTools: isACP ? undefined : Object.keys(tools).filter((x) => x !== "invalid"),
+      tools: finalTools,
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
