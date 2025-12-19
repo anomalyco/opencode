@@ -1,4 +1,17 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createResource, createMemo, createEffect, on } from "solid-js"
+import {
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  Match,
+  Switch,
+  createResource,
+  createMemo,
+  createEffect,
+  on,
+  createRenderEffect,
+  batch,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
@@ -23,9 +36,8 @@ import {
   SortableProvider,
   closestCenter,
   createSortable,
-  useDragDropContext,
 } from "@thisbeyond/solid-dnd"
-import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
@@ -42,6 +54,7 @@ import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 
 export default function Page() {
   const layout = useLayout()
@@ -130,7 +143,8 @@ export default function Page() {
     clickTimer: undefined as number | undefined,
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
-    stepsExpanded: false,
+    userInteracted: false,
+    stepsExpanded: true,
   })
   let inputRef!: HTMLDivElement
 
@@ -159,7 +173,28 @@ export default function Page() {
     ),
   )
 
+  createEffect(() => {
+    params.id
+    const status = sync.data.session_status[params.id ?? ""] ?? { type: "idle" }
+    batch(() => {
+      setStore("userInteracted", false)
+      setStore("stepsExpanded", status.type !== "idle")
+    })
+  })
+
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? { type: "idle" })
+  const working = createMemo(() => status().type !== "idle" && activeMessage()?.id === lastUserMessage()?.id)
+
+  createRenderEffect((prev) => {
+    const isWorking = working()
+    if (!prev && isWorking) {
+      setStore("stepsExpanded", true)
+    }
+    if (prev && !isWorking && !store.userInteracted) {
+      setStore("stepsExpanded", false)
+    }
+    return isWorking
+  }, working())
 
   command.register(() => [
     {
@@ -259,11 +294,18 @@ export default function Page() {
       onSelect: () => local.agent.move(1),
     },
     {
+      id: "agent.cycle.reverse",
+      title: "Cycle agent backwards",
+      description: "Switch to the previous agent",
+      category: "Agent",
+      keybind: "shift+mod+.",
+      onSelect: () => local.agent.move(-1),
+    },
+    {
       id: "session.undo",
       title: "Undo",
       description: "Undo the last message",
       category: "Session",
-      keybind: "mod+z",
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -293,7 +335,6 @@ export default function Page() {
       title: "Redo",
       description: "Redo the last undone message",
       category: "Session",
-      keybind: "mod+shift+z",
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
@@ -321,24 +362,15 @@ export default function Page() {
   ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if ((document.activeElement as HTMLElement)?.dataset?.component === "terminal") return
+    const activeElement = document.activeElement as HTMLElement | undefined
+    if (activeElement) {
+      const isProtected = activeElement.closest("[data-prevent-autofocus]")
+      const isInput = /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName) || activeElement.isContentEditable
+      if (isProtected || isInput) return
+    }
     if (dialog.active) return
 
-    if (event.key === "PageUp" || event.key === "PageDown") {
-      const scrollContainer = document.querySelector('[data-slot="session-turn-content"]') as HTMLElement
-      if (scrollContainer) {
-        event.preventDefault()
-        const scrollAmount = scrollContainer.clientHeight * 0.8
-        scrollContainer.scrollBy({
-          top: event.key === "PageUp" ? -scrollAmount : scrollAmount,
-          behavior: "instant",
-        })
-      }
-      return
-    }
-
-    const focused = document.activeElement === inputRef
-    if (focused) {
+    if (activeElement === inputRef) {
       if (event.key === "Escape") inputRef?.blur()
       return
     }
@@ -519,36 +551,6 @@ export default function Page() {
     )
   }
 
-  const ConstrainDragYAxis = (): JSX.Element => {
-    const context = useDragDropContext()
-    if (!context) return <></>
-    const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
-    const transformer: Transformer = {
-      id: "constrain-y-axis",
-      order: 100,
-      callback: (transform) => ({ ...transform, y: 0 }),
-    }
-    onDragStart((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      addTransformer("draggables", id, transformer)
-    })
-    onDragEnd((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      removeTransformer("draggables", id, transformer.id)
-    })
-    return <></>
-  }
-
-  const getDraggableId = (event: unknown): string | undefined => {
-    if (typeof event !== "object" || event === null) return undefined
-    if (!("draggable" in event)) return undefined
-    const draggable = (event as { draggable?: { id?: unknown } }).draggable
-    if (!draggable) return undefined
-    return typeof draggable.id === "string" ? draggable.id : undefined
-  }
-
   const wide = createMemo(() => layout.review.state() === "tab" || !diffs().length)
 
   return (
@@ -621,7 +623,10 @@ export default function Page() {
                 </div>
               </Tabs.List>
             </div>
-            <Tabs.Content value="chat" class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden">
+            <Tabs.Content
+              value="chat"
+              class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden contain-strict"
+            >
               <div
                 classList={{
                   "w-full flex-1 min-h-0": true,
@@ -632,7 +637,7 @@ export default function Page() {
                 <div
                   classList={{
                     "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
-                    "max-w-200 mx-auto": !wide(),
+                    "max-w-146 mx-auto": !wide(),
                   }}
                 >
                   <Switch>
@@ -649,7 +654,8 @@ export default function Page() {
                             sessionID={params.id!}
                             messageID={activeMessage()!.id}
                             stepsExpanded={store.stepsExpanded}
-                            onStepsExpandedChange={(expanded) => setStore("stepsExpanded", expanded)}
+                            onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
+                            onUserInteracted={() => setStore("userInteracted", true)}
                             classes={{
                               root: "pb-20 flex-1 min-w-0",
                               content: "pb-20",
@@ -704,7 +710,7 @@ export default function Page() {
                 <Show when={layout.review.state() === "pane" && diffs().length}>
                   <div
                     classList={{
-                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base": true,
+                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base contain-strict": true,
                     }}
                   >
                     <SessionReview
@@ -732,7 +738,7 @@ export default function Page() {
               </div>
             </Tabs.Content>
             <Show when={layout.review.state() === "tab" && diffs().length}>
-              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden">
+              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden contain-strict">
                 <div
                   classList={{
                     "relative pt-3 flex-1 min-h-0 overflow-hidden": true,

@@ -160,6 +160,7 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    command: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
 
@@ -611,6 +612,14 @@ export namespace MessageV2 {
       case APICallError.isInstance(e):
         const message = iife(() => {
           let msg = e.message
+          if (msg === "") {
+            if (e.responseBody) return e.responseBody
+            if (e.statusCode) {
+              const err = STATUS_CODES[e.statusCode]
+              if (err) return err
+            }
+            return "Unknown error"
+          }
           const transformed = ProviderTransform.error(ctx.providerID, e)
           if (transformed !== msg) {
             return transformed
@@ -629,7 +638,7 @@ export namespace MessageV2 {
           } catch {}
 
           return `${msg}: ${e.responseBody}`
-        })
+        }).trim()
 
         return new MessageV2.APIError(
           {
