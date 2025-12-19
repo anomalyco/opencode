@@ -67,6 +67,7 @@
     "@octokit/rest": "22.0.1",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
