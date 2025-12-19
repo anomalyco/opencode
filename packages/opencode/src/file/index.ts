@@ -87,8 +87,6 @@ export namespace File {
     const tops = ["image", "audio", "video", "font", "model", "multipart"]
     if (tops.includes(top)) return true
 
-    if (type === "application/octet-stream") return true
-
     const bins = [
       "zip",
       "gzip",
