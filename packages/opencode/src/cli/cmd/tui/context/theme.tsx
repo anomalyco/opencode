@@ -6,6 +6,7 @@ import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
+import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" }
 import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
@@ -135,6 +136,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
   ayu,
   catppuccin,
+  ["catppuccin-frappe"]: catppuccinFrappe,
   ["catppuccin-macchiato"]: catppuccinMacchiato,
   cobalt2,
   dracula,
