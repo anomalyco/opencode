@@ -1,84 +1,103 @@
 [data-component="markdown"] {
+  /* Reset & Base Typography */
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
+  overflow-wrap: break-word;
   color: var(--text-base);
-  text-wrap: pretty;
-
-  strong {
-    font-weight: var(--font-weight-medium);
-  }
-
-  /* text-12-regular */
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-base);
-  font-style: normal;
-  font-weight: var(--font-weight-regular);
+  font-size: var(--font-size-base); /* 14px */
   line-height: var(--line-height-large);
-  letter-spacing: var(--letter-spacing-normal);
 
-  h1 {
-    margin-top: 40px;
-    font-weight: var(--font-weight-medium);
+  /* Spacing for flow */
+  > *:first-child {
+    margin-top: 0;
+  }
+  > *:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Headings: Same size, distinguished by color and spacing */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: var(--font-size-base);
     color: var(--text-strong);
-
-    strong {
-      font-weight: var(--font-weight-medium);
-    }
-  }
-
-  h2 {
-    margin-top: 32px;
     font-weight: var(--font-weight-medium);
-    color: var(--text-strong);
-
-    strong {
-      font-weight: var(--font-weight-medium);
-    }
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+    line-height: var(--line-height-large);
   }
 
-  h3 {
-    margin-top: 24px;
+  /* Emphasis & Strong: Neutral strong color */
+  strong,
+  b {
+    color: var(--text-strong);
     font-weight: var(--font-weight-medium);
-    color: var(--text-strong);
-
-    strong {
-      font-weight: var(--font-weight-medium);
-    }
   }
 
-  h1 {
-    font-size: 15px;
-  }
-
+  /* Paragraphs */
   p {
-    margin-top: 16px;
-    margin-bottom: 8px;
+    margin-bottom: 1rem;
   }
 
+  /* Links */
+  a {
+    color: var(--text-interactive-base);
+    text-decoration: none;
+    font-weight: inherit;
+  }
+
+  a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* Lists */
   ul,
   ol {
-    margin-top: 16px;
-
-    li {
-      margin-bottom: 12px;
-      line-height: var(--line-height-large);
-    }
-
-    li:last-child {
-      margin-bottom: 0;
-    }
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+    padding-left: 0;
+    list-style-position: inside;
   }
 
+  li {
+    margin-bottom: 0.25rem;
+  }
+
+  li::marker {
+    color: var(--text-weak);
+  }
+
+  /* Nested lists spacing */
+  li > ul,
+  li > ol {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    padding-left: 1rem; /* Minimal indent for nesting only */
+  }
+
+  /* Blockquotes */
+  blockquote {
+    border-left: 2px solid var(--border-weak-base);
+    margin: 1.5rem 0;
+    padding-left: 0.5rem;
+    color: var(--text-weak);
+    font-style: normal;
+  }
+
+  /* Horizontal Rule - Invisible spacing only */
   hr {
-    margin-top: 8px;
-    margin-bottom: 16px;
-    border-color: var(--border-weaker-base);
+    border: none;
+    height: 0;
+    margin: 2.5rem 0;
   }
 
   .shiki {
     font-size: 13px;
-    background: var(--surface-raised-base) !important; /* temporary fix to test style */
     padding: 8px 12px;
     border-radius: 4px;
     border: 0.5px solid var(--border-weak-base);
@@ -99,19 +118,43 @@
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     font-size: 13px;
-    /* background-color: var(--surface-base-strong); */
-    /* padding: 0.15em 0.35em; */
-    /* border-radius: var(--radius-sm); */
 
     padding: 2px 2px;
     margin: 0 1.5px;
     border-radius: 2px;
     background: var(--surface-base);
     box-shadow: 0 0 0 0.5px var(--border-weak-base);
+  }
 
-    /* &::before, */
-    /* &::after { */
-    /*   content: "\`"; */
-    /* } */
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: var(--font-size-base);
+  }
+
+  th,
+  td {
+    /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
+    border-bottom: 1px solid var(--border-weaker-base);
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    color: var(--text-strong);
+    font-weight: var(--font-weight-medium);
+    border-bottom: 1px solid var(--border-weak-base);
+  }
+
+  /* Images */
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 1.5rem 0;
+    display: block;
   }
 }

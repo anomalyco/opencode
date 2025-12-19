@@ -111,22 +111,4 @@ export namespace BunProc {
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
   }
-
-  export async function resolve(pkg: string) {
-    const local = workspace(pkg)
-    if (local) return local
-    const dir = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(dir, "package.json"))
-    const exists = await pkgjson.exists()
-    if (exists) return dir
-  }
-
-  function workspace(pkg: string) {
-    try {
-      const target = req.resolve(`${pkg}/package.json`)
-      return path.dirname(target)
-    } catch {
-      return
-    }
-  }
 }
