@@ -193,14 +193,17 @@ export function SessionTurn(
   function handleScroll() {
     if (!scrollRef || store.autoScrolled) return
     const scrollTop = scrollRef.scrollTop
-    const reset = scrollTop <= 0 && store.lastScrollTop > 100 && working() && !store.userScrolled
+    console.log("scrollTop", scrollTop)
+    console.log("clientHeight", store.contentRef?.clientHeight)
+    const reset = scrollTop <= 0 && store.lastScrollTop > 0 && working() && !store.userScrolled
     if (reset) {
       setStore("lastScrollTop", scrollTop)
       requestAnimationFrame(scrollToBottom)
       return
     }
-    const scrolledUp = scrollTop < store.lastScrollTop - 10
+    const scrolledUp = scrollTop < store.lastScrollTop - 50
     if (scrolledUp && working()) {
+      console.log("scrolled up")
       setStore("userScrolled", true)
       props.onUserInteracted?.()
     }
