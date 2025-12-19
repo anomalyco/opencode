@@ -21,7 +21,7 @@ import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand, formatKeybind } from "@/context/command"
 import { persisted } from "@/utils/persist"
-import { Identifier } from "@opencode-ai/util/identifier"
+import { Identifier } from "@/utils/id"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -1004,15 +1004,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <Tooltip placement="top" value="Attach image">
-              <IconButton
-                type="button"
-                icon="photo"
-                variant="ghost"
-                class="h-10 w-8"
-                onClick={() => fileInputRef.click()}
-              />
-            </Tooltip>
+            <Show when={store.mode === "normal"}>
+              <Tooltip placement="top" value="Attach image">
+                <IconButton
+                  type="button"
+                  icon="photo"
+                  variant="ghost"
+                  class="h-10 w-8"
+                  onClick={() => fileInputRef.click()}
+                />
+              </Tooltip>
+            </Show>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}
