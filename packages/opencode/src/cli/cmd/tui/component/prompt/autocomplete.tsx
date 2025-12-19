@@ -238,6 +238,7 @@ export function Autocomplete(props: {
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
+          description: agent.description,
           onSelect: () => {
             insertPart(agent.name, {
               type: "agent",
@@ -608,6 +609,7 @@ export function Autocomplete(props: {
               </text>
               <Show when={option.description}>
                 <text fg={index() === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
+                  {" - "}
                   {option.description}
                 </text>
               </Show>
