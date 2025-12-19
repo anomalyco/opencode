@@ -2,7 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
-import { spawnWrapper } from "./spawn-wrapper"
+import { spawnWrapper } from "opencode/util/spawn-wrapper"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
@@ -64,19 +64,19 @@ export namespace Installation {
     if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()
 
+    // Use spawnWrapper to avoid Bun.$ signal handling issues on Windows
     const checks = [
       {
         name: "npm" as const,
-        // Changed to spawnWrapper because of a bug in Bun.$ with npm and Ctrl+C handling in Windows
         command: () => spawnWrapper(["npm", "list", "-g", "--depth=0"], { throws: false }).text(),
       },
       {
         name: "yarn" as const,
-        command: () => $`yarn global list`.throws(false).text(),
+        command: () => spawnWrapper(["yarn", "global", "list"], { throws: false }).text(),
       },
       {
         name: "pnpm" as const,
-        command: () => $`pnpm list -g --depth=0`.throws(false).text(),
+        command: () => spawnWrapper(["pnpm", "list", "-g", "--depth=0"], { throws: false }).text(),
       },
       {
         name: "bun" as const,
@@ -131,26 +131,26 @@ export namespace Installation {
         })
         break
       case "npm":
-        cmd = $`npm install -g opencode-ai@${target}`
+        cmd = spawnWrapper(["npm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false }).exec()
         break
       case "pnpm":
-        cmd = $`pnpm install -g opencode-ai@${target}`
+        cmd = spawnWrapper(["pnpm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false }).exec()
         break
       case "bun":
-        cmd = $`bun install -g opencode-ai@${target}`
+        cmd = $`bun install -g opencode-ai@${target}`.quiet().throws(false)
         break
       case "brew": {
         const formula = await getBrewFormula()
         cmd = $`brew install ${formula}`.env({
           HOMEBREW_NO_AUTO_UPDATE: "1",
           ...process.env,
-        })
+        }).quiet().throws(false)
         break
       }
       default:
         throw new Error(`Unknown method: ${method}`)
     }
-    const result = await cmd.quiet().throws(false)
+    const result = await cmd
     log.info("upgraded", {
       method,
       target,

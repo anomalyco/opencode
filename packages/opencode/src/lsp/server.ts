@@ -5,6 +5,7 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { $, readableStreamToText } from "bun"
+import { spawnWrapper } from "../util/spawn-wrapper"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
@@ -196,8 +197,9 @@ export namespace LSPServer {
         }
         await fs.rename(extractedPath, finalPath)
 
-        await $`npm install`.cwd(finalPath).quiet()
-        await $`npm run compile`.cwd(finalPath).quiet()
+        // Use spawnWrapper to avoid Bun.$ signal handling issues on Windows
+        await spawnWrapper(["npm", "install"], { cwd: finalPath, quiet: true }).exec()
+        await spawnWrapper(["npm", "run", "compile"], { cwd: finalPath, quiet: true }).exec()
 
         log.info("installed VS Code ESLint server", { serverPath })
       }
