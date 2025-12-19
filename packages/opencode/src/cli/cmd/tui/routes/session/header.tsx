@@ -54,7 +54,10 @@ export function Header() {
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     let result = total.toLocaleString()
     if (model?.limit.context) {
-      result += "  " + Math.round((total / model.limit.context) * 100) + "%"
+      const pct = Math.round((total / model.limit.context) * 100)
+      if (!isNaN(pct) && isFinite(pct)) {
+        result += "  " + pct + "%%"
+      }
     }
     return result
   })
