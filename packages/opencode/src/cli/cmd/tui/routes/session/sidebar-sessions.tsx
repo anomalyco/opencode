@@ -262,7 +262,7 @@ export function SessionsSidebar(props: { onClose: () => void }) {
 
   return (
     <box
-      width={50}
+      width={35}
       backgroundColor={theme.backgroundPanel}
       paddingTop={1}
       paddingBottom={1}
@@ -278,7 +278,7 @@ export function SessionsSidebar(props: { onClose: () => void }) {
             <text fg={theme.text}>
               <b>Navigation</b>
             </text>
-            <text fg={theme.textMuted}>────────────────────────────────────────</text>
+            <text fg={theme.textMuted}>─────────────────────────────</text>
             <text fg={theme.text}>
               j/k, ↑/↓ <span style={{ fg: theme.textMuted }}>Move cursor</span>
             </text>
@@ -300,7 +300,7 @@ export function SessionsSidebar(props: { onClose: () => void }) {
             <text fg={theme.text}>
               g/G <span style={{ fg: theme.textMuted }}>Top/Bottom</span>
             </text>
-            <text fg={theme.textMuted}>────────────────────────────────────────</text>
+            <text fg={theme.textMuted}>─────────────────────────────</text>
             <text fg={theme.text}>
               n <span style={{ fg: theme.textMuted }}>New session</span>
             </text>
@@ -310,7 +310,7 @@ export function SessionsSidebar(props: { onClose: () => void }) {
             <text fg={theme.text}>
               d <span style={{ fg: theme.textMuted }}>Delete</span>
             </text>
-            <text fg={theme.textMuted}>────────────────────────────────────────</text>
+            <text fg={theme.textMuted}>─────────────────────────────</text>
             <text fg={theme.text}>
               q, Esc <span style={{ fg: theme.textMuted }}>Close sidebar</span>
             </text>
@@ -358,7 +358,7 @@ export function SessionsSidebar(props: { onClose: () => void }) {
                       {expandChar}
                     </text>
                     <text fg={isActive() ? theme.primary : theme.text} flexGrow={1}>
-                      {Locale.truncate(node.session.title, 30)}
+                      {Locale.truncate(node.session.title, 18)}
                     </text>
                     <text fg={theme.textMuted}>{relTime().padStart(3)}</text>
                     <text fg={isBusy() ? theme.success : theme.textMuted}>{isBusy() ? "●" : "○"}</text>
