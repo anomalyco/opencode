@@ -39,7 +39,15 @@ export function activate(context: vscode.ExtensionContext) {
       const host = env?.["_EXTENSION_OPENCODE_HOST"] ?? "localhost"
       if (port) {
         await appendPrompt(parseInt(port), fileRef, host)
+      const env = terminal.creationOptions.env
+      const port = env?.["_EXTENSION_OPENCODE_PORT"]
+      const host = env?.["_EXTENSION_OPENCODE_HOST"] ?? "localhost"
+      if (port) {
+        await appendPrompt(parseInt(port), fileRef, host)
+      } else {
+        terminal.sendText(fileRef)
       }
+      terminal.show()
       terminal.show()
     }
   })
