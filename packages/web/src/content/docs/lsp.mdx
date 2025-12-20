@@ -11,33 +11,34 @@ OpenCode integrates with your Language Server Protocol (LSP) to help the LLM int
 
 OpenCode comes with several built-in LSP servers for popular languages:
 
-| LSP Server         | Extensions                                           | Requirements                                                 |
-| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------ |
-| astro              | .astro                                               | Auto-installs for Astro projects                             |
-| bash               | .sh, .bash, .zsh, .ksh                               | Auto-installs bash-language-server                           |
-| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Auto-installs for C/C++ projects                             |
-| csharp             | .cs                                                  | `.NET SDK` installed                                         |
-| dart               | .dart                                                | `dart` command available                                     |
-| deno               | .ts, .tsx, .js, .jsx, .mjs                           | `deno` command available (auto-detects deno.json/deno.jsonc) |
-| elixir-ls          | .ex, .exs                                            | `elixir` command available                                   |
-| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue   | `eslint` dependency in project                               |
-| fsharp             | .fs, .fsi, .fsx, .fsscript                           | `.NET SDK` installed                                         |
-| gleam              | .gleam                                               | `gleam` command available                                    |
-| gopls              | .go                                                  | `go` command available                                       |
-| jdtls              | .java                                                | `Java SDK (version 21+)` installed                           |
-| lua-ls             | .lua                                                 | Auto-installs for Lua projects                               |
-| ocaml-lsp          | .ml, .mli                                            | `ocamllsp` command available                                 |
-| php intelephense   | .php                                                 | Auto-installs for PHP projects                               |
-| pyright            | .py, .pyi                                            | `pyright` dependency installed                               |
-| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                            | `ruby` and `gem` commands available                          |
-| rust               | .rs                                                  | `rust-analyzer` command available                            |
-| sourcekit-lsp      | .swift, .objc, .objcpp                               | `swift` installed (`xcode` on macOS)                         |
-| svelte             | .svelte                                              | Auto-installs for Svelte projects                            |
-| terraform          | .tf, .tfvars                                         | Auto-installs from GitHub releases                           |
-| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts         | `typescript` dependency in project                           |
-| vue                | .vue                                                 | Auto-installs for Vue projects                               |
-| yaml-ls            | .yaml, .yml                                          | Auto-installs Red Hat yaml-language-server                   |
-| zls                | .zig, .zon                                           | `zig` command available                                      |
+| LSP Server         | Extensions                                                          | Requirements                                                 |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| astro              | .astro                                                              | Auto-installs for Astro projects                             |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Auto-installs bash-language-server                           |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Auto-installs for C/C++ projects                             |
+| csharp             | .cs                                                                 | `.NET SDK` installed                                         |
+| dart               | .dart                                                               | `dart` command available                                     |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` command available (auto-detects deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` command available                                   |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependency in project                               |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installed                                         |
+| gleam              | .gleam                                                              | `gleam` command available                                    |
+| gopls              | .go                                                                 | `go` command available                                       |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` installed                           |
+| lua-ls             | .lua                                                                | Auto-installs for Lua projects                               |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` command available                                 |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                               |
+| php intelephense   | .php                                                                | Auto-installs for PHP projects                               |
+| pyright            | .py, .pyi                                                           | `pyright` dependency installed                               |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` and `gem` commands available                          |
+| rust               | .rs                                                                 | `rust-analyzer` command available                            |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installed (`xcode` on macOS)                         |
+| svelte             | .svelte                                                             | Auto-installs for Svelte projects                            |
+| terraform          | .tf, .tfvars                                                        | Auto-installs from GitHub releases                           |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependency in project                           |
+| vue                | .vue                                                                | Auto-installs for Vue projects                               |
+| yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
+| zls                | .zig, .zon                                                          | `zig` command available                                      |
 
 LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
 
