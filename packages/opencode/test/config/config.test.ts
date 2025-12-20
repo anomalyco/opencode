@@ -1,10 +1,11 @@
-import { test, expect } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
+import os from "os"
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -499,5 +500,130 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
       )
       expect(pluginNames.length).toBe(3)
     },
+  })
+})
+
+// Unit tests for pattern-based external directory permission helpers
+describe("getExternalDirectoryReadForPath", () => {
+  test("returns permission when string", () => {
+    expect(Config.getExternalDirectoryReadForPath("allow", "/any/path")).toBe("allow")
+    expect(Config.getExternalDirectoryReadForPath("deny", "/any/path")).toBe("deny")
+    expect(Config.getExternalDirectoryReadForPath("ask", "/any/path")).toBe("ask")
+  })
+
+  test("returns undefined when permission is undefined", () => {
+    expect(Config.getExternalDirectoryReadForPath(undefined, "/any/path")).toBeUndefined()
+  })
+
+  test("returns permission from pattern map when path matches", () => {
+    const permission = {
+      read: {
+        "/etc/**": "allow" as const,
+        "*": "deny" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryReadForPath(permission, "/etc/hosts")).toBe("allow")
+    expect(Config.getExternalDirectoryReadForPath(permission, "/etc/subdir/file")).toBe("allow")
+    expect(Config.getExternalDirectoryReadForPath(permission, "/other/path")).toBe("deny")
+  })
+
+  test("returns catch-all (*) when no pattern matches", () => {
+    const permission = {
+      read: {
+        "/nonexistent/**": "allow" as const,
+        "*": "ask" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryReadForPath(permission, "/etc/hosts")).toBe("ask")
+  })
+
+  test("returns undefined when no pattern matches and no catch-all", () => {
+    const permission = {
+      read: {
+        "/nonexistent/**": "deny" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryReadForPath(permission, "/etc/hosts")).toBeUndefined()
+  })
+
+  test("first matching pattern takes precedence", () => {
+    const permission = {
+      read: {
+        "/etc/hosts": "allow" as const,
+        "/etc/**": "deny" as const,
+        "*": "ask" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryReadForPath(permission, "/etc/hosts")).toBe("allow")
+  })
+
+  test("expands ~ to home directory in patterns", () => {
+    const homeDir = os.homedir()
+    const permission = {
+      read: {
+        "~/.ssh/**": "deny" as const,
+        "~/reference/**": "allow" as const,
+        "*": "ask" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryReadForPath(permission, `${homeDir}/.ssh/id_rsa`)).toBe("deny")
+    expect(Config.getExternalDirectoryReadForPath(permission, `${homeDir}/reference/doc.txt`)).toBe("allow")
+    expect(Config.getExternalDirectoryReadForPath(permission, `${homeDir}/other/file.txt`)).toBe("ask")
+  })
+
+  test("returns simple read permission when read is string", () => {
+    const permission = {
+      read: "allow" as const,
+      write: "deny" as const,
+    }
+    expect(Config.getExternalDirectoryReadForPath(permission, "/any/path")).toBe("allow")
+  })
+})
+
+describe("getExternalDirectoryWriteForPath", () => {
+  test("returns permission when string", () => {
+    expect(Config.getExternalDirectoryWriteForPath("allow", "/any/path")).toBe("allow")
+    expect(Config.getExternalDirectoryWriteForPath("deny", "/any/path")).toBe("deny")
+    expect(Config.getExternalDirectoryWriteForPath("ask", "/any/path")).toBe("ask")
+  })
+
+  test("returns undefined when permission is undefined", () => {
+    expect(Config.getExternalDirectoryWriteForPath(undefined, "/any/path")).toBeUndefined()
+  })
+
+  test("returns permission from pattern map when path matches", () => {
+    const permission = {
+      write: {
+        "/tmp/**": "allow" as const,
+        "*": "deny" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryWriteForPath(permission, "/tmp/file.txt")).toBe("allow")
+    expect(Config.getExternalDirectoryWriteForPath(permission, "/tmp/subdir/file")).toBe("allow")
+    expect(Config.getExternalDirectoryWriteForPath(permission, "/other/path")).toBe("deny")
+  })
+
+  test("expands ~ to home directory in patterns", () => {
+    const homeDir = os.homedir()
+    const permission = {
+      write: {
+        "~/temp/**": "allow" as const,
+        "*": "deny" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryWriteForPath(permission, `${homeDir}/temp/file.txt`)).toBe("allow")
+    expect(Config.getExternalDirectoryWriteForPath(permission, `${homeDir}/other/file.txt`)).toBe("deny")
+  })
+
+  test("mixed config: pattern map for write, simple value for read", () => {
+    const permission = {
+      read: "allow" as const,
+      write: {
+        "/protected/**": "deny" as const,
+        "*": "ask" as const,
+      },
+    }
+    expect(Config.getExternalDirectoryWriteForPath(permission, "/protected/file.txt")).toBe("deny")
+    expect(Config.getExternalDirectoryWriteForPath(permission, "/other/file.txt")).toBe("ask")
   })
 })

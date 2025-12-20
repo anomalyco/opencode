@@ -27,7 +27,7 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      const writePermission = Config.getExternalDirectoryWrite(agent.permission.external_directory)
+      const writePermission = Config.getExternalDirectoryWriteForPath(agent.permission.external_directory, filepath)
       if (writePermission === "ask") {
         await Permission.ask({
           type: "external_directory",

@@ -47,7 +47,7 @@ export const EditTool = Tool.define("edit", {
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
       const parentDir = path.dirname(filePath)
-      const writePermission = Config.getExternalDirectoryWrite(agent.permission.external_directory)
+      const writePermission = Config.getExternalDirectoryWriteForPath(agent.permission.external_directory, filePath)
       if (writePermission === "ask") {
         await Permission.ask({
           type: "external_directory",

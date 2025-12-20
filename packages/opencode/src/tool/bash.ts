@@ -87,7 +87,7 @@ export const BashTool = Tool.define("bash", async () => {
       const checkExternalDirectory = async (dir: string) => {
         if (Filesystem.contains(Instance.directory, dir)) return
         const title = `This command references paths outside of ${Instance.directory}`
-        const writePermission = Config.getExternalDirectoryWrite(agent.permission.external_directory)
+        const writePermission = Config.getExternalDirectoryWriteForPath(agent.permission.external_directory, dir)
         if (writePermission === "ask") {
           await Permission.ask({
             type: "external_directory",

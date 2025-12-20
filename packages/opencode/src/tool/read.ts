@@ -33,7 +33,7 @@ export const ReadTool = Tool.define("read", {
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      const readPermission = Config.getExternalDirectoryRead(agent.permission.external_directory)
+      const readPermission = Config.getExternalDirectoryReadForPath(agent.permission.external_directory, filepath)
       if (readPermission === "ask") {
         await Permission.ask({
           type: "external_directory",
