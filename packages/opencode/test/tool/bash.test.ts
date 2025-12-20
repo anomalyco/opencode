@@ -386,6 +386,79 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("denies external directory when split permission has write: deny", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            permission: {
+              external_directory: {
+                read: "allow",
+                write: "deny",
+              },
+              bash: {
+                "*": "allow",
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Should deny cd to parent directory (bash uses write permission)
+        await expect(
+          bash.execute(
+            {
+              command: "cd ../",
+              description: "Change to parent directory",
+            },
+            ctx,
+          ),
+        ).rejects.toThrow()
+      },
+    })
+  })
+
+  test("allows external directory when split permission has write: allow", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            permission: {
+              external_directory: {
+                read: "deny",
+                write: "allow",
+              },
+              bash: {
+                "*": "allow",
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Should allow because write permission is allow
+        const result = await bash.execute(
+          {
+            command: "ls /tmp",
+            description: "List /tmp",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+      },
+    })
+  })
+
   test("handles multiple commands in sequence", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

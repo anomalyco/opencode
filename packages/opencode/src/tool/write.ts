@@ -10,6 +10,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { Config } from "../config/config"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -26,7 +27,8 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      if (agent.permission.external_directory === "ask") {
+      const writePermission = Config.getExternalDirectoryWrite(agent.permission.external_directory)
+      if (writePermission === "ask") {
         await Permission.ask({
           type: "external_directory",
           pattern: [parentDir, path.join(parentDir, "*")],
@@ -39,7 +41,7 @@ export const WriteTool = Tool.define("write", {
             parentDir,
           },
         })
-      } else if (agent.permission.external_directory === "deny") {
+      } else if (writePermission === "deny") {
         throw new Permission.RejectedError(
           ctx.sessionID,
           "external_directory",

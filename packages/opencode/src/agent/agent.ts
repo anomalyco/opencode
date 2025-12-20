@@ -32,7 +32,7 @@ export namespace Agent {
         bash: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
         doom_loop: Config.Permission.optional(),
-        external_directory: Config.Permission.optional(),
+        external_directory: Config.ExternalDirectoryPermission.optional(),
       }),
       model: z
         .object({

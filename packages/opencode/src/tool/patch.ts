@@ -11,6 +11,7 @@ import { Agent } from "../agent/agent"
 import { Patch } from "../patch"
 import { Filesystem } from "../util/filesystem"
 import { createTwoFilesPatch } from "diff"
+import { Config } from "../config/config"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -55,7 +56,8 @@ export const PatchTool = Tool.define("patch", {
 
       if (!Filesystem.contains(Instance.directory, filePath)) {
         const parentDir = path.dirname(filePath)
-        if (agent.permission.external_directory === "ask") {
+        const writePermission = Config.getExternalDirectoryWrite(agent.permission.external_directory)
+        if (writePermission === "ask") {
           await Permission.ask({
             type: "external_directory",
             pattern: [parentDir, path.join(parentDir, "*")],
@@ -68,7 +70,7 @@ export const PatchTool = Tool.define("patch", {
               parentDir,
             },
           })
-        } else if (agent.permission.external_directory === "deny") {
+        } else if (writePermission === "deny") {
           throw new Permission.RejectedError(
             ctx.sessionID,
             "external_directory",

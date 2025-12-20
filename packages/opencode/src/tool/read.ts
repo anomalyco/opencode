@@ -11,6 +11,7 @@ import { Identifier } from "../id/id"
 import { Permission } from "../permission"
 import { Agent } from "@/agent/agent"
 import { iife } from "@/util/iife"
+import { Config } from "@/config/config"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -32,7 +33,8 @@ export const ReadTool = Tool.define("read", {
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      if (agent.permission.external_directory === "ask") {
+      const readPermission = Config.getExternalDirectoryRead(agent.permission.external_directory)
+      if (readPermission === "ask") {
         await Permission.ask({
           type: "external_directory",
           pattern: [parentDir, path.join(parentDir, "*")],
@@ -45,7 +47,7 @@ export const ReadTool = Tool.define("read", {
             parentDir,
           },
         })
-      } else if (agent.permission.external_directory === "deny") {
+      } else if (readPermission === "deny") {
         throw new Permission.RejectedError(
           ctx.sessionID,
           "external_directory",

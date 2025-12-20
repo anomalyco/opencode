@@ -1124,6 +1124,21 @@ export type KeybindsConfig = {
   terminal_title_toggle?: string
 }
 
+export type ExternalDirectoryPermission =
+  | "ask"
+  | "allow"
+  | "deny"
+  | {
+      /**
+       * Permission for reading files outside working directory
+       */
+      read?: "ask" | "allow" | "deny"
+      /**
+       * Permission for writing files outside working directory
+       */
+      write?: "ask" | "allow" | "deny"
+    }
+
 export type AgentConfig = {
   model?: string
   temperature?: number
@@ -1157,7 +1172,7 @@ export type AgentConfig = {
         }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
-    external_directory?: "ask" | "allow" | "deny"
+    external_directory?: ExternalDirectoryPermission
   }
   [key: string]:
     | unknown
@@ -1183,7 +1198,7 @@ export type AgentConfig = {
             }
         webfetch?: "ask" | "allow" | "deny"
         doom_loop?: "ask" | "allow" | "deny"
-        external_directory?: "ask" | "allow" | "deny"
+        external_directory?: ExternalDirectoryPermission
       }
     | undefined
 }
@@ -1502,7 +1517,7 @@ export type Config = {
         }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
-    external_directory?: "ask" | "allow" | "deny"
+    external_directory?: ExternalDirectoryPermission
   }
   tools?: {
     [key: string]: boolean
@@ -1782,7 +1797,7 @@ export type Agent = {
     }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
-    external_directory?: "ask" | "allow" | "deny"
+    external_directory?: ExternalDirectoryPermission
   }
   model?: {
     modelID: string

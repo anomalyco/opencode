@@ -7597,6 +7597,30 @@
         },
         "additionalProperties": false
       },
+      "ExternalDirectoryPermission": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["ask", "allow", "deny"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "read": {
+                "description": "Permission for reading files outside working directory",
+                "type": "string",
+                "enum": ["ask", "allow", "deny"]
+              },
+              "write": {
+                "description": "Permission for writing files outside working directory",
+                "type": "string",
+                "enum": ["ask", "allow", "deny"]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
       "AgentConfig": {
         "type": "object",
         "properties": {
@@ -7677,8 +7701,7 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
+                "$ref": "#/components/schemas/ExternalDirectoryPermission"
               }
             }
           }
@@ -8385,8 +8408,7 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
+                "$ref": "#/components/schemas/ExternalDirectoryPermission"
               }
             }
           },
@@ -9194,8 +9216,7 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
+                "$ref": "#/components/schemas/ExternalDirectoryPermission"
               }
             },
             "required": ["edit", "bash"]

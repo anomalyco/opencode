@@ -391,6 +391,37 @@ export namespace Config {
   export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
+  export const ExternalDirectoryPermission = z
+    .union([
+      Permission,
+      z
+        .object({
+          read: Permission.optional().describe("Permission for reading files outside working directory"),
+          write: Permission.optional().describe("Permission for writing files outside working directory"),
+        })
+        .strict(),
+    ])
+    .meta({
+      ref: "ExternalDirectoryPermission",
+    })
+  export type ExternalDirectoryPermission = z.infer<typeof ExternalDirectoryPermission>
+
+  export function getExternalDirectoryRead(
+    permission: ExternalDirectoryPermission | undefined,
+  ): Permission | undefined {
+    if (permission === undefined) return undefined
+    if (typeof permission === "string") return permission
+    return permission.read
+  }
+
+  export function getExternalDirectoryWrite(
+    permission: ExternalDirectoryPermission | undefined,
+  ): Permission | undefined {
+    if (permission === undefined) return undefined
+    if (typeof permission === "string") return permission
+    return permission.write
+  }
+
   export const Command = z.object({
     template: z.string(),
     description: z.string().optional(),
@@ -427,7 +458,7 @@ export namespace Config {
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
+          external_directory: ExternalDirectoryPermission.optional(),
         })
         .optional(),
     })
@@ -774,7 +805,7 @@ export namespace Config {
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
+          external_directory: ExternalDirectoryPermission.optional(),
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),

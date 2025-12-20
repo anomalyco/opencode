@@ -77,7 +77,9 @@ export namespace Plugin {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
     for (const hook of hooks) {
-      await hook.config?.(config)
+      // Since @hey-api/openapi-ts doesn't generate the union type for ExternalDirectoryPermission correctly,
+      // a type assertion is used here (see: Config.ExternalDirectoryPermission)
+      await hook.config?.(config as Parameters<NonNullable<Hooks["config"]>>[0])
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
