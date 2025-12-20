@@ -141,6 +141,17 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
+    // Only validate if user has configured agents - if none configured, built-in agents will be used
+    if (Object.keys(result.agent).length > 0) {
+      const primaryAgents = Object.values(result.agent).filter((a) => a.mode !== "subagent" && !a.hidden && !a.disable)
+      if (primaryAgents.length === 0) {
+        throw new InvalidError({
+          path: "config",
+          message: "No primary agents are available. Please configure at least one agent with mode 'primary' or 'all'.",
+        })
+      }
+    }
+
     return {
       config: result,
       directories,
