@@ -27,6 +27,20 @@ if (!Script.preview) {
   const opencode = await createOpencode()
   const session = await opencode.client.session.create()
   console.log("generating changelog since " + previous)
+
+  const team = [
+    "actions-user",
+    "opencode",
+    "rekram1-node",
+    "thdxr",
+    "kommander",
+    "jayair",
+    "fwang",
+    "adamdotdevin",
+    "iamdavidhill",
+    "opencode-agent[bot]",
+  ]
+
   const raw = await opencode.client.session
     .prompt({
       path: {
@@ -106,19 +120,6 @@ if (!Script.preview) {
   console.log("-----------------------------")
   opencode.server.close()
 
-  // Get contributors
-  const team = [
-    "actions-user",
-    "opencode",
-    "rekram1-node",
-    "thdxr",
-    "kommander",
-    "jayair",
-    "fwang",
-    "adamdotdevin",
-    "iamdavidhill",
-    "opencode-agent[bot]",
-  ]
   const compare =
     await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
   const contributors = new Map<string, string[]>()
