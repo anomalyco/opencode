@@ -67,6 +67,9 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
 import { DialogSubagent } from "./dialog-subagent.tsx"
+import { Session as SessionApi } from "@/session"
+import { Storage } from "@/storage/storage"
+import { Instance } from "@/project/instance"
 
 addDefaultParsers(parsers.parsers)
 
@@ -782,6 +785,63 @@ export function Session() {
           toast.show({ message: `Session exported to ${filename}`, variant: "success" })
         } catch (error) {
           toast.show({ message: "Failed to export session", variant: "error" })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Edit session in editor",
+      value: "session.edit",
+      keybind: "session_edit",
+      category: "Session",
+      onSelect: async (dialog) => {
+        try {
+          const sessionData = session()
+          const sessionMessages = await SessionApi.messages({ sessionID: sessionData.id })
+
+          const exportData = {
+            info: sessionData,
+            messages: sessionMessages.map((msg) => ({
+              info: msg.info,
+              parts: msg.parts,
+            })),
+          }
+
+          const json = JSON.stringify(exportData, null, 2)
+
+          // Open in editor
+          const result = await Editor.open({ value: json, renderer })
+          if (!result) {
+            dialog.clear()
+            return
+          }
+
+          // Parse edited JSON
+          let edited: typeof exportData
+          try {
+            edited = JSON.parse(result)
+          } catch (e) {
+            toast.show({ message: "Invalid JSON", variant: "error" })
+            dialog.clear()
+            return
+          }
+
+          // Import as new session (with new ID to avoid conflicts)
+          const newSessionID = edited.info.id
+          await Storage.write(["session", Instance.project.id, newSessionID], edited.info)
+
+          for (const msg of edited.messages) {
+            await Storage.write(["message", newSessionID, msg.info.id], msg.info)
+            for (const part of msg.parts) {
+              await Storage.write(["part", msg.info.id, part.id], part)
+            }
+          }
+
+          // Navigate to the imported session
+          navigate({ type: "session", sessionID: newSessionID })
+          toast.show({ message: "Session imported successfully", variant: "success" })
+        } catch (error) {
+          toast.show({ message: `Failed to edit session: ${error}`, variant: "error" })
         }
         dialog.clear()
       },
