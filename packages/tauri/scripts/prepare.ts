@@ -3,14 +3,13 @@
 import { $ } from "bun"
 
 import { copyBinaryToSidecarFolder, getCurrentSidecar } from "./utils"
-import { Script } from "@opencode-ai/script"
 
 const sidecarConfig = getCurrentSidecar()
 
 const dir = "src-tauri/target/opencode-binaries"
 
 await $`mkdir -p ${dir}`
-await $`gh release download v${Script.version} --pattern ${sidecarConfig.ocBinary}.${sidecarConfig.assetExt} --repo sst/opencode --skip-existing --dir ${dir}`
+await $`gh release download ${Bun.env.OPENCODE_RELEASE_TAG} --pattern ${sidecarConfig.ocBinary}.${sidecarConfig.assetExt} --repo sst/opencode --skip-existing --dir ${dir}`
 
 if (sidecarConfig.assetExt === "tar.gz") {
   await $`tar -xvzf ${dir}/${sidecarConfig.ocBinary}.${sidecarConfig.assetExt} -C ${dir}`
