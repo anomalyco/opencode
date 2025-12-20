@@ -13,15 +13,20 @@ import PROMPT_POLARIS from "./prompt/polaris.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
-import PROMPT_COMPACTION from "./prompt/compaction.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
-  export function header(providerID: string) {
-    if (providerID.includes("anthropic")) return [PROMPT_ANTHROPIC_SPOOF.trim()]
+  function providerSpoof(providerID: string) {
+    if (providerID !== "google-vertex-anthropic" && providerID.includes("anthropic")) {
+      return [PROMPT_ANTHROPIC_SPOOF.trim()]
+    }
     return []
+  }
+
+  export function header(providerID: string) {
+    return [...providerSpoof(providerID)]
   }
 
   export function provider(model: Provider.Model) {
