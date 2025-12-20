@@ -218,6 +218,60 @@ The `bash` tool uses the `write` permission when checking external directory acc
 
 ---
 
+#### Glob patterns
+
+You can use glob patterns to manage permissions for specific external paths. This allows fine-grained control over which external directories are accessible.
+
+```json title="opencode.json" {4-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "read": {
+        "~/Documents/**": "allow",
+        "/tmp/**": "allow",
+        "*": "deny"
+      },
+      "write": "deny"
+    }
+  }
+}
+```
+
+For example, here the `read` permission allows reading files under `~/Documents` and `/tmp`, but denies access to all other external paths.
+
+---
+
+##### Pattern evaluation
+
+Patterns are evaluated in insertion order; the first match wins. The `*` pattern is treated as a catch-all default and is always evaluated last, regardless of its position.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "read": {
+        "~/secrets/**": "deny",
+        "~/**": "allow",
+        "*": "ask"
+      }
+    }
+  }
+}
+```
+
+In this example:
+1. Files under `~/secrets/` are denied
+2. Other files in the home directory are allowed
+3. All other external paths require approval
+
+:::tip
+Use `~` as a shorthand for the home directory. For example, `~/Documents/**` expands to `/Users/yourname/Documents/**`.
+:::
+
+---
+
 ## Agents
 
 You can also configure permissions per agent. Where the agent specific config
