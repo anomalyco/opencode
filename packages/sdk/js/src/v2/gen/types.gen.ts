@@ -2915,6 +2915,94 @@ export type SessionMessageResponses = {
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
 
+export type PartDeleteData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Message ID
+     */
+    messageID: string
+    /**
+     * Part ID
+     */
+    partID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
+}
+
+export type PartDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PartDeleteError = PartDeleteErrors[keyof PartDeleteErrors]
+
+export type PartDeleteResponses = {
+  /**
+   * Successfully deleted part
+   */
+  200: boolean
+}
+
+export type PartDeleteResponse = PartDeleteResponses[keyof PartDeleteResponses]
+
+export type PartUpdateData = {
+  body?: Part
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Message ID
+     */
+    messageID: string
+    /**
+     * Part ID
+     */
+    partID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
+}
+
+export type PartUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PartUpdateError = PartUpdateErrors[keyof PartUpdateErrors]
+
+export type PartUpdateResponses = {
+  /**
+   * Successfully updated part
+   */
+  200: Part
+}
+
+export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
+
 export type SessionPromptAsyncData = {
   body?: {
     messageID?: string
