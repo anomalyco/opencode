@@ -1,5 +1,6 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import z from "zod"
-import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
@@ -38,8 +39,8 @@ export namespace Permission {
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: Bus.event("permission.updated", Info),
-    Replied: Bus.event(
+    Updated: BusEvent.define("permission.updated", Info),
+    Replied: BusEvent.define(
       "permission.replied",
       z.object({
         sessionID: z.string(),

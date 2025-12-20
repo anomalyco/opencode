@@ -1,10 +1,12 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { iife } from "@/util/iife"
+import { Flag } from "../flag/flag"
 
 declare global {
   const OPENCODE_VERSION: string
@@ -17,13 +19,13 @@ export namespace Installation {
   export type Method = Awaited<ReturnType<typeof method>>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "installation.updated",
       z.object({
         version: z.string(),
       }),
     ),
-    UpdateAvailable: Bus.event(
+    UpdateAvailable: BusEvent.define(
       "installation.update-available",
       z.object({
         version: z.string(),
@@ -161,7 +163,7 @@ export namespace Installation {
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
   export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
-  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}`
+  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
@@ -183,7 +185,8 @@ export namespace Installation {
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
     const [major] = VERSION.split(".").map((x) => Number(x))
-    const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    // const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    const channel = CHANNEL
     return fetch(`${registry}/opencode-ai/${channel}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)

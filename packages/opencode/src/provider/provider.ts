@@ -279,9 +279,31 @@ export namespace Provider {
           project,
           location,
         },
-        async getModel(sdk, modelID) {
+        async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
+        },
+      }
+    },
+    "sap-ai-core": async () => {
+      const auth = await Auth.get("sap-ai-core")
+      const envServiceKey = iife(() => {
+        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+        if (envAICoreServiceKey) return envAICoreServiceKey
+        if (auth?.type === "api") {
+          Env.set("AICORE_SERVICE_KEY", auth.key)
+          return auth.key
+        }
+        return undefined
+      })
+      const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
+      const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
+
+      return {
+        autoload: !!envServiceKey,
+        options: envServiceKey ? { deploymentId, resourceGroup } : {},
+        async getModel(sdk: any, modelID: string) {
+          return sdk(modelID)
         },
       }
     },
@@ -292,6 +314,16 @@ export namespace Provider {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
+          },
+        },
+      }
+    },
+    cerebras: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "X-Cerebras-3rd-Party-Integration": "opencode",
           },
         },
       }
@@ -308,6 +340,7 @@ export namespace Provider {
         npm: z.string(),
       }),
       name: z.string(),
+      family: z.string().optional(),
       capabilities: z.object({
         temperature: z.boolean(),
         reasoning: z.boolean(),
@@ -327,6 +360,12 @@ export namespace Provider {
           video: z.boolean(),
           pdf: z.boolean(),
         }),
+        interleaved: z.union([
+          z.boolean(),
+          z.object({
+            field: z.enum(["reasoning_content", "reasoning_details"]),
+          }),
+        ]),
       }),
       cost: z.object({
         input: z.number(),
@@ -353,6 +392,7 @@ export namespace Provider {
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
+      release_date: z.string(),
     })
     .meta({
       ref: "Model",
@@ -379,6 +419,7 @@ export namespace Provider {
       id: model.id,
       providerID: provider.id,
       name: model.name,
+      family: model.family,
       api: {
         id: model.id,
         url: provider.api!,
@@ -428,7 +469,9 @@ export namespace Provider {
           video: model.modalities?.output?.includes("video") ?? false,
           pdf: model.modalities?.output?.includes("pdf") ?? false,
         },
+        interleaved: model.interleaved ?? false,
       },
+      release_date: model.release_date,
     }
   }
 
@@ -446,7 +489,8 @@ export namespace Provider {
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
-    const database = mapValues(await ModelsDev.get(), fromModelsDevProvider)
+    const modelsDev = await ModelsDev.get()
+    const database = mapValues(modelsDev, fromModelsDevProvider)
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
@@ -475,6 +519,10 @@ export namespace Provider {
         ...githubCopilot,
         id: "github-copilot-enterprise",
         name: "GitHub Copilot Enterprise",
+        models: mapValues(githubCopilot.models, (model) => ({
+          ...model,
+          providerID: "github-copilot-enterprise",
+        })),
       }
     }
 
@@ -504,56 +552,60 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existing = parsed.models[model.id ?? modelID]
+        const existingModel = parsed.models[model.id ?? modelID]
         const name = iife(() => {
           if (model.name) return model.name
           if (model.id && model.id !== modelID) return modelID
-          return existing?.name ?? modelID
+          return existingModel?.name ?? modelID
         })
         const parsedModel: Model = {
           id: modelID,
           api: {
-            id: model.id ?? existing?.api.id ?? modelID,
-            npm: model.provider?.npm ?? provider.npm ?? existing?.api.npm ?? providerID,
-            url: provider?.api ?? existing?.api.url,
+            id: model.id ?? existingModel?.api.id ?? modelID,
+            npm:
+              model.provider?.npm ?? provider.npm ?? existingModel?.api.npm ?? modelsDev[providerID]?.npm ?? providerID,
+            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
-          status: model.status ?? existing?.status ?? "active",
+          status: model.status ?? existingModel?.status ?? "active",
           name,
           providerID,
           capabilities: {
-            temperature: model.temperature ?? existing?.capabilities.temperature ?? false,
-            reasoning: model.reasoning ?? existing?.capabilities.reasoning ?? false,
-            attachment: model.attachment ?? existing?.capabilities.attachment ?? false,
-            toolcall: model.tool_call ?? existing?.capabilities.toolcall ?? true,
+            temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
+            reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+            attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
+            toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
             input: {
-              text: model.modalities?.input?.includes("text") ?? existing?.capabilities.input.text ?? true,
-              audio: model.modalities?.input?.includes("audio") ?? existing?.capabilities.input.audio ?? false,
-              image: model.modalities?.input?.includes("image") ?? existing?.capabilities.input.image ?? false,
-              video: model.modalities?.input?.includes("video") ?? existing?.capabilities.input.video ?? false,
-              pdf: model.modalities?.input?.includes("pdf") ?? existing?.capabilities.input.pdf ?? false,
+              text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
+              audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
+              image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
+              video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
+              pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
             },
             output: {
-              text: model.modalities?.output?.includes("text") ?? existing?.capabilities.output.text ?? true,
-              audio: model.modalities?.output?.includes("audio") ?? existing?.capabilities.output.audio ?? false,
-              image: model.modalities?.output?.includes("image") ?? existing?.capabilities.output.image ?? false,
-              video: model.modalities?.output?.includes("video") ?? existing?.capabilities.output.video ?? false,
-              pdf: model.modalities?.output?.includes("pdf") ?? existing?.capabilities.output.pdf ?? false,
+              text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
+              audio: model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
+              image: model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
+              video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
+              pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
             },
+            interleaved: model.interleaved ?? false,
           },
           cost: {
-            input: model?.cost?.input ?? existing?.cost?.input ?? 0,
-            output: model?.cost?.output ?? existing?.cost?.output ?? 0,
+            input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
+            output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
             cache: {
-              read: model?.cost?.cache_read ?? existing?.cost?.cache.read ?? 0,
-              write: model?.cost?.cache_write ?? existing?.cost?.cache.write ?? 0,
+              read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
+              write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
             },
           },
-          options: mergeDeep(existing?.options ?? {}, model.options ?? {}),
+          options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
           limit: {
-            context: model.limit?.context ?? existing?.limit?.context ?? 0,
-            output: model.limit?.output ?? existing?.limit?.output ?? 0,
+            context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+            output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
           },
-          headers: mergeDeep(existing?.headers ?? {}, model.headers ?? {}),
+          headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
+          family: model.family ?? existingModel?.family ?? "",
+          release_date: model.release_date ?? existingModel?.release_date ?? "",
         }
         parsed.models[modelID] = parsedModel
       }
@@ -673,8 +725,7 @@ export namespace Provider {
         model.api.id = model.api.id ?? model.id ?? modelID
         if (modelID === "gpt-5-chat-latest" || (providerID === "openrouter" && modelID === "openai/gpt-5-chat"))
           delete provider.models[modelID]
-        if ((model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) || model.status === "deprecated")
-          delete provider.models[modelID]
+        if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
         if (
           (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
@@ -811,7 +862,7 @@ export namespace Provider {
     return info
   }
 
-  export async function getLanguage(model: Model) {
+  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
     const s = await state()
     const key = `${model.providerID}/${model.id}`
     if (s.models.has(key)) return s.models.get(key)!

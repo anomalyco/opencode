@@ -1,7 +1,7 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
-import { batch, createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -36,6 +36,7 @@ export interface DialogSelectOption<T = any> {
   category?: string
   disabled?: boolean
   bg?: RGBA
+  gutter?: JSX.Element
   onSelect?: (ctx: DialogContext, trigger?: "prompt") => void
 }
 
@@ -52,14 +53,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     filter: "",
   })
 
-  createEffect(() => {
-    if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
-      }
-    }
-  })
+  createEffect(
+    on(
+      () => props.current,
+      (current) => {
+        if (current) {
+          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+          if (currentIndex >= 0) {
+            setStore("selected", currentIndex)
+          }
+        }
+      },
+    ),
+  )
 
   let input: InputRenderable
 
@@ -97,18 +103,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const selected = createMemo(() => flat()[store.selected])
 
-  createEffect(() => {
-    store.filter
-    if (store.filter.length > 0) {
-      setStore("selected", 0)
-    } else if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
+  createEffect(
+    on([() => store.filter, () => props.current], ([filter, current]) => {
+      if (filter.length > 0) {
+        setStore("selected", 0)
+      } else if (current) {
+        const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+        if (currentIndex >= 0) {
+          setStore("selected", currentIndex)
+        }
       }
-    }
-    scroll.scrollTo(0)
-  })
+      scroll.scrollTo(0)
+    }),
+  )
 
   function move(direction: number) {
     let next = store.selected + direction
@@ -239,7 +246,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         moveTo(index)
                       }}
                       backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
-                      paddingLeft={current() ? 1 : 3}
+                      paddingLeft={current() || option.gutter ? 1 : 3}
                       paddingRight={3}
                       gap={1}
                     >
@@ -249,6 +256,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         description={option.description !== category ? option.description : undefined}
                         active={active()}
                         current={current()}
+                        gutter={option.gutter}
                       />
                     </box>
                   )
@@ -282,6 +290,7 @@ function Option(props: {
   active?: boolean
   current?: boolean
   footer?: JSX.Element | string
+  gutter?: JSX.Element
   onMouseOver?: () => void
 }) {
   const { theme } = useTheme()
@@ -294,16 +303,22 @@ function Option(props: {
           ●
         </text>
       </Show>
+      <Show when={!props.current && props.gutter}>
+        <box flexShrink={0} marginRight={0.5}>
+          {props.gutter}
+        </box>
+      </Show>
       <text
         flexGrow={1}
         fg={props.active ? fg : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
-        wrapMode="none"
         paddingLeft={3}
       >
-        {Locale.truncate(props.title, 62)}
-        <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
+        {Locale.truncate(props.title, 61)}
+        <Show when={props.description}>
+          <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
+        </Show>
       </text>
       <Show when={props.footer}>
         <box flexShrink={0}>

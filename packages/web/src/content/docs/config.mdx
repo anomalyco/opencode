@@ -194,6 +194,23 @@ You can also define agents using markdown files in `~/.config/opencode/agent/` o
 
 ---
 
+### Default agent
+
+You can set the default agent using the `default_agent` option. This determines which agent is used when none is explicitly specified.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "plan"
+}
+```
+
+The default agent must be a primary agent (not a subagent). This can be a built-in agent like `"build"` or `"plan"`, or a [custom agent](/docs/agents) you've defined. If the specified agent doesn't exist or is a subagent, OpenCode will fall back to `"build"` with a warning.
+
+This setting applies across all interfaces: TUI, CLI (`opencode run`), desktop app, and GitHub Action.
+
+---
+
 ### Sharing
 
 You can configure the [share](/docs/share) feature through the `share` option.
@@ -364,6 +381,25 @@ The `disabled_providers` option accepts an array of provider IDs. When a provide
 - It won't be loaded even if environment variables are set.
 - It won't be loaded even if API keys are configured through the `/connect` command.
 - The provider's models won't appear in the model selection list.
+
+---
+
+### Enabled providers
+
+You can specify an allowlist of providers through the `enabled_providers` option. When set, only the specified providers will be enabled and all others will be ignored.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": ["anthropic", "openai"]
+}
+```
+
+This is useful when you want to restrict OpenCode to only use specific providers rather than disabling them one by one.
+
+:::note
+If a provider appears in both `enabled_providers` and `disabled_providers`, the `disabled_providers` takes priority for backwards compatibility.
+:::
 
 ---
 

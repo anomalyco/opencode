@@ -85,68 +85,30 @@ export namespace BunProc {
       version,
     })
 
-    const total = 3
-    const wait = 500
+    await BunProc.run(args, {
+      cwd: Global.Path.cache,
+    }).catch((e) => {
+      throw new InstallFailedError(
+        { pkg, version },
+        {
+          cause: e,
+        },
+      )
+    })
 
-    const runInstall = async (count: number = 1): Promise<void> => {
-      log.info("bun install attempt", {
-        pkg,
-        version,
-        attempt: count,
-        total,
-      })
-      await BunProc.run(args, {
-        cwd: Global.Path.cache,
-      }).catch(async (error) => {
-        log.warn("bun install failed", {
-          pkg,
-          version,
-          attempt: count,
-          total,
-          error,
-        })
-        if (count >= total) {
-          throw new InstallFailedError(
-            { pkg, version },
-            {
-              cause: error,
-            },
-          )
-        }
-        const delay = wait * count
-        log.info("bun install retrying", {
-          pkg,
-          version,
-          next: count + 1,
-          delay,
-        })
-        await Bun.sleep(delay)
-        return runInstall(count + 1)
-      })
+    // Resolve actual version from installed package when using "latest"
+    // This ensures subsequent starts use the cached version until explicitly updated
+    let resolvedVersion = version
+    if (version === "latest") {
+      const installedPkgJson = Bun.file(path.join(mod, "package.json"))
+      const installedPkg = await installedPkgJson.json().catch(() => null)
+      if (installedPkg?.version) {
+        resolvedVersion = installedPkg.version
+      }
     }
 
-    await runInstall()
-
-    parsed.dependencies[pkg] = version
+    parsed.dependencies[pkg] = resolvedVersion
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
-  }
-
-  export async function resolve(pkg: string) {
-    const local = workspace(pkg)
-    if (local) return local
-    const dir = path.join(Global.Path.cache, "node_modules", pkg)
-    const pkgjson = Bun.file(path.join(dir, "package.json"))
-    const exists = await pkgjson.exists()
-    if (exists) return dir
-  }
-
-  function workspace(pkg: string) {
-    try {
-      const target = req.resolve(`${pkg}/package.json`)
-      return path.dirname(target)
-    } catch {
-      return
-    }
   }
 }

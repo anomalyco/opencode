@@ -1,6 +1,7 @@
 @layer theme, base, components, utilities;
+
 @import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
+@import "tailwindcss/utilities.css" layer(utilities) source("../../../../");
 @import "./utilities.css";
 
 @import "../index.css";
@@ -56,10 +57,7 @@
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
-  --radius-3xl: 1.5rem;
-  --radius-4xl: 2rem;
+  --radius-xl: 0.625rem;
 
   --shadow-xs: var(--shadow-xs);
   --shadow-md: var(--shadow-md);

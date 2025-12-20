@@ -21,8 +21,11 @@ import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
 import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
+import { Log } from "@/util/log"
 
 export namespace ToolRegistry {
+  const log = Log.create({ service: "tool.registry" })
+
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("tool/*.{js,ts}")
@@ -113,13 +116,19 @@ export namespace ToolRegistry {
     const result = await Promise.all(
       tools
         .filter((t) => {
-          if (t.id === "codesearch" || t.id === "websearch") return providerID === "opencode"
+          // Enable websearch/codesearch for zen users OR via enable flag
+          if (t.id === "codesearch" || t.id === "websearch") {
+            return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
           return true
         })
-        .map(async (t) => ({
-          id: t.id,
-          ...(await t.init()),
-        })),
+        .map(async (t) => {
+          using _ = log.time(t.id)
+          return {
+            id: t.id,
+            ...(await t.init()),
+          }
+        }),
     )
     return result
   }

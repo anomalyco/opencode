@@ -26,6 +26,7 @@ export const TaskTool = Tool.define("task", async () => {
       prompt: z.string().describe("The task for the agent to perform"),
       subagent_type: z.string().describe("The type of specialized agent to use for this task"),
       session_id: z.string().describe("Existing Task session to continue").optional(),
+      command: z.string().describe("The command that triggered this task").optional(),
     }),
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
@@ -52,16 +53,24 @@ export const TaskTool = Tool.define("task", async () => {
       })
 
       const messageID = Identifier.ascending("message")
-      const parts: Record<string, MessageV2.ToolPart> = {}
+      const parts: Record<string, { id: string; tool: string; state: { status: string; title?: string } }> = {}
       const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
         if (evt.properties.part.sessionID !== session.id) return
         if (evt.properties.part.messageID === messageID) return
         if (evt.properties.part.type !== "tool") return
-        parts[evt.properties.part.id] = evt.properties.part
+        const part = evt.properties.part
+        parts[part.id] = {
+          id: part.id,
+          tool: part.tool,
+          state: {
+            status: part.state.status,
+            title: part.state.status === "completed" ? part.state.title : undefined,
+          },
+        }
         ctx.metadata({
           title: params.description,
           metadata: {
-            summary: Object.values(parts).sort((a, b) => a.id?.localeCompare(b.id)),
+            summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
             sessionId: session.id,
           },
         })
@@ -98,10 +107,18 @@ export const TaskTool = Tool.define("task", async () => {
         parts: promptParts,
       })
       unsub()
-      let all
-      all = await Session.messages({ sessionID: session.id })
-      all = all.filter((x) => x.info.role === "assistant")
-      all = all.flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
+      const messages = await Session.messages({ sessionID: session.id })
+      const summary = messages
+        .filter((x) => x.info.role === "assistant")
+        .flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
+        .map((part) => ({
+          id: part.id,
+          tool: part.tool,
+          state: {
+            status: part.state.status,
+            title: part.state.status === "completed" ? part.state.title : undefined,
+          },
+        }))
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
       const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
@@ -109,7 +126,7 @@ export const TaskTool = Tool.define("task", async () => {
       return {
         title: params.description,
         metadata: {
-          summary: all,
+          summary,
           sessionId: session.id,
         },
         output,
