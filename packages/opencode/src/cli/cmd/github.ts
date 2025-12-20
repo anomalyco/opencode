@@ -424,7 +424,11 @@ export const GithubRunCommand = cmd({
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = payload?.comment.id
       const useGithubToken = normalizeUseGithubToken()
-      const commentType = context.eventName === "pull_request_review_comment" ? "pr_review" : "issue"
+      const commentType = isScheduleEvent
+        ? undefined
+        : context.eventName === "pull_request_review_comment"
+          ? "pr_review"
+          : "issue"
 
       try {
         if (useGithubToken) {
@@ -451,7 +455,7 @@ export const GithubRunCommand = cmd({
         // Skip permission check for schedule events (no actor to check)
         if (!isScheduleEvent) {
           await assertPermissions()
-          await addReaction(commentType)
+          await addReaction(commentType!)
         }
 
         // Setup opencode session
@@ -505,7 +509,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           }
           // Fork PR
           else {
@@ -520,7 +524,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           }
         }
         // Issue
@@ -541,10 +545,10 @@ export const GithubRunCommand = cmd({
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
             await createComment(`Created PR #${pr}${footer({ image: true })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           } else {
             await createComment(`${response}${footer({ image: true })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           }
         }
       } catch (e: any) {
@@ -558,7 +562,7 @@ export const GithubRunCommand = cmd({
         }
         if (!isScheduleEvent) {
           await createComment(`${msg}${footer()}`)
-          await removeReaction(commentType)
+          await removeReaction(commentType!)
         }
         core.setFailed(msg)
         // Also output the clean error message for the action to capture
