@@ -2,15 +2,17 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
+import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel } from "@tui/component/dialog-model"
+import { DialogModel, useConnected } from "@tui/component/dialog-model"
+import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
@@ -31,6 +33,7 @@ import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { PromptRefProvider, usePromptRef } from "./context/prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -104,7 +107,9 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
     render(
       () => {
         return (
-          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
+          <ErrorBoundary
+            fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
+          >
             <ArgsProvider {...input.args}>
               <ExitProvider onExit={onExit}>
                 <KVProvider>
@@ -118,7 +123,9 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                                 <DialogProvider>
                                   <CommandProvider>
                                     <PromptHistoryProvider>
-                                      <App />
+                                      <PromptRefProvider>
+                                        <App />
+                                      </PromptRefProvider>
                                     </PromptHistoryProvider>
                                   </CommandProvider>
                                 </DialogProvider>
@@ -139,7 +146,15 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: true,
+        useKittyKeyboard: {},
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          },
+        },
       },
     )
   })
@@ -159,9 +174,34 @@ function App() {
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
   const exit = useExit()
+  const promptRef = usePromptRef()
+
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
+  })
+
+  // Update terminal window title based on current route and session
+  createEffect(() => {
+    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
+    if (route.data.type === "home") {
+      renderer.setTerminalTitle("OpenCode")
+      return
+    }
+
+    if (route.data.type === "session") {
+      const session = sync.session.get(route.data.sessionID)
+      if (!session || SessionApi.isDefaultTitle(session.title)) {
+        renderer.setTerminalTitle("OpenCode")
+        return
+      }
+
+      // Truncate title to 40 chars max
+      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+      renderer.setTerminalTitle(`OC | ${title}`)
+    }
   })
 
   const args = useArgs()
@@ -190,31 +230,51 @@ function App() {
   let continued = false
   createEffect(() => {
     if (continued || sync.status !== "complete" || !args.continue) return
-    const match = sync.data.session.at(0)?.id
+    const match = sync.data.session
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
       route.navigate({ type: "session", sessionID: match })
     }
   })
 
+  createEffect(
+    on(
+      () => sync.status === "complete" && sync.data.provider.length === 0,
+      (isEmpty, wasEmpty) => {
+        // only trigger when we transition into an empty-provider state
+        if (!isEmpty || wasEmpty) return
+        dialog.replace(() => <DialogProviderList />)
+      },
+    ),
+  )
+
+  const connected = useConnected()
   command.register(() => [
     {
       title: "Switch session",
       value: "session.list",
       keybind: "session_list",
       category: "Session",
+      suggested: sync.data.session.length > 0,
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
     },
     {
       title: "New session",
+      suggested: route.data.type === "session",
       value: "session.new",
       keybind: "session_new",
       category: "Session",
       onSelect: () => {
+        const current = promptRef.current
+        // Don't require focus - if there's any text, preserve it
+        const currentPrompt = current?.current?.input ? current.current : undefined
         route.navigate({
           type: "home",
+          initialPrompt: currentPrompt,
         })
         dialog.clear()
       },
@@ -223,6 +283,7 @@ function App() {
       title: "Switch model",
       value: "model.list",
       keybind: "model_list",
+      suggested: true,
       category: "Agent",
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
@@ -230,6 +291,7 @@ function App() {
     },
     {
       title: "Model cycle",
+      disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
@@ -239,11 +301,30 @@ function App() {
     },
     {
       title: "Model cycle reverse",
+      disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
       onSelect: () => {
         local.model.cycle(-1)
+      },
+    },
+    {
+      title: "Favorite cycle",
+      value: "model.cycle_favorite",
+      keybind: "model_cycle_favorite",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(1)
+      },
+    },
+    {
+      title: "Favorite cycle reverse",
+      value: "model.cycle_favorite_reverse",
+      keybind: "model_cycle_favorite_reverse",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(-1)
       },
     },
     {
@@ -253,6 +334,14 @@ function App() {
       category: "Agent",
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
+      },
+    },
+    {
+      title: "Toggle MCPs",
+      value: "mcp.list",
+      category: "Agent",
+      onSelect: () => {
+        dialog.replace(() => <DialogMcp />)
       },
     },
     {
@@ -276,6 +365,15 @@ function App() {
       },
     },
     {
+      title: "Connect provider",
+      value: "provider.connect",
+      suggested: !connected(),
+      onSelect: () => {
+        dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
       title: "View status",
       keybind: "status_view",
       value: "opencode.status",
@@ -293,18 +391,11 @@ function App() {
       category: "System",
     },
     {
-      title: "Connect provider",
-      value: "provider.connect",
-      onSelect: () => {
-        dialog.replace(() => <DialogProviderList />)
-      },
-      category: "System",
-    },
-    {
-      title: `Switch to ${mode() === "dark" ? "light" : "dark"} mode`,
+      title: "Toggle appearance",
       value: "theme.switch_mode",
-      onSelect: () => {
+      onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
       },
       category: "System",
     },
@@ -364,11 +455,27 @@ function App() {
         process.kill(0, "SIGTSTP")
       },
     },
+    {
+      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      value: "terminal.title.toggle",
+      keybind: "terminal_title_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setTerminalTitleEnabled((prev) => {
+          const next = !prev
+          kv.set("terminal_title_enabled", next)
+          if (!next) renderer.setTerminalTitle("")
+          return next
+        })
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
-    const providerID = local.model.current().providerID
-    if (providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+    const currentModel = local.model.current()
+    if (!currentModel) return
+    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
       untrack(() => {
         DialogAlert.show(
           dialog,
@@ -394,7 +501,6 @@ function App() {
 
   event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
@@ -448,6 +554,10 @@ function App() {
       height={dimensions().height}
       backgroundColor={theme.background}
       onMouseUp={async () => {
+        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+          renderer.clearSelection()
+          return
+        }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
           const base64 = Buffer.from(text).toString("base64")
@@ -474,7 +584,12 @@ function App() {
   )
 }
 
-function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => Promise<void> }) {
+function ErrorComponent(props: {
+  error: Error
+  reset: () => void
+  onExit: () => Promise<void>
+  mode?: "dark" | "light"
+}) {
   const term = useTerminalDimensions()
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
@@ -484,6 +599,15 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
   const [copied, setCopied] = createSignal(false)
 
   const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+
+  // Choose safe fallback colors per mode since theme context may not be available
+  const isLight = props.mode === "light"
+  const colors = {
+    bg: isLight ? "#ffffff" : "#0a0a0a",
+    text: isLight ? "#1a1a1a" : "#eeeeee",
+    muted: isLight ? "#8a8a8a" : "#808080",
+    primary: isLight ? "#3b7dd8" : "#fab283",
+  }
 
   if (props.error.message) {
     issueURL.searchParams.set("title", `opentui: fatal: ${props.error.message}`)
@@ -505,27 +629,31 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
   }
 
   return (
-    <box flexDirection="column" gap={1}>
+    <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text attributes={TextAttributes.BOLD}>Please report an issue.</text>
-        <box onMouseUp={copyIssueURL} backgroundColor="#565f89" padding={1}>
-          <text attributes={TextAttributes.BOLD}>Copy issue URL (exception info pre-filled)</text>
+        <text attributes={TextAttributes.BOLD} fg={colors.text}>
+          Please report an issue.
+        </text>
+        <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
+          <text attributes={TextAttributes.BOLD} fg={colors.bg}>
+            Copy issue URL (exception info pre-filled)
+          </text>
         </box>
-        {copied() && <text>Successfully copied</text>}
+        {copied() && <text fg={colors.muted}>Successfully copied</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
-        <text>A fatal error occurred!</text>
-        <box onMouseUp={props.reset} backgroundColor="#565f89" padding={1}>
-          <text>Reset TUI</text>
+        <text fg={colors.text}>A fatal error occurred!</text>
+        <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
+          <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor="#565f89" padding={1}>
-          <text>Exit</text>
+        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+          <text fg={colors.bg}>Exit</text>
         </box>
       </box>
       <scrollbox height={Math.floor(term().height * 0.7)}>
-        <text>{props.error.stack}</text>
+        <text fg={colors.muted}>{props.error.stack}</text>
       </scrollbox>
-      <text>{props.error.message}</text>
+      <text fg={colors.text}>{props.error.message}</text>
     </box>
   )
 }

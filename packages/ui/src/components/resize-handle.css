@@ -1,0 +1,20 @@
+[data-component="resize-handle"] {
+  position: absolute;
+  z-index: 10;
+
+  &[data-direction="horizontal"] {
+    inset-block: 0;
+    inset-inline-end: 0;
+    width: 8px;
+    transform: translateX(50%);
+    cursor: ew-resize;
+  }
+
+  &[data-direction="vertical"] {
+    inset-inline: 0;
+    inset-block-start: 0;
+    height: 8px;
+    transform: translateY(-50%);
+    cursor: ns-resize;
+  }
+}

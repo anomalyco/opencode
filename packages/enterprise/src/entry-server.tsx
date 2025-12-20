@@ -11,8 +11,6 @@ export default createHandler(() => (
           <title>OpenCode</title>
           <meta name="theme-color" content="#F8F7F7" />
           <meta name="theme-color" content="#131010" media="(prefers-color-scheme: dark)" />
-          <meta property="og:image" content="/social-share.png" />
-          <meta property="twitter:image" content="/social-share.png" />
           {assets}
         </head>
         <body class="antialiased overscroll-none select-none text-12-regular">

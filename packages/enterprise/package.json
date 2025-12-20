@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.0.123",
+  "version": "1.0.175",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,12 +14,13 @@
     "@opencode-ai/util": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
-    "@pierre/precision-diffs": "catalog:",
+    "@pierre/diffs": "catalog:",
     "@solidjs/router": "catalog:",
     "@solidjs/start": "catalog:",
     "@solidjs/meta": "catalog:",
     "hono": "catalog:",
     "hono-openapi": "catalog:",
+    "js-base64": "3.7.7",
     "luxon": "catalog:",
     "nitro": "3.0.1-alpha.1",
     "solid-js": "catalog:",

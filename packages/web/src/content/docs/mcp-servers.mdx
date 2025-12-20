@@ -12,10 +12,6 @@ OpenCode supports both:
 
 Once added, MCP tools are automatically available to the LLM alongside built-in tools.
 
-:::note
-OAuth support for MCP servers is coming soon.
-:::
-
 ---
 
 ## Caveats
@@ -146,7 +142,103 @@ Here the `url` is the URL of the remote MCP server and with the `headers` option
 | `url`     | String  | Y        | URL of the remote MCP server.                                                       |
 | `enabled` | Boolean |          | Enable or disable the MCP server on startup.                                        |
 | `headers` | Object  |          | Headers to send with the request.                                                   |
+| `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
 | `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+
+---
+
+### OAuth
+
+OpenCode automatically handles OAuth authentication for remote MCP servers. When a server requires authentication, OpenCode will:
+
+1. Detect the 401 response and initiate the OAuth flow
+2. Use **Dynamic Client Registration (RFC 7591)** if supported by the server
+3. Store tokens securely for future requests
+
+#### Automatic OAuth
+
+For most OAuth-enabled MCP servers, no special configuration is needed. Just configure the remote server:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp"
+    }
+  }
+}
+```
+
+If the server requires authentication, OpenCode will prompt you to authenticate when you first try to use it.
+
+#### Pre-registered Client
+
+If you have client credentials from the MCP server provider, you can configure them:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-oauth-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
+        "scope": "tools:read tools:execute"
+      }
+    }
+  }
+}
+```
+
+#### Disabling OAuth
+
+If you want to disable automatic OAuth for a server (e.g., for servers that use API keys instead), set `oauth` to `false`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "my-api-key-server": {
+      "type": "remote",
+      "url": "https://mcp.example.com/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MY_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+#### OAuth Options
+
+| Option         | Type            | Required | Description                                                                      |
+| -------------- | --------------- | -------- | -------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false |          | OAuth config object, or `false` to disable OAuth auto-detection.                 |
+| `clientId`     | String          |          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
+| `clientSecret` | String          |          | OAuth client secret, if required by the authorization server.                    |
+| `scope`        | String          |          | OAuth scopes to request during authorization.                                    |
+
+#### Authenticating
+
+You can manually trigger authentication or manage credentials:
+
+```bash
+# Authenticate with a specific MCP server
+opencode mcp auth my-oauth-server
+
+# List all MCP servers and their auth status
+opencode mcp list
+
+# Remove stored credentials
+opencode mcp logout my-oauth-server
+```
+
+The `mcp auth` command will open your browser for authorization. After you authorize, OpenCode will store the tokens securely in `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 

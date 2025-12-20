@@ -257,6 +257,28 @@ If no temperature is specified, OpenCode uses model-specific defaults; typically
 
 ---
 
+### Max steps
+
+Control the maximum number of agentic iterations an agent can perform before being forced to respond with text only. This allows users who wish to control costs to set a limit on agentic actions.
+
+If this is not set, the agent will continue to iterate until the model chooses to stop or the user interrupts the session.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "maxSteps": 5
+    }
+  }
+}
+```
+
+When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
+
+---
+
 ### Disable
 
 Set to `true` to disable the agent.
@@ -293,7 +315,11 @@ This path is relative to where the config file is located. So this works for bot
 
 ### Model
 
-Use the `model` config to override the default model for this agent. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
+Use the `model` config to override the model for this agent. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
+
+:::tip
+If you don’t specify a model, primary agents use the [model globally configured](/docs/config#models) while subagents will use the model of the primary agent that invoked the subagent.
+:::
 
 ```json title="opencode.json"
 {

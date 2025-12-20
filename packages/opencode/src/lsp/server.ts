@@ -4,11 +4,12 @@ import os from "os"
 import { Global } from "../global"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
-import { $ } from "bun"
+import { $, readableStreamToText } from "bun"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -176,7 +177,13 @@ export namespace LSPServer {
         const zipPath = path.join(Global.Path.bin, "vscode-eslint.zip")
         await Bun.file(zipPath).write(response)
 
-        await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+        const ok = await Archive.extractZip(zipPath, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract vscode-eslint archive", { error })
+            return false
+          })
+        if (!ok) return
         await fs.rm(zipPath, { force: true })
 
         const extractedPath = path.join(Global.Path.bin, "vscode-eslint-main")
@@ -209,6 +216,139 @@ export namespace LSPServer {
     },
   }
 
+  export const Oxlint: Info = {
+    id: "oxlint",
+    root: NearestRoot([
+      ".oxlintrc.json",
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      "package.json",
+    ]),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".astro", ".svelte"],
+    async spawn(root) {
+      const ext = process.platform === "win32" ? ".cmd" : ""
+
+      const serverTarget = path.join("node_modules", ".bin", "oxc_language_server" + ext)
+      const lintTarget = path.join("node_modules", ".bin", "oxlint" + ext)
+
+      const resolveBin = async (target: string) => {
+        const localBin = path.join(root, target)
+        if (await Bun.file(localBin).exists()) return localBin
+
+        const candidates = Filesystem.up({
+          targets: [target],
+          start: root,
+          stop: Instance.worktree,
+        })
+        const first = await candidates.next()
+        await candidates.return()
+        if (first.value) return first.value
+
+        return undefined
+      }
+
+      let lintBin = await resolveBin(lintTarget)
+      if (!lintBin) {
+        const found = Bun.which("oxlint")
+        if (found) lintBin = found
+      }
+
+      if (lintBin) {
+        const proc = Bun.spawn([lintBin, "--help"], { stdout: "pipe" })
+        await proc.exited
+        const help = await readableStreamToText(proc.stdout)
+        if (help.includes("--lsp")) {
+          return {
+            process: spawn(lintBin, ["--lsp"], {
+              cwd: root,
+            }),
+          }
+        }
+      }
+
+      let serverBin = await resolveBin(serverTarget)
+      if (!serverBin) {
+        const found = Bun.which("oxc_language_server")
+        if (found) serverBin = found
+      }
+      if (serverBin) {
+        return {
+          process: spawn(serverBin, [], {
+            cwd: root,
+          }),
+        }
+      }
+
+      log.info("oxlint not found, please install oxlint")
+      return
+    },
+  }
+
+  export const Biome: Info = {
+    id: "biome",
+    root: NearestRoot([
+      "biome.json",
+      "biome.jsonc",
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+    ]),
+    extensions: [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".mts",
+      ".cts",
+      ".json",
+      ".jsonc",
+      ".vue",
+      ".astro",
+      ".svelte",
+      ".css",
+      ".graphql",
+      ".gql",
+      ".html",
+    ],
+    async spawn(root) {
+      const localBin = path.join(root, "node_modules", ".bin", "biome")
+      let bin: string | undefined
+      if (await Bun.file(localBin).exists()) bin = localBin
+      if (!bin) {
+        const found = Bun.which("biome")
+        if (found) bin = found
+      }
+
+      let args = ["lsp-proxy", "--stdio"]
+
+      if (!bin) {
+        const resolved = await Bun.resolve("biome", root).catch(() => undefined)
+        if (!resolved) return
+        bin = BunProc.which()
+        args = ["x", "biome", "lsp-proxy", "--stdio"]
+      }
+
+      const proc = spawn(bin, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+
+      return {
+        process: proc,
+      }
+    },
+  }
+
   export const Gopls: Info = {
     id: "gopls",
     root: async (file) => {
@@ -219,7 +359,7 @@ export namespace LSPServer {
     extensions: [".go"],
     async spawn(root) {
       let bin = Bun.which("gopls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         if (!Bun.which("go")) return
@@ -257,7 +397,7 @@ export namespace LSPServer {
     extensions: [".rb", ".rake", ".gemspec", ".ru"],
     async spawn(root) {
       let bin = Bun.which("rubocop", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         const ruby = Bun.which("ruby")
@@ -288,6 +428,70 @@ export namespace LSPServer {
         process: spawn(bin!, ["--lsp"], {
           cwd: root,
         }),
+      }
+    },
+  }
+
+  export const Ty: Info = {
+    id: "ty",
+    extensions: [".py", ".pyi"],
+    root: NearestRoot([
+      "pyproject.toml",
+      "ty.toml",
+      "setup.py",
+      "setup.cfg",
+      "requirements.txt",
+      "Pipfile",
+      "pyrightconfig.json",
+    ]),
+    async spawn(root) {
+      if (!Flag.OPENCODE_EXPERIMENTAL_LSP_TY) {
+        return undefined
+      }
+
+      let binary = Bun.which("ty")
+
+      const initialization: Record<string, string> = {}
+
+      const potentialVenvPaths = [process.env["VIRTUAL_ENV"], path.join(root, ".venv"), path.join(root, "venv")].filter(
+        (p): p is string => p !== undefined,
+      )
+      for (const venvPath of potentialVenvPaths) {
+        const isWindows = process.platform === "win32"
+        const potentialPythonPath = isWindows
+          ? path.join(venvPath, "Scripts", "python.exe")
+          : path.join(venvPath, "bin", "python")
+        if (await Bun.file(potentialPythonPath).exists()) {
+          initialization["pythonPath"] = potentialPythonPath
+          break
+        }
+      }
+
+      if (!binary) {
+        for (const venvPath of potentialVenvPaths) {
+          const isWindows = process.platform === "win32"
+          const potentialTyPath = isWindows
+            ? path.join(venvPath, "Scripts", "ty.exe")
+            : path.join(venvPath, "bin", "ty")
+          if (await Bun.file(potentialTyPath).exists()) {
+            binary = potentialTyPath
+            break
+          }
+        }
+      }
+
+      if (!binary) {
+        log.error("ty not found, please install ty first")
+        return
+      }
+
+      const proc = spawn(binary, ["server"], {
+        cwd: root,
+      })
+
+      return {
+        process: proc,
+        initialization,
       }
     },
   }
@@ -358,7 +562,7 @@ export namespace LSPServer {
           Global.Path.bin,
           "elixir-ls-master",
           "release",
-          process.platform === "win32" ? "language_server.bar" : "language_server.sh",
+          process.platform === "win32" ? "language_server.bat" : "language_server.sh",
         )
 
         if (!(await Bun.file(binary).exists())) {
@@ -376,7 +580,13 @@ export namespace LSPServer {
           const zipPath = path.join(Global.Path.bin, "elixir-ls.zip")
           await Bun.file(zipPath).write(response)
 
-          await $`unzip -o -q ${zipPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          const ok = await Archive.extractZip(zipPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract elixir-ls archive", { error })
+              return false
+            })
+          if (!ok) return
 
           await fs.rm(zipPath, {
             force: true,
@@ -408,7 +618,7 @@ export namespace LSPServer {
     root: NearestRoot(["build.zig"]),
     async spawn(root) {
       let bin = Bun.which("zls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -479,7 +689,13 @@ export namespace LSPServer {
         await Bun.file(tempPath).write(downloadResponse)
 
         if (ext === "zip") {
-          await $`unzip -o -q ${tempPath}`.quiet().cwd(Global.Path.bin).nothrow()
+          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract zls archive", { error })
+              return false
+            })
+          if (!ok) return
         } else {
           await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
         }
@@ -514,7 +730,7 @@ export namespace LSPServer {
     extensions: [".cs"],
     async spawn(root) {
       let bin = Bun.which("csharp-ls", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
       if (!bin) {
         if (!Bun.which("dotnet")) {
@@ -538,6 +754,46 @@ export namespace LSPServer {
 
         bin = path.join(Global.Path.bin, "csharp-ls" + (process.platform === "win32" ? ".exe" : ""))
         log.info(`installed csharp-ls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const FSharp: Info = {
+    id: "fsharp",
+    root: NearestRoot([".sln", ".fsproj", "global.json"]),
+    extensions: [".fs", ".fsi", ".fsx", ".fsscript"],
+    async spawn(root) {
+      let bin = Bun.which("fsautocomplete", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+      if (!bin) {
+        if (!Bun.which("dotnet")) {
+          log.error(".NET SDK is required to install fsautocomplete")
+          return
+        }
+
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing fsautocomplete via dotnet tool")
+        const proc = Bun.spawn({
+          cmd: ["dotnet", "tool", "install", "fsautocomplete", "--tool-path", Global.Path.bin],
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install fsautocomplete")
+          return
+        }
+
+        bin = path.join(Global.Path.bin, "fsautocomplete" + (process.platform === "win32" ? ".exe" : ""))
+        log.info(`installed fsautocomplete`, { bin })
       }
 
       return {
@@ -738,7 +994,13 @@ export namespace LSPServer {
       }
 
       if (zip) {
-        await $`unzip -o -q ${archive}`.quiet().cwd(Global.Path.bin).nothrow()
+        const ok = await Archive.extractZip(archive, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract clangd archive", { error })
+            return false
+          })
+        if (!ok) return
       }
       if (tar) {
         await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
@@ -1008,7 +1270,7 @@ export namespace LSPServer {
     extensions: [".lua"],
     async spawn(root) {
       let bin = Bun.which("lua-language-server", {
-        PATH: process.env["PATH"] + ":" + Global.Path.bin,
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
       })
 
       if (!bin) {
@@ -1086,14 +1348,21 @@ export namespace LSPServer {
         await fs.mkdir(installDir, { recursive: true })
 
         if (ext === "zip") {
-          const ok = await $`unzip -o -q ${tempPath} -d ${installDir}`.quiet().catch((error) => {
-            log.error("Failed to extract lua-language-server archive", { error })
-          })
+          const ok = await Archive.extractZip(tempPath, installDir)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract lua-language-server archive", { error })
+              return false
+            })
           if (!ok) return
         } else {
-          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`.quiet().catch((error) => {
-            log.error("Failed to extract lua-language-server archive", { error })
-          })
+          const ok = await $`tar -xzf ${tempPath} -C ${installDir}`
+            .quiet()
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract lua-language-server archive", { error })
+              return false
+            })
           if (!ok) return
         }
 
@@ -1179,6 +1448,299 @@ export namespace LSPServer {
       }
       return {
         process: spawn(dart, ["language-server", "--lsp"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Ocaml: Info = {
+    id: "ocaml-lsp",
+    extensions: [".ml", ".mli"],
+    root: NearestRoot(["dune-project", "dune-workspace", ".merlin", "opam"]),
+    async spawn(root) {
+      const bin = Bun.which("ocamllsp")
+      if (!bin) {
+        log.info("ocamllsp not found, please install ocaml-lsp-server")
+        return
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+  export const BashLS: Info = {
+    id: "bash",
+    extensions: [".sh", ".bash", ".zsh", ".ksh"],
+    root: async () => Instance.directory,
+    async spawn(root) {
+      let binary = Bun.which("bash-language-server")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(Global.Path.bin, "node_modules", "bash-language-server", "out", "cli.js")
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "bash-language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("start")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const TerraformLS: Info = {
+    id: "terraform",
+    extensions: [".tf", ".tfvars"],
+    root: NearestRoot([".terraform.lock.hcl", "terraform.tfstate", "*.tf"]),
+    async spawn(root) {
+      let bin = Bun.which("terraform-ls", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading terraform-ls from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/hashicorp/terraform-ls/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch terraform-ls release info")
+          return
+        }
+
+        const release = (await releaseResponse.json()) as {
+          tag_name?: string
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+        const version = release.tag_name?.replace("v", "")
+        if (!version) {
+          log.error("terraform-ls release did not include a version tag")
+          return
+        }
+
+        const platform = process.platform
+        const arch = process.arch
+
+        const tfArch = arch === "arm64" ? "arm64" : "amd64"
+        const tfPlatform = platform === "win32" ? "windows" : platform
+
+        const assetName = `terraform-ls_${version}_${tfPlatform}_${tfArch}.zip`
+
+        const assets = release.assets ?? []
+        const asset = assets.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) {
+          log.error(`Could not find asset ${assetName} in terraform-ls release`)
+          return
+        }
+
+        const downloadResponse = await fetch(asset.browser_download_url)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download terraform-ls")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract terraform-ls archive", { error })
+            return false
+          })
+        if (!ok) return
+        await fs.rm(tempPath, { force: true })
+
+        bin = path.join(Global.Path.bin, "terraform-ls" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract terraform-ls binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info(`installed terraform-ls`, { bin })
+      }
+
+      return {
+        process: spawn(bin, ["serve"], {
+          cwd: root,
+        }),
+        initialization: {
+          experimentalFeatures: {
+            prefillRequiredFields: true,
+            validateOnSave: true,
+          },
+        },
+      }
+    },
+  }
+
+  export const TexLab: Info = {
+    id: "texlab",
+    extensions: [".tex", ".bib"],
+    root: NearestRoot([".latexmkrc", "latexmkrc", ".texlabroot", "texlabroot"]),
+    async spawn(root) {
+      let bin = Bun.which("texlab", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading texlab from GitHub releases")
+
+        const response = await fetch("https://api.github.com/repos/latex-lsp/texlab/releases/latest")
+        if (!response.ok) {
+          log.error("Failed to fetch texlab release info")
+          return
+        }
+
+        const release = (await response.json()) as {
+          tag_name?: string
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+        const version = release.tag_name?.replace("v", "")
+        if (!version) {
+          log.error("texlab release did not include a version tag")
+          return
+        }
+
+        const platform = process.platform
+        const arch = process.arch
+
+        const texArch = arch === "arm64" ? "aarch64" : "x86_64"
+        const texPlatform = platform === "darwin" ? "macos" : platform === "win32" ? "windows" : "linux"
+        const ext = platform === "win32" ? "zip" : "tar.gz"
+        const assetName = `texlab-${texArch}-${texPlatform}.${ext}`
+
+        const assets = release.assets ?? []
+        const asset = assets.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) {
+          log.error(`Could not find asset ${assetName} in texlab release`)
+          return
+        }
+
+        const downloadResponse = await fetch(asset.browser_download_url)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download texlab")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        if (ext === "zip") {
+          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract texlab archive", { error })
+              return false
+            })
+          if (!ok) return
+        }
+        if (ext === "tar.gz") {
+          await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+        }
+
+        await fs.rm(tempPath, { force: true })
+
+        bin = path.join(Global.Path.bin, "texlab" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract texlab binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.nothrow()
+        }
+
+        log.info("installed texlab", { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const DockerfileLS: Info = {
+    id: "dockerfile",
+    extensions: [".dockerfile", "Dockerfile"],
+    root: async () => Instance.directory,
+    async spawn(root) {
+      let binary = Bun.which("docker-langserver")
+      const args: string[] = []
+      if (!binary) {
+        const js = path.join(Global.Path.bin, "node_modules", "dockerfile-language-server-nodejs", "lib", "server.js")
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+          await Bun.spawn([BunProc.which(), "install", "dockerfile-language-server-nodejs"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+      args.push("--stdio")
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+      return {
+        process: proc,
+      }
+    },
+  }
+
+  export const Gleam: Info = {
+    id: "gleam",
+    extensions: [".gleam"],
+    root: NearestRoot(["gleam.toml"]),
+    async spawn(root) {
+      const gleam = Bun.which("gleam")
+      if (!gleam) {
+        log.info("gleam not found, please install gleam first")
+        return
+      }
+      return {
+        process: spawn(gleam, ["lsp"], {
           cwd: root,
         }),
       }
