@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { useLayout, getAvatarColors } from "@/context/layout"
+import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
@@ -26,7 +26,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session, Project } from "@opencode-ai/sdk/v2/client"
+import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore, produce } from "solid-js/store"
 import {
@@ -348,7 +348,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const ProjectAvatar = (props: {
-    project: Project
+    project: LocalProject
     class?: string
     expandable?: boolean
     notify?: boolean
@@ -391,7 +391,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const ProjectVisual = (props: { project: Project & { expanded: boolean }; class?: string }): JSX.Element => {
+  const ProjectVisual = (props: { project: LocalProject; class?: string }): JSX.Element => {
     const name = createMemo(() => getFilename(props.project.worktree))
     const current = createMemo(() => base64Decode(params.dir ?? ""))
     return (
@@ -427,7 +427,7 @@ export default function Layout(props: ParentProps) {
   const SessionItem = (props: {
     session: Session
     slug: string
-    project: Project
+    project: LocalProject
     depth?: number
     childrenMap: Map<string, Session[]>
   }): JSX.Element => {
@@ -517,7 +517,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: Project & { worktree: string; expanded: boolean } }): JSX.Element => {
+  const SortableProject = (props: { project: LocalProject }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))

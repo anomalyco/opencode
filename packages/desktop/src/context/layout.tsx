@@ -27,6 +27,8 @@ type SessionTabs = {
   all: string[]
 }
 
+export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -69,7 +71,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       ]
     }
 
-    function colorize(project: Partial<Project> & { worktree: string; expanded: boolean }) {
+    function colorize(project: LocalProject) {
       if (project.icon?.color) return project
       const color = pickAvailableColor()
       usedColors.add(color)
