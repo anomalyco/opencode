@@ -11,6 +11,8 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_CHALLENGER from "./prompt/challenger.txt"
+import PROMPT_ARCHITECT from "./prompt/architect.txt"
 
 export namespace Agent {
   export const Info = z
@@ -186,6 +188,33 @@ export namespace Agent {
         permission: agentPermission,
         prompt: PROMPT_SUMMARY,
         tools: {},
+      },
+      challenger: {
+        name: "challenger",
+        description:
+          "A critical reviewer that challenges plans and proposals to identify risks, edge cases, and improvements.",
+        mode: "subagent",
+        native: true,
+        permission: planPermission,
+        prompt: PROMPT_CHALLENGER,
+        tools: {
+          ...defaultTools,
+        },
+        options: {},
+      },
+      architect: {
+        name: "architect",
+        description:
+          "A senior architect that creates comprehensive plans and iteratively validates them with a challenger agent.",
+        mode: "all",
+        native: true,
+        permission: planPermission,
+        prompt: PROMPT_ARCHITECT,
+        tools: {
+          task: true,
+          ...defaultTools,
+        },
+        options: {},
       },
     }
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
