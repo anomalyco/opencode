@@ -8,6 +8,7 @@ import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
 import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
+import cursor from "./theme/cursor.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
 import flexoki from "./theme/flexoki.json" with { type: "json" }
@@ -138,6 +139,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   catppuccin,
   ["catppuccin-macchiato"]: catppuccinMacchiato,
   cobalt2,
+  cursor,
   dracula,
   everforest,
   flexoki,
