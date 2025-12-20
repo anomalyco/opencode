@@ -13,6 +13,16 @@ This extension requires the [opencode CLI](https://opencode.ai) to be installed 
 - **Context Awareness**: Automatically share your current selection or tab with opencode.
 - **File Reference Shortcuts**: Use `Cmd+Option+K` (Mac) or `Alt+Ctrl+K` (Linux/Windows) to insert file references. For example, `@File#L37-42`.
 
+## Configuration
+
+| Setting                   | Default     | Description                                                              |
+| ------------------------- | ----------- | ------------------------------------------------------------------------ |
+| `opencode.attach.enabled` | `false`     | Attach to an existing OpenCode server instead of spawning a new instance |
+| `opencode.attach.host`    | `localhost` | Host of the OpenCode server                                              |
+| `opencode.attach.port`    | `4096`      | Port of the OpenCode server                                              |
+
+**Attach Mode**: Useful when OpenCode is already running (e.g., in cloud workspaces like Coder). Enable attach mode to connect to the existing server instead of starting a new one.
+
 ## Support
 
 This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/sst/opencode/issues.

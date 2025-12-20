@@ -34,8 +34,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     if (terminal.name === TERMINAL_NAME) {
       // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
-      port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef)
+      const env = terminal.creationOptions.env
+      const port = env?.["_EXTENSION_OPENCODE_PORT"]
+      const host = env?.["_EXTENSION_OPENCODE_HOST"] ?? "localhost"
+      if (port) {
+        await appendPrompt(parseInt(port), fileRef, host)
+      }
       terminal.show()
     }
   })
@@ -43,8 +47,14 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
 
   async function openTerminal() {
-    // Create a new terminal in split screen
-    const port = Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
+    const config = vscode.workspace.getConfiguration("opencode")
+    const attachEnabled = config.get<boolean>("attach.enabled", false)
+    const attachHost = config.get<string>("attach.host", "localhost")
+    const attachPort = config.get<number>("attach.port", 4096)
+
+    const host = attachEnabled ? attachHost : "localhost"
+    const port = attachEnabled ? attachPort : Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
+
     const terminal = vscode.window.createTerminal({
       name: TERMINAL_NAME,
       iconPath: {
@@ -57,12 +67,14 @@ export function activate(context: vscode.ExtensionContext) {
       },
       env: {
         _EXTENSION_OPENCODE_PORT: port.toString(),
+        _EXTENSION_OPENCODE_HOST: host,
         OPENCODE_CALLER: "vscode",
       },
     })
 
     terminal.show()
-    terminal.sendText(`opencode --port ${port}`)
+    const command = attachEnabled ? `opencode attach http://${host}:${port}` : `opencode --port ${port}`
+    terminal.sendText(command)
 
     const fileRef = getActiveFile()
     if (!fileRef) {
@@ -75,7 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
     do {
       await new Promise((resolve) => setTimeout(resolve, 200))
       try {
-        await fetch(`http://localhost:${port}/app`)
+        await fetch(`http://${host}:${port}/app`)
         connected = true
         break
       } catch (e) {}
@@ -85,13 +97,13 @@ export function activate(context: vscode.ExtensionContext) {
 
     // If connected, append the prompt to the terminal
     if (connected) {
-      await appendPrompt(port, `In ${fileRef}`)
+      await appendPrompt(port, `In ${fileRef}`, host)
       terminal.show()
     }
   }
 
-  async function appendPrompt(port: number, text: string) {
-    await fetch(`http://localhost:${port}/tui/append-prompt`, {
+  async function appendPrompt(port: number, text: string, host = "localhost") {
+    await fetch(`http://${host}:${port}/tui/append-prompt`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

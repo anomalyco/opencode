@@ -78,7 +78,27 @@
         "win": "ctrl+alt+K",
         "linux": "ctrl+alt+K"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "OpenCode",
+      "properties": {
+        "opencode.attach.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Attach to an existing OpenCode server instead of spawning a new instance"
+        },
+        "opencode.attach.host": {
+          "type": "string",
+          "default": "localhost",
+          "description": "Host of the OpenCode server to attach to"
+        },
+        "opencode.attach.port": {
+          "type": "number",
+          "default": 4096,
+          "description": "Port of the OpenCode server to attach to"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "bun run package",
