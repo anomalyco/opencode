@@ -1,4 +1,5 @@
 [data-component="assistant-message"] {
+  content-visibility: auto;
   width: 100%;
   display: flex;
   flex-direction: column;
