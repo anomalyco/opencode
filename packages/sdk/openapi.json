@@ -8153,6 +8153,10 @@
             "description": "Small model to use for tasks like title generation in the format of provider/model",
             "type": "string"
           },
+          "default_agent": {
+            "description": "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+            "type": "string"
+          },
           "username": {
             "description": "Custom username to display in conversations instead of system username",
             "type": "string"
@@ -9150,6 +9154,9 @@
             "type": "boolean"
           },
           "hidden": {
+            "type": "boolean"
+          },
+          "default": {
             "type": "boolean"
           },
           "topP": {
