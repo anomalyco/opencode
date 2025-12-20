@@ -281,14 +281,23 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       ready: false,
     })
 
-    createEffect(async () => {
-      const custom = await getCustomThemes()
-      setStore(
-        produce((draft) => {
-          Object.assign(draft.themes, custom)
-          draft.ready = true
-        }),
-      )
+    createEffect(() => {
+      getCustomThemes()
+        .then((custom) => {
+          setStore(
+            produce((draft) => {
+              Object.assign(draft.themes, custom)
+            }),
+          )
+        })
+        .catch(() => {
+          setStore("active", "opencode")
+        })
+        .finally(() => {
+          if (store.active !== "system") {
+            setStore("ready", true)
+          }
+        })
     })
 
     const renderer = useRenderer()
@@ -297,8 +306,25 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         size: 16,
       })
       .then((colors) => {
-        if (!colors.palette[0]) return
-        setStore("themes", "system", generateSystem(colors, store.mode))
+        if (!colors.palette[0]) {
+          if (store.active === "system") {
+            setStore(
+              produce((draft) => {
+                draft.active = "opencode"
+                draft.ready = true
+              }),
+            )
+          }
+          return
+        }
+        setStore(
+          produce((draft) => {
+            draft.themes.system = generateSystem(colors, store.mode)
+            if (store.active === "system") {
+              draft.ready = true
+            }
+          }),
+        )
       })
 
     const values = createMemo(() => {
