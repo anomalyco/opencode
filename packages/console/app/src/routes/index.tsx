@@ -1,6 +1,6 @@
 import "./index.css"
 import { Title, Meta, Link } from "@solidjs/meta"
-import { HttpHeader } from "@solidjs/start"
+//import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
 import { IconCopy, IconCheck } from "../component/icon"
@@ -42,7 +42,7 @@ export default function Home() {
 
   return (
     <main data-page="opencode">
-      <HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />
+      {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>OpenCode | The open source AI coding agent</Title>
       <Link rel="canonical" href={config.baseUrl} />
       <Meta property="og:image" content="/social-share.png" />
