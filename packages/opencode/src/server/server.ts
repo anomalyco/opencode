@@ -1481,14 +1481,18 @@ export namespace Server {
           const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
           return c.json({
             providers: Object.values(providers),
-            default: mapValues(providers, (item) => {
-              const sorted = Provider.sort(Object.values(item.models))
-              if (sorted.length === 0) {
-                log.error("Provider has no models available", { providerID: item.id })
-                return null
-              }
-              return sorted[0].id
-            }),
+            default: Object.fromEntries(
+              Object.entries(providers)
+                .map(([providerID, item]) => {
+                  const sorted = Provider.sort(Object.values(item.models))
+                  if (sorted.length === 0) {
+                    log.error("Provider has no models available", { providerID })
+                    return null
+                  }
+                  return [providerID, sorted[0].id]
+                })
+                .filter((entry): entry is [string, string] => entry !== null),
+            ),
           })
         },
       )
@@ -1533,16 +1537,21 @@ export namespace Server {
             mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
             connected,
           )
+
           return c.json({
             all: Object.values(providers),
-            default: mapValues(providers, (item) => {
-              const sorted = Provider.sort(Object.values(item.models))
-              if (sorted.length === 0) {
-                log.error("Provider has no models available", { providerID: item.id })
-                return null
-              }
-              return sorted[0].id
-            }),
+            default: Object.fromEntries(
+              Object.entries(providers)
+                .map(([providerID, item]) => {
+                  const sorted = Provider.sort(Object.values(item.models))
+                  if (sorted.length === 0) {
+                    log.error("Provider has no models available", { providerID })
+                    return null
+                  }
+                  return [providerID, sorted[0].id]
+                })
+                .filter((entry): entry is [string, string] => entry !== null),
+            ),
             connected: Object.keys(connected),
           })
         },
