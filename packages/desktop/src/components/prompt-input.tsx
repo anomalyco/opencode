@@ -102,6 +102,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
+    userHasEdited: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -111,11 +112,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
+    userHasEdited: false,
   })
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
     "prompt-history.v1",
+    createStore<{
+      entries: Prompt[]
+    }>({
+      entries: [],
+    }),
+  )
+  const [shellHistory, setShellHistory] = persisted(
+    "prompt-history-shell.v1",
     createStore<{
       entries: Prompt[]
     }>({
@@ -139,6 +149,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
+    setStore("userHasEdited", false)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -440,6 +451,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (shouldReset) {
       setStore("popover", null)
+      setStore("userHasEdited", false)
       if (store.historyIndex >= 0 && !store.applyingHistory) {
         setStore("historyIndex", -1)
         setStore("savedPrompt", null)
@@ -472,6 +484,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.historyIndex >= 0 && !store.applyingHistory) {
       setStore("historyIndex", -1)
       setStore("savedPrompt", null)
+    }
+
+    if (!store.applyingHistory) {
+      setStore("userHasEdited", true)
     }
 
     prompt.set(rawParts, cursorPosition)
@@ -547,7 +563,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sessionID: params.id!,
     })
 
-  const addToHistory = (prompt: Prompt) => {
+  const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
       .map((p) => ("content" in p ? p.content : ""))
       .join("")
@@ -555,17 +571,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!text) return
 
     const entry = clonePromptParts(prompt)
-    const lastEntry = history.entries[0]
+    const currentHistory = mode === "shell" ? shellHistory : history
+    const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
+    const lastEntry = currentHistory.entries[0]
     if (lastEntry) {
       const lastText = lastEntry.map((p) => ("content" in p ? p.content : "")).join("")
       if (lastText === text) return
     }
 
-    setHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
+    setCurrentHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
   }
 
   const navigateHistory = (direction: "up" | "down") => {
-    const entries = history.entries
+    if (store.userHasEdited) return false
+
+    const entries = store.mode === "shell" ? shellHistory.entries : history.entries
     const current = store.historyIndex
 
     if (direction === "up") {
@@ -693,9 +713,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    addToHistory(currentPrompt)
+    addToHistory(currentPrompt, store.mode)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
+    setStore("userHasEdited", false)
 
     let existing = info()
     if (!existing) {
