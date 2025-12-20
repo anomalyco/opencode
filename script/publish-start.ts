@@ -27,6 +27,20 @@ if (!Script.preview) {
   const opencode = await createOpencode()
   const session = await opencode.client.session.create()
   console.log("generating changelog since " + previous)
+
+  const team = [
+    "actions-user",
+    "opencode",
+    "rekram1-node",
+    "thdxr",
+    "kommander",
+    "jayair",
+    "fwang",
+    "adamdotdevin",
+    "iamdavidhill",
+    "opencode-agent[bot]",
+  ]
+
   const raw = await opencode.client.session
     .prompt({
       path: {
@@ -106,19 +120,6 @@ if (!Script.preview) {
   console.log("-----------------------------")
   opencode.server.close()
 
-  // Get contributors
-  const team = [
-    "actions-user",
-    "opencode",
-    "rekram1-node",
-    "thdxr",
-    "kommander",
-    "jayair",
-    "fwang",
-    "adamdotdevin",
-    "iamdavidhill",
-    "opencode-agent[bot]",
-  ]
   const compare =
     await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
   const contributors = new Map<string, string[]>()
@@ -180,6 +181,8 @@ await import(`../packages/plugin/script/publish.ts`)
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
+let output = `version=${Script.version}\n`
+
 if (!Script.preview) {
   await $`git commit -am "release: v${Script.version}"`
   await $`git tag v${Script.version}`
@@ -189,7 +192,10 @@ if (!Script.preview) {
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
   const release = await $`gh release view v${Script.version} --json id,tagName`.json()
-  if (process.env.GITHUB_OUTPUT) {
-    await Bun.write(process.env.GITHUB_OUTPUT, `releaseId=${release.id}\ntagName=${release.tagName}\n`)
-  }
+  output += `release=${release.id}\n`
+  output += `tag=${release.tagName}\n`
+}
+
+if (process.env.GITHUB_OUTPUT) {
+  await Bun.write(process.env.GITHUB_OUTPUT, output)
 }

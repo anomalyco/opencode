@@ -53,6 +53,15 @@ for (const tag of tags) {
 }
 
 if (!Script.preview) {
+  // Create archives for GitHub release
+  for (const key of Object.keys(binaries)) {
+    if (key.includes("linux")) {
+      await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
+    } else {
+      await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+    }
+  }
+
   const image = "ghcr.io/sst/opencode"
   const platforms = "linux/amd64,linux/arm64"
   const tags = [`${image}:${Script.version}`, `${image}:latest`]
