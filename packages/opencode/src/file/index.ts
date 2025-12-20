@@ -72,6 +72,37 @@ export namespace File {
     })
   export type Content = z.infer<typeof Content>
 
+  async function isTextFile(file: BunFile): Promise<boolean> {
+    try {
+      const sampleSize = 8192
+      const buffer = await file.slice(0, sampleSize).arrayBuffer()
+      const bytes = new Uint8Array(buffer)
+
+      for (let i = 0; i < bytes.length; i++) {
+        if (bytes[i] === 0) return false
+      }
+
+      const decoder = new TextDecoder("utf-8", { fatal: true })
+      try {
+        decoder.decode(bytes)
+      } catch {
+        return false // Not valid UTF-8
+      }
+
+      let printable = 0
+      for (let i = 0; i < bytes.length; i++) {
+        const byte = bytes[i]
+        if ((byte >= 32 && byte <= 126) || byte === 9 || byte === 10 || byte === 13) {
+          printable++
+        }
+      }
+      const ratio = printable / bytes.length
+      return ratio > 0.95
+    } catch {
+      return false
+    }
+  }
+
   async function shouldEncode(file: BunFile): Promise<boolean> {
     const type = file.type?.toLowerCase()
     if (!type) return false
@@ -86,6 +117,9 @@ export namespace File {
 
     const tops = ["image", "audio", "video", "font", "model", "multipart"]
     if (tops.includes(top)) return true
+    if (type === "application/octet-stream") {
+      return !(await isTextFile(file))
+    }
 
     const bins = [
       "zip",
