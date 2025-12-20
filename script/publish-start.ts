@@ -181,6 +181,8 @@ await import(`../packages/plugin/script/publish.ts`)
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
+let output = `version=${Script.version}\n`
+
 if (!Script.preview) {
   await $`git commit -am "release: v${Script.version}"`
   await $`git tag v${Script.version}`
@@ -190,7 +192,10 @@ if (!Script.preview) {
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
   const release = await $`gh release view v${Script.version} --json id,tagName`.json()
-  if (process.env.GITHUB_OUTPUT) {
-    await Bun.write(process.env.GITHUB_OUTPUT, `releaseId=${release.id}\ntagName=${release.tagName}\n`)
-  }
+  output += `release=${release.id}`
+  output += `tag=${release.tagName}`
+}
+
+if (process.env.GITHUB_OUTPUT) {
+  await Bun.write(process.env.GITHUB_OUTPUT, output)
 }
