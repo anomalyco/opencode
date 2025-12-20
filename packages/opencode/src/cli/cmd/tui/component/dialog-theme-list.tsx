@@ -16,6 +16,10 @@ export function DialogThemeList() {
   let ref: DialogSelectRef<string>
   const initial = theme.selected
 
+  onMount(() => {
+    dialog.setPosition("floating-right")
+  })
+
   onCleanup(() => {
     if (!confirmed) theme.set(initial)
   })
@@ -25,6 +29,7 @@ export function DialogThemeList() {
       title="Themes"
       options={options}
       current={initial}
+      compact
       onMove={(opt) => {
         theme.set(opt.value)
       }}

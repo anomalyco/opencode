@@ -26,6 +26,7 @@ export interface DialogSelectProps<T> {
     onTrigger: (option: DialogSelectOption<T>) => void
   }[]
   current?: T
+  compact?: boolean
 }
 
 export interface DialogSelectOption<T = any> {
@@ -97,9 +98,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   const dimensions = useTerminalDimensions()
-  const height = createMemo(() =>
-    Math.min(flat().length + grouped().length * 2 - 1, Math.floor(dimensions().height / 2) - 6),
-  )
+  const height = createMemo(() => {
+    const itemCount = flat().length + grouped().length * 2 - 1
+    const maxHeight = props.compact
+      ? Math.floor(dimensions().height * 0.8) - 6
+      : Math.floor(dimensions().height / 2) - 6
+    return Math.min(itemCount, maxHeight)
+  })
 
   const selected = createMemo(() => flat()[store.selected])
 
@@ -185,7 +190,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   return (
     <box gap={1} paddingBottom={1}>
-      <box paddingLeft={4} paddingRight={4}>
+      <box paddingLeft={props.compact ? 2 : 4} paddingRight={props.compact ? 2 : 4}>
         <box flexDirection="row" justifyContent="space-between">
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             {props.title}
@@ -257,6 +262,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         active={active()}
                         current={current()}
                         gutter={option.gutter}
+                        compact={props.compact}
                       />
                     </box>
                   )
@@ -292,6 +298,7 @@ function Option(props: {
   footer?: JSX.Element | string
   gutter?: JSX.Element
   onMouseOver?: () => void
+  compact?: boolean
 }) {
   const { theme } = useTheme()
   const fg = selectedForeground(theme)
@@ -315,7 +322,7 @@ function Option(props: {
         overflow="hidden"
         paddingLeft={3}
       >
-        {Locale.truncate(props.title, 61)}
+        {Locale.truncate(props.title, props.compact ? 24 : 61)}
         <Show when={props.description}>
           <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
         </Show>

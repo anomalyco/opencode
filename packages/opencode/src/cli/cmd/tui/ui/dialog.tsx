@@ -6,15 +6,19 @@ import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
 
+export type DialogPosition = "center" | "floating-right"
+
 export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large"
+    position?: DialogPosition
     onClose: () => void
   }>,
 ) {
   const dimensions = useTerminalDimensions()
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const isFloating = () => props.position === "floating-right"
 
   return (
     <box
@@ -24,20 +28,24 @@ export function Dialog(
       }}
       width={dimensions().width}
       height={dimensions().height}
-      alignItems="center"
+      alignItems={isFloating() ? "flex-end" : "center"}
+      justifyContent={isFloating() ? "flex-end" : undefined}
       position="absolute"
-      paddingTop={dimensions().height / 4}
+      paddingTop={isFloating() ? 0 : dimensions().height / 4}
+      paddingRight={isFloating() ? 1 : 0}
+      paddingBottom={isFloating() ? 1 : 0}
       left={0}
       top={0}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+      backgroundColor={isFloating() ? RGBA.fromInts(0, 0, 0, 0) : RGBA.fromInts(0, 0, 0, 150)}
     >
       <box
         onMouseUp={async (e) => {
           if (renderer.getSelection()) return
           e.stopPropagation()
         }}
-        width={props.size === "large" ? 80 : 60}
+        width={isFloating() ? 30 : props.size === "large" ? 80 : 60}
         maxWidth={dimensions().width - 2}
+        maxHeight={isFloating() ? Math.floor(dimensions().height * 0.8) : undefined}
         backgroundColor={theme.backgroundPanel}
         paddingTop={1}
       >
@@ -54,6 +62,7 @@ function init() {
       onClose?: () => void
     }[],
     size: "medium" as "medium" | "large",
+    position: "center" as DialogPosition,
   })
 
   useKeyboard((evt) => {
@@ -92,6 +101,7 @@ function init() {
       }
       batch(() => {
         setStore("size", "medium")
+        setStore("position", "center")
         setStore("stack", [])
       })
       refocus()
@@ -103,13 +113,16 @@ function init() {
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
-      setStore("size", "medium")
-      setStore("stack", [
-        {
-          element: input,
-          onClose,
-        },
-      ])
+      batch(() => {
+        setStore("size", "medium")
+        setStore("position", "center")
+        setStore("stack", [
+          {
+            element: input,
+            onClose,
+          },
+        ])
+      })
     },
     get stack() {
       return store.stack
@@ -117,8 +130,14 @@ function init() {
     get size() {
       return store.size
     },
+    get position() {
+      return store.position
+    },
     setSize(size: "medium" | "large") {
       setStore("size", size)
+    },
+    setPosition(position: DialogPosition) {
+      setStore("position", position)
     },
   }
 }
@@ -152,7 +171,7 @@ export function DialogProvider(props: ParentProps) {
         }}
       >
         <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size}>
+          <Dialog onClose={() => value.clear()} size={value.size} position={value.position}>
             {value.stack.at(-1)!.element}
           </Dialog>
         </Show>
