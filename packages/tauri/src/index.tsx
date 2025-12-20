@@ -5,6 +5,8 @@ import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { AsyncStorage } from "@solid-primitives/storage"
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
+import { Store } from "@tauri-apps/plugin-store"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
@@ -57,7 +59,7 @@ const platform: Platform = {
   storage: (name = "default.dat") => {
     const api: AsyncStorage = {
       _store: null,
-      _getStore: async () => api._store || (api._store = (await import("@tauri-apps/plugin-store")).Store.load(name)),
+      _getStore: async () => api._store || (api._store = Store.load(name)),
       getItem: async (key: string) => (await (await api._getStore()).get(key)) ?? null,
       setItem: async (key: string, value: string) => await (await api._getStore()).set(key, value),
       removeItem: async (key: string) => await (await api._getStore()).delete(key),
@@ -82,9 +84,15 @@ const platform: Platform = {
   update: async () => {
     if (!UPDATER_ENABLED || !update) return
     await update.install()
+  },
+
+  restart: async () => {
     await invoke("kill_sidecar")
     await relaunch()
   },
+
+  // @ts-expect-error
+  fetch: tauriFetch,
 }
 
 createMenu()

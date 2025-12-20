@@ -63,8 +63,6 @@ TUI issues potentially caused by our underlying TUI library:
 
 **Do not** add for general TUI bugs.
 
----
-
 When assigning to people here are the following rules:
 
 adamdotdev:
