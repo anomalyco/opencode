@@ -154,7 +154,11 @@ export function Sidebar(props: { sessionID: string }) {
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
                 <Show when={sync.data.lsp.length === 0}>
-                  <text fg={theme.textMuted}>LSPs will activate as files are read</text>
+                  <text fg={theme.textMuted}>
+                    {sync.data.config.lsp === false
+                      ? "LSPs have been disabled in settings"
+                      : "LSPs will activate as files are read"}
+                  </text>
                 </Show>
                 <For each={sync.data.lsp}>
                   {(item) => (
