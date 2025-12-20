@@ -87,8 +87,6 @@ export namespace File {
     const tops = ["image", "audio", "video", "font", "model", "multipart"]
     if (tops.includes(top)) return true
 
-    if (type === "application/octet-stream") return true
-
     const bins = [
       "zip",
       "gzip",
@@ -125,6 +123,8 @@ export namespace File {
     let cache: Entry = { files: [], dirs: [] }
     let fetching = false
     const fn = async (result: Entry) => {
+      // Disable scanning if in root of file system
+      if (Instance.directory === path.parse(Instance.directory).root) return
       fetching = true
       const set = new Set<string>()
       for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
