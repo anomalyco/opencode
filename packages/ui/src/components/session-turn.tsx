@@ -499,7 +499,7 @@ export function SessionTurn(
                             )
                             return (
                               <Switch>
-                                <Match when={response() && lastTextPart()?.id === last()?.id}>
+                                <Match when={!summary() && response() && lastTextPart()?.id === last()?.id}>
                                   <Message
                                     message={assistantMessage}
                                     parts={parts().filter((p) => p?.id !== last()?.id)}
