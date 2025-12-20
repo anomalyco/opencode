@@ -1,9 +1,11 @@
-import { z } from "zod"
+import z from "zod"
 import { Tool } from "./tool"
-import { App } from "../app/app"
 import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
+import { Instance } from "../project/instance"
+
+const MAX_LINE_LENGTH = 2000
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -17,11 +19,10 @@ export const GrepTool = Tool.define("grep", {
       throw new Error("pattern is required")
     }
 
-    const app = App.info()
-    const searchPath = params.path || app.path.cwd
+    const searchPath = params.path || Instance.directory
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-n", params.pattern]
+    const args = ["-nH", "--field-match-separator=|", "--regexp", params.pattern]
     if (params.include) {
       args.push("--glob", params.include)
     }
@@ -54,11 +55,11 @@ export const GrepTool = Tool.define("grep", {
     for (const line of lines) {
       if (!line) continue
 
-      const [filePath, lineNumStr, ...lineTextParts] = line.split(":")
+      const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
       if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
 
       const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join(":")
+      const lineText = lineTextParts.join("|")
 
       const file = Bun.file(filePath)
       const stats = await file.stat().catch(() => null)
@@ -97,7 +98,9 @@ export const GrepTool = Tool.define("grep", {
         currentFile = match.path
         outputLines.push(`${match.path}:`)
       }
-      outputLines.push(`  Line ${match.lineNum}: ${match.lineText}`)
+      const truncatedLineText =
+        match.lineText.length > MAX_LINE_LENGTH ? match.lineText.substring(0, MAX_LINE_LENGTH) + "..." : match.lineText
+      outputLines.push(`  Line ${match.lineNum}: ${truncatedLineText}`)
     }
 
     if (truncated) {

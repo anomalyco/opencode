@@ -1,4 +1,5 @@
 .root {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -144,5 +145,10 @@
     table td:last-child {
       border-right: none;
     }
+  }
+
+  [data-component="copy-button"] {
+    top: 0;
+    right: 0;
   }
 }

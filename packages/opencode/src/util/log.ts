@@ -4,7 +4,7 @@ import { Global } from "../global"
 import z from "zod"
 
 export namespace Log {
-  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).openapi({ ref: "LogLevel", description: "Log level" })
+  export const Level = z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).meta({ ref: "LogLevel", description: "Log level" })
   export type Level = z.infer<typeof Level>
 
   const levelPriority: Record<Level, number> = {
@@ -50,6 +50,10 @@ export namespace Log {
   export function file() {
     return logpath
   }
+  let write = (msg: any) => {
+    process.stderr.write(msg)
+    return msg.length
+  }
 
   export async function init(options: Options) {
     if (options.level) level = options.level
@@ -62,10 +66,10 @@ export namespace Log {
     const logfile = Bun.file(logpath)
     await fs.truncate(logpath).catch(() => {})
     const writer = logfile.writer()
-    process.stderr.write = (msg) => {
-      writer.write(msg)
+    write = async (msg: any) => {
+      const num = writer.write(msg)
       writer.flush()
-      return true
+      return num
     }
   }
 
@@ -81,6 +85,13 @@ export namespace Log {
 
     const filesToDelete = files.slice(0, -10)
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
+  }
+
+  function formatError(error: Error, depth = 0): string {
+    const result = error.message
+    return error.cause instanceof Error && depth < 10
+      ? result + " Caused by: " + formatError(error.cause, depth + 1)
+      : result
   }
 
   let last = Date.now()
@@ -101,7 +112,12 @@ export namespace Log {
         ...extra,
       })
         .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => `${key}=${typeof value === "object" ? JSON.stringify(value) : value}`)
+        .map(([key, value]) => {
+          const prefix = `${key}=`
+          if (value instanceof Error) return prefix + formatError(value)
+          if (typeof value === "object") return prefix + JSON.stringify(value)
+          return prefix + value
+        })
         .join(" ")
       const next = new Date()
       const diff = next.getTime() - last
@@ -111,22 +127,22 @@ export namespace Log {
     const result: Logger = {
       debug(message?: any, extra?: Record<string, any>) {
         if (shouldLog("DEBUG")) {
-          process.stderr.write("DEBUG " + build(message, extra))
+          write("DEBUG " + build(message, extra))
         }
       },
       info(message?: any, extra?: Record<string, any>) {
         if (shouldLog("INFO")) {
-          process.stderr.write("INFO  " + build(message, extra))
+          write("INFO  " + build(message, extra))
         }
       },
       error(message?: any, extra?: Record<string, any>) {
         if (shouldLog("ERROR")) {
-          process.stderr.write("ERROR " + build(message, extra))
+          write("ERROR " + build(message, extra))
         }
       },
       warn(message?: any, extra?: Record<string, any>) {
         if (shouldLog("WARN")) {
-          process.stderr.write("WARN  " + build(message, extra))
+          write("WARN  " + build(message, extra))
         }
       },
       tag(key: string, value: string) {

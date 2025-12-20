@@ -1,0 +1,35 @@
+[data-component="diff"] {
+  content-visibility: auto;
+
+  [data-slot="diff-hunk-separator-line-number"] {
+    position: sticky;
+    left: 0;
+    background-color: var(--surface-diff-hidden-strong);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    [data-slot="diff-hunk-separator-line-number-icon"] {
+      aspect-ratio: 1;
+      width: 24px;
+      height: 24px;
+      color: var(--icon-strong-base);
+    }
+  }
+  [data-slot="diff-hunk-separator-content"] {
+    position: sticky;
+    background-color: var(--surface-diff-hidden-base);
+    color: var(--text-base);
+    width: var(--diffs-column-content-width);
+    left: var(--diffs-column-number-width);
+    padding-left: 8px;
+    user-select: none;
+    cursor: default;
+    text-align: left;
+
+    [data-slot="diff-hunk-separator-content-span"] {
+      mix-blend-mode: var(--text-mix-blend-mode);
+    }
+  }
+}

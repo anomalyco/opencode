@@ -1,0 +1,4 @@
+Summarize the following conversation into 2 sentences MAX explaining what the
+assistant did and why
+Do not explain the user's input.
+Do not speak in the third person about the assistant.

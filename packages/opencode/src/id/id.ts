@@ -1,4 +1,4 @@
-import { z } from "zod"
+import z from "zod"
 import { randomBytes } from "crypto"
 
 export namespace Identifier {
@@ -8,6 +8,7 @@ export namespace Identifier {
     permission: "per",
     user: "usr",
     part: "prt",
+    pty: "pty",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
@@ -30,7 +31,7 @@ export namespace Identifier {
 
   function generateID(prefix: keyof typeof prefixes, descending: boolean, given?: string): string {
     if (!given) {
-      return generateNewID(prefix, descending)
+      return create(prefix, descending)
     }
 
     if (!given.startsWith(prefixes[prefix])) {
@@ -49,8 +50,8 @@ export namespace Identifier {
     return result
   }
 
-  function generateNewID(prefix: keyof typeof prefixes, descending: boolean): string {
-    const currentTimestamp = Date.now()
+  export function create(prefix: keyof typeof prefixes, descending: boolean, timestamp?: number): string {
+    const currentTimestamp = timestamp ?? Date.now()
 
     if (currentTimestamp !== lastTimestamp) {
       lastTimestamp = currentTimestamp

@@ -9,11 +9,10 @@ import { rehypeHeadingIds } from "@astrojs/markdown-remark"
 import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import { spawnSync } from "child_process"
 
-const github = "https://github.com/sst/opencode"
-
 // https://astro.build/config
 export default defineConfig({
   site: config.url,
+  base: "/docs",
   output: "server",
   adapter: cloudflare({
     imageService: "passthrough",
@@ -32,24 +31,15 @@ export default defineConfig({
     configSchema(),
     solidJs(),
     starlight({
-      title: "opencode",
+      title: "OpenCode",
       lastUpdated: true,
       expressiveCode: { themes: ["github-light", "github-dark"] },
       social: [
         { icon: "github", label: "GitHub", href: config.github },
         { icon: "discord", label: "Dscord", href: config.discord },
       ],
-      head: [
-        {
-          tag: "link",
-          attrs: {
-            rel: "icon",
-            href: "/favicon.svg",
-          },
-        },
-      ],
       editLink: {
-        baseUrl: `${github}/edit/dev/packages/web/`,
+        baseUrl: `${config.github}/edit/dev/packages/web/`,
       },
       markdown: {
         headingLinks: false,
@@ -61,37 +51,47 @@ export default defineConfig({
         replacesTitle: true,
       },
       sidebar: [
-        "docs",
-        "docs/config",
-        "docs/providers",
-        "docs/enterprise",
-        "docs/troubleshooting",
-
+        "",
+        "config",
+        "providers",
+        "network",
+        "enterprise",
+        "troubleshooting",
+        "1-0",
         {
           label: "Usage",
-          items: ["docs/cli", "docs/ide", "docs/share", "docs/github"],
+          items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
         },
 
         {
           label: "Configure",
           items: [
-            "docs/rules",
-            "docs/agents",
-            "docs/models",
-            "docs/themes",
-            "docs/plugins",
-            "docs/keybinds",
-            "docs/formatters",
-            "docs/permissions",
-            "docs/lsp",
-            "docs/mcp-servers",
+            "tools",
+            "rules",
+            "agents",
+            "models",
+            "themes",
+            "keybinds",
+            "commands",
+            "formatters",
+            "permissions",
+            "lsp",
+            "mcp-servers",
+            "acp",
+            "custom-tools",
           ],
+        },
+
+        {
+          label: "Develop",
+          items: ["sdk", "server", "plugins", "ecosystem"],
         },
       ],
       components: {
         Hero: "./src/components/Hero.astro",
         Head: "./src/components/Head.astro",
         Header: "./src/components/Header.astro",
+        SiteTitle: "./src/components/SiteTitle.astro",
       },
       plugins: [
         theme({
@@ -100,9 +100,6 @@ export default defineConfig({
       ],
     }),
   ],
-  redirects: {
-    "/discord": "https://discord.gg/opencode",
-  },
 })
 
 function configSchema() {

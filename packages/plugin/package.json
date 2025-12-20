@@ -1,26 +1,27 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/plugin",
-  "version": "0.4.1",
+  "version": "1.0.176",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "build": "tsc"
   },
   "exports": {
-    ".": {
-      "development": "./src/index.ts",
-      "import": "./dist/index.js"
-    }
+    ".": "./src/index.ts",
+    "./tool": "./src/tool.ts"
   },
   "files": [
     "dist"
   ],
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*"
+    "@opencode-ai/sdk": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/node": "catalog:",
     "typescript": "catalog:",
-    "@hey-api/openapi-ts": "0.80.1",
-    "@tsconfig/node22": "catalog:"
+    "@typescript/native-preview": "catalog:"
   }
 }

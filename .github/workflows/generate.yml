@@ -1,0 +1,51 @@
+name: generate
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Generate
+        run: ./script/generate.ts
+
+      - name: Commit and push
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "chore: generate"
+          git push origin HEAD:${{ github.ref_name }} --no-verify
+          # if ! git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify; then
+          #   echo ""
+          #   echo "============================================"
+          #   echo "Failed to push generated code."
+          #   echo "Please run locally and push:"
+          #   echo ""
+          #   echo "  ./script/generate.ts"
+          #   echo "  git add -A && git commit -m \"chore: generate\" && git push"
+          #   echo ""
+          #   echo "============================================"
+          #   exit 1
+          # fi

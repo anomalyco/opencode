@@ -1,0 +1,30 @@
+dist
+.wrangler
+.output
+.vercel
+.netlify
+app.config.timestamp_*.js
+
+# Environment
+.env
+.env*.local
+
+# dependencies
+/node_modules
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+*.launch
+.settings/
+
+# Temp
+gitignore
+
+# Generated files
+public/sitemap.xml
+
+# System Files
+.DS_Store
+Thumbs.db

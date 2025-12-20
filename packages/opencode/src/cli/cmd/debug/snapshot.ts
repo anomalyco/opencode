@@ -11,7 +11,7 @@ export const SnapshotCommand = cmd({
 const TrackCommand = cmd({
   command: "track",
   async handler() {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       console.log(await Snapshot.track())
     })
   },
@@ -26,7 +26,7 @@ const PatchCommand = cmd({
       demandOption: true,
     }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       console.log(await Snapshot.patch(args.hash))
     })
   },
@@ -41,7 +41,7 @@ const DiffCommand = cmd({
       demandOption: true,
     }),
   async handler(args) {
-    await bootstrap({ cwd: process.cwd() }, async () => {
+    await bootstrap(process.cwd(), async () => {
       console.log(await Snapshot.diff(args.hash))
     })
   },

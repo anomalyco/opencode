@@ -1,0 +1,66 @@
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+[data-component="modal"][data-slot="overlay"] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  animation: fadeIn 0.2s ease;
+
+  @media (prefers-color-scheme: dark) {
+    background-color: rgba(0, 0, 0, 0.7);
+  }
+
+  [data-slot="content"] {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    padding: var(--space-6);
+    min-width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    animation: slideUp 0.2s ease;
+
+    @media (max-width: 30rem) {
+      min-width: 300px;
+      padding: var(--space-4);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  [data-slot="title"] {
+    margin: 0 0 var(--space-4) 0;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+}

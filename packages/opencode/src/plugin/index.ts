@@ -1,46 +1,59 @@
-import type { Hooks, Plugin as PluginInstance } from "@opencode-ai/plugin"
-import { App } from "../app/app"
+import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
+import { Instance } from "../project/instance"
+import { Flag } from "../flag/flag"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const state = App.state("plugin", async (app) => {
+  const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      fetch: async (...args) => Server.app().fetch(...args),
+      // @ts-ignore - fetch type incompatibility
+      fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
     const hooks = []
-    for (let plugin of config.plugin ?? []) {
+    const input: PluginInput = {
+      client,
+      project: Instance.project,
+      worktree: Instance.worktree,
+      directory: Instance.directory,
+      $: Bun.$,
+    }
+    const plugins = [...(config.plugin ?? [])]
+    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+      plugins.push("opencode-copilot-auth@0.0.9")
+      plugins.push("opencode-anthropic-auth@0.0.5")
+    }
+    for (let plugin of plugins) {
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
-        const [pkg, version] = plugin.split("@")
-        plugin = await BunProc.install(pkg, version ?? "latest")
+        const lastAtIndex = plugin.lastIndexOf("@")
+        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+        plugin = await BunProc.install(pkg, version)
       }
       const mod = await import(plugin)
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        const init = await fn({
-          client,
-          app,
-          $: Bun.$,
-        })
+        const init = await fn(input)
         hooks.push(init)
       }
     }
 
     return {
       hooks,
+      input,
     }
   })
 
   export async function trigger<
-    Name extends keyof Required<Hooks>,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -56,7 +69,16 @@ export namespace Plugin {
     return output
   }
 
-  export function init() {
+  export async function list() {
+    return state().then((x) => x.hooks)
+  }
+
+  export async function init() {
+    const hooks = await state().then((x) => x.hooks)
+    const config = await Config.get()
+    for (const hook of hooks) {
+      await hook.config?.(config)
+    }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {

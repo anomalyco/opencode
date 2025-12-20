@@ -1,6 +1,8 @@
-import { App } from "../app/app"
+import { readableStreamToText } from "bun"
 import { BunProc } from "../bun"
+import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { Flag } from "@/flag/flag"
 
 export interface Info {
   name: string
@@ -63,8 +65,7 @@ export const prettier: Info = {
     ".gql",
   ],
   async enabled() {
-    const app = App.info()
-    const items = await Filesystem.findUp("package.json", app.path.cwd, app.path.root)
+    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
     for (const item of items) {
       const json = await Bun.file(item).json()
       if (json.dependencies?.prettier) return true
@@ -74,9 +75,28 @@ export const prettier: Info = {
   },
 }
 
+export const oxfmt: Info = {
+  name: "oxfmt",
+  command: [BunProc.which(), "x", "oxfmt", "$FILE"],
+  environment: {
+    BUN_BE_BUN: "1",
+  },
+  extensions: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"],
+  async enabled() {
+    if (!Flag.OPENCODE_EXPERIMENTAL_OXFMT) return false
+    const items = await Filesystem.findUp("package.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.dependencies?.oxfmt) return true
+      if (json.devDependencies?.oxfmt) return true
+    }
+    return false
+  },
+}
+
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "biome", "format", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -109,9 +129,14 @@ export const biome: Info = {
     ".gql",
   ],
   async enabled() {
-    const app = App.info()
-    const items = await Filesystem.findUp("biome.json", app.path.cwd, app.path.root)
-    return items.length > 0
+    const configs = ["biome.json", "biome.jsonc"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      if (found.length > 0) {
+        return true
+      }
+    }
+    return false
   },
 }
 
@@ -129,8 +154,7 @@ export const clang: Info = {
   command: ["clang-format", "-i", "$FILE"],
   extensions: [".c", ".cc", ".cpp", ".cxx", ".c++", ".h", ".hh", ".hpp", ".hxx", ".h++", ".ino", ".C", ".H"],
   async enabled() {
-    const app = App.info()
-    const items = await Filesystem.findUp(".clang-format", app.path.cwd, app.path.root)
+    const items = await Filesystem.findUp(".clang-format", Instance.directory, Instance.worktree)
     return items.length > 0
   },
 }
@@ -150,10 +174,9 @@ export const ruff: Info = {
   extensions: [".py", ".pyi"],
   async enabled() {
     if (!Bun.which("ruff")) return false
-    const app = App.info()
     const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
     for (const config of configs) {
-      const found = await Filesystem.findUp(config, app.path.cwd, app.path.root)
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
       if (found.length > 0) {
         if (config === "pyproject.toml") {
           const content = await Bun.file(found[0]).text()
@@ -165,11 +188,53 @@ export const ruff: Info = {
     }
     const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
     for (const dep of deps) {
-      const found = await Filesystem.findUp(dep, app.path.cwd, app.path.root)
+      const found = await Filesystem.findUp(dep, Instance.directory, Instance.worktree)
       if (found.length > 0) {
         const content = await Bun.file(found[0]).text()
         if (content.includes("ruff")) return true
       }
+    }
+    return false
+  },
+}
+
+export const rlang: Info = {
+  name: "air",
+  command: ["air", "format", "$FILE"],
+  extensions: [".R"],
+  async enabled() {
+    const airPath = Bun.which("air")
+    if (airPath == null) return false
+
+    try {
+      const proc = Bun.spawn(["air", "--help"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      await proc.exited
+      const output = await readableStreamToText(proc.stdout)
+
+      // Check for "Air: An R language server and formatter"
+      const firstLine = output.split("\n")[0]
+      const hasR = firstLine.includes("R language")
+      const hasFormatter = firstLine.includes("formatter")
+      return hasR && hasFormatter
+    } catch (error) {
+      return false
+    }
+  },
+}
+
+export const uvformat: Info = {
+  name: "uv format",
+  command: ["uv", "format", "--", "$FILE"],
+  extensions: [".py", ".pyi"],
+  async enabled() {
+    if (await ruff.enabled()) return false
+    if (Bun.which("uv") !== null) {
+      const proc = Bun.spawn(["uv", "format", "--help"], { stderr: "pipe", stdout: "pipe" })
+      const code = await proc.exited
+      return code === 0
     }
     return false
   },
@@ -199,5 +264,52 @@ export const htmlbeautifier: Info = {
   extensions: [".erb", ".html.erb"],
   async enabled() {
     return Bun.which("htmlbeautifier") !== null
+  },
+}
+
+export const dart: Info = {
+  name: "dart",
+  command: ["dart", "format", "$FILE"],
+  extensions: [".dart"],
+  async enabled() {
+    return Bun.which("dart") !== null
+  },
+}
+
+export const ocamlformat: Info = {
+  name: "ocamlformat",
+  command: ["ocamlformat", "-i", "$FILE"],
+  extensions: [".ml", ".mli"],
+  async enabled() {
+    if (!Bun.which("ocamlformat")) return false
+    const items = await Filesystem.findUp(".ocamlformat", Instance.directory, Instance.worktree)
+    return items.length > 0
+  },
+}
+
+export const terraform: Info = {
+  name: "terraform",
+  command: ["terraform", "fmt", "$FILE"],
+  extensions: [".tf", ".tfvars"],
+  async enabled() {
+    return Bun.which("terraform") !== null
+  },
+}
+
+export const latexindent: Info = {
+  name: "latexindent",
+  command: ["latexindent", "-w", "-s", "$FILE"],
+  extensions: [".tex"],
+  async enabled() {
+    return Bun.which("latexindent") !== null
+  },
+}
+
+export const gleam: Info = {
+  name: "gleam",
+  command: ["gleam", "format", "$FILE"],
+  extensions: [".gleam"],
+  async enabled() {
+    return Bun.which("gleam") !== null
   },
 }

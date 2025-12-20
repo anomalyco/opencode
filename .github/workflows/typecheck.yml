@@ -1,4 +1,4 @@
-name: Typecheck
+name: typecheck
 
 on:
   pull_request:
@@ -7,18 +7,13 @@ on:
 
 jobs:
   typecheck:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: 1.2.19
-
-      - name: Install dependencies
-        run: bun install
+        uses: ./.github/actions/setup-bun
 
       - name: Run typecheck
         run: bun typecheck

@@ -1,11 +1,13 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { spawn } from "bun"
-import { z } from "zod"
-import { NamedError } from "../util/error"
+import z from "zod"
+import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
-import { Bus } from "../bus"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },
+  { name: "Visual Studio Code - Insiders" as const, cmd: "code-insiders" },
   { name: "Visual Studio Code" as const, cmd: "code" },
   { name: "Cursor" as const, cmd: "cursor" },
   { name: "VSCodium" as const, cmd: "codium" },
@@ -15,7 +17,7 @@ export namespace Ide {
   const log = Log.create({ service: "ide" })
 
   export const Event = {
-    Installed: Bus.event(
+    Installed: BusEvent.define(
       "ide.installed",
       z.object({
         ide: z.string(),
@@ -43,7 +45,7 @@ export namespace Ide {
   }
 
   export function alreadyInstalled() {
-    return process.env["OPENCODE_CALLER"] === "vscode"
+    return process.env["OPENCODE_CALLER"] === "vscode" || process.env["OPENCODE_CALLER"] === "vscode-insiders"
   }
 
   export async function install(ide: (typeof SUPPORTED_IDES)[number]["name"]) {

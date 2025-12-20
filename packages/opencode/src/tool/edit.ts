@@ -3,19 +3,26 @@
 // https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/utils/editCorrector.ts
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
-import { z } from "zod"
+import z from "zod"
 import * as path from "path"
 import { Tool } from "./tool"
 import { LSP } from "../lsp"
-import { createTwoFilesPatch } from "diff"
+import { createTwoFilesPatch, diffLines } from "diff"
 import { Permission } from "../permission"
 import DESCRIPTION from "./edit.txt"
-import { App } from "../app/app"
 import { File } from "../file"
 import { Bus } from "../bus"
 import { FileTime } from "../file/time"
-import { Config } from "../config/config"
 import { Filesystem } from "../util/filesystem"
+import { Instance } from "../project/instance"
+import { Agent } from "../agent/agent"
+import { Snapshot } from "@/snapshot"
+
+const MAX_DIAGNOSTICS_PER_FILE = 20
+
+function normalizeLineEndings(text: string): string {
+  return text.replaceAll("\r\n", "\n")
+}
 
 export const EditTool = Tool.define("edit", {
   description: DESCRIPTION,
@@ -34,21 +41,46 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
-    const app = App.info()
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(app.path.cwd, params.filePath)
-    if (!Filesystem.contains(app.path.cwd, filePath)) {
-      throw new Error(`File ${filePath} is not in the current working directory`)
+    const agent = await Agent.get(ctx.agent)
+
+    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    if (!Filesystem.contains(Instance.directory, filePath)) {
+      const parentDir = path.dirname(filePath)
+      if (agent.permission.external_directory === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: [parentDir, path.join(parentDir, "*")],
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `Edit file outside working directory: ${filePath}`,
+          metadata: {
+            filepath: filePath,
+            parentDir,
+          },
+        })
+      } else if (agent.permission.external_directory === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          {
+            filepath: filePath,
+            parentDir,
+          },
+          `File ${filePath} is not in the current working directory`,
+        )
+      }
     }
 
-    const cfg = await Config.get()
     let diff = ""
     let contentOld = ""
     let contentNew = ""
-    await (async () => {
+    await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-        if (cfg.permission?.edit === "ask") {
+        if (agent.permission.edit === "ask") {
           await Permission.ask({
             type: "edit",
             sessionID: ctx.sessionID,
@@ -65,6 +97,7 @@ export const EditTool = Tool.define("edit", {
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
+        FileTime.read(ctx.sessionID, filePath)
         return
       }
 
@@ -76,8 +109,10 @@ export const EditTool = Tool.define("edit", {
       contentOld = await file.text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-      if (cfg.permission?.edit === "ask") {
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
+      if (agent.permission.edit === "ask") {
         await Permission.ask({
           type: "edit",
           sessionID: ctx.sessionID,
@@ -96,32 +131,44 @@ export const EditTool = Tool.define("edit", {
         file: filePath,
       })
       contentNew = await file.text()
-      diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-    })()
-
-    FileTime.read(ctx.sessionID, filePath)
+      diff = trimDiff(
+        createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
+      )
+      FileTime.read(ctx.sessionID, filePath)
+    })
 
     let output = ""
     await LSP.touchFile(filePath, true)
     const diagnostics = await LSP.diagnostics()
-    for (const [file, issues] of Object.entries(diagnostics)) {
-      if (issues.length === 0) continue
-      if (file === filePath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${issues.map(LSP.Diagnostic.pretty).join("\n")}\n</file_diagnostics>\n`
-        continue
-      }
-      output += `\n<project_diagnostics>\n${file}\n${issues
-        .filter((item) => item.severity === 1)
-        .map(LSP.Diagnostic.pretty)
-        .join("\n")}\n</project_diagnostics>\n`
+    const normalizedFilePath = Filesystem.normalizePath(filePath)
+    const issues = diagnostics[normalizedFilePath] ?? []
+    if (issues.length > 0) {
+      const errors = issues.filter((item) => item.severity === 1)
+      const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
+      const suffix =
+        errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
+      output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
+    }
+
+    const filediff: Snapshot.FileDiff = {
+      file: filePath,
+      before: contentOld,
+      after: contentNew,
+      additions: 0,
+      deletions: 0,
+    }
+    for (const change of diffLines(contentOld, contentNew)) {
+      if (change.added) filediff.additions += change.count || 0
+      if (change.removed) filediff.deletions += change.count || 0
     }
 
     return {
       metadata: {
         diagnostics,
         diff,
+        filediff,
       },
-      title: `${path.relative(app.path.root, filePath)}`,
+      title: `${path.relative(Instance.worktree, filePath)}`,
       output,
     }
   },
@@ -187,7 +234,10 @@ export const LineTrimmedReplacer: Replacer = function* (content, find) {
 
       let matchEndIndex = matchStartIndex
       for (let k = 0; k < searchLines.length; k++) {
-        matchEndIndex += originalLines[i + k].length + 1
+        matchEndIndex += originalLines[i + k].length
+        if (k < searchLines.length - 1) {
+          matchEndIndex += 1 // Add newline character except for the last line
+        }
       }
 
       yield content.substring(matchStartIndex, matchEndIndex)
@@ -549,7 +599,7 @@ export const ContextAwareReplacer: Replacer = function* (content, find) {
   }
 }
 
-function trimDiff(diff: string): string {
+export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
   const contentLines = lines.filter(
     (line) =>
@@ -590,6 +640,8 @@ export function replace(content: string, oldString: string, newString: string, r
     throw new Error("oldString and newString must be different")
   }
 
+  let notFound = true
+
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
@@ -597,13 +649,14 @@ export function replace(content: string, oldString: string, newString: string, r
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
     EscapeNormalizedReplacer,
-    // TrimmedBoundaryReplacer,
-    // ContextAwareReplacer,
-    // MultiOccurrenceReplacer,
+    TrimmedBoundaryReplacer,
+    ContextAwareReplacer,
+    MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
       if (index === -1) continue
+      notFound = false
       if (replaceAll) {
         return content.replaceAll(search, newString)
       }
@@ -612,5 +665,11 @@ export function replace(content: string, oldString: string, newString: string, r
       return content.substring(0, index) + newString + content.substring(index + search.length)
     }
   }
-  throw new Error("oldString not found in content or was found multiple times")
+
+  if (notFound) {
+    throw new Error("oldString not found in content")
+  }
+  throw new Error(
+    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
+  )
 }

@@ -1,12 +1,16 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
-import { z } from "zod"
-import { NamedError } from "../util/error"
-import { Bus } from "../bus"
+import z from "zod"
+import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
+import { iife } from "@/util/iife"
+import { Flag } from "../flag/flag"
 
 declare global {
   const OPENCODE_VERSION: string
+  const OPENCODE_CHANNEL: string
 }
 
 export namespace Installation {
@@ -15,8 +19,14 @@ export namespace Installation {
   export type Method = Awaited<ReturnType<typeof method>>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "installation.updated",
+      z.object({
+        version: z.string(),
+      }),
+    ),
+    UpdateAvailable: BusEvent.define(
+      "installation.update-available",
       z.object({
         version: z.string(),
       }),
@@ -28,7 +38,7 @@ export namespace Installation {
       version: z.string(),
       latest: z.string(),
     })
-    .openapi({
+    .meta({
       ref: "InstallationInfo",
     })
   export type Info = z.infer<typeof Info>
@@ -40,16 +50,17 @@ export namespace Installation {
     }
   }
 
-  export function isSnapshot() {
-    return VERSION.startsWith("0.0.0")
+  export function isPreview() {
+    return CHANNEL !== "latest"
   }
 
-  export function isDev() {
-    return VERSION === "dev"
+  export function isLocal() {
+    return CHANNEL === "local"
   }
 
   export async function method() {
     if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl"
+    if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()
 
     const checks = [
@@ -71,7 +82,7 @@ export namespace Installation {
       },
       {
         name: "brew" as const,
-        command: () => $`brew list --formula opencode-ai`.throws(false).text(),
+        command: () => $`brew list --formula opencode`.throws(false).text(),
       },
     ]
 
@@ -85,7 +96,7 @@ export namespace Installation {
 
     for (const check of checks) {
       const output = await check.command()
-      if (output.includes("opencode-ai")) {
+      if (output.includes(check.name === "brew" ? "opencode" : "opencode-ai")) {
         return check.name
       }
     }
@@ -100,28 +111,43 @@ export namespace Installation {
     }),
   )
 
+  async function getBrewFormula() {
+    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).text()
+    if (tapFormula.includes("opencode")) return "sst/tap/opencode"
+    const coreFormula = await $`brew list --formula opencode`.throws(false).text()
+    if (coreFormula.includes("opencode")) return "opencode"
+    return "opencode"
+  }
+
   export async function upgrade(method: Method, target: string) {
-    const cmd = (() => {
-      switch (method) {
-        case "curl":
-          return $`curl -fsSL https://opencode.ai/install | bash`.env({
-            ...process.env,
-            VERSION: target,
-          })
-        case "npm":
-          return $`npm install -g opencode-ai@${target}`
-        case "pnpm":
-          return $`pnpm install -g opencode-ai@${target}`
-        case "bun":
-          return $`bun install -g opencode-ai@${target}`
-        case "brew":
-          return $`brew install sst/tap/opencode`.env({
-            HOMEBREW_NO_AUTO_UPDATE: "1",
-          })
-        default:
-          throw new Error(`Unknown method: ${method}`)
+    let cmd
+    switch (method) {
+      case "curl":
+        cmd = $`curl -fsSL https://opencode.ai/install | bash`.env({
+          ...process.env,
+          VERSION: target,
+        })
+        break
+      case "npm":
+        cmd = $`npm install -g opencode-ai@${target}`
+        break
+      case "pnpm":
+        cmd = $`pnpm install -g opencode-ai@${target}`
+        break
+      case "bun":
+        cmd = $`bun install -g opencode-ai@${target}`
+        break
+      case "brew": {
+        const formula = await getBrewFormula()
+        cmd = $`brew install ${formula}`.env({
+          HOMEBREW_NO_AUTO_UPDATE: "1",
+          ...process.env,
+        })
+        break
       }
-    })()
+      default:
+        throw new Error(`Unknown method: ${method}`)
+    }
     const result = await cmd.quiet().throws(false)
     log.info("upgraded", {
       method,
@@ -135,18 +161,37 @@ export namespace Installation {
       })
   }
 
-  export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "dev"
-  export const USER_AGENT = `opencode/${VERSION}`
+  export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
+  export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
+  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
-  export async function latest() {
-    return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
-      .then((res) => res.json())
-      .then((data) => {
-        if (typeof data.tag_name !== "string") {
-          log.error("GitHub API error", data)
-          throw new Error("failed to fetch latest version")
-        }
-        return data.tag_name.slice(1) as string
+  export async function latest(installMethod?: Method) {
+    const detectedMethod = installMethod || (await method())
+    if (detectedMethod === "brew") {
+      const formula = await getBrewFormula()
+      if (formula === "opencode") {
+        return fetch("https://formulae.brew.sh/api/formula/opencode.json")
+          .then((res) => {
+            if (!res.ok) throw new Error(res.statusText)
+            return res.json()
+          })
+          .then((data: any) => data.versions.stable)
+      }
+    }
+
+    const registry = await iife(async () => {
+      const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
+      const reg = r || "https://registry.npmjs.org"
+      return reg.endsWith("/") ? reg.slice(0, -1) : reg
+    })
+    const [major] = VERSION.split(".").map((x) => Number(x))
+    // const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    const channel = CHANNEL
+    return fetch(`${registry}/opencode-ai/${channel}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(res.statusText)
+        return res.json()
       })
+      .then((data: any) => data.version)
   }
 }

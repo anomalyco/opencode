@@ -1,0 +1,166 @@
+[data-component="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  user-select: none;
+  cursor: default;
+  outline: none;
+  white-space: nowrap;
+
+  &[data-variant="primary"] {
+    background-color: var(--icon-strong-base);
+    border-color: var(--border-weak-base);
+    color: var(--icon-invert-base);
+
+    [data-slot="icon-svg"] {
+      color: var(--icon-invert-base);
+    }
+
+    &:hover:not(:disabled) {
+      background-color: var(--icon-strong-hover);
+    }
+    &:focus:not(:disabled) {
+      background-color: var(--icon-strong-focus);
+    }
+    &:active:not(:disabled) {
+      background-color: var(--icon-strong-active);
+    }
+    &:disabled {
+      background-color: var(--icon-strong-disabled);
+
+      [data-slot="icon-svg"] {
+        color: var(--icon-invert-base);
+      }
+    }
+  }
+
+  &[data-variant="ghost"] {
+    border-color: transparent;
+    background-color: transparent;
+    color: var(--text-strong);
+
+    &:hover:not(:disabled) {
+      background-color: var(--surface-raised-base-hover);
+    }
+    &:focus:not(:disabled) {
+      background-color: var(--surface-raised-base-hover);
+    }
+    &:active:not(:disabled) {
+      background-color: var(--surface-raised-base-active);
+    }
+    &:disabled {
+      color: var(--text-weak);
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    &[data-selected="true"]:not(:disabled) {
+      background-color: var(--surface-raised-base-hover);
+    }
+    &[data-active="true"] {
+      background-color: var(--surface-raised-base-active);
+    }
+  }
+
+  &[data-variant="secondary"] {
+    border: transparent;
+    background-color: var(--button-secondary-base);
+    color: var(--text-strong);
+    box-shadow: var(--shadow-xs-border);
+
+    &:hover:not(:disabled) {
+      background-color: var(--button-secondary-hover);
+    }
+    &:focus:not(:disabled) {
+      background-color: var(--button-secondary-base);
+    }
+    &:focus-visible:not(:active) {
+      background-color: var(--button-secondary-base);
+      box-shadow: var(--shadow-xs-border-focus);
+    }
+    &:focus-visible:active {
+      box-shadow: none;
+    }
+    &:active:not(:disabled) {
+      background-color: var(--button-secondary-base);
+      scale: 0.99;
+      transition: all 150ms ease-out;
+    }
+    &:disabled {
+      border-color: var(--border-disabled);
+      background-color: var(--surface-disabled);
+      color: var(--text-weak);
+      cursor: not-allowed;
+    }
+
+    [data-slot="icon-svg"] {
+      color: var(--icon-strong-base);
+    }
+  }
+
+  &[data-size="small"] {
+    height: 22px;
+    padding: 0 8px;
+    &[data-icon] {
+      padding: 0 12px 0 4px;
+    }
+
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+    gap: 4px;
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &[data-size="normal"] {
+    height: 24px;
+    padding: 0 6px;
+    &[data-icon] {
+      padding: 0 12px 0 4px;
+    }
+
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+    gap: 6px;
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &[data-size="large"] {
+    height: 32px;
+    padding: 6px 12px;
+
+    &[data-icon] {
+      padding: 0 12px 0 8px;
+    }
+
+    gap: 8px;
+
+    /* text-14-medium */
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 142.857% */
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &:focus {
+    outline: none;
+  }
+}

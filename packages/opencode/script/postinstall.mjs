@@ -50,41 +50,73 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const packageName = `opencode-${platform}-${arch}`
-  const binary = platform === "windows" ? "opencode.exe" : "opencode"
+  const binaryName = platform === "windows" ? "opencode.exe" : "opencode"
 
   try {
     // Use require.resolve to find the package
     const packageJsonPath = require.resolve(`${packageName}/package.json`)
     const packageDir = path.dirname(packageJsonPath)
-    const binaryPath = path.join(packageDir, "bin", binary)
+    const binaryPath = path.join(packageDir, "bin", binaryName)
 
     if (!fs.existsSync(binaryPath)) {
       throw new Error(`Binary not found at ${binaryPath}`)
     }
 
-    return binaryPath
+    return { binaryPath, binaryName }
   } catch (error) {
     throw new Error(`Could not find package ${packageName}: ${error.message}`)
   }
 }
 
-function main() {
-  try {
-    const binaryPath = findBinary()
-    const binScript = path.join(__dirname, "bin", "opencode")
+function prepareBinDirectory(binaryName) {
+  const binDir = path.join(__dirname, "bin")
+  const targetPath = path.join(binDir, binaryName)
 
-    // Remove existing bin script if it exists
-    if (fs.existsSync(binScript)) {
-      fs.unlinkSync(binScript)
+  // Ensure bin directory exists
+  if (!fs.existsSync(binDir)) {
+    fs.mkdirSync(binDir, { recursive: true })
+  }
+
+  // Remove existing binary/symlink if it exists
+  if (fs.existsSync(targetPath)) {
+    fs.unlinkSync(targetPath)
+  }
+
+  return { binDir, targetPath }
+}
+
+function symlinkBinary(sourcePath, binaryName) {
+  const { targetPath } = prepareBinDirectory(binaryName)
+
+  fs.symlinkSync(sourcePath, targetPath)
+  console.log(`opencode binary symlinked: ${targetPath} -> ${sourcePath}`)
+
+  // Verify the file exists after operation
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`Failed to symlink binary to ${targetPath}`)
+  }
+}
+
+async function main() {
+  try {
+    if (os.platform() === "win32") {
+      // On Windows, the .exe is already included in the package and bin field points to it
+      // No postinstall setup needed
+      console.log("Windows detected: binary setup not needed (using packaged .exe)")
+      return
     }
 
-    // Create symlink to the actual binary
-    fs.symlinkSync(binaryPath, binScript)
-    console.log(`opencode binary symlinked: ${binScript} -> ${binaryPath}`)
+    const { binaryPath, binaryName } = findBinary()
+    symlinkBinary(binaryPath, binaryName)
   } catch (error) {
-    console.error("Failed to create opencode binary symlink:", error.message)
+    console.error("Failed to setup opencode binary:", error.message)
     process.exit(1)
   }
 }
 
-main()
+try {
+  main()
+} catch (error) {
+  console.error("Postinstall script error:", error.message)
+  process.exit(0)
+}

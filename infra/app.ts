@@ -2,6 +2,8 @@ import { domain } from "./stage"
 
 const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
 const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
+export const EMAILOCTOPUS_API_KEY = new sst.Secret("EMAILOCTOPUS_API_KEY")
+const ADMIN_SECRET = new sst.Secret("ADMIN_SECRET")
 const bucket = new sst.cloudflare.Bucket("Bucket")
 
 export const api = new sst.cloudflare.Worker("Api", {
@@ -11,7 +13,7 @@ export const api = new sst.cloudflare.Worker("Api", {
     WEB_DOMAIN: domain,
   },
   url: true,
-  link: [bucket, GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY],
+  link: [bucket, GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, ADMIN_SECRET],
   transform: {
     worker: (args) => {
       args.logpush = true
@@ -25,16 +27,16 @@ export const api = new sst.cloudflare.Worker("Api", {
       ])
       args.migrations = {
         // Note: when releasing the next tag, make sure all stages use tag v2
-        oldTag: $app.stage === "production" ? "" : "v1",
-        newTag: $app.stage === "production" ? "" : "v1",
+        oldTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
+        newTag: $app.stage === "production" || $app.stage === "thdxr" ? "" : "v1",
         //newSqliteClasses: ["SyncServer"],
       }
     },
   },
 })
 
-export const web = new sst.cloudflare.x.Astro("Web", {
-  domain,
+new sst.cloudflare.x.Astro("Web", {
+  domain: "docs." + domain,
   path: "packages/web",
   environment: {
     // For astro config

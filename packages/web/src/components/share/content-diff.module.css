@@ -90,7 +90,6 @@
   }
 
   [data-component="mobile"] {
-
     & > [data-component="diff-block"]:first-child > div {
       padding-top: 0.25rem;
     }

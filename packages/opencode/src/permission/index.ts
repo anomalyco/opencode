@@ -1,42 +1,56 @@
-import { App } from "../app/app"
-import { z } from "zod"
-import { Bus } from "../bus"
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
+import z from "zod"
 import { Log } from "../util/log"
 import { Identifier } from "../id/id"
 import { Plugin } from "../plugin"
+import { Instance } from "../project/instance"
+import { Wildcard } from "../util/wildcard"
 
 export namespace Permission {
   const log = Log.create({ service: "permission" })
+
+  function toKeys(pattern: Info["pattern"], type: string): string[] {
+    return pattern === undefined ? [type] : Array.isArray(pattern) ? pattern : [pattern]
+  }
+
+  function covered(keys: string[], approved: Record<string, boolean>): boolean {
+    const pats = Object.keys(approved)
+    return keys.every((k) => pats.some((p) => Wildcard.match(k, p)))
+  }
 
   export const Info = z
     .object({
       id: z.string(),
       type: z.string(),
-      pattern: z.string().optional(),
+      pattern: z.union([z.string(), z.array(z.string())]).optional(),
       sessionID: z.string(),
       messageID: z.string(),
       callID: z.string().optional(),
       title: z.string(),
-      metadata: z.record(z.any()),
+      metadata: z.record(z.string(), z.any()),
       time: z.object({
         created: z.number(),
       }),
     })
-    .openapi({
+    .meta({
       ref: "Permission",
     })
   export type Info = z.infer<typeof Info>
 
   export const Event = {
-    Updated: Bus.event("permission.updated", Info),
-    Replied: Bus.event(
+    Updated: BusEvent.define("permission.updated", Info),
+    Replied: BusEvent.define(
       "permission.replied",
-      z.object({ sessionID: z.string(), permissionID: z.string(), response: z.string() }),
+      z.object({
+        sessionID: z.string(),
+        permissionID: z.string(),
+        response: z.string(),
+      }),
     ),
   }
 
-  const state = App.state(
-    "permission",
+  const state = Instance.state(
     () => {
       const pending: {
         [sessionID: string]: {
@@ -62,11 +76,15 @@ export namespace Permission {
     async (state) => {
       for (const pending of Object.values(state.pending)) {
         for (const item of Object.values(pending)) {
-          item.reject(new RejectedError(item.info.sessionID, item.info.id, item.info.callID))
+          item.reject(new RejectedError(item.info.sessionID, item.info.id, item.info.callID, item.info.metadata))
         }
       }
     },
   )
+
+  export function pending() {
+    return state().pending
+  }
 
   export async function ask(input: {
     type: Info["type"]
@@ -82,11 +100,15 @@ export namespace Permission {
       sessionID: input.sessionID,
       messageID: input.messageID,
       toolCallID: input.callID,
+      pattern: input.pattern,
     })
-    if (approved[input.sessionID]?.[input.pattern ?? input.type]) return
+    const approvedForSession = approved[input.sessionID] || {}
+    const keys = toKeys(input.pattern, input.type)
+    if (covered(keys, approvedForSession)) return
     const info: Info = {
       id: Identifier.ascending("permission"),
       type: input.type,
+      pattern: input.pattern,
       sessionID: input.sessionID,
       messageID: input.messageID,
       callID: input.callID,
@@ -103,7 +125,7 @@ export namespace Permission {
       }).then((x) => x.status)
     ) {
       case "deny":
-        throw new RejectedError(info.sessionID, info.id, info.callID)
+        throw new RejectedError(info.sessionID, info.id, info.callID, info.metadata)
       case "allow":
         return
     }
@@ -128,22 +150,32 @@ export namespace Permission {
     const match = pending[input.sessionID]?.[input.permissionID]
     if (!match) return
     delete pending[input.sessionID][input.permissionID]
-    if (input.response === "reject") {
-      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID))
-      return
-    }
-    match.resolve()
     Bus.publish(Event.Replied, {
       sessionID: input.sessionID,
       permissionID: input.permissionID,
       response: input.response,
     })
+    if (input.response === "reject") {
+      match.reject(new RejectedError(input.sessionID, input.permissionID, match.info.callID, match.info.metadata))
+      return
+    }
+    match.resolve()
     if (input.response === "always") {
       approved[input.sessionID] = approved[input.sessionID] || {}
-      approved[input.sessionID][match.info.pattern ?? match.info.type] = true
-      for (const item of Object.values(pending[input.sessionID])) {
-        if ((item.info.pattern ?? item.info.type) === (match.info.pattern ?? match.info.type)) {
-          respond({ sessionID: item.info.sessionID, permissionID: item.info.id, response: input.response })
+      const approveKeys = toKeys(match.info.pattern, match.info.type)
+      for (const k of approveKeys) {
+        approved[input.sessionID][k] = true
+      }
+      const items = pending[input.sessionID]
+      if (!items) return
+      for (const item of Object.values(items)) {
+        const itemKeys = toKeys(item.info.pattern, item.info.type)
+        if (covered(itemKeys, approved[input.sessionID])) {
+          respond({
+            sessionID: item.info.sessionID,
+            permissionID: item.info.id,
+            response: input.response,
+          })
         }
       }
     }
@@ -154,8 +186,14 @@ export namespace Permission {
       public readonly sessionID: string,
       public readonly permissionID: string,
       public readonly toolCallID?: string,
+      public readonly metadata?: Record<string, any>,
+      public readonly reason?: string,
     ) {
-      super(`The user rejected permission to use this functionality`)
+      super(
+        reason !== undefined
+          ? reason
+          : `The user rejected permission to use this specific tool call. You may try again with different parameters.`,
+      )
     }
   }
 }
