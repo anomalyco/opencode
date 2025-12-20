@@ -23,6 +23,7 @@ export namespace Agent {
       mode: z.enum(["subagent", "primary", "all"]),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
+      default: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
@@ -248,6 +249,19 @@ export namespace Agent {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})
       }
     }
+
+    // Mark the default agent
+    const defaultName = cfg.default_agent ?? "build"
+    const defaultCandidate = result[defaultName]
+    if (defaultCandidate && defaultCandidate.mode !== "subagent") {
+      defaultCandidate.default = true
+    } else {
+      // Fall back to "build" if configured default is invalid
+      if (result["build"]) {
+        result["build"].default = true
+      }
+    }
+
     return result
   })
 
@@ -260,23 +274,9 @@ export namespace Agent {
   }
 
   export async function defaultAgent(): Promise<string> {
-    const cfg = await Config.get()
     const agents = await state()
-    const name = cfg.default_agent ?? "build"
-
-    const agent = agents[name]
-    if (!agent) {
-      log.warn(`default agent "${name}" not found. Falling back to "build"`)
-      return "build"
-    }
-
-    // Only primary agents can be default (not subagents)
-    if (agent.mode === "subagent") {
-      log.warn(`default agent "${name}" is a subagent, not a primary agent. Falling back to "build"`)
-      return "build"
-    }
-
-    return name
+    const defaultCandidate = Object.values(agents).find((a) => a.default)
+    return defaultCandidate?.name ?? "build"
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
