@@ -193,6 +193,31 @@ This provides an additional safety layer to prevent unintended modifications to 
 
 ---
 
+#### Separate read and write permissions
+
+You can configure separate permissions for reading and writing files outside the working directory. This allows you to permit reading external reference files while blocking writes.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "read": "allow",
+      "write": "deny"
+    }
+  }
+}
+```
+
+- `read` — Controls the `read` tool when accessing external files
+- `write` — Controls file writing tools (`write`, `edit`, `patch`) and `bash` when working with external directories
+
+:::tip
+The `bash` tool uses the `write` permission when checking external directory access, since bash commands can potentially modify files. If you need to run read-only bash commands in external directories, consider allowing specific commands via `permission.bash` instead.
+:::
+
+---
+
 ## Agents
 
 You can also configure permissions per agent. Where the agent specific config
