@@ -2126,6 +2126,173 @@
         ]
       }
     },
+    "/session/{sessionID}/message/{messageID}/part/{partID}": {
+      "delete": {
+        "operationId": "part.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "path",
+            "name": "messageID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Message ID"
+          },
+          {
+            "in": "path",
+            "name": "partID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Part ID"
+          }
+        ],
+        "description": "Delete a part from a message",
+        "responses": {
+          "200": {
+            "description": "Successfully deleted part",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.part.delete({\n  ...\n})"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "part.update",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "path",
+            "name": "messageID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Message ID"
+          },
+          {
+            "in": "path",
+            "name": "partID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Part ID"
+          }
+        ],
+        "description": "Update a part in a message",
+        "responses": {
+          "200": {
+            "description": "Successfully updated part",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Part"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Part"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.part.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/{sessionID}/prompt_async": {
       "post": {
         "operationId": "session.prompt_async",
@@ -7077,6 +7244,16 @@
             "default": "<leader>g",
             "type": "string"
           },
+          "session_fork": {
+            "description": "Fork session from message",
+            "default": "none",
+            "type": "string"
+          },
+          "session_rename": {
+            "description": "Rename session",
+            "default": "none",
+            "type": "string"
+          },
           "session_share": {
             "description": "Share current session",
             "default": "none",
@@ -7974,6 +8151,10 @@
           },
           "small_model": {
             "description": "Small model to use for tasks like title generation in the format of provider/model",
+            "type": "string"
+          },
+          "default_agent": {
+            "description": "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
             "type": "string"
           },
           "username": {
@@ -8973,6 +9154,9 @@
             "type": "boolean"
           },
           "hidden": {
+            "type": "boolean"
+          },
+          "default": {
             "type": "boolean"
           },
           "topP": {

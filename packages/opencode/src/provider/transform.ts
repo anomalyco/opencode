@@ -74,17 +74,10 @@ export namespace ProviderTransform {
       return result
     }
 
-    // TODO: rm later
-    const bugged =
-      (model.id === "kimi-k2-thinking" && model.providerID === "opencode") ||
-      (model.id === "moonshotai/Kimi-K2-Thinking" && model.providerID === "baseten")
     if (
-      model.providerID === "deepseek" ||
-      model.api.id.toLowerCase().includes("deepseek") ||
-      (model.capabilities.interleaved &&
-        typeof model.capabilities.interleaved === "object" &&
-        model.capabilities.interleaved.field === "reasoning_content" &&
-        !bugged)
+      model.capabilities.interleaved &&
+      typeof model.capabilities.interleaved === "object" &&
+      model.capabilities.interleaved.field === "reasoning_content"
     ) {
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -429,6 +422,10 @@ export namespace ProviderTransform {
         // Filter required array to only include fields that exist in properties
         if (result.type === "object" && result.properties && Array.isArray(result.required)) {
           result.required = result.required.filter((field: any) => field in result.properties)
+        }
+
+        if (result.type === "array" && result.items == null) {
+          result.items = {}
         }
 
         return result

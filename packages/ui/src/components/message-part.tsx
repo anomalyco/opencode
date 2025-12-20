@@ -69,6 +69,7 @@ export interface MessagePartProps {
   part: PartType
   message: MessageType
   hideDetails?: boolean
+  defaultOpen?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -208,7 +209,13 @@ export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
   return (
     <Show when={component()}>
-      <Dynamic component={component()} part={props.part} message={props.message} hideDetails={props.hideDetails} />
+      <Dynamic
+        component={component()}
+        part={props.part}
+        message={props.message}
+        hideDetails={props.hideDetails}
+        defaultOpen={props.defaultOpen}
+      />
     </Show>
   )
 }
@@ -219,6 +226,7 @@ export interface ToolProps {
   tool: string
   output?: string
   hideDetails?: boolean
+  defaultOpen?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -286,6 +294,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
             hideDetails={props.hideDetails}
+            defaultOpen={props.defaultOpen}
           />
         </Match>
       </Switch>
@@ -326,6 +335,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="glasses"
         trigger={{
           title: "Read",
@@ -340,7 +350,11 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     return (
-      <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
+      <BasicTool
+        {...props}
+        icon="bullet-list"
+        trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}
+      >
         <Show when={props.output}>
           {(output) => (
             <div data-component="tool-output" data-scrollable>
@@ -358,6 +372,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="magnifying-glass-menu"
         trigger={{
           title: "Glob",
@@ -385,6 +400,7 @@ ToolRegistry.register({
     if (props.input.include) args.push("include=" + props.input.include)
     return (
       <BasicTool
+        {...props}
         icon="magnifying-glass-menu"
         trigger={{
           title: "Grep",
@@ -409,6 +425,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="window-cursor"
         trigger={{
           title: "Webfetch",
@@ -438,6 +455,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="task"
         trigger={{
           title: `${props.input.subagent_type || props.tool} Agent`,
@@ -445,13 +463,13 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
-        </Show>
+        {/* <Show when={false && props.output}> */}
+        {/*   {(output) => ( */}
+        {/*     <div data-component="tool-output" data-scrollable> */}
+        {/*       <Markdown text={output()} /> */}
+        {/*     </div> */}
+        {/*   )} */}
+        {/* </Show> */}
       </BasicTool>
     )
   },
@@ -462,6 +480,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="console"
         trigger={{
           title: "Shell",
@@ -485,6 +504,7 @@ ToolRegistry.register({
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
+        {...props}
         defaultOpen
         icon="code-lines"
         trigger={
@@ -511,12 +531,14 @@ ToolRegistry.register({
             <Dynamic
               component={diffComponent}
               before={{
-                name: getFilename(props.metadata.filediff.path),
+                name: props.metadata.filediff.path,
                 contents: props.metadata.filediff.before,
+                cacheKey: checksum(props.metadata.filediff.before),
               }}
               after={{
-                name: getFilename(props.metadata.filediff.path),
+                name: props.metadata.filediff.path,
                 contents: props.metadata.filediff.after,
+                cacheKey: checksum(props.metadata.filediff.after),
               }}
             />
           </div>
@@ -534,6 +556,7 @@ ToolRegistry.register({
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
+        {...props}
         defaultOpen
         icon="code-lines"
         trigger={
@@ -575,6 +598,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         defaultOpen
         icon="checklist"
         trigger={{
