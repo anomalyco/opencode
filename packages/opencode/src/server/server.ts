@@ -1481,7 +1481,14 @@ export namespace Server {
           const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
           return c.json({
             providers: Object.values(providers),
-            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+            default: mapValues(providers, (item) => {
+              const sorted = Provider.sort(Object.values(item.models))
+              if (sorted.length === 0) {
+                log.error("Provider has no models available", { providerID: item.id })
+                return null
+              }
+              return sorted[0].id
+            }),
           })
         },
       )
@@ -1528,7 +1535,14 @@ export namespace Server {
           )
           return c.json({
             all: Object.values(providers),
-            default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+            default: mapValues(providers, (item) => {
+              const sorted = Provider.sort(Object.values(item.models))
+              if (sorted.length === 0) {
+                log.error("Provider has no models available", { providerID: item.id })
+                return null
+              }
+              return sorted[0].id
+            }),
             connected: Object.keys(connected),
           })
         },

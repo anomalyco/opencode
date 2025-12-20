@@ -529,14 +529,26 @@ export namespace Provider {
     function mergeProvider(providerID: string, provider: Partial<Info>) {
       const existing = providers[providerID]
       if (existing) {
-        // @ts-expect-error
-        providers[providerID] = mergeDeep(existing, provider)
+        const merged = mergeDeep(existing, provider) as Info
+        // Validate after merge - if no models, remove the provider entirely
+        if (Object.keys(merged.models || {}).length === 0) {
+          log.warn("Provider has no models after merge, removing", { providerID })
+          delete providers[providerID]
+          return
+        }
+        providers[providerID] = merged
         return
       }
       const match = database[providerID]
       if (!match) return
-      // @ts-expect-error
-      providers[providerID] = mergeDeep(match, provider)
+
+      const merged = mergeDeep(match, provider) as Info
+      // Validate immediately after creation - if no models, don't add to providers
+      if (Object.keys(merged.models || {}).length === 0) {
+        log.warn("Provider has no models from database, skipping", { providerID })
+        return
+      }
+      providers[providerID] = merged
     }
 
     // extend database from config

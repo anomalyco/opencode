@@ -662,6 +662,7 @@ export namespace ACP {
       })
       const availableModels = entries.flatMap((provider) => {
         const models = Provider.sort(Object.values(provider.models))
+        if (models.length === 0) return []
         return models.map((model) => ({
           modelId: `${provider.id}/${model.id}`,
           name: `${provider.name}/${model.name}`,
