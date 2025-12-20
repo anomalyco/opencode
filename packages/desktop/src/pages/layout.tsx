@@ -69,7 +69,7 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
 
   onMount(async () => {
-    if (platform.checkUpdate && platform.update) {
+    if (platform.checkUpdate && platform.update && platform.restart) {
       const { updateAvailable, version } = await platform.checkUpdate()
       if (updateAvailable) {
         showToast({
@@ -80,7 +80,10 @@ export default function Layout(props: ParentProps) {
           actions: [
             {
               label: "Install and restart",
-              onClick: () => platform!.update!(),
+              onClick: async () => {
+                await platform.update!()
+                await platform.restart!()
+              },
             },
             {
               label: "Not yet",
