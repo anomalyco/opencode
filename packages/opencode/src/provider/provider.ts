@@ -111,7 +111,8 @@ export namespace Provider {
             return sdk.responses(modelID)
           }
 
-          if (useResponsesApi && isGpt5OrLater(modelID)) {
+          // gpt-5-mini is known to be unsupported via Responses API for some users.
+          if (useResponsesApi && isGpt5OrLater(modelID) && modelID !== "gpt-5-mini") {
             return sdk.responses(modelID)
           }
           return sdk.chat(modelID)
@@ -129,7 +130,7 @@ export namespace Provider {
             return sdk.responses(modelID)
           }
 
-          if (useResponsesApi && isGpt5OrLater(modelID)) {
+          if (useResponsesApi && isGpt5OrLater(modelID) && modelID !== "gpt-5-mini") {
             return sdk.responses(modelID)
           }
           return sdk.chat(modelID)
