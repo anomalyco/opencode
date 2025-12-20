@@ -25,3 +25,9 @@
 - **Logging**: Use `Log.create({ service: "name" })` pattern
 - **Storage**: Use `Storage` namespace for persistence
 - **API Client**: Go TUI communicates with TypeScript server via stainless SDK. When adding/modifying server endpoints in `packages/opencode/src/server/server.ts`, ask the user to generate a new client SDK to proceed with client-side changes.
+
+## Protected Mode
+
+If bash commands fail with "Permission denied" on specific files, you may be in protected mode. Run `whoami` - if it returns a restricted user (e.g., `opencode-agent`), the user has locked certain files with `chmod 600` permissions to prevent reading secrets.
+
+Certain commands (like `git`) may be blocked because the restricted user lacks permissions. If the user is in protected mode and wants to grant you access to these commands, they can whitelist them in `~/.opencode/security.json` under `whitelistedCommands`, then run `opencode protect lock` and restart OpenCode.

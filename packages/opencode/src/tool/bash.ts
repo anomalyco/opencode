@@ -15,6 +15,8 @@ import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
 import { iife } from "@/util/iife"
+import { loadSecurityConfig } from "@/util/security/config"
+import { ProtectedExecutor } from "@/util/security/executor"
 
 const DEFAULT_MAX_OUTPUT_LENGTH = 30_000
 const MAX_OUTPUT_LENGTH = (() => {
@@ -213,6 +215,73 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      // Check if protected mode is enabled
+      // TODO: Protected mode path duplicates result metadata building logic from normal
+      // execution path (lines 250-269 vs 388-406). Consider extracting shared helper.
+      const securityConfig = await loadSecurityConfig()
+      if (securityConfig?.protectedMode) {
+        // Execute via ProtectedExecutor
+        const executor = new ProtectedExecutor(securityConfig)
+
+        // Initialize metadata with empty output
+        ctx.metadata({
+          metadata: {
+            output: "",
+            description: params.description,
+          },
+        })
+
+        const result = await executor.execute(params.command, {
+          cwd: Instance.directory,
+          description: params.description,
+          timeout,
+          abortSignal: ctx.abort,
+          onData: (output) => {
+            // Stream output updates to UI in real-time
+            if (output.length <= MAX_OUTPUT_LENGTH) {
+              ctx.metadata({
+                metadata: {
+                  output,
+                  description: params.description,
+                },
+              })
+            }
+          },
+        })
+
+        let output = result.stdout + result.stderr
+        let resultMetadata: string[] = ["<bash_metadata>"]
+
+        if (output.length > MAX_OUTPUT_LENGTH) {
+          output = output.slice(0, MAX_OUTPUT_LENGTH)
+          resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
+        }
+
+        if (result.timedOut) {
+          resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
+        }
+
+        if (result.aborted) {
+          resultMetadata.push("User aborted the command")
+        }
+
+        if (resultMetadata.length > 1) {
+          resultMetadata.push("</bash_metadata>")
+          output += "\n\n" + resultMetadata.join("\n")
+        }
+
+        return {
+          title: params.description,
+          metadata: {
+            output,
+            exit: result.exitCode,
+            description: params.description,
+          },
+          output,
+        }
+      }
+
+      // Normal execution (not protected mode)
       const proc = spawn(params.command, {
         shell,
         cwd: Instance.directory,
@@ -234,13 +303,15 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            output,
-            description: params.description,
-          },
-        })
+        if (output.length <= MAX_OUTPUT_LENGTH) {
+          output += chunk.toString()
+          ctx.metadata({
+            metadata: {
+              output,
+              description: params.description,
+            },
+          })
+        }
       }
 
       proc.stdout?.on("data", append)
@@ -295,7 +366,7 @@ export const BashTool = Tool.define("bash", async () => {
       const timeoutTimer = setTimeout(() => {
         timedOut = true
         void killTree()
-      }, timeout)
+      }, timeout + 100)
 
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
@@ -316,19 +387,19 @@ export const BashTool = Tool.define("bash", async () => {
         })
       })
 
-      let resultMetadata: String[] = ["<bash_metadata>"]
+      let resultMetadata: string[] = ["<bash_metadata>"]
 
       if (output.length > MAX_OUTPUT_LENGTH) {
         output = output.slice(0, MAX_OUTPUT_LENGTH)
-        resultMetadata.push(`Output exceeded length limit of ${MAX_OUTPUT_LENGTH} chars`)
+        resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
       }
 
       if (timedOut) {
-        resultMetadata.push(`Command terminated after exceeding timeout ${timeout} ms`)
+        resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
 
       if (aborted) {
-        resultMetadata.push("Command aborted by user")
+        resultMetadata.push("User aborted the command")
       }
 
       if (resultMetadata.length > 1) {
