@@ -40,7 +40,7 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
 > [!NOTE]
-> After touching `packages/opencode/src/server/server.ts`, run "./packages/sdk/js/script/build.ts" to regenerate the JS sdk.
+> If you make changes to the API or SDK (e.g. `packages/opencode/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
 
 Please try to follow the [style guide](./STYLE_GUIDE.md)
 

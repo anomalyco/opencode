@@ -1,4 +1,4 @@
-import type { BoxRenderable, TextareaRenderable, KeyEvent } from "@opentui/core"
+import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
 import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
@@ -369,7 +369,7 @@ export function Autocomplete(props: {
       store.visible === "@" ? [...agents(), ...(files() || [])] : [...commands()]
     ).filter((x) => x.disabled !== true)
     const currentFilter = filter()
-    if (!currentFilter) return mixed.slice(0, 10)
+    if (!currentFilter) return mixed
     const result = fuzzysort.go(currentFilter, mixed, {
       keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
@@ -395,7 +395,19 @@ export function Autocomplete(props: {
     let next = store.selected + direction
     if (next < 0) next = options().length - 1
     if (next >= options().length) next = 0
+    moveTo(next)
+  }
+
+  function moveTo(next: number) {
     setStore("selected", next)
+    if (!scroll) return
+    const viewportHeight = Math.min(height(), options().length)
+    const scrollBottom = scroll.scrollTop + viewportHeight
+    if (next < scroll.scrollTop) {
+      scroll.scrollBy(next - scroll.scrollTop)
+    } else if (next + 1 > scrollBottom) {
+      scroll.scrollBy(next + 1 - scrollBottom)
+    }
   }
 
   function select() {
@@ -497,6 +509,8 @@ export function Autocomplete(props: {
     return 1
   })
 
+  let scroll: ScrollBoxRenderable
+
   return (
     <box
       visible={store.visible !== false}
@@ -508,7 +522,12 @@ export function Autocomplete(props: {
       {...SplitBorder}
       borderColor={theme.border}
     >
-      <box backgroundColor={theme.backgroundMenu} height={height()}>
+      <scrollbox
+        ref={(r: ScrollBoxRenderable) => (scroll = r)}
+        backgroundColor={theme.backgroundMenu}
+        height={height()}
+        scrollbarOptions={{ visible: false }}
+      >
         <For
           each={options()}
           fallback={
@@ -535,7 +554,7 @@ export function Autocomplete(props: {
             </box>
           )}
         </For>
-      </box>
+      </scrollbox>
     </box>
   )
 }
