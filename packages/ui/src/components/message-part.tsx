@@ -463,13 +463,13 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
-        </Show>
+        {/* <Show when={false && props.output}> */}
+        {/*   {(output) => ( */}
+        {/*     <div data-component="tool-output" data-scrollable> */}
+        {/*       <Markdown text={output()} /> */}
+        {/*     </div> */}
+        {/*   )} */}
+        {/* </Show> */}
       </BasicTool>
     )
   },

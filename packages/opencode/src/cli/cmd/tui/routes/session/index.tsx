@@ -168,6 +168,13 @@ export function Session() {
   const toast = useToast()
   const sdk = useSDK()
 
+  // Handle initial prompt from fork
+  createEffect(() => {
+    if (route.initialPrompt && prompt) {
+      prompt.set(route.initialPrompt)
+    }
+  })
+
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {
     const currentSession = session()
