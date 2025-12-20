@@ -1,53 +1,124 @@
-{
-  "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "@opencode-ai/docs",
-  "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
-  },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "SDK",
-        "groups": [
+  {
+    "$schema": "https://mintlify.com/docs.json",
+    "theme": "linden",
+    "name": "Opencode docs",
+    "colors": {
+      "primary": "#4B4646",
+      "light": "#F1ECEC",
+      "dark": "#F1ECEC"
+    },
+    "favicon": "/favicon.svg",
+    "appearance": {
+      "default": "dark"
+    },
+   "styling": {
+      "codeblocks": {
+        "theme": "catppuccin-mocha"
+      }
+    },
+    "background": {
+      "color": {
+        "dark": "#12110f"
+      }
+    },
+    "fonts": {
+      "heading": {
+        "family": "IBM Plex Mono"
+      },
+      "body": {
+        "family": "IBM Plex Mono"
+      }
+    },
+    "navigation": {
+    "pages": [
+        "index",
+        "config",
+        "providers",
+        "network",
+        "enterprise",
+        "troubleshooting",
+        "1-0",
+        {
+          "group": "Usage",
+          "pages": [
+            "tui",
+            "cli",
+            "ide",
+            "zen",
+            "share",
+            "github",
+            "gitlab"
+          ]
+        },
+        {
+          "group": "Configure",
+          "pages": [
+            "tools",
+            "rules",
+            "agents",
+            "models",
+            "themes",
+            "keybinds",
+            "commands",
+            "formatters",
+            "permissions",
+            "lsp",
+            "mcp-servers",
+            "acp",
+            "custom-tools"
+          ]
+        },
+        {
+          "group": "Develop",
+          "pages": [
+            "sdk",
+            "server",
+            "plugins",
+            "ecosystem"
+          ]
+        }
+      ],
+      "global": {
+        "anchors": [
           {
-            "group": "Getting started",
-            "pages": ["index", "quickstart", "development"],
-            "openapi": "https://opencode.ai/openapi.json"
+            "anchor": "Community",
+            "href": "https://opencode.ai/discord",
+            "icon": "discord"
           }
         ]
       }
-    ],
-    "global": {}
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+    },
+    "logo": {
+      "light": "/logo/light.svg",
+      "dark": "/logo/dark.svg",
+      "href": "https://opencode.ai/"
+    },
+    "navbar": {
+      "primary": {
+        "type": "github",
+        "href": "https://github.com/sst/opencode"
       }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "cursor", "vscode"]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+    },
+    "metadata": {
+    "timestamp": true
+    },
+    "contextual": {
+      "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
+    },
+    "footer": {
+      "socials": {
+        "x": "https://x.com/opencode",
+        "github": "https://github.com/sst/opencode",
+        "discord": "https://opencode.ai/discord"
+      }
     }
   }
-}
