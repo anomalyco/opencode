@@ -1,3 +1,4 @@
 [data-component="code"] {
+  content-visibility: auto;
   overflow: hidden;
 }
