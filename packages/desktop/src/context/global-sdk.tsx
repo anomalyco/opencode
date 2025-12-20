@@ -8,8 +8,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
   init: (props: { url: string }) => {
     const eventSdk = createOpencodeClient({
       baseUrl: props.url,
-      signal: AbortSignal.timeout(1000 * 60 * 10),
-      throwOnError: true,
+      // signal: AbortSignal.timeout(1000 * 60 * 10),
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
