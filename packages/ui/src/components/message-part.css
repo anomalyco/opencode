@@ -319,5 +319,10 @@
   [data-slot="diagnostic-message"] {
     color: var(--text-on-critical-base);
     word-break: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
   }
 }
