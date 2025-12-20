@@ -141,6 +141,17 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
+    // Only validate if user has configured agents - if none configured, built-in agents will be used
+    if (Object.keys(result.agent).length > 0) {
+      const primaryAgents = Object.values(result.agent).filter((a) => a.mode !== "subagent" && !a.hidden && !a.disable)
+      if (primaryAgents.length === 0) {
+        throw new InvalidError({
+          path: "config",
+          message: "No primary agents are available. Please configure at least one agent with mode 'primary' or 'all'.",
+        })
+      }
+    }
+
     return {
       config: result,
       directories,
@@ -666,6 +677,12 @@ export namespace Config {
         .string()
         .describe("Small model to use for tasks like title generation in the format of provider/model")
         .optional(),
+      default_agent: z
+        .string()
+        .optional()
+        .describe(
+          "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+        ),
       username: z
         .string()
         .optional()
