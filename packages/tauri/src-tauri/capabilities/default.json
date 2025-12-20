@@ -14,6 +14,10 @@
     "process:default",
     "store:default",
     "window-state:default",
-    "os:default"
+    "os:default",
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }, { "url": "http://*:*/*" }]
+    }
   ]
 }
