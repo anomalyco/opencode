@@ -5,6 +5,9 @@ import { generateObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "agent" })
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -254,6 +257,26 @@ export namespace Agent {
 
   export async function list() {
     return state().then((x) => Object.values(x))
+  }
+
+  export async function defaultAgent(): Promise<string> {
+    const cfg = await Config.get()
+    const agents = await state()
+    const name = cfg.default_agent ?? "build"
+
+    const agent = agents[name]
+    if (!agent) {
+      log.warn(`default agent "${name}" not found. Falling back to "build"`)
+      return "build"
+    }
+
+    // Only primary agents can be default (not subagents)
+    if (agent.mode === "subagent") {
+      log.warn(`default agent "${name}" is a subagent, not a primary agent. Falling back to "build"`)
+      return "build"
+    }
+
+    return name
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
