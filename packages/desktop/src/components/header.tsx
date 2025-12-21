@@ -10,6 +10,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { base64Decode } from "@opencode-ai/util/encode"
+import { useCommand } from "@/context/command"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useParams } from "@solidjs/router"
 import { createMemo, createResource, Show } from "solid-js"
@@ -24,6 +25,7 @@ export function Header(props: {
   const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const params = useParams()
+  const command = useCommand()
 
   return (
     <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
@@ -80,9 +82,18 @@ export function Header(props: {
                     />
                   </div>
                   <Show when={currentSession()}>
-                    <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
-                      New session
-                    </Button>
+                    <Tooltip
+                      value={
+                        <div class="flex items-center gap-2">
+                          <span>New session</span>
+                          <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
+                        </div>
+                      }
+                    >
+                      <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
+                        New session
+                      </Button>
+                    </Tooltip>
                   </Show>
                 </div>
                 <div class="flex items-center gap-4">
@@ -91,7 +102,7 @@ export function Header(props: {
                     value={
                       <div class="flex items-center gap-2">
                         <span>Toggle terminal</span>
-                        <span class="text-icon-base text-12-medium">Ctrl `</span>
+                        <span class="text-icon-base text-12-medium">{command.keybind("terminal.toggle")}</span>
                       </div>
                     }
                   >
