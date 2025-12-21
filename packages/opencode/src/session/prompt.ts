@@ -1309,7 +1309,7 @@ export namespace SessionPrompt {
       const results = await Promise.all(
         shell.map(async ([, cmd]) => {
           try {
-            return await $`${{ raw: cmd }}`.nothrow().text()
+            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
           } catch (error) {
             return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
           }
