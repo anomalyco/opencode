@@ -715,8 +715,9 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? "build")
+    const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
     const lastM = await lastModel(input.sessionID)
+
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -1283,7 +1284,7 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
-    const agentName = command.agent ?? input.agent ?? "build"
+    const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1426,7 +1427,7 @@ export namespace SessionPrompt {
               time: {
                 created: Date.now(),
               },
-              agent: input.message.info.role === "user" ? input.message.info.agent : "build",
+              agent: input.message.info.role === "user" ? input.message.info.agent : await Agent.defaultAgent(),
               model: {
                 providerID: input.providerID,
                 modelID: input.modelID,

@@ -456,6 +456,10 @@ export namespace ProviderTransform {
           result.required = result.required.filter((field: any) => field in result.properties)
         }
 
+        if (result.type === "array" && result.items == null) {
+          result.items = {}
+        }
+
         return result
       }
 
