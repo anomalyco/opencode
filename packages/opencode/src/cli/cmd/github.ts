@@ -127,6 +127,7 @@ type IssueQueryResponse = {
 const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
+const SUPPORTED_EVENTS = ["issue_comment", "pull_request_review_comment", "schedule"] as const
 
 // Parses GitHub remote URLs in various formats:
 // - https://github.com/owner/repo.git
@@ -387,22 +388,27 @@ export const GithubRunCommand = cmd({
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
-      if (context.eventName !== "issue_comment" && context.eventName !== "pull_request_review_comment") {
+      if (!SUPPORTED_EVENTS.includes(context.eventName as (typeof SUPPORTED_EVENTS)[number])) {
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
+      const isScheduleEvent = context.eventName === "schedule"
 
       const { providerID, modelID } = normalizeModel()
       const runId = normalizeRunId()
       const share = normalizeShare()
       const oidcBaseUrl = normalizeOidcBaseUrl()
       const { owner, repo } = context.repo
-      const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
-      const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
-      const actor = context.actor
+      // For schedule events, payload has no issue/comment data
+      const payload = isScheduleEvent
+        ? undefined
+        : (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent)
+      const issueEvent = payload && isIssueCommentEvent(payload) ? payload : undefined
+      const actor = isScheduleEvent ? undefined : context.actor
 
-      const issueId =
-        context.eventName === "pull_request_review_comment"
+      const issueId = isScheduleEvent
+        ? undefined
+        : context.eventName === "pull_request_review_comment"
           ? (payload as PullRequestReviewCommentEvent).pull_request.number
           : (payload as IssueCommentEvent).issue.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
@@ -416,9 +422,13 @@ export const GithubRunCommand = cmd({
       let shareId: string | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
-      const triggerCommentId = payload.comment.id
+      const triggerCommentId = payload?.comment.id
       const useGithubToken = normalizeUseGithubToken()
-      const commentType = context.eventName === "pull_request_review_comment" ? "pr_review" : "issue"
+      const commentType = isScheduleEvent
+        ? undefined
+        : context.eventName === "pull_request_review_comment"
+          ? "pr_review"
+          : "issue"
 
       try {
         if (useGithubToken) {
@@ -442,9 +452,11 @@ export const GithubRunCommand = cmd({
         if (!useGithubToken) {
           await configureGit(appToken)
         }
-        await assertPermissions()
-
-        await addReaction(commentType)
+        // Skip permission check for schedule events (no actor to check)
+        if (!isScheduleEvent) {
+          await assertPermissions()
+          await addReaction(commentType!)
+        }
 
         // Setup opencode session
         const repoData = await fetchRepo()
@@ -458,11 +470,31 @@ export const GithubRunCommand = cmd({
         })()
         console.log("opencode session", session.id)
 
-        // Handle 3 cases
-        // 1. Issue
-        // 2. Local PR
-        // 3. Fork PR
-        if (context.eventName === "pull_request_review_comment" || issueEvent?.issue.pull_request) {
+        // Handle 4 cases
+        // 1. Schedule (no issue/PR context)
+        // 2. Issue
+        // 3. Local PR
+        // 4. Fork PR
+        if (isScheduleEvent) {
+          // Schedule event - no issue/PR context, output goes to logs
+          const branch = await checkoutNewBranch("schedule")
+          const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
+          const response = await chat(userPrompt, promptFiles)
+          const { dirty, uncommittedChanges } = await branchIsDirty(head)
+          if (dirty) {
+            const summary = await summarize(response)
+            await pushToNewBranch(summary, branch, uncommittedChanges, true)
+            const pr = await createPR(
+              repoData.data.default_branch,
+              branch,
+              summary,
+              `${response}\n\nTriggered by scheduled workflow${footer({ image: true })}`,
+            )
+            console.log(`Created PR #${pr}`)
+          } else {
+            console.log("Response:", response)
+          }
+        } else if (context.eventName === "pull_request_review_comment" || issueEvent?.issue.pull_request) {
           const prData = await fetchPR()
           // Local PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
@@ -477,7 +509,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           }
           // Fork PR
           else {
@@ -492,12 +524,12 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           }
         }
         // Issue
         else {
-          const branch = await checkoutNewBranch()
+          const branch = await checkoutNewBranch("issue")
           const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
           const issueData = await fetchIssue()
           const dataPrompt = buildPromptDataForIssue(issueData)
@@ -505,7 +537,7 @@ export const GithubRunCommand = cmd({
           const { dirty, uncommittedChanges } = await branchIsDirty(head)
           if (dirty) {
             const summary = await summarize(response)
-            await pushToNewBranch(summary, branch, uncommittedChanges)
+            await pushToNewBranch(summary, branch, uncommittedChanges, false)
             const pr = await createPR(
               repoData.data.default_branch,
               branch,
@@ -513,10 +545,10 @@ export const GithubRunCommand = cmd({
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
             await createComment(`Created PR #${pr}${footer({ image: true })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           } else {
             await createComment(`${response}${footer({ image: true })}`)
-            await removeReaction(commentType)
+            await removeReaction(commentType!)
           }
         }
       } catch (e: any) {
@@ -528,8 +560,10 @@ export const GithubRunCommand = cmd({
         } else if (e instanceof Error) {
           msg = e.message
         }
-        await createComment(`${msg}${footer()}`)
-        await removeReaction(commentType)
+        if (!isScheduleEvent) {
+          await createComment(`${msg}${footer()}`)
+          await removeReaction(commentType!)
+        }
         core.setFailed(msg)
         // Also output the clean error message for the action to capture
         //core.setOutput("prepare_error", e.message);
@@ -605,6 +639,14 @@ export const GithubRunCommand = cmd({
 
       async function getUserPrompt() {
         const customPrompt = process.env["PROMPT"]
+        // For schedule events, PROMPT is required since there's no comment to extract from
+        if (isScheduleEvent) {
+          if (!customPrompt) {
+            throw new Error("PROMPT input is required for scheduled events")
+          }
+          return { userPrompt: customPrompt, promptFiles: [] }
+        }
+
         if (customPrompt) {
           return { userPrompt: customPrompt, promptFiles: [] }
         }
@@ -615,7 +657,7 @@ export const GithubRunCommand = cmd({
           .map((m) => m.trim().toLowerCase())
           .filter(Boolean)
         let prompt = (() => {
-          const body = payload.comment.body.trim()
+          const body = payload!.comment.body.trim()
           const bodyLower = body.toLowerCase()
           if (mentions.some((m) => bodyLower === m)) {
             if (reviewContext) {
@@ -865,9 +907,9 @@ export const GithubRunCommand = cmd({
         await $`git config --local ${config} "${gitConfig}"`
       }
 
-      async function checkoutNewBranch() {
+      async function checkoutNewBranch(type: "issue" | "schedule") {
         console.log("Checking out new branch...")
-        const branch = generateBranchName("issue")
+        const branch = generateBranchName(type)
         await $`git checkout -b ${branch}`
         return branch
       }
@@ -894,23 +936,32 @@ export const GithubRunCommand = cmd({
         await $`git checkout -b ${localBranch} fork/${remoteBranch}`
       }
 
-      function generateBranchName(type: "issue" | "pr") {
+      function generateBranchName(type: "issue" | "pr" | "schedule") {
         const timestamp = new Date()
           .toISOString()
           .replace(/[:-]/g, "")
           .replace(/\.\d{3}Z/, "")
           .split("T")
           .join("")
+        if (type === "schedule") {
+          const hex = crypto.randomUUID().slice(0, 6)
+          return `opencode/scheduled-${hex}-${timestamp}`
+        }
         return `opencode/${type}${issueId}-${timestamp}`
       }
 
-      async function pushToNewBranch(summary: string, branch: string, commit: boolean) {
+      async function pushToNewBranch(summary: string, branch: string, commit: boolean, isSchedule: boolean) {
         console.log("Pushing to new branch...")
         if (commit) {
           await $`git add .`
-          await $`git commit -m "${summary}
+          if (isSchedule) {
+            // No co-author for scheduled events - the schedule is operating as the repo
+            await $`git commit -m "${summary}"`
+          } else {
+            await $`git commit -m "${summary}
 
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+          }
         }
         await $`git push -u origin ${branch}`
       }
@@ -958,6 +1009,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       }
 
       async function assertPermissions() {
+        // Only called for non-schedule events, so actor is defined
         console.log(`Asserting permissions for user ${actor}...`)
 
         let permission
@@ -965,7 +1017,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           const response = await octoRest.repos.getCollaboratorPermissionLevel({
             owner,
             repo,
-            username: actor,
+            username: actor!,
           })
 
           permission = response.data.permission
@@ -979,30 +1031,32 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       }
 
       async function addReaction(commentType: "issue" | "pr_review") {
+        // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Adding reaction...")
         if (commentType === "pr_review") {
           return await octoRest.rest.reactions.createForPullRequestReviewComment({
             owner,
             repo,
-            comment_id: triggerCommentId,
+            comment_id: triggerCommentId!,
             content: AGENT_REACTION,
           })
         }
         return await octoRest.rest.reactions.createForIssueComment({
           owner,
           repo,
-          comment_id: triggerCommentId,
+          comment_id: triggerCommentId!,
           content: AGENT_REACTION,
         })
       }
 
       async function removeReaction(commentType: "issue" | "pr_review") {
+        // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Removing reaction...")
         if (commentType === "pr_review") {
           const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
             owner,
             repo,
-            comment_id: triggerCommentId,
+            comment_id: triggerCommentId!,
             content: AGENT_REACTION,
           })
 
@@ -1012,7 +1066,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           await octoRest.rest.reactions.deleteForPullRequestComment({
             owner,
             repo,
-            comment_id: triggerCommentId,
+            comment_id: triggerCommentId!,
             reaction_id: eyesReaction.id,
           })
           return
@@ -1021,7 +1075,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         const reactions = await octoRest.rest.reactions.listForIssueComment({
           owner,
           repo,
-          comment_id: triggerCommentId,
+          comment_id: triggerCommentId!,
           content: AGENT_REACTION,
         })
 
@@ -1031,17 +1085,18 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         await octoRest.rest.reactions.deleteForIssueComment({
           owner,
           repo,
-          comment_id: triggerCommentId,
+          comment_id: triggerCommentId!,
           reaction_id: eyesReaction.id,
         })
       }
 
       async function createComment(body: string) {
+        // Only called for non-schedule events, so issueId is defined
         console.log("Creating comment...")
         return await octoRest.rest.issues.createComment({
           owner,
           repo,
-          issue_number: issueId,
+          issue_number: issueId!,
           body,
         })
       }
@@ -1119,10 +1174,11 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
 
       function buildPromptDataForIssue(issue: GitHubIssue) {
+        // Only called for non-schedule events, so payload is defined
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== payload.comment.id
+            return id !== payload!.comment.id
           })
           .map((c) => `  - ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
@@ -1246,10 +1302,11 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
 
       function buildPromptDataForPR(pr: GitHubPullRequest) {
+        // Only called for non-schedule events, so payload is defined
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== payload.comment.id
+            return id !== payload!.comment.id
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
