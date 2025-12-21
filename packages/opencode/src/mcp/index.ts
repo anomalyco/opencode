@@ -497,7 +497,7 @@ export namespace MCP {
     return prompts
   }
 
-  export async function getPrompt(clientName: string, name: string, args?: Record<string, unknown>) {
+  export async function getPrompt(clientName: string, name: string, args?: Record<string, string>) {
     const clientsSnapshot = await clients()
     const client = clientsSnapshot[clientName]
 
