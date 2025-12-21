@@ -674,7 +674,17 @@ export default function Layout(props: ParentProps) {
             />
           </Show>
           <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
-            <Tooltip class="shrink-0" placement="right" value="Toggle sidebar" inactive={layout.sidebar.opened()}>
+            <Tooltip
+              class="shrink-0"
+              placement="right"
+              value={
+                <div class="flex items-center gap-2">
+                  <span>Toggle sidebar</span>
+                  <span class="text-icon-base text-12-medium">{command.keybind("sidebar.toggle")}</span>
+                </div>
+              }
+              inactive={layout.sidebar.opened()}
+            >
               <Button
                 variant="ghost"
                 size="large"
@@ -762,7 +772,16 @@ export default function Layout(props: ParentProps) {
               </Match>
             </Switch>
             <Show when={platform.openDirectoryPickerDialog}>
-              <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
+              <Tooltip
+                placement="right"
+                value={
+                  <div class="flex items-center gap-2">
+                    <span>Open project</span>
+                    <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
+                  </div>
+                }
+                inactive={layout.sidebar.opened()}
+              >
                 <Button
                   class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
