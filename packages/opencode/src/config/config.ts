@@ -666,6 +666,12 @@ export namespace Config {
         .string()
         .describe("Small model to use for tasks like title generation in the format of provider/model")
         .optional(),
+      default_agent: z
+        .string()
+        .optional()
+        .describe(
+          "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
+        ),
       username: z
         .string()
         .optional()
