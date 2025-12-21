@@ -66,6 +66,7 @@
     "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
