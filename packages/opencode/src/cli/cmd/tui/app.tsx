@@ -177,7 +177,6 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
   const keybind = useKeybind()
-  const sdk = useSDK()
 
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
