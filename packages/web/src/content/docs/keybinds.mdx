@@ -112,3 +112,44 @@ You can disable a keybind by adding the key to your config with a value of "none
   }
 }
 ```
+
+---
+
+## Shift+Enter
+
+Some terminals don't send modifier keys with Enter by default. You may need to configure your terminal to send `Shift+Enter` as an escape sequence.
+
+### Windows Terminal
+
+Open your `settings.json` at:
+
+```
+%LOCALAPPDATA%\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+```
+
+Add this to the root-level `actions` array:
+
+```json
+"actions": [
+  {
+    "command": {
+      "action": "sendInput",
+      "input": "\u001b[13;2u"
+    },
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Add this to the root-level `keybindings` array:
+
+```json
+"keybindings": [
+  {
+    "keys": "shift+enter",
+    "id": "User.sendInput.ShiftEnterCustom"
+  }
+]
+```
+
+Save the file and restart Windows Terminal or open a new tab.

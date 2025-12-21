@@ -67,6 +67,8 @@ jobs:
           When critiquing code style don't be a zealot, we don't like "let" statements but sometimes they are the simpliest option, if someone does a bunch of nesting with let, they should consider using iife (see packages/opencode/src/util.iife.ts)
 
           Use the gh cli to create comments on the files for the violations. Try to leave the comment on the exact line number. If you have a suggested fix include it in a suggestion code block.
+          If you are writing suggested fixes, BE SURE THAT the change you are recommending is actually valid typescript, often I have seen missing closing "}" or other syntax errors.
+          Generally, write a comment instead of writing suggested change if you can help it.
 
           Command MUST be like this.
           \`\`\`

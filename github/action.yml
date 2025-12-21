@@ -9,6 +9,10 @@ inputs:
     description: "Model to use"
     required: true
 
+  agent:
+    description: "Agent to use. Must be a primary agent. Falls back to default_agent from config or 'build' if not found."
+    required: false
+
   share:
     description: "Share the opencode session (defaults to true for public repos)"
     required: false
@@ -24,6 +28,10 @@ inputs:
 
   mentions:
     description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/opencode,/oc'"
+    required: false
+
+  oidc_base_url:
+    description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
 
 runs:
@@ -58,7 +66,9 @@ runs:
       run: opencode github run
       env:
         MODEL: ${{ inputs.model }}
+        AGENT: ${{ inputs.agent }}
         SHARE: ${{ inputs.share }}
         PROMPT: ${{ inputs.prompt }}
         USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
         MENTIONS: ${{ inputs.mentions }}
+        OIDC_BASE_URL: ${{ inputs.oidc_base_url }}

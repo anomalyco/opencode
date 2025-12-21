@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/desktop",
-  "version": "1.0.167",
+  "version": "1.0.184",
   "description": "",
   "type": "module",
   "exports": {
@@ -56,6 +56,7 @@
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
-    "virtua": "catalog:"
+    "virtua": "catalog:",
+    "zod": "catalog:"
   }
 }
