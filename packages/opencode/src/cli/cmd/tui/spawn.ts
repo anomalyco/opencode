@@ -46,7 +46,7 @@ export const TuiSpawnCommand = cmd({
       cmd,
       cwd,
       stdout: "inherit",
-      stderr: "inherit",
+      stderr: "ignore",
       stdin: "inherit",
       env: {
         ...process.env,

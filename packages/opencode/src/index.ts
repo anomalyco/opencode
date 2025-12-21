@@ -146,7 +146,7 @@ try {
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
     UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-    console.error(e)
+    Log.Default.error("unexpected error", { error: e instanceof Error ? e.stack : e })
   }
   process.exitCode = 1
 } finally {
