@@ -83,7 +83,7 @@ export namespace ShareNext {
       id: string
       secret: string
       url: string
-    }>(["session_share", sessionID])
+    }>(["session_share", sessionID]).catch(() => undefined)
   }
 
   type Data =

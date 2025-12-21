@@ -215,7 +215,7 @@ export namespace Session {
   })
 
   export const getShare = fn(Identifier.schema("session"), async (id) => {
-    return Storage.read<ShareInfo>(["share", id])
+    return Storage.read<ShareInfo>(["share", id]).catch(() => undefined)
   })
 
   export const share = fn(Identifier.schema("session"), async (id) => {
