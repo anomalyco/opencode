@@ -193,6 +193,88 @@ This provides an additional safety layer to prevent unintended modifications to 
 
 ---
 
+#### Separate read and write
+
+You can configure different permissions for read and write operations.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "read": "allow",
+      "write": "ask"
+    }
+  }
+}
+```
+
+---
+
+#### Directory rules
+
+For more granular control, specify permissions per directory using glob patterns.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "read": {
+        "directories": {
+          "~/projects/docs": "allow",
+          "~/.ssh": "deny",
+          "/etc": "deny"
+        },
+        "default": "ask"
+      },
+      "write": {
+        "directories": {
+          "~/projects/docs": "allow"
+        },
+        "default": "deny"
+      }
+    }
+  }
+}
+```
+
+Directory paths are matched as prefixes, so `~/projects/docs` matches all files inside that directory. Use `~` for your home directory.
+
+---
+
+#### Glob patterns
+
+You can use glob patterns to match multiple directories.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "read": {
+        "directories": {
+          "~/projects/**/docs": "allow",
+          "~/projects/**/node_modules": "deny"
+        },
+        "default": "ask"
+      }
+    }
+  }
+}
+```
+
+- `*` matches any characters except `/`
+- `**` matches any characters including `/`
+
+---
+
+#### Limitations
+
+The `external_directory` permission only applies to OpenCode's built-in file tools (`read`, `write`, `edit`, `ls`, `glob`, `grep`). It does not restrict access through the `bash` tool, which can run arbitrary commands.
+
+---
+
 ## Agents
 
 You can also configure permissions per agent. Where the agent specific config
