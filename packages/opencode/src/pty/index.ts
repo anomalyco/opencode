@@ -7,9 +7,41 @@ import { Log } from "../util/log"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
-import {} from "process"
+import { spawn } from "child_process"
 import { Installation } from "@/installation"
 import { Shell } from "@/shell/shell"
+
+const SIGKILL_TIMEOUT_MS = 200
+
+async function killPtyTree(pty: IPty): Promise<void> {
+  const pid = pty.pid
+  if (!pid) return
+
+  if (process.platform === "win32") {
+    await new Promise<void>((resolve) => {
+      const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
+      killer.once("exit", () => resolve())
+      killer.once("error", () => resolve())
+    })
+    return
+  }
+
+  try {
+    process.kill(-pid, "SIGTERM")
+    await Bun.sleep(SIGKILL_TIMEOUT_MS)
+    try {
+      process.kill(-pid, "SIGKILL")
+    } catch {}
+  } catch {
+    try {
+      pty.kill("SIGTERM")
+    } catch {}
+    await Bun.sleep(SIGKILL_TIMEOUT_MS)
+    try {
+      pty.kill("SIGKILL")
+    } catch {}
+  }
+}
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -90,14 +122,14 @@ export namespace Pty {
   const state = Instance.state(
     () => new Map<string, ActiveSession>(),
     async (sessions) => {
-      for (const session of sessions.values()) {
-        try {
-          session.process.kill()
-        } catch {}
-        for (const ws of session.subscribers) {
-          ws.close()
-        }
-      }
+      await Promise.all(
+        Array.from(sessions.values()).map(async (session) => {
+          await killPtyTree(session.process)
+          for (const ws of session.subscribers) {
+            ws.close()
+          }
+        }),
+      )
       sessions.clear()
     },
   )
@@ -182,9 +214,7 @@ export namespace Pty {
     const session = state().get(id)
     if (!session) return
     log.info("removing session", { id })
-    try {
-      session.process.kill()
-    } catch {}
+    await killPtyTree(session.process)
     for (const ws of session.subscribers) {
       ws.close()
     }
