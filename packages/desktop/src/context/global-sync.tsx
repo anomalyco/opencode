@@ -18,9 +18,12 @@ import {
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
+import { retry } from "@opencode-ai/util/retry"
 import { useGlobalSDK } from "./global-sdk"
 import { ErrorPage, type InitError } from "../pages/error"
 import { createContext, useContext, onMount, type ParentProps, Switch, Match } from "solid-js"
+import { showToast } from "@opencode-ai/ui/toast"
+import { getFilename } from "@opencode-ai/util/path"
 
 type State = {
   ready: boolean
@@ -72,6 +75,7 @@ function createGlobalSync() {
 
   const children: Record<string, ReturnType<typeof createStore<State>>> = {}
   function child(directory: string) {
+    if (!directory) console.error("No directory provided")
     if (!children[directory]) {
       setGlobalStore("children", directory, {
         project: "",
@@ -117,11 +121,13 @@ function createGlobalSync() {
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
-        setGlobalStore("error", err)
+        const project = getFilename(directory)
+        showToast({ title: `Failed to load sessions for ${project}`, description: err.message })
       })
   }
 
   async function bootstrapInstance(directory: string) {
+    if (!directory) return
     const [, setStore] = child(directory)
     const sdk = createOpencodeClient({
       baseUrl: globalSDK.url,
@@ -140,7 +146,7 @@ function createGlobalSync() {
       changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
       node: () => sdk.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
     }
-    await Promise.all(Object.values(load).map((p) => p().catch((e) => setGlobalStore("error", e))))
+    await Promise.all(Object.values(load).map((p) => retry(p).catch((e) => setGlobalStore("error", e))))
       .then(() => setStore("ready", true))
       .catch((e) => setGlobalStore("error", e))
   }
@@ -290,21 +296,29 @@ function createGlobalSync() {
 
   async function bootstrap() {
     return Promise.all([
-      globalSDK.client.path.get().then((x) => {
-        setGlobalStore("path", x.data!)
-      }),
-      globalSDK.client.project.list().then(async (x) => {
-        setGlobalStore(
-          "project",
-          x.data!.filter((p) => !p.worktree.includes("opencode-test")).sort((a, b) => a.id.localeCompare(b.id)),
-        )
-      }),
-      globalSDK.client.provider.list().then((x) => {
-        setGlobalStore("provider", x.data ?? {})
-      }),
-      globalSDK.client.provider.auth().then((x) => {
-        setGlobalStore("provider_auth", x.data ?? {})
-      }),
+      retry(() =>
+        globalSDK.client.path.get().then((x) => {
+          setGlobalStore("path", x.data!)
+        }),
+      ),
+      retry(() =>
+        globalSDK.client.project.list().then(async (x) => {
+          setGlobalStore(
+            "project",
+            x.data!.filter((p) => !p.worktree.includes("opencode-test")).sort((a, b) => a.id.localeCompare(b.id)),
+          )
+        }),
+      ),
+      retry(() =>
+        globalSDK.client.provider.list().then((x) => {
+          setGlobalStore("provider", x.data ?? {})
+        }),
+      ),
+      retry(() =>
+        globalSDK.client.provider.auth().then((x) => {
+          setGlobalStore("provider_auth", x.data ?? {})
+        }),
+      ),
     ])
       .then(() => setGlobalStore("ready", true))
       .catch((e) => setGlobalStore("error", e))

@@ -75,11 +75,9 @@ export namespace ProviderTransform {
     }
 
     if (
-      model.providerID === "deepseek" ||
-      model.api.id.toLowerCase().includes("deepseek") ||
-      (model.capabilities.interleaved &&
-        typeof model.capabilities.interleaved === "object" &&
-        model.capabilities.interleaved.field === "reasoning_content")
+      model.capabilities.interleaved &&
+      typeof model.capabilities.interleaved === "object" &&
+      model.capabilities.interleaved.field === "reasoning_content"
     ) {
       return msgs.map((msg) => {
         if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -219,10 +217,10 @@ export namespace ProviderTransform {
     if (id.includes("gemini-3-pro")) return 1.0
     if (id.includes("glm-4.6")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
-    // if (id.includes("kimi-k2")) {
-    //   if (id.includes("thinking")) return 1.0
-    //   return 0.6
-    // }
+    if (id.includes("kimi-k2")) {
+      if (id.includes("thinking")) return 1.0
+      return 0.6
+    }
     return undefined
   }
 
@@ -424,6 +422,10 @@ export namespace ProviderTransform {
         // Filter required array to only include fields that exist in properties
         if (result.type === "object" && result.properties && Array.isArray(result.required)) {
           result.required = result.required.filter((field: any) => field in result.properties)
+        }
+
+        if (result.type === "array" && result.items == null) {
+          result.items = {}
         }
 
         return result

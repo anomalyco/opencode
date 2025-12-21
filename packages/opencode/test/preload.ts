@@ -3,9 +3,14 @@
 import os from "os"
 import path from "path"
 import fs from "fs/promises"
+import fsSync from "fs"
+import { afterAll } from "bun:test"
 
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
+afterAll(() => {
+  fsSync.rmSync(dir, { recursive: true, force: true })
+})
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")

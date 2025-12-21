@@ -1,5 +1,6 @@
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
+import { Button } from "@opencode-ai/ui/button"
 import { Component } from "solid-js"
 import { usePlatform } from "@/context/platform"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -9,9 +10,17 @@ export type InitError = {
   data: Record<string, unknown>
 }
 
-function formatError(error: InitError | undefined): string {
-  if (!error) return "Unknown error"
+function isInitError(error: unknown): error is InitError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    "data" in error &&
+    typeof (error as InitError).data === "object"
+  )
+}
 
+function formatInitError(error: InitError): string {
   const data = error.data
   switch (error.name) {
     case "MCPFailed":
@@ -53,8 +62,36 @@ function formatError(error: InitError | undefined): string {
   }
 }
 
+function formatErrorChain(error: unknown, depth = 0): string {
+  if (!error) return "Unknown error"
+
+  const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
+
+  if (isInitError(error)) {
+    return indent + formatInitError(error)
+  }
+
+  if (error instanceof Error) {
+    const parts = [indent + `${error.name}: ${error.message}`]
+    if (error.stack) {
+      parts.push(error.stack)
+    }
+    if (error.cause) {
+      parts.push(formatErrorChain(error.cause, depth + 1))
+    }
+    return parts.join("\n\n")
+  }
+
+  if (typeof error === "string") return indent + error
+  return indent + JSON.stringify(error, null, 2)
+}
+
+function formatError(error: unknown): string {
+  return formatErrorChain(error, 0)
+}
+
 interface ErrorPageProps {
-  error: InitError | undefined
+  error: unknown
 }
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
@@ -76,6 +113,9 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           label="Error Details"
           hideLabel
         />
+        <Button size="large" onClick={platform.restart}>
+          Restart
+        </Button>
         <div class="flex items-center justify-center gap-1">
           Please report this error to the OpenCode team
           <button

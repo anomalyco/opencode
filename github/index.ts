@@ -318,6 +318,10 @@ function useEnvRunUrl() {
   return `/${repo.owner}/${repo.repo}/actions/runs/${runId}`
 }
 
+function useEnvAgent() {
+  return process.env["AGENT"] || undefined
+}
+
 function useEnvShare() {
   const value = process.env["SHARE"]
   if (!value) return undefined
@@ -570,24 +574,49 @@ async function subscribeSessionEvents() {
 }
 
 async function summarize(response: string) {
-  const payload = useContext().payload as IssueCommentEvent
   try {
     return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
   } catch (e) {
+    if (isScheduleEvent()) {
+      return "Scheduled task changes"
+    }
+    const payload = useContext().payload as IssueCommentEvent
     return `Fix issue: ${payload.issue.title}`
   }
+}
+
+async function resolveAgent(): Promise<string | undefined> {
+  const envAgent = useEnvAgent()
+  if (!envAgent) return undefined
+
+  // Validate the agent exists and is a primary agent
+  const agents = await client.agent.list<true>()
+  const agent = agents.data?.find((a) => a.name === envAgent)
+
+  if (!agent) {
+    console.warn(`agent "${envAgent}" not found. Falling back to default agent`)
+    return undefined
+  }
+
+  if (agent.mode === "subagent") {
+    console.warn(`agent "${envAgent}" is a subagent, not a primary agent. Falling back to default agent`)
+    return undefined
+  }
+
+  return envAgent
 }
 
 async function chat(text: string, files: PromptFiles = []) {
   console.log("Sending message to opencode...")
   const { providerID, modelID } = useEnvModel()
+  const agent = await resolveAgent()
 
   const chat = await client.session.chat<true>({
     path: session,
     body: {
       providerID,
       modelID,
-      agent: "build",
+      agent,
       parts: [
         {
           type: "text",

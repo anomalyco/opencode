@@ -27,6 +27,20 @@ if (!Script.preview) {
   const opencode = await createOpencode()
   const session = await opencode.client.session.create()
   console.log("generating changelog since " + previous)
+
+  const team = [
+    "actions-user",
+    "opencode",
+    "rekram1-node",
+    "thdxr",
+    "kommander",
+    "jayair",
+    "fwang",
+    "adamdotdevin",
+    "iamdavidhill",
+    "opencode-agent[bot]",
+  ]
+
   const raw = await opencode.client.session
     .prompt({
       path: {
@@ -35,29 +49,61 @@ if (!Script.preview) {
       body: {
         model: {
           providerID: "opencode",
-          modelID: "claude-haiku-4-5",
+          modelID: "gemini-3-flash",
         },
         parts: [
           {
             type: "text",
             text: `
-          Analyze these commits and generate a changelog of all notable user facing changes.
+            Analyze these commits and generate a changelog of all notable user facing changes, grouped by area.
 
-          Commits between ${previous} and HEAD:
-          ${commits}
+            Each commit below includes:
+            - [author: username] showing the GitHub username of the commit author
+            - [areas: ...] showing which areas of the codebase were modified
 
-          - Do NOT make general statements about "improvements", be very specific about what was changed.
-          - Do NOT include any information about code changes if they do not affect the user facing changes.
-          - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
-          - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG)
-          - If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
+            Commits between ${previous} and HEAD:
+            ${commits}
 
-          IMPORTANT: ONLY return a bulleted list of changes, do not include any other information. Do not include a preamble like "Based on my analysis..."
+            Group the changes into these categories based on the [areas: ...] tags (omit any category with no changes):
+            - **TUI**: Changes to "opencode" area (the terminal/CLI interface)
+            - **Desktop**: Changes to "desktop" or "tauri" areas (the desktop application)
+            - **SDK**: Changes to "sdk" or "plugin" areas (the SDK and plugin system)
+            - **Extensions**: Changes to "extensions/zed", "extensions/vscode", or "github" areas (editor extensions and GitHub Action)
+            - **Other**: Any user-facing changes that don't fit the above categories
 
-          <example>
-          - Added ability to @ mention agents
-          - Fixed a bug where the TUI would render improperly on some terminals
-          </example>
+            Excluded areas (omit these entirely unless they contain user-facing changes like refactors that may affect behavior):
+            - "nix", "infra", "script" - CI/build infrastructure
+            - "ui", "docs", "web", "console", "enterprise", "function", "util", "identity", "slack" - internal packages
+
+            Rules:
+            - Use the [areas: ...] tags to determine the correct category. If a commit touches multiple areas, put it in the most relevant user-facing category.
+            - ONLY include commits that have user-facing impact. Omit purely internal changes (CI, build scripts, internal tooling).
+            - However, DO include refactors that touch user-facing code - refactors can introduce bugs or change behavior.
+            - Do NOT make general statements about "improvements", be very specific about what was changed.
+            - For commits that are already well-written and descriptive, avoid rewording them. Simply capitalize the first letter, fix any misspellings, and ensure proper English grammar.
+            - DO NOT read any other commits than the ones listed above (THIS IS IMPORTANT TO AVOID DUPLICATING THINGS IN OUR CHANGELOG).
+            - If a commit was made and then reverted do not include it in the changelog. If the commits only include a revert but not the original commit, then include the revert in the changelog.
+            - Omit categories that have no changes.
+            - For community contributors: if the [author: username] is NOT in the team list, add (@username) at the end of the changelog entry. This is REQUIRED for all non-team contributors.
+            - The team members are: ${team.join(", ")}. Do NOT add @ mentions for team members.
+
+            IMPORTANT: ONLY return the grouped changelog, do not include any other information. Do not include a preamble like "Based on my analysis..." or "Here is the changelog..."
+
+            <example>
+            ## TUI
+            - Added experimental support for the Ty language server (@OpeOginni)
+            - Added /fork slash command for keyboard-friendly session forking (@ariane-emory)
+            - Increased retry attempts for failed requests
+            - Fixed model validation before executing slash commands (@devxoul)
+
+            ## Desktop
+            - Added shell mode support
+            - Fixed prompt history navigation and optimistic prompt duplication
+            - Disabled pinch-to-zoom on Linux (@Brendonovich)
+
+            ## Extensions
+            - Added OIDC_BASE_URL support for custom GitHub App installations (@elithrar)
+            </example>
           `,
           },
         ],
@@ -74,19 +120,6 @@ if (!Script.preview) {
   console.log("-----------------------------")
   opencode.server.close()
 
-  // Get contributors
-  const team = [
-    "actions-user",
-    "opencode",
-    "rekram1-node",
-    "thdxr",
-    "kommander",
-    "jayair",
-    "fwang",
-    "adamdotdevin",
-    "iamdavidhill",
-    "opencode-agent[bot]",
-  ]
   const compare =
     await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
   const contributors = new Map<string, string[]>()
@@ -148,6 +181,8 @@ await import(`../packages/plugin/script/publish.ts`)
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
+let output = `version=${Script.version}\n`
+
 if (!Script.preview) {
   await $`git commit -am "release: v${Script.version}"`
   await $`git tag v${Script.version}`
@@ -157,7 +192,10 @@ if (!Script.preview) {
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
   const release = await $`gh release view v${Script.version} --json id,tagName`.json()
-  if (process.env.GITHUB_OUTPUT) {
-    await Bun.write(process.env.GITHUB_OUTPUT, `releaseId=${release.id}\ntagName=${release.tagName}\n`)
-  }
+  output += `release=${release.id}\n`
+  output += `tag=${release.tagName}\n`
+}
+
+if (process.env.GITHUB_OUTPUT) {
+  await Bun.write(process.env.GITHUB_OUTPUT, output)
 }

@@ -19,7 +19,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
-import { useCommand, formatKeybind } from "@/context/command"
+import { useCommand } from "@/context/command"
 import { persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
 
@@ -102,6 +102,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
+    userHasEdited: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -111,11 +112,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
+    userHasEdited: false,
   })
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
     "prompt-history.v1",
+    createStore<{
+      entries: Prompt[]
+    }>({
+      entries: [],
+    }),
+  )
+  const [shellHistory, setShellHistory] = persisted(
+    "prompt-history-shell.v1",
     createStore<{
       entries: Prompt[]
     }>({
@@ -139,6 +149,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
+    setStore("userHasEdited", false)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -440,6 +451,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (shouldReset) {
       setStore("popover", null)
+      setStore("userHasEdited", false)
       if (store.historyIndex >= 0 && !store.applyingHistory) {
         setStore("historyIndex", -1)
         setStore("savedPrompt", null)
@@ -472,6 +484,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.historyIndex >= 0 && !store.applyingHistory) {
       setStore("historyIndex", -1)
       setStore("savedPrompt", null)
+    }
+
+    if (!store.applyingHistory) {
+      setStore("userHasEdited", true)
     }
 
     prompt.set(rawParts, cursorPosition)
@@ -547,7 +563,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sessionID: params.id!,
     })
 
-  const addToHistory = (prompt: Prompt) => {
+  const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
       .map((p) => ("content" in p ? p.content : ""))
       .join("")
@@ -555,17 +571,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!text) return
 
     const entry = clonePromptParts(prompt)
-    const lastEntry = history.entries[0]
+    const currentHistory = mode === "shell" ? shellHistory : history
+    const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
+    const lastEntry = currentHistory.entries[0]
     if (lastEntry) {
       const lastText = lastEntry.map((p) => ("content" in p ? p.content : "")).join("")
       if (lastText === text) return
     }
 
-    setHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
+    setCurrentHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
   }
 
   const navigateHistory = (direction: "up" | "down") => {
-    const entries = history.entries
+    if (store.userHasEdited) return false
+
+    const entries = store.mode === "shell" ? shellHistory.entries : history.entries
     const current = store.historyIndex
 
     if (direction === "up") {
@@ -693,9 +713,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    addToHistory(currentPrompt)
+    addToHistory(currentPrompt, store.mode)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
+    setStore("userHasEdited", false)
 
     let existing = info()
     if (!existing) {
@@ -868,8 +889,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             custom
                           </span>
                         </Show>
-                        <Show when={cmd.keybind}>
-                          <span class="text-12-regular text-text-subtle">{formatKeybind(cmd.keybind!)}</span>
+                        <Show when={command.keybind(cmd.id)}>
+                          <span class="text-12-regular text-text-subtle">{command.keybind(cmd.id)}</span>
                         </Show>
                       </div>
                     </button>
@@ -969,26 +990,46 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </div>
               </Match>
               <Match when={store.mode === "normal"}>
-                <Select
-                  options={local.agent.list().map((agent) => agent.name)}
-                  current={local.agent.current().name}
-                  onSelect={local.agent.set}
-                  class="capitalize"
-                  variant="ghost"
-                />
-                <Button
-                  as="div"
-                  variant="ghost"
-                  onClick={() =>
-                    dialog.show(() =>
-                      providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
-                    )
+                <Tooltip
+                  placement="top"
+                  value={
+                    <div class="flex items-center gap-2">
+                      <span>Cycle agent</span>
+                      <span class="text-icon-base text-12-medium">{command.keybind("agent.cycle")}</span>
+                    </div>
                   }
                 >
-                  {local.model.current()?.name ?? "Select model"}
-                  <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
-                  <Icon name="chevron-down" size="small" />
-                </Button>
+                  <Select
+                    options={local.agent.list().map((agent) => agent.name)}
+                    current={local.agent.current().name}
+                    onSelect={local.agent.set}
+                    class="capitalize"
+                    variant="ghost"
+                  />
+                </Tooltip>
+                <Tooltip
+                  placement="top"
+                  value={
+                    <div class="flex items-center gap-2">
+                      <span>Choose model</span>
+                      <span class="text-icon-base text-12-medium">{command.keybind("model.choose")}</span>
+                    </div>
+                  }
+                >
+                  <Button
+                    as="div"
+                    variant="ghost"
+                    onClick={() =>
+                      dialog.show(() =>
+                        providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
+                      )
+                    }
+                  >
+                    {local.model.current()?.name ?? "Select model"}
+                    <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
+                    <Icon name="chevron-down" size="small" />
+                  </Button>
+                </Tooltip>
               </Match>
             </Switch>
           </div>
