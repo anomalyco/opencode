@@ -37,13 +37,8 @@ export namespace Provider {
     return Number(match[1]) >= 5
   }
 
-  function shouldUseCopilotResponsesApi(useResponsesApi: boolean, modelID: string): boolean {
-    return (
-      useResponsesApi &&
-      isGpt5OrLater(modelID) &&
-      !modelID.startsWith("gpt-5-mini") &&
-      !modelID.startsWith("gpt-5-chat")
-    )
+  function shouldUseCopilotResponsesApi(modelID: string): boolean {
+    return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
   }
 
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
@@ -108,30 +103,20 @@ export namespace Provider {
         options: {},
       }
     },
-    "github-copilot": async (input) => {
+    "github-copilot": async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          // TODO: once GitHub Copilot enables Responses API broadly, default this on for supported models
-          // and remove the opt-in flag to reduce configuration surface area.
-          const useResponsesApi = Boolean(input.options?.useResponsesApi)
-
-          const useResponses = modelID.includes("codex") || shouldUseCopilotResponsesApi(useResponsesApi, modelID)
-          return useResponses ? sdk.responses(modelID) : sdk.chat(modelID)
+          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
     },
-    "github-copilot-enterprise": async (input) => {
+    "github-copilot-enterprise": async () => {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          // TODO: once GitHub Copilot enables Responses API broadly, default this on for supported models
-          // and remove the opt-in flag to reduce configuration surface area.
-          const useResponsesApi = Boolean(input.options?.useResponsesApi)
-
-          const useResponses = modelID.includes("codex") || shouldUseCopilotResponsesApi(useResponsesApi, modelID)
-          return useResponses ? sdk.responses(modelID) : sdk.chat(modelID)
+          return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
