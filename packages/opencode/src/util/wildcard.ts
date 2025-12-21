@@ -33,11 +33,16 @@ export namespace Wildcard {
       const next = normalizedPattern[i + 1]
 
       if (char === "*" && next === "*") {
-        // ** matches anything including slashes
-        regex += ".*"
+        // ** matches zero or more path segments
         i += 2
-        // Skip trailing slash after **
-        if (normalizedPattern[i] === "/") i++
+        if (normalizedPattern[i] === "/") {
+          // **/ means "zero or more directories followed by /"
+          regex += "(?:.*/)?"
+          i++
+        } else {
+          // ** at end or before non-slash matches anything
+          regex += ".*"
+        }
       } else if (char === "*") {
         // * matches anything except slashes
         regex += "[^/]*"

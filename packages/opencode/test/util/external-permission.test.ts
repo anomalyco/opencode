@@ -197,6 +197,20 @@ describe("ExternalPermission.resolve", () => {
       expect(ExternalPermission.resolve(config, "/var/log/syslog", "read")).toBe("allow")
     })
 
+    test("**/ requires path boundary - does not match partial names", () => {
+      const config = {
+        read: {
+          directories: { "/a/**/docs": "allow" as const },
+          default: "deny" as const,
+        },
+      }
+      expect(ExternalPermission.resolve(config, "/a/docs/file.txt", "read")).toBe("allow")
+      expect(ExternalPermission.resolve(config, "/a/x/docs/file.txt", "read")).toBe("allow")
+      expect(ExternalPermission.resolve(config, "/a/x/y/docs/file.txt", "read")).toBe("allow")
+      expect(ExternalPermission.resolve(config, "/a/xdocs/file.txt", "read")).toBe("deny") // xdocs != docs
+      expect(ExternalPermission.resolve(config, "/a/mydocs/file.txt", "read")).toBe("deny") // mydocs != docs
+    })
+
     test("handles ? single character wildcard", () => {
       const config = {
         read: {
