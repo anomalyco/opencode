@@ -16,6 +16,7 @@ import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 
 const singleFlag = process.argv.includes("--single")
+const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 
 const allTargets: {
@@ -78,7 +79,19 @@ const allTargets: {
 ]
 
 const targets = singleFlag
-  ? allTargets.filter((item) => item.os === process.platform && item.arch === process.arch)
+  ? allTargets.filter((item) => {
+      if (item.os !== process.platform || item.arch !== process.arch) {
+        return false
+      }
+
+      // When building for the current platform, prefer a single native binary by default.
+      // Baseline binaries require additional Bun artifacts and can be flaky to download.
+      if (item.avx2 === false) {
+        return baselineFlag
+      }
+
+      return true
+    })
   : allTargets
 
 await $`rm -rf dist`

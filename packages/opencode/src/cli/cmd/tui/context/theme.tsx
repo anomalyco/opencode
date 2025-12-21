@@ -6,8 +6,10 @@ import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
+import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" }
 import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
+import cursor from "./theme/cursor.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
 import flexoki from "./theme/flexoki.json" with { type: "json" }
@@ -136,8 +138,10 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
   ayu,
   catppuccin,
+  ["catppuccin-frappe"]: catppuccinFrappe,
   ["catppuccin-macchiato"]: catppuccinMacchiato,
   cobalt2,
+  cursor,
   dracula,
   everforest,
   flexoki,
@@ -279,14 +283,23 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       ready: false,
     })
 
-    createEffect(async () => {
-      const custom = await getCustomThemes()
-      setStore(
-        produce((draft) => {
-          Object.assign(draft.themes, custom)
-          draft.ready = true
-        }),
-      )
+    createEffect(() => {
+      getCustomThemes()
+        .then((custom) => {
+          setStore(
+            produce((draft) => {
+              Object.assign(draft.themes, custom)
+            }),
+          )
+        })
+        .catch(() => {
+          setStore("active", "opencode")
+        })
+        .finally(() => {
+          if (store.active !== "system") {
+            setStore("ready", true)
+          }
+        })
     })
 
     const renderer = useRenderer()
@@ -295,8 +308,25 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         size: 16,
       })
       .then((colors) => {
-        if (!colors.palette[0]) return
-        setStore("themes", "system", generateSystem(colors, store.mode))
+        if (!colors.palette[0]) {
+          if (store.active === "system") {
+            setStore(
+              produce((draft) => {
+                draft.active = "opencode"
+                draft.ready = true
+              }),
+            )
+          }
+          return
+        }
+        setStore(
+          produce((draft) => {
+            draft.themes.system = generateSystem(colors, store.mode)
+            if (store.active === "system") {
+              draft.ready = true
+            }
+          }),
+        )
       })
 
     const values = createMemo(() => {
