@@ -244,7 +244,7 @@ describe("ExternalPermission.resolve", () => {
       expect(ExternalPermission.resolve(config, `${homedir}/projects/other/File.java`, "read")).toBe("deny")
     })
 
-    test("patterns with existing wildcards are not modified", () => {
+    test("patterns ending with * are not modified", () => {
       const config = {
         read: {
           directories: {
@@ -257,6 +257,25 @@ describe("ExternalPermission.resolve", () => {
       expect(ExternalPermission.resolve(config, "/etc/hosts", "read")).toBe("deny")
       expect(ExternalPermission.resolve(config, "/etc/ssh/config", "read")).toBe("ask") // * doesn't match /
       expect(ExternalPermission.resolve(config, "/var/log/deep/file.log", "read")).toBe("allow")
+    })
+
+    test("glob patterns with ** in middle match directory contents", () => {
+      const config = {
+        read: {
+          directories: {
+            "/projects/**/spring-petclinic": "allow" as const,
+          },
+          default: "deny" as const,
+        },
+      }
+      expect(ExternalPermission.resolve(config, "/projects/ahold/playground/spring-petclinic/Pet.java", "read")).toBe(
+        "allow",
+      )
+      expect(
+        ExternalPermission.resolve(config, "/projects/ahold/playground/spring-petclinic/src/App.java", "read"),
+      ).toBe("allow")
+      expect(ExternalPermission.resolve(config, "/projects/ahold/playground/spring-petclinic", "read")).toBe("allow")
+      expect(ExternalPermission.resolve(config, "/projects/ahold/other-project/File.java", "read")).toBe("deny")
     })
   })
 

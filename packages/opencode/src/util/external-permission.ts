@@ -14,10 +14,6 @@ export namespace ExternalPermission {
     return pattern
   }
 
-  function hasWildcard(pattern: string): boolean {
-    return pattern.includes("*") || pattern.includes("?")
-  }
-
   /** Resolve permission for a filepath. Checks directory rules, then falls back to default. */
   export function resolve(
     config: ExternalDirectoryConfig | undefined,
@@ -32,17 +28,14 @@ export namespace ExternalPermission {
     if (typeof operationConfig === "string") return operationConfig
 
     if (operationConfig.directories) {
-      // Expand patterns: plain paths get both exact and /** variants for directory matching
+      // Expand patterns: add /** suffix unless pattern already ends with wildcard
       const expanded: Record<string, Permission> = {}
       for (const [pattern, permission] of Object.entries(operationConfig.directories)) {
-        const expandedPattern = expandTilde(pattern)
-        if (hasWildcard(expandedPattern)) {
-          expanded[expandedPattern] = permission
-        } else {
-          // Plain path: match exact path AND treat as directory prefix
-          expanded[expandedPattern] = permission
-          const suffix = expandedPattern.endsWith("/") ? "**" : "/**"
-          expanded[expandedPattern + suffix] = permission
+        const p = expandTilde(pattern)
+        expanded[p] = permission
+        // Add /** variant unless pattern already ends with * or **
+        if (!p.endsWith("*")) {
+          expanded[p + (p.endsWith("/") ? "**" : "/**")] = permission
         }
       }
       const match = Wildcard.pathAll(filepath, expanded)
