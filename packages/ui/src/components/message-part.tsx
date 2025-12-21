@@ -87,6 +87,110 @@ function getDirectory(path: string | undefined) {
   return relativizeProjectPaths(_getDirectory(path), data.directory)
 }
 
+export function getSessionToolParts(store: ReturnType<typeof useData>["store"], sessionId: string): ToolPart[] {
+  const messages = store.message[sessionId]?.filter((m) => m.role === "assistant")
+  if (!messages) return []
+
+  const parts: ToolPart[] = []
+  for (const m of messages) {
+    const msgParts = store.part[m.id]
+    if (msgParts) {
+      for (const p of msgParts) {
+        if (p && p.type === "tool") parts.push(p as ToolPart)
+      }
+    }
+  }
+  return parts
+}
+
+import type { IconProps } from "./icon"
+
+export type ToolInfo = {
+  icon: IconProps["name"]
+  title: string
+  subtitle?: string
+}
+
+export function getToolInfo(tool: string, input: Record<string, any> = {}): ToolInfo {
+  switch (tool) {
+    case "read":
+      return {
+        icon: "glasses",
+        title: "Read",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "list":
+      return {
+        icon: "bullet-list",
+        title: "List",
+        subtitle: input.path ? getFilename(input.path) : undefined,
+      }
+    case "glob":
+      return {
+        icon: "magnifying-glass-menu",
+        title: "Glob",
+        subtitle: input.pattern,
+      }
+    case "grep":
+      return {
+        icon: "magnifying-glass-menu",
+        title: "Grep",
+        subtitle: input.pattern,
+      }
+    case "webfetch":
+      return {
+        icon: "window-cursor",
+        title: "Webfetch",
+        subtitle: input.url,
+      }
+    case "task":
+      return {
+        icon: "task",
+        title: `${input.subagent_type || "task"} Agent`,
+        subtitle: input.description,
+      }
+    case "bash":
+      return {
+        icon: "console",
+        title: "Shell",
+        subtitle: input.description,
+      }
+    case "edit":
+      return {
+        icon: "code-lines",
+        title: "Edit",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "write":
+      return {
+        icon: "code-lines",
+        title: "Write",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "todowrite":
+      return {
+        icon: "checklist",
+        title: "To-dos",
+      }
+    case "todoread":
+      return {
+        icon: "checklist",
+        title: "Read to-dos",
+      }
+    default:
+      return {
+        icon: "mcp",
+        title: tool,
+      }
+  }
+}
+
+function getToolPartInfo(part: ToolPart): ToolInfo {
+  const state = part.state as any
+  const input = state.input || {}
+  return getToolInfo(part.tool, input)
+}
+
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
@@ -453,23 +557,37 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "task",
   render(props) {
+    const summary = () =>
+      (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
+
     return (
       <BasicTool
-        {...props}
         icon="task"
+        defaultOpen={true}
         trigger={{
           title: `${props.input.subagent_type || props.tool} Agent`,
           titleClass: "capitalize",
           subtitle: props.input.description,
         }}
       >
-        {/* <Show when={false && props.output}> */}
-        {/*   {(output) => ( */}
-        {/*     <div data-component="tool-output" data-scrollable> */}
-        {/*       <Markdown text={output()} /> */}
-        {/*     </div> */}
-        {/*   )} */}
-        {/* </Show> */}
+        <div data-component="tool-output" data-scrollable>
+          <div data-component="task-tools">
+            <For each={summary()}>
+              {(item) => {
+                const info = getToolInfo(item.tool)
+                return (
+                  <div data-slot="task-tool-item">
+                    <Icon name={info.icon} size="small" />
+                    <span data-slot="task-tool-title">{info.title}</span>
+                    <Show when={item.state.title}>
+                      <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </div>
       </BasicTool>
     )
   },
