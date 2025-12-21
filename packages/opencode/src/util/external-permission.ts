@@ -1,3 +1,4 @@
+import path from "path"
 import { Config } from "../config/config"
 import { Wildcard } from "./wildcard"
 import { Global } from "../global"
@@ -6,15 +7,10 @@ export namespace ExternalPermission {
   type Permission = Config.Permission
   type ExternalDirectoryConfig = Config.ExternalDirectoryPermission
 
-  /**
-   * Expands tilde (~) in a pattern to the user's home directory.
-   * Examples:
-   *   ~/.ssh/** → /Users/username/.ssh/**
-   *   ~/Documents/* → /Users/username/Documents/*
-   */
+  // Expand ~/ to home directory using path.join for cross-platform support
   function expandTilde(pattern: string): string {
     if (pattern.startsWith("~/")) {
-      return Global.Path.home + pattern.slice(1)
+      return path.join(Global.Path.home, pattern.slice(2))
     }
     return pattern
   }
