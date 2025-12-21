@@ -69,9 +69,9 @@ export namespace Wildcard {
    * Find the best matching pattern for a file path.
    * Uses pathMatch() for proper glob semantics. Longer patterns take precedence.
    */
-  export function pathAll(filepath: string, patterns: Record<string, any>) {
+  export function pathAll<T>(filepath: string, patterns: Record<string, T>): T | undefined {
     const sorted = pipe(patterns, Object.entries, sortBy([([key]) => key.length, "asc"], [([key]) => key, "asc"]))
-    let result = undefined
+    let result: T | undefined = undefined
     for (const [pattern, value] of sorted) {
       if (pathMatch(filepath, pattern)) {
         result = value

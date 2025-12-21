@@ -38,8 +38,8 @@ export namespace ExternalPermission {
           expanded[p + (p.endsWith("/") ? "**" : "/**")] = permission
         }
       }
-      const match = Wildcard.pathAll(filepath, expanded)
-      if (match !== undefined) return match as Permission
+      const match = Wildcard.pathAll<Permission>(filepath, expanded)
+      if (match !== undefined) return match
     }
 
     return operationConfig.default ?? "ask"

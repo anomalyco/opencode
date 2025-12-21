@@ -24,8 +24,11 @@ export const GrepTool = Tool.define("grep", {
       throw new Error("pattern is required")
     }
 
-    let searchPath = params.path ?? Instance.directory
-    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    const searchPath = params.path
+      ? path.isAbsolute(params.path)
+        ? params.path
+        : path.resolve(Instance.directory, params.path)
+      : Instance.directory
     const agent = await Agent.get(ctx.agent)
 
     if (!Filesystem.contains(Instance.directory, searchPath)) {

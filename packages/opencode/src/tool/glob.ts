@@ -21,8 +21,11 @@ export const GlobTool = Tool.define("glob", {
       ),
   }),
   async execute(params, ctx) {
-    let search = params.path ?? Instance.directory
-    search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
+    const search = params.path
+      ? path.isAbsolute(params.path)
+        ? params.path
+        : path.resolve(Instance.directory, params.path)
+      : Instance.directory
     const agent = await Agent.get(ctx.agent)
 
     if (!Filesystem.contains(Instance.directory, search)) {
