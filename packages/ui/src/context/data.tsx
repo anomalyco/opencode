@@ -1,6 +1,6 @@
 import type { Message, Session, Part, FileDiff, SessionStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
-import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
 type Data = {
   session: Session[]
@@ -24,6 +24,13 @@ type Data = {
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: { data: Data; directory: string }) => {
-    return { store: props.data, directory: props.directory }
+    return {
+      get store() {
+        return props.data
+      },
+      get directory() {
+        return props.directory
+      },
+    }
   },
 })

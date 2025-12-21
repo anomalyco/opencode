@@ -51,7 +51,6 @@ const parser = lazy(async () => {
 })
 
 // TODO: we may wanna rename this tool so it works better on other shells
-
 export const BashTool = Tool.define("bash", async () => {
   const shell = (() => {
     const s = process.env.SHELL

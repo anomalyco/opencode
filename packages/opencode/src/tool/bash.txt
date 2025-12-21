@@ -25,11 +25,6 @@ Usage notes:
     - The description argument is required. You must write a clear, concise description of what this command does in 5-10 words.
     - If the output exceeds 30000 characters, output will be truncated before being
   returned to you.
-    - You can use the `run_in_background` parameter to run the command in the background,
-  which allows you to continue working while the command runs. You can monitor the output
-  using the Bash tool as it becomes available. You do not need to use '&' at the end of
-  the command when using this parameter.
-
     - Avoid using Bash with the `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or
   `echo` commands, unless explicitly instructed or when these commands are truly necessary
    for the task. Instead, always prefer using the dedicated tools for these commands:

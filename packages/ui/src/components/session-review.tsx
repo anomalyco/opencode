@@ -9,7 +9,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileDiff } from "@opencode-ai/sdk/v2"
-import { PreloadMultiFileDiffResult } from "@pierre/precision-diffs/ssr"
+import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { Dynamic } from "solid-js/web"
 import { checksum } from "@opencode-ai/util/encode"
 
@@ -25,7 +25,7 @@ export interface SessionReviewProps {
 export const SessionReview = (props: SessionReviewProps) => {
   const diffComponent = useDiffComponent()
   const [store, setStore] = createStore({
-    open: props.diffs.map((d) => d.file),
+    open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
   })
 
   const handleChange = (open: string[]) => {
@@ -78,7 +78,7 @@ export const SessionReview = (props: SessionReviewProps) => {
         <Accordion multiple value={store.open} onChange={handleChange}>
           <For each={props.diffs}>
             {(diff) => (
-              <Accordion.Item forceMount value={diff.file} data-slot="session-review-accordion-item">
+              <Accordion.Item value={diff.file} data-slot="session-review-accordion-item">
                 <StickyAccordionHeader>
                   <Accordion.Trigger>
                     <div data-slot="session-review-trigger-content">
