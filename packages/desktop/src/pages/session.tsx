@@ -534,7 +534,7 @@ export default function Page() {
   const showTabs = createMemo(() => diffs().length > 0 || tabs().all().length > 0)
 
   return (
-    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
+    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <div class="min-h-0 grow w-full flex">
         {/* Session pane - always visible */}
         <div
