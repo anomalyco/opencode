@@ -1,7 +1,7 @@
-import { createEffect, on, Show, For, type JSX, createSignal } from "solid-js"
+import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { createEffect, createSignal, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
-import { Icon, IconProps } from "./icon"
+import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
 
@@ -160,6 +160,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                         data-active={props.key(item) === active()}
                         data-selected={item === props.current}
                         onClick={() => handleSelect(item, i())}
+                        type="button"
                         onMouseMove={() => {
                           setStore("mouseActive", true)
                           setActive(props.key(item))
