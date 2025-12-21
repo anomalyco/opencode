@@ -15,6 +15,7 @@ import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
 import { Shell } from "@/shell/shell"
+import { ExternalPermission } from "@/util/external-permission"
 
 const MAX_OUTPUT_LENGTH = Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH || 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -86,7 +87,8 @@ export const BashTool = Tool.define("bash", async () => {
       const checkExternalDirectory = async (dir: string) => {
         if (Filesystem.contains(Instance.directory, dir)) return
         const title = `This command references paths outside of ${Instance.directory}`
-        if (agent.permission.external_directory === "ask") {
+        const externalPerm = ExternalPermission.resolve(agent.permission.external_directory, dir, "write")
+        if (externalPerm === "ask") {
           await Permission.ask({
             type: "external_directory",
             pattern: [dir, path.join(dir, "*")],
@@ -98,7 +100,7 @@ export const BashTool = Tool.define("bash", async () => {
               command: params.command,
             },
           })
-        } else if (agent.permission.external_directory === "deny") {
+        } else if (externalPerm === "deny") {
           throw new Permission.RejectedError(
             ctx.sessionID,
             "external_directory",
