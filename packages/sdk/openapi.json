@@ -7677,8 +7677,74 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["ask", "allow", "deny"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "read": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "allow", "deny"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "directories": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "enum": ["ask", "allow", "deny"]
+                                }
+                              },
+                              "default": {
+                                "type": "string",
+                                "enum": ["ask", "allow", "deny"]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "write": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "allow", "deny"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "directories": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "enum": ["ask", "allow", "deny"]
+                                }
+                              },
+                              "default": {
+                                "type": "string",
+                                "enum": ["ask", "allow", "deny"]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
               }
             }
           }
@@ -8385,8 +8451,74 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["ask", "allow", "deny"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "read": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "allow", "deny"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "directories": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "enum": ["ask", "allow", "deny"]
+                                }
+                              },
+                              "default": {
+                                "type": "string",
+                                "enum": ["ask", "allow", "deny"]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "write": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "allow", "deny"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "directories": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "enum": ["ask", "allow", "deny"]
+                                }
+                              },
+                              "default": {
+                                "type": "string",
+                                "enum": ["ask", "allow", "deny"]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
               }
             }
           },
@@ -9194,8 +9326,74 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "external_directory": {
-                "type": "string",
-                "enum": ["ask", "allow", "deny"]
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["ask", "allow", "deny"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "read": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "allow", "deny"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "directories": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "enum": ["ask", "allow", "deny"]
+                                }
+                              },
+                              "default": {
+                                "type": "string",
+                                "enum": ["ask", "allow", "deny"]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "write": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": ["ask", "allow", "deny"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "directories": {
+                                "type": "object",
+                                "propertyNames": {
+                                  "type": "string"
+                                },
+                                "additionalProperties": {
+                                  "type": "string",
+                                  "enum": ["ask", "allow", "deny"]
+                                }
+                              },
+                              "default": {
+                                "type": "string",
+                                "enum": ["ask", "allow", "deny"]
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
               }
             },
             "required": ["edit", "bash"]

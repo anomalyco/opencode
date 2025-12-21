@@ -380,6 +380,28 @@ export namespace Config {
   export const Permission = z.enum(["ask", "allow", "deny"])
   export type Permission = z.infer<typeof Permission>
 
+  export const DirectoryRulesObject = z
+    .object({
+      directories: z.record(z.string(), Permission).optional(),
+      default: Permission.optional(),
+    })
+    .strict()
+  export type DirectoryRulesObject = z.infer<typeof DirectoryRulesObject>
+
+  export const OperationPermission = z.union([Permission, DirectoryRulesObject])
+  export type OperationPermission = z.infer<typeof OperationPermission>
+
+  export const ExternalDirectoryPermission = z.union([
+    Permission,
+    z
+      .object({
+        read: OperationPermission.optional(),
+        write: OperationPermission.optional(),
+      })
+      .strict(),
+  ])
+  export type ExternalDirectoryPermission = z.infer<typeof ExternalDirectoryPermission>
+
   export const Command = z.object({
     template: z.string(),
     description: z.string().optional(),
@@ -416,7 +438,7 @@ export namespace Config {
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
+          external_directory: ExternalDirectoryPermission.optional(),
         })
         .optional(),
     })
@@ -763,7 +785,7 @@ export namespace Config {
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
+          external_directory: ExternalDirectoryPermission.optional(),
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
