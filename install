@@ -14,27 +14,37 @@ OpenCode Installer
 Usage: install.sh [options]
 
 Options:
-    -h, --help          Display this help message
-
-Environment variables:
-    VERSION             Install a specific version (e.g., VERSION=1.0.180)
+    -h, --help              Display this help message
+    -v, --version <version> Install a specific version (e.g., 1.0.180)
 
 Examples:
     curl -fsSL https://opencode.ai/install | bash
-    VERSION=1.0.180 curl -fsSL https://opencode.ai/install | bash
+    curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
 EOF
 }
 
-for arg in "$@"; do
-    case "$arg" in
+requested_version=${VERSION:-}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         -h|--help)
             usage
             exit 0
             ;;
+        -v|--version)
+            if [[ -n "${2:-}" ]]; then
+                requested_version="$2"
+                shift 2
+            else
+                echo -e "${RED}Error: --version requires a version argument${NC}"
+                exit 1
+            fi
+            ;;
+        *)
+            shift
+            ;;
     esac
 done
-
-requested_version=${VERSION:-}
 
 raw_os=$(uname -s)
 os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
