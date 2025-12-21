@@ -271,7 +271,13 @@ You can use glob patterns to match multiple directories.
 
 #### Limitations
 
-The `external_directory` permission only applies to OpenCode's built-in file tools (`read`, `write`, `edit`, `ls`, `glob`, `grep`). It does not restrict access through the `bash` tool, which can run arbitrary commands.
+The `external_directory` permission applies to OpenCode's built-in file tools: `read`, `write`, `edit`, `patch`, `ls`, `glob`, and `grep`.
+
+The `bash` tool performs best-effort detection of external paths and may prompt or deny based on your configuration. However, it cannot guarantee confinement because arbitrary commands can access files in ways that aren't reliably detectable.
+
+:::caution[Symlinks]
+Path checks are lexical. Symlinks inside allowed directories that point outside are not currently blocked.
+:::
 
 ---
 
