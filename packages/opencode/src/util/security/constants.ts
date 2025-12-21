@@ -50,5 +50,5 @@ function getPlatformConstants() {
   }
 }
 
-export const PLATFORM = getPlatformConstants()
+export const PLATFORM = getPlatformConstants
 export const MACOS = MACOS_CONSTANTS // For darwin.ts

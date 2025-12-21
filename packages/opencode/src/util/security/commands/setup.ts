@@ -7,7 +7,7 @@ import os from "os"
  * Configure sudoers file for passwordless execution
  */
 async function configureSudoers(currentUser: string, restrictedUser: string): Promise<void> {
-  const sudoRule = `${currentUser} ALL=(${restrictedUser}) NOPASSWD: ${PLATFORM.SHELL}`
+  const sudoRule = `${currentUser} ALL=(${restrictedUser}) NOPASSWD: ${PLATFORM().SHELL}`
 
   // Check if rule already exists
   const existing = await Bun.file(SUDOERS_FILE_PATH)

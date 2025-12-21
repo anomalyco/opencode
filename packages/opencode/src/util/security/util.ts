@@ -7,7 +7,7 @@ import type { PlatformSecurity } from "./platform/interface"
  * Run sudo command (non-interactive, assumes auth cached)
  */
 export async function runSudoCommand(cmd: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  const proc = Bun.spawn(["sudo", "-n", PLATFORM.SHELL, "-c", cmd], {
+  const proc = Bun.spawn(["sudo", "-n", PLATFORM().SHELL, "-c", cmd], {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -125,7 +125,7 @@ export async function rebuildSudoersFile(config: SecurityConfig): Promise<void> 
   const rules: string[] = []
 
   // Base rule: Allow main user to execute commands as restricted user
-  rules.push(`${config.mainUser} ALL=(${config.restrictedUser}) NOPASSWD: ${PLATFORM.SHELL}`)
+  rules.push(`${config.mainUser} ALL=(${config.restrictedUser}) NOPASSWD: ${PLATFORM().SHELL}`)
 
   // Whitelisted command rules: Allow restricted user to run whitelisted commands as main user
   for (const command of config.whitelistedCommands) {

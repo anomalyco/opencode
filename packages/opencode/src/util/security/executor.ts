@@ -97,9 +97,9 @@ export class ProtectedExecutor {
     }
 
     // Set base environment (these override any parent values for security)
-    env.HOME = PLATFORM.USER_HOME // Match NFSHomeDirectory from user creation
+    env.HOME = PLATFORM().USER_HOME // Match NFSHomeDirectory from user creation
     env.USER = this.restrictedUser
-    env.SHELL = PLATFORM.SHELL
+    env.SHELL = PLATFORM().SHELL
 
     return env
   }
@@ -126,7 +126,7 @@ export class ProtectedExecutor {
         "-n", // Non-interactive (requires NOPASSWD)
         "-u",
         this.restrictedUser,
-        PLATFORM.SHELL,
+        PLATFORM().SHELL,
         "--noprofile",
         "--norc",
         "-c",
