@@ -45,7 +45,7 @@ export const GrepTool = Tool.define("grep", {
           "external_directory",
           ctx.callID,
           { searchPath },
-          `Directory ${searchPath} is not in the current working directory`,
+          `Access to ${searchPath} is denied by external_directory permission`,
         )
       }
     }

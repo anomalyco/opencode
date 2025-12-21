@@ -79,7 +79,7 @@ export const PatchTool = Tool.define("patch", {
               filepath: filePath,
               parentDir,
             },
-            `File ${filePath} is not in the current working directory`,
+            `Access to ${filePath} is denied by external_directory permission`,
           )
         }
       }

@@ -50,7 +50,7 @@ export const WriteTool = Tool.define("write", {
             filepath: filepath,
             parentDir,
           },
-          `File ${filepath} is not in the current working directory`,
+          `Access to ${filepath} is denied by external_directory permission`,
         )
       }
     }

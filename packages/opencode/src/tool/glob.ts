@@ -43,7 +43,7 @@ export const GlobTool = Tool.define("glob", {
           "external_directory",
           ctx.callID,
           { searchPath: search },
-          `Directory ${search} is not in the current working directory`,
+          `Access to ${search} is denied by external_directory permission`,
         )
       }
     }

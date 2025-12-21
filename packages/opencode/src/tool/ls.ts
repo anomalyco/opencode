@@ -66,7 +66,7 @@ export const ListTool = Tool.define("list", {
           "external_directory",
           ctx.callID,
           { searchPath },
-          `Directory ${searchPath} is not in the current working directory`,
+          `Access to ${searchPath} is denied by external_directory permission`,
         )
       }
     }
