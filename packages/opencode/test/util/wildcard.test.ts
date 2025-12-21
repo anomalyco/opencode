@@ -1,5 +1,62 @@
-import { test, expect } from "bun:test"
+import { test, expect, describe } from "bun:test"
 import { Wildcard } from "../../src/util/wildcard"
+
+describe("pathMatch", () => {
+  test("* does not cross directory boundaries", () => {
+    expect(Wildcard.pathMatch("/etc/hosts", "/etc/*")).toBe(true)
+    expect(Wildcard.pathMatch("/etc/ssh/config", "/etc/*")).toBe(false)
+    expect(Wildcard.pathMatch("/tmp/file.txt", "/tmp/*")).toBe(true)
+    expect(Wildcard.pathMatch("/tmp/subdir/file.txt", "/tmp/*")).toBe(false)
+  })
+
+  test("** matches across directory boundaries", () => {
+    expect(Wildcard.pathMatch("/etc/hosts", "/etc/**")).toBe(true)
+    expect(Wildcard.pathMatch("/etc/ssh/config", "/etc/**")).toBe(true)
+    expect(Wildcard.pathMatch("/etc/ssh/keys/id_rsa", "/etc/**")).toBe(true)
+  })
+
+  test("? matches single character but not separator", () => {
+    expect(Wildcard.pathMatch("/tmp/a.txt", "/tmp/?.txt")).toBe(true)
+    expect(Wildcard.pathMatch("/tmp/ab.txt", "/tmp/?.txt")).toBe(false)
+    expect(Wildcard.pathMatch("/t/p/a.txt", "/tmp/?.txt")).toBe(false)
+  })
+
+  test("exact matches work", () => {
+    expect(Wildcard.pathMatch("/etc/hosts", "/etc/hosts")).toBe(true)
+    expect(Wildcard.pathMatch("/etc/passwd", "/etc/hosts")).toBe(false)
+  })
+
+  test("handles Windows-style paths", () => {
+    expect(Wildcard.pathMatch("C:\\Users\\john\\file.txt", "C:/Users/john/*")).toBe(true)
+    expect(Wildcard.pathMatch("C:\\Users\\john\\docs\\file.txt", "C:/Users/john/*")).toBe(false)
+    expect(Wildcard.pathMatch("C:\\Users\\john\\docs\\file.txt", "C:/Users/john/**")).toBe(true)
+  })
+})
+
+describe("pathAll", () => {
+  test("picks the most specific matching pattern", () => {
+    const rules = {
+      "/etc/*": "deny",
+      "/etc/hosts": "allow",
+    }
+    expect(Wildcard.pathAll("/etc/hosts", rules)).toBe("allow")
+    expect(Wildcard.pathAll("/etc/passwd", rules)).toBe("deny")
+  })
+
+  test("returns undefined when no match", () => {
+    const rules = { "/etc/*": "deny" }
+    expect(Wildcard.pathAll("/var/log/syslog", rules)).toBeUndefined()
+  })
+
+  test("** patterns match subdirectories", () => {
+    const rules = {
+      "/tmp/*": "allow",
+      "/etc/**": "deny",
+    }
+    expect(Wildcard.pathAll("/etc/ssh/config", rules)).toBe("deny")
+    expect(Wildcard.pathAll("/tmp/subdir/file", rules)).toBeUndefined()
+  })
+})
 
 test("match handles glob tokens", () => {
   expect(Wildcard.match("file1.txt", "file?.txt")).toBe(true)

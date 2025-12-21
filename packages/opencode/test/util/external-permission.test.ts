@@ -173,7 +173,19 @@ describe("ExternalPermission.resolve", () => {
   })
 
   describe("Wildcard patterns", () => {
-    test("handles ** glob pattern", () => {
+    test("* does not cross directory boundaries", () => {
+      const config = {
+        read: {
+          directories: { "/etc/*": "deny" as const },
+          default: "allow" as const,
+        },
+      }
+      expect(ExternalPermission.resolve(config, "/etc/hosts", "read")).toBe("deny")
+      expect(ExternalPermission.resolve(config, "/etc/ssh/config", "read")).toBe("allow") // * doesn't cross /
+      expect(ExternalPermission.resolve(config, "/var/log/syslog", "read")).toBe("allow")
+    })
+
+    test("** matches across directory boundaries", () => {
       const config = {
         read: {
           directories: { "/etc/**": "deny" as const },

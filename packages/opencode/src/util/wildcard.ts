@@ -14,6 +14,67 @@ export namespace Wildcard {
     return regex.test(str)
   }
 
+  /**
+   * Match a file path against a glob pattern with proper path semantics.
+   * - `*` matches any characters except path separators (/ or \)
+   * - `**` matches any characters including path separators (recursive)
+   * - `?` matches a single character except path separators
+   */
+  export function pathMatch(filepath: string, pattern: string): boolean {
+    // Normalize separators to forward slash for matching
+    const normalizedPath = filepath.replace(/\\/g, "/")
+    const normalizedPattern = pattern.replace(/\\/g, "/")
+
+    // Build regex from pattern
+    let regex = "^"
+    let i = 0
+    while (i < normalizedPattern.length) {
+      const char = normalizedPattern[i]
+      const next = normalizedPattern[i + 1]
+
+      if (char === "*" && next === "*") {
+        // ** matches anything including slashes
+        regex += ".*"
+        i += 2
+        // Skip trailing slash after **
+        if (normalizedPattern[i] === "/") i++
+      } else if (char === "*") {
+        // * matches anything except slashes
+        regex += "[^/]*"
+        i++
+      } else if (char === "?") {
+        // ? matches single char except slash
+        regex += "[^/]"
+        i++
+      } else if (".+^${}()|[]\\".includes(char)) {
+        // Escape regex special chars
+        regex += "\\" + char
+        i++
+      } else {
+        regex += char
+        i++
+      }
+    }
+    regex += "$"
+
+    return new RegExp(regex).test(normalizedPath)
+  }
+
+  /**
+   * Find the best matching pattern for a file path.
+   * Uses pathMatch() for proper glob semantics. Longer patterns take precedence.
+   */
+  export function pathAll(filepath: string, patterns: Record<string, any>) {
+    const sorted = pipe(patterns, Object.entries, sortBy([([key]) => key.length, "asc"], [([key]) => key, "asc"]))
+    let result = undefined
+    for (const [pattern, value] of sorted) {
+      if (pathMatch(filepath, pattern)) {
+        result = value
+      }
+    }
+    return result
+  }
+
   export function all(input: string, patterns: Record<string, any>) {
     const sorted = pipe(patterns, Object.entries, sortBy([([key]) => key.length, "asc"], [([key]) => key, "asc"]))
     let result = undefined

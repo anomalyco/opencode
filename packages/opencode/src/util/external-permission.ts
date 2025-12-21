@@ -71,7 +71,7 @@ export namespace ExternalPermission {
         expandedDirectories[expandTilde(pattern)] = permission
       }
 
-      const match = Wildcard.all(filepath, expandedDirectories)
+      const match = Wildcard.pathAll(filepath, expandedDirectories)
       if (match !== undefined) {
         return match as Permission
       }
