@@ -4,6 +4,7 @@ import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
+import { X11Clipboard } from "./x11-clipboard.js"
 
 export namespace Clipboard {
   export interface Content {
@@ -52,6 +53,13 @@ export namespace Clipboard {
       }
     }
 
+    if (os === "linux") {
+      const nativeText = await X11Clipboard.read()
+      if (nativeText) {
+        return { data: nativeText, mime: "text/plain" }
+      }
+    }
+
     const text = await clipboardy.read().catch(() => {})
     if (text) {
       return { data: text, mime: "text/plain" }
@@ -79,6 +87,16 @@ export namespace Clipboard {
           await proc.exited.catch(() => {})
         }
       }
+
+      console.log("clipboard: using native X11")
+      return async (text: string) => {
+        const success = await X11Clipboard.copy(text)
+        if (!success) {
+          console.log("X11 clipboard failed, falling back to clipboardy")
+          await clipboardy.write(text).catch(() => {})
+        }
+      }
+
       if (Bun.which("xclip")) {
         console.log("clipboard: using xclip")
         return async (text: string) => {

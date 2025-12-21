@@ -82,6 +82,7 @@
     "bun-pty": "0.4.2",
     "chokidar": "4.0.3",
     "clipboardy": "4.0.0",
+    "ffi-napi": "^4.0.3",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
     "fuzzysort": "3.1.0",
