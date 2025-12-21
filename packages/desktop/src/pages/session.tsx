@@ -538,7 +538,7 @@ export default function Page() {
       <div class="min-h-0 grow w-full flex">
         {/* Session pane - always visible */}
         <div
-          class="relative shrink-0 py-3 flex flex-col gap-6 min-h-0 h-full bg-background-stronger"
+          class="@container relative shrink-0 py-3 flex flex-col gap-6 min-h-0 h-full bg-background-stronger"
           style={{ width: showTabs() ? `${layout.session.width()}px` : "100%" }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
@@ -601,7 +601,12 @@ export default function Page() {
             </Switch>
           </div>
           <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
-            <div class="w-full max-w-200 px-6">
+            <div
+              classList={{
+                "w-full px-6": true,
+                "max-w-200": !showTabs(),
+              }}
+            >
               <PromptInput
                 ref={(el) => {
                   inputRef = el
