@@ -217,10 +217,10 @@ export namespace ProviderTransform {
     if (id.includes("gemini-3-pro")) return 1.0
     if (id.includes("glm-4.6")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
-    // if (id.includes("kimi-k2")) {
-    //   if (id.includes("thinking")) return 1.0
-    //   return 0.6
-    // }
+    if (id.includes("kimi-k2")) {
+      if (id.includes("thinking")) return 1.0
+      return 0.6
+    }
     return undefined
   }
 
