@@ -15,7 +15,6 @@ export const DialogSelectProvider: Component = () => {
   return (
     <Dialog title="Connect provider">
       <List
-        class="px-2.5"
         search={{ placeholder: "Search providers", autofocus: true }}
         activeIcon="plus-small"
         key={(x) => x?.id}
@@ -38,7 +37,7 @@ export const DialogSelectProvider: Component = () => {
         }}
       >
         {(i) => (
-          <div class="px-1.25 w-full flex items-center gap-x-4">
+          <div class="px-1.25 w-full flex items-center gap-x-3">
             <ProviderIcon
               data-slot="list-item-extra-icon"
               id={i.id as IconName}
