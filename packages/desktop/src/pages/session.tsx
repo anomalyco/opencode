@@ -22,7 +22,6 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
@@ -50,7 +49,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
-import { AssistantMessage, UserMessage } from "@opencode-ai/sdk/v2"
+import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
@@ -118,26 +117,7 @@ export default function Page() {
     setActiveMessage(msgs[targetIndex])
   }
 
-  const last = createMemo(
-    () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage,
-  )
-  const model = createMemo(() =>
-    last() ? sync.data.provider.all.find((x) => x.id === last().providerID)?.models[last().modelID] : undefined,
-  )
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
-
-  const tokens = createMemo(() => {
-    if (!last()) return
-    const t = last().tokens
-    return t.input + t.output + t.reasoning + t.cache.read + t.cache.write
-  })
-
-  const context = createMemo(() => {
-    const total = tokens()
-    const limit = model()?.limit.context
-    if (!total || !limit) return 0
-    return Math.round((total / limit) * 100)
-  })
 
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
@@ -551,273 +531,213 @@ export default function Page() {
     )
   }
 
-  const wide = createMemo(() => layout.review.state() === "tab" || !diffs().length)
+  const showTabs = createMemo(() => diffs().length > 0 || tabs().all().length > 0)
 
   return (
     <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
-      <div class="min-h-0 grow w-full">
-        <DragDropProvider
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDragOver={handleDragOver}
-          collisionDetector={closestCenter}
+      <div class="min-h-0 grow w-full flex">
+        {/* Session pane - always visible */}
+        <div
+          class="relative shrink-0 py-3 flex flex-col gap-6 min-h-0 h-full bg-background-stronger"
+          style={{ width: showTabs() ? `${layout.session.width()}px` : "100%" }}
         >
-          <DragDropSensors />
-          <ConstrainDragYAxis />
-          <Tabs value={tabs().active() ?? "chat"} onChange={tabs().open}>
-            <div class="sticky top-0 shrink-0 flex">
-              <Tabs.List>
-                <Tabs.Trigger value="chat">
-                  <div class="flex gap-x-[17px] items-center">
-                    <div>Session</div>
-                    <Tooltip
-                      value={`${new Intl.NumberFormat("en-US", {
-                        notation: "compact",
-                        compactDisplay: "short",
-                      }).format(tokens() ?? 0)} Tokens`}
-                      class="flex items-center gap-1.5"
-                    >
-                      <ProgressCircle percentage={context() ?? 0} />
-                      <div class="text-14-regular text-text-weak text-left w-7">{context() ?? 0}%</div>
-                    </Tooltip>
-                  </div>
-                </Tabs.Trigger>
-                <Show when={layout.review.state() === "tab" && diffs().length}>
-                  <Tabs.Trigger
-                    value="review"
-                    closeButton={
-                      <Tooltip value="Close tab" placement="bottom">
-                        <IconButton icon="collapse" size="normal" variant="ghost" onClick={layout.review.pane} />
-                      </Tooltip>
-                    }
-                  >
-                    <div class="flex items-center gap-3">
-                      <Show when={diffs()}>
-                        <DiffChanges changes={diffs()} variant="bars" />
-                      </Show>
-                      <div class="flex items-center gap-1.5">
-                        <div>Review</div>
-                        <Show when={info()?.summary?.files}>
-                          <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
-                            {info()?.summary?.files ?? 0}
-                          </div>
-                        </Show>
-                      </div>
-                    </div>
-                  </Tabs.Trigger>
-                </Show>
-                <SortableProvider ids={tabs().all() ?? []}>
-                  <For each={tabs().all() ?? []}>
-                    {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={tabs().close} />}
-                  </For>
-                </SortableProvider>
-                <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                  <Tooltip value="Open file" class="flex items-center">
-                    <IconButton
-                      icon="plus-small"
-                      variant="ghost"
-                      iconSize="large"
-                      onClick={() => dialog.show(() => <DialogSelectFile />)}
+          <div class="flex-1 min-h-0 overflow-hidden">
+            <Switch>
+              <Match when={params.id}>
+                <div class="flex items-start justify-start h-full min-h-0">
+                  <SessionMessageRail
+                    messages={visibleUserMessages()}
+                    current={activeMessage()}
+                    onMessageSelect={setActiveMessage}
+                    wide={!showTabs()}
+                  />
+                  <Show when={activeMessage()}>
+                    <SessionTurn
+                      sessionID={params.id!}
+                      messageID={activeMessage()!.id}
+                      stepsExpanded={store.stepsExpanded}
+                      onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
+                      onUserInteracted={() => setStore("userInteracted", true)}
+                      classes={{
+                        root: "pb-20 flex-1 min-w-0",
+                        content: "pb-20",
+                        container:
+                          "w-full " +
+                          (!showTabs()
+                            ? "max-w-200 mx-auto px-6"
+                            : visibleUserMessages().length > 1
+                              ? "pr-6 pl-18"
+                              : "px-6"),
+                      }}
                     />
-                  </Tooltip>
+                  </Show>
                 </div>
-              </Tabs.List>
-            </div>
-            <Tabs.Content
-              value="chat"
-              class="@container select-text flex flex-col flex-1 min-h-0 overflow-y-hidden contain-strict"
-            >
-              <div
-                classList={{
-                  "w-full flex-1 min-h-0": true,
-                  grid: layout.review.state() === "tab",
-                  flex: layout.review.state() === "pane",
-                }}
-              >
-                <div
-                  classList={{
-                    "relative shrink-0 py-3 flex flex-col gap-6 flex-1 min-h-0 w-full": true,
-                    "max-w-146 mx-auto": !wide(),
-                  }}
-                >
-                  <Switch>
-                    <Match when={params.id}>
-                      <div class="flex items-start justify-start h-full min-h-0">
-                        <SessionMessageRail
-                          messages={visibleUserMessages()}
-                          current={activeMessage()}
-                          onMessageSelect={setActiveMessage}
-                          wide={wide()}
-                        />
-                        <Show when={activeMessage()}>
-                          <SessionTurn
-                            sessionID={params.id!}
-                            messageID={activeMessage()!.id}
-                            stepsExpanded={store.stepsExpanded}
-                            onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
-                            onUserInteracted={() => setStore("userInteracted", true)}
-                            classes={{
-                              root: "pb-20 flex-1 min-w-0",
-                              content: "pb-20",
-                              container:
-                                "w-full " +
-                                (wide()
-                                  ? "max-w-200 mx-auto px-6"
-                                  : visibleUserMessages().length > 1
-                                    ? "pr-6 pl-18"
-                                    : "px-6"),
-                            }}
-                          />
-                        </Show>
+              </Match>
+              <Match when={true}>
+                <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
+                  <div class="text-20-medium text-text-weaker">New session</div>
+                  <div class="flex justify-center items-center gap-3">
+                    <Icon name="folder" size="small" />
+                    <div class="text-12-medium text-text-weak">
+                      {getDirectory(sync.data.path.directory)}
+                      <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
+                    </div>
+                  </div>
+                  <Show when={sync.project}>
+                    {(project) => (
+                      <div class="flex justify-center items-center gap-3">
+                        <Icon name="pencil-line" size="small" />
+                        <div class="text-12-medium text-text-weak">
+                          Last modified&nbsp;
+                          <span class="text-text-strong">
+                            {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
+                          </span>
+                        </div>
                       </div>
-                    </Match>
-                    <Match when={true}>
-                      <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
-                        <div class="text-20-medium text-text-weaker">New session</div>
-                        <div class="flex justify-center items-center gap-3">
-                          <Icon name="folder" size="small" />
-                          <div class="text-12-medium text-text-weak">
-                            {getDirectory(sync.data.path.directory)}
-                            <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
+                    )}
+                  </Show>
+                </div>
+              </Match>
+            </Switch>
+          </div>
+          <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
+            <div class="w-full max-w-200 px-6">
+              <PromptInput
+                ref={(el) => {
+                  inputRef = el
+                }}
+              />
+            </div>
+          </div>
+          <Show when={showTabs()}>
+            <ResizeHandle
+              direction="horizontal"
+              size={layout.session.width()}
+              min={450}
+              max={window.innerWidth * 0.45}
+              onResize={layout.session.resize}
+            />
+          </Show>
+        </div>
+
+        {/* Tabs pane - visible when there are diffs or file tabs */}
+        <Show when={showTabs()}>
+          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
+            <DragDropProvider
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragYAxis />
+              <Tabs value={tabs().active() ?? "review"} onChange={tabs().open}>
+                <div class="sticky top-0 shrink-0 flex">
+                  <Tabs.List>
+                    <Show when={diffs().length}>
+                      <Tabs.Trigger value="review">
+                        <div class="flex items-center gap-3">
+                          <Show when={diffs()}>
+                            <DiffChanges changes={diffs()} variant="bars" />
+                          </Show>
+                          <div class="flex items-center gap-1.5">
+                            <div>Review</div>
+                            <Show when={info()?.summary?.files}>
+                              <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                {info()?.summary?.files ?? 0}
+                              </div>
+                            </Show>
                           </div>
                         </div>
-                        <Show when={sync.project}>
-                          {(project) => (
-                            <div class="flex justify-center items-center gap-3">
-                              <Icon name="pencil-line" size="small" />
-                              <div class="text-12-medium text-text-weak">
-                                Last modified&nbsp;
-                                <span class="text-text-strong">
-                                  {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-                        </Show>
-                      </div>
-                    </Match>
-                  </Switch>
-                  <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
-                    <div class="w-full max-w-200 px-6">
-                      <PromptInput
-                        ref={(el) => {
-                          inputRef = el
+                      </Tabs.Trigger>
+                    </Show>
+                    <SortableProvider ids={tabs().all() ?? []}>
+                      <For each={tabs().all() ?? []}>
+                        {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={tabs().close} />}
+                      </For>
+                    </SortableProvider>
+                    <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
+                      <Tooltip value="Open file" class="flex items-center">
+                        <IconButton
+                          icon="plus-small"
+                          variant="ghost"
+                          iconSize="large"
+                          onClick={() => dialog.show(() => <DialogSelectFile />)}
+                        />
+                      </Tooltip>
+                    </div>
+                  </Tabs.List>
+                </div>
+                <Show when={diffs().length}>
+                  <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden contain-strict">
+                    <div class="relative pt-3 flex-1 min-h-0 overflow-hidden">
+                      <SessionReview
+                        classes={{
+                          root: "pb-40",
+                          header: "px-6",
+                          container: "px-6",
                         }}
+                        diffs={diffs()}
+                        split
                       />
                     </div>
-                  </div>
-                </div>
-                <Show when={layout.review.state() === "pane" && diffs().length}>
-                  <div
-                    classList={{
-                      "relative grow pt-3 flex-1 min-h-0 border-l border-border-weak-base contain-strict": true,
-                    }}
-                  >
-                    <SessionReview
-                      classes={{
-                        root: "pb-20",
-                        header: "px-6",
-                        container: "px-6",
-                      }}
-                      diffs={diffs()}
-                      actions={
-                        <Tooltip value="Open in tab">
-                          <IconButton
-                            icon="expand"
-                            variant="ghost"
-                            onClick={() => {
-                              layout.review.tab()
-                              tabs().setActive("review")
-                            }}
-                          />
-                        </Tooltip>
-                      }
-                    />
-                  </div>
-                </Show>
-              </div>
-            </Tabs.Content>
-            <Show when={layout.review.state() === "tab" && diffs().length}>
-              <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden contain-strict">
-                <div
-                  classList={{
-                    "relative pt-3 flex-1 min-h-0 overflow-hidden": true,
-                  }}
-                >
-                  <SessionReview
-                    classes={{
-                      root: "pb-40",
-                      header: "px-6",
-                      container: "px-6",
-                    }}
-                    diffs={diffs()}
-                    split
-                  />
-                </div>
-              </Tabs.Content>
-            </Show>
-            <For each={tabs().all()}>
-              {(tab) => {
-                const [file] = createResource(
-                  () => tab,
-                  async (tab) => {
-                    if (tab.startsWith("file://")) {
-                      return local.file.node(tab.replace("file://", ""))
-                    }
-                    return undefined
-                  },
-                )
-                return (
-                  <Tabs.Content value={tab} class="select-text mt-3">
-                    <Switch>
-                      <Match when={file()}>
-                        {(f) => (
-                          <Dynamic
-                            component={codeComponent}
-                            file={{
-                              name: f().path,
-                              contents: f().content?.content ?? "",
-                              cacheKey: checksum(f().content?.content ?? ""),
-                            }}
-                            overflow="scroll"
-                            class="pb-40"
-                          />
-                        )}
-                      </Match>
-                    </Switch>
                   </Tabs.Content>
-                )
-              }}
-            </For>
-          </Tabs>
-          <DragOverlay>
-            <Show when={store.activeDraggable}>
-              {(draggedFile) => {
-                const [file] = createResource(
-                  () => draggedFile(),
-                  async (tab) => {
-                    if (tab.startsWith("file://")) {
-                      return local.file.node(tab.replace("file://", ""))
-                    }
-                    return undefined
-                  },
-                )
-                return (
-                  <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
-                    <Show when={file()}>{(f) => <FileVisual active file={f()} />}</Show>
-                  </div>
-                )
-              }}
-            </Show>
-          </DragOverlay>
-        </DragDropProvider>
-        <Show when={tabs().active()}>
-          <div class="absolute inset-x-0 px-6 max-w-200 flex flex-col justify-center items-center z-50 mx-auto bottom-8">
-            <PromptInput
-              ref={(el) => {
-                inputRef = el
-              }}
-            />
+                </Show>
+                <For each={tabs().all()}>
+                  {(tab) => {
+                    const [file] = createResource(
+                      () => tab,
+                      async (tab) => {
+                        if (tab.startsWith("file://")) {
+                          return local.file.node(tab.replace("file://", ""))
+                        }
+                        return undefined
+                      },
+                    )
+                    return (
+                      <Tabs.Content value={tab} class="select-text mt-3">
+                        <Switch>
+                          <Match when={file()}>
+                            {(f) => (
+                              <Dynamic
+                                component={codeComponent}
+                                file={{
+                                  name: f().path,
+                                  contents: f().content?.content ?? "",
+                                  cacheKey: checksum(f().content?.content ?? ""),
+                                }}
+                                overflow="scroll"
+                                class="pb-40"
+                              />
+                            )}
+                          </Match>
+                        </Switch>
+                      </Tabs.Content>
+                    )
+                  }}
+                </For>
+              </Tabs>
+              <DragOverlay>
+                <Show when={store.activeDraggable}>
+                  {(draggedFile) => {
+                    const [file] = createResource(
+                      () => draggedFile(),
+                      async (tab) => {
+                        if (tab.startsWith("file://")) {
+                          return local.file.node(tab.replace("file://", ""))
+                        }
+                        return undefined
+                      },
+                    )
+                    return (
+                      <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                        <Show when={file()}>{(f) => <FileVisual active file={f()} />}</Show>
+                      </div>
+                    )
+                  }}
+                </Show>
+              </DragOverlay>
+            </DragDropProvider>
           </div>
         </Show>
       </div>
