@@ -62,12 +62,32 @@ function formatInitError(error: InitError): string {
   }
 }
 
-function formatError(error: unknown): string {
+function formatErrorChain(error: unknown, depth = 0): string {
   if (!error) return "Unknown error"
-  if (isInitError(error)) return formatInitError(error)
-  if (error instanceof Error) return `${error.name}: ${error.message}\n\n${error.stack}`
-  if (typeof error === "string") return error
-  return JSON.stringify(error, null, 2)
+
+  const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
+
+  if (isInitError(error)) {
+    return indent + formatInitError(error)
+  }
+
+  if (error instanceof Error) {
+    const parts = [indent + `${error.name}: ${error.message}`]
+    if (error.stack) {
+      parts.push(error.stack)
+    }
+    if (error.cause) {
+      parts.push(formatErrorChain(error.cause, depth + 1))
+    }
+    return parts.join("\n\n")
+  }
+
+  if (typeof error === "string") return indent + error
+  return indent + JSON.stringify(error, null, 2)
+}
+
+function formatError(error: unknown): string {
+  return formatErrorChain(error, 0)
 }
 
 interface ErrorPageProps {
