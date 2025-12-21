@@ -2601,13 +2601,19 @@ export namespace Server {
   }
 
   export function listen(opts: { port: number; hostname: string }) {
-    const server = Bun.serve({
-      port: opts.port,
+    const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
-    })
-    return server
+    } as const
+    if (opts.port === 0) {
+      try {
+        return Bun.serve({ ...args, port: 4096 })
+      } catch {
+        // port 4096 not available, fall through to use port 0
+      }
+    }
+    return Bun.serve({ ...args, port: opts.port })
   }
 }
