@@ -46,7 +46,7 @@ export function Header(props: {
           {(directory) => {
             const currentDirectory = createMemo(() => base64Decode(directory()))
             const store = createMemo(() => globalSync.child(currentDirectory())[0])
-            const sessions = createMemo(() => store().session ?? [])
+            const sessions = createMemo(() => (store().session ?? []).filter((s) => !s.parentID))
             const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
             const shareEnabled = createMemo(() => store().config.share !== "disabled")
             return (
