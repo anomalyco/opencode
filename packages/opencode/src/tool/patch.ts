@@ -124,12 +124,45 @@ export const PatchTool = Tool.define("patch", {
 
           const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
 
+          const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
+
+          // Check permission for move destination
+          if (movePath && !Filesystem.contains(Instance.directory, movePath)) {
+            const moveParentDir = path.dirname(movePath)
+            const moveExternalPerm = ExternalPermission.resolve(agent.permission.external_directory, movePath, "write")
+            if (moveExternalPerm === "ask") {
+              await Permission.ask({
+                type: "external_directory",
+                pattern: [moveParentDir, path.join(moveParentDir, "*")],
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                callID: ctx.callID,
+                title: `Move file to outside working directory: ${movePath}`,
+                metadata: {
+                  filepath: movePath,
+                  parentDir: moveParentDir,
+                },
+              })
+            } else if (moveExternalPerm === "deny") {
+              throw new Permission.RejectedError(
+                ctx.sessionID,
+                "external_directory",
+                ctx.callID,
+                {
+                  filepath: movePath,
+                  parentDir: moveParentDir,
+                },
+                `Access to ${movePath} is denied by external_directory permission`,
+              )
+            }
+          }
+
           fileChanges.push({
             filePath,
             oldContent,
             newContent,
-            type: hunk.move_path ? "move" : "update",
-            movePath: hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined,
+            type: movePath ? "move" : "update",
+            movePath,
           })
 
           totalDiff += diff + "\n"
