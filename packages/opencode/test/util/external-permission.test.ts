@@ -210,6 +210,56 @@ describe("ExternalPermission.resolve", () => {
     })
   })
 
+  describe("Directory pattern normalization", () => {
+    test("plain directory paths match files inside", () => {
+      const config = {
+        read: {
+          directories: { "/Users/test/projects/myapp": "allow" as const },
+          default: "deny" as const,
+        },
+      }
+      expect(ExternalPermission.resolve(config, "/Users/test/projects/myapp/src/main.ts", "read")).toBe("allow")
+      expect(ExternalPermission.resolve(config, "/Users/test/projects/myapp/package.json", "read")).toBe("allow")
+      expect(ExternalPermission.resolve(config, "/Users/test/projects/other/file.ts", "read")).toBe("deny")
+    })
+
+    test("plain directory paths match nested subdirectories", () => {
+      const config = {
+        read: {
+          directories: { "/home/user/code": "allow" as const },
+          default: "deny" as const,
+        },
+      }
+      expect(ExternalPermission.resolve(config, "/home/user/code/project/src/deep/file.ts", "read")).toBe("allow")
+    })
+
+    test("tilde directory paths match contents", () => {
+      const config = {
+        read: {
+          directories: { "~/projects/spring-petclinic": "allow" as const },
+          default: "deny" as const,
+        },
+      }
+      expect(ExternalPermission.resolve(config, `${homedir}/projects/spring-petclinic/Pet.java`, "read")).toBe("allow")
+      expect(ExternalPermission.resolve(config, `${homedir}/projects/other/File.java`, "read")).toBe("deny")
+    })
+
+    test("patterns with existing wildcards are not modified", () => {
+      const config = {
+        read: {
+          directories: {
+            "/etc/*": "deny" as const,
+            "/var/**": "allow" as const,
+          },
+          default: "ask" as const,
+        },
+      }
+      expect(ExternalPermission.resolve(config, "/etc/hosts", "read")).toBe("deny")
+      expect(ExternalPermission.resolve(config, "/etc/ssh/config", "read")).toBe("ask") // * doesn't match /
+      expect(ExternalPermission.resolve(config, "/var/log/deep/file.log", "read")).toBe("allow")
+    })
+  })
+
   describe("Edge cases", () => {
     test("handles empty directories object", () => {
       const config = {

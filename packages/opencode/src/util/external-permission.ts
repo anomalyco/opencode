@@ -7,12 +7,15 @@ export namespace ExternalPermission {
   type Permission = Config.Permission
   type ExternalDirectoryConfig = Config.ExternalDirectoryPermission
 
-  // Expand ~/ to home directory using path.join for cross-platform support
   function expandTilde(pattern: string): string {
     if (pattern.startsWith("~/")) {
       return path.join(Global.Path.home, pattern.slice(2))
     }
     return pattern
+  }
+
+  function hasWildcard(pattern: string): boolean {
+    return pattern.includes("*") || pattern.includes("?")
   }
 
   /** Resolve permission for a filepath. Checks directory rules, then falls back to default. */
@@ -29,9 +32,18 @@ export namespace ExternalPermission {
     if (typeof operationConfig === "string") return operationConfig
 
     if (operationConfig.directories) {
+      // Expand patterns: plain paths get both exact and /** variants for directory matching
       const expanded: Record<string, Permission> = {}
       for (const [pattern, permission] of Object.entries(operationConfig.directories)) {
-        expanded[expandTilde(pattern)] = permission
+        const expandedPattern = expandTilde(pattern)
+        if (hasWildcard(expandedPattern)) {
+          expanded[expandedPattern] = permission
+        } else {
+          // Plain path: match exact path AND treat as directory prefix
+          expanded[expandedPattern] = permission
+          const suffix = expandedPattern.endsWith("/") ? "**" : "/**"
+          expanded[expandedPattern + suffix] = permission
+        }
       }
       const match = Wildcard.pathAll(filepath, expanded)
       if (match !== undefined) return match as Permission
