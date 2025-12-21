@@ -47,6 +47,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         *)
+            echo -e "${ORANGE}Warning: Unknown option '$1'${NC}" >&2
             shift
             ;;
     esac
