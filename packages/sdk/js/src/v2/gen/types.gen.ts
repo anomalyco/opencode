@@ -1548,6 +1548,10 @@ export type Config = {
      */
     primary_tools?: Array<string>
     /**
+     * Cache command markdown files on first load. Set to false to reload command files on every execution.
+     */
+    cache_command_markdown_files?: boolean
+    /**
      * Continue the agent loop when a tool call is denied
      */
     continue_loop_on_deny?: boolean
