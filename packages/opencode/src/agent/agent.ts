@@ -262,6 +262,14 @@ export namespace Agent {
       }
     }
 
+    const hasPrimaryAgents = Object.values(result).filter((a) => a.mode !== "subagent" && !a.hidden).length > 0
+    if (!hasPrimaryAgents) {
+      throw new Config.InvalidError({
+        path: "config",
+        message: "No primary agents are available. Please configure at least one agent with mode 'primary' or 'all'.",
+      })
+    }
+
     return result
   })
 
