@@ -37,6 +37,15 @@ export namespace Provider {
     return Number(match[1]) >= 5
   }
 
+  function shouldUseCopilotResponsesApi(useResponsesApi: boolean, modelID: string): boolean {
+    return (
+      useResponsesApi &&
+      isGpt5OrLater(modelID) &&
+      !modelID.startsWith("gpt-5-mini") &&
+      !modelID.startsWith("gpt-5-chat")
+    )
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -103,19 +112,12 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          // GitHub Copilot can optionally route supported models through the Responses API.
-          // This enables settings like reasoningEffort/reasoningSummary for GPT-5+ models.
+          // TODO: once GitHub Copilot enables Responses API broadly, default this on for supported models
+          // and remove the opt-in flag to reduce configuration surface area.
           const useResponsesApi = Boolean(input.options?.useResponsesApi)
 
-          if (modelID.includes("codex")) {
-            return sdk.responses(modelID)
-          }
-
-          // gpt-5-mini is known to be unsupported via Responses API for some users.
-          if (useResponsesApi && isGpt5OrLater(modelID) && modelID !== "gpt-5-mini") {
-            return sdk.responses(modelID)
-          }
-          return sdk.chat(modelID)
+          const useResponses = modelID.includes("codex") || shouldUseCopilotResponsesApi(useResponsesApi, modelID)
+          return useResponses ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
@@ -124,16 +126,12 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          // TODO: once GitHub Copilot enables Responses API broadly, default this on for supported models
+          // and remove the opt-in flag to reduce configuration surface area.
           const useResponsesApi = Boolean(input.options?.useResponsesApi)
 
-          if (modelID.includes("codex")) {
-            return sdk.responses(modelID)
-          }
-
-          if (useResponsesApi && isGpt5OrLater(modelID) && modelID !== "gpt-5-mini") {
-            return sdk.responses(modelID)
-          }
-          return sdk.chat(modelID)
+          const useResponses = modelID.includes("codex") || shouldUseCopilotResponsesApi(useResponsesApi, modelID)
+          return useResponses ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
       }
