@@ -4,6 +4,10 @@ import * as path from "path"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
+import { Filesystem } from "../util/filesystem"
+import { Permission } from "../permission"
+import { Agent } from "../agent/agent"
+import { ExternalPermission } from "../util/external-permission"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -40,8 +44,32 @@ export const ListTool = Tool.define("list", {
     path: z.string().describe("The absolute path to the directory to list (must be absolute, not relative)").optional(),
     ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
   }),
-  async execute(params) {
+  async execute(params, ctx) {
     const searchPath = path.resolve(Instance.directory, params.path || ".")
+    const agent = await Agent.get(ctx.agent)
+
+    if (!Filesystem.contains(Instance.directory, searchPath)) {
+      const externalPerm = ExternalPermission.resolve(agent.permission.external_directory, searchPath, "read")
+      if (externalPerm === "ask") {
+        await Permission.ask({
+          type: "external_directory",
+          pattern: [searchPath, path.join(searchPath, "*")],
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          title: `List directory outside working directory: ${searchPath}`,
+          metadata: { searchPath },
+        })
+      } else if (externalPerm === "deny") {
+        throw new Permission.RejectedError(
+          ctx.sessionID,
+          "external_directory",
+          ctx.callID,
+          { searchPath },
+          `Directory ${searchPath} is not in the current working directory`,
+        )
+      }
+    }
 
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
     const files = []
