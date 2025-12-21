@@ -56,11 +56,6 @@ export function DialogToolOutput(props: { tool: string; output: string; onClose:
         paddingTop={1}
         paddingBottom={1}
       >
-        <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
-          <text fg={theme.text}>
-            <b>{props.tool}</b>
-          </text>
-        </box>
         <scrollbox
           flexGrow={1}
           scrollAcceleration={scrollAcceleration()}

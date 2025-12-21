@@ -1318,7 +1318,8 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const permission = permissions[permissionIndex]
 
     const output = props.part.state.status === "completed" ? props.part.state.output : undefined
-    const isClickable = container === "inline" && props.part.tool !== "bash" && output
+    // Skip preview for "block" tools (like bash) as they are already expanded
+    const isClickable = container !== "block" && output
 
     const onMouseUp = isClickable
       ? (event: any) => {
