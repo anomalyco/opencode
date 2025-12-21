@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow, path::BaseDirectory};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -97,6 +97,11 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
     let log_state = app.state::<LogState>();
     let log_state_clone = log_state.inner().clone();
 
+    let state_dir = app
+        .path()
+        .resolve("", BaseDirectory::AppLocalData)
+        .expect("Failed to resolve app local data dir");
+
     #[cfg(target_os = "windows")]
     let (mut rx, child) = app
         .shell()
@@ -104,6 +109,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
         .unwrap()
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
         .env("OPENCODE_CLIENT", "desktop")
+        .env("XDG_STATE_HOME", &state_dir)
         .args(["serve", &format!("--port={port}")])
         .spawn()
         .expect("Failed to spawn opencode");
@@ -120,6 +126,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
             .command(&shell)
             .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
             .env("OPENCODE_CLIENT", "desktop")
+            .env("XDG_STATE_HOME", &state_dir)
             .args([
                 "-il",
                 "-c",
