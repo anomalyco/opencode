@@ -15,62 +15,26 @@ export namespace ExternalPermission {
     return pattern
   }
 
-  /**
-   * Resolve external directory permission for a given filepath and operation.
-   *
-   * Resolution order:
-   * 1. If config is absent → "ask"
-   * 2. If config is string → return that string for both operations
-   * 3. If config is object → check operation-specific config
-   *    a. If operation config is absent → "ask"
-   *    b. If operation config is string → return that string
-   *    c. If operation config is object → check directories, then default
-   *
-   * @param config The external_directory configuration
-   * @param filepath Absolute file path to check
-   * @param operation Operation type ('read' or 'write')
-   * @returns Permission level to apply
-   */
+  /** Resolve permission for a filepath. Checks directory rules, then falls back to default. */
   export function resolve(
     config: ExternalDirectoryConfig | undefined,
     filepath: string,
     operation: "read" | "write",
   ): Permission {
-    // Config absent = default to "ask"
-    if (config === undefined) {
-      return "ask"
-    }
+    if (config === undefined) return "ask"
+    if (typeof config === "string") return config
 
-    // Type 1: Simple string - applies to both read and write
-    if (typeof config === "string") {
-      return config
-    }
-
-    // Type 2/3: Object with read/write
     const operationConfig = config[operation]
+    if (operationConfig === undefined) return "ask"
+    if (typeof operationConfig === "string") return operationConfig
 
-    // Operation not specified = default to "ask"
-    if (operationConfig === undefined) {
-      return "ask"
-    }
-
-    // Simple string for this operation
-    if (typeof operationConfig === "string") {
-      return operationConfig
-    }
-
-    // Object with directories for this operation
     if (operationConfig.directories) {
-      // Expand tilde in all directory patterns
-      const expandedDirectories: Record<string, Permission> = {}
+      const expanded: Record<string, Permission> = {}
       for (const [pattern, permission] of Object.entries(operationConfig.directories)) {
-        expandedDirectories[expandTilde(pattern)] = permission
+        expanded[expandTilde(pattern)] = permission
       }
-
-      const match = Wildcard.pathAll(filepath, expandedDirectories)
-      if (match !== undefined) {
-        return match as Permission
-      }
+      const match = Wildcard.pathAll(filepath, expanded)
+      if (match !== undefined) return match as Permission
     }
 
     return operationConfig.default ?? "ask"
