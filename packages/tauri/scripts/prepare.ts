@@ -10,6 +10,7 @@ const sidecarConfig = getCurrentSidecar()
 const dir = "src-tauri/target/opencode-binaries"
 
 await $`mkdir -p ${dir}`
+await $`gh run download ${Bun.env.GITHUB_RUN_ID} -n opencode-cli`
 await $`gh release download v${Script.version} --pattern ${sidecarConfig.ocBinary}.${sidecarConfig.assetExt} --repo sst/opencode --skip-existing --dir ${dir}`
 
 if (sidecarConfig.assetExt === "tar.gz") {
