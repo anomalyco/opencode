@@ -408,9 +408,9 @@ export const GithubRunCommand = cmd({
       const actor = isScheduleEvent ? undefined : context.actor
 
       const issueId = isCommentEvent
-        ? context.eventName === "pull_request_review_comment"
-          ? (payload as PullRequestReviewCommentEvent).pull_request.number
-          : (payload as IssueCommentEvent).issue.number
+        ? context.eventName === "issue_comment"
+          ? (payload as IssueCommentEvent).issue.number
+          : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
         : undefined
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
@@ -641,7 +641,7 @@ export const GithubRunCommand = cmd({
       async function getUserPrompt() {
         const customPrompt = process.env["PROMPT"]
         // For schedule events, PROMPT is required since there's no comment to extract from
-        if (!isCommentEvent && !customPrompt) {
+        if (isScheduleEvent && !customPrompt) {
           throw new Error("PROMPT input is required for scheduled and pull request events")
         }
 
@@ -655,17 +655,12 @@ export const GithubRunCommand = cmd({
           .map((m) => m.trim().toLowerCase())
           .filter(Boolean)
         let prompt = (() => {
-<<<<<<< HEAD
           if (!isCommentEvent) {
             return "Review this pull request"
           }
-          const body = commentPayload!.comment.body.trim()
-          if (body === "/opencode" || body === "/oc") {
-=======
           const body = payload!.comment.body.trim()
           const bodyLower = body.toLowerCase()
           if (mentions.some((m) => bodyLower === m)) {
->>>>>>> 8e01f6cc135c7db73f8474c884fbff34b60bdd5c
             if (reviewContext) {
               return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
             }
@@ -1039,56 +1034,56 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       async function addReaction(commentType: "issue" | "pr_review") {
         // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Adding reaction...")
-<<<<<<< HEAD
         if (triggerCommentId) {
+          if (commentType === "pr_review") {
+            return await octoRest.rest.reactions.createForPullRequestReviewComment({
+              owner,
+              repo,
+              comment_id: triggerCommentId!,
+              content: AGENT_REACTION,
+            })
+          }
           return await octoRest.rest.reactions.createForIssueComment({
-            owner,
-            repo,
-            comment_id: triggerCommentId,
-            content: AGENT_REACTION,
-          })
-        } else {
-          return await octoRest.rest.reactions.createForIssue({
-            owner,
-            repo,
-            issue_number: issueId,
-            content: AGENT_REACTION,
-          })
-        }
-=======
-        if (commentType === "pr_review") {
-          return await octoRest.rest.reactions.createForPullRequestReviewComment({
             owner,
             repo,
             comment_id: triggerCommentId!,
             content: AGENT_REACTION,
           })
         }
-        return await octoRest.rest.reactions.createForIssueComment({
+        return await octoRest.rest.reactions.createForIssue({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          issue_number: issueId!,
           content: AGENT_REACTION,
         })
->>>>>>> 8e01f6cc135c7db73f8474c884fbff34b60bdd5c
       }
 
       async function removeReaction(commentType: "issue" | "pr_review") {
         // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Removing reaction...")
-<<<<<<< HEAD
         if (triggerCommentId) {
+          if (commentType === "pr_review") {
+            const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
+              owner,
+              repo,
+              comment_id: triggerCommentId!,
+              content: AGENT_REACTION,
+            })
+
+            const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
+            if (!eyesReaction) return
+
+            return await octoRest.rest.reactions.deleteForPullRequestComment({
+              owner,
+              repo,
+              comment_id: triggerCommentId!,
+              reaction_id: eyesReaction.id,
+            })
+          }
+
           const reactions = await octoRest.rest.reactions.listForIssueComment({
             owner,
             repo,
-            comment_id: triggerCommentId,
-            content: AGENT_REACTION,
-          })
-=======
-        if (commentType === "pr_review") {
-          const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
-            owner,
-            repo,
             comment_id: triggerCommentId!,
             content: AGENT_REACTION,
           })
@@ -1096,59 +1091,30 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
           if (!eyesReaction) return
 
-          await octoRest.rest.reactions.deleteForPullRequestComment({
+          return await octoRest.rest.reactions.deleteForIssueComment({
             owner,
             repo,
             comment_id: triggerCommentId!,
             reaction_id: eyesReaction.id,
           })
-          return
         }
 
-        const reactions = await octoRest.rest.reactions.listForIssueComment({
+        const reactions = await octoRest.rest.reactions.listForIssue({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          issue_number: issueId!,
           content: AGENT_REACTION,
         })
->>>>>>> 8e01f6cc135c7db73f8474c884fbff34b60bdd5c
 
-          const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
-          if (!eyesReaction) return
+        const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
+        if (!eyesReaction) return
 
-<<<<<<< HEAD
-          await octoRest.rest.reactions.deleteForIssueComment({
-            owner,
-            repo,
-            comment_id: triggerCommentId,
-            reaction_id: eyesReaction.id,
-          })
-        } else {
-          const reactions = await octoRest.rest.reactions.listForIssue({
-            owner,
-            repo,
-            issue_number: issueId,
-            content: AGENT_REACTION,
-          })
-
-          const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
-          if (!eyesReaction) return
-
-          await octoRest.rest.reactions.deleteForIssue({
-            owner,
-            repo,
-            issue_number: issueId,
-            reaction_id: eyesReaction.id,
-          })
-        }
-=======
-        await octoRest.rest.reactions.deleteForIssueComment({
+        await octoRest.rest.reactions.deleteForIssue({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          issue_number: issueId!,
           reaction_id: eyesReaction.id,
         })
->>>>>>> 8e01f6cc135c7db73f8474c884fbff34b60bdd5c
       }
 
       async function createComment(body: string) {
@@ -1239,11 +1205,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-<<<<<<< HEAD
             return id !== triggerCommentId
-=======
-            return id !== payload!.comment.id
->>>>>>> 8e01f6cc135c7db73f8474c884fbff34b60bdd5c
           })
           .map((c) => `  - ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
@@ -1371,11 +1333,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-<<<<<<< HEAD
             return id !== triggerCommentId
-=======
-            return id !== payload!.comment.id
->>>>>>> 8e01f6cc135c7db73f8474c884fbff34b60bdd5c
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
