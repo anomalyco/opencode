@@ -532,7 +532,11 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system: [
+          ...(await SystemPrompt.environment()),
+          ...(await SystemPrompt.skills()),
+          ...(await SystemPrompt.custom()),
+        ],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
@@ -1309,7 +1313,7 @@ export namespace SessionPrompt {
       const results = await Promise.all(
         shell.map(async ([, cmd]) => {
           try {
-            return await $`${{ raw: cmd }}`.nothrow().text()
+            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
           } catch (error) {
             return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
           }
