@@ -40,11 +40,7 @@ export const LspTool = Tool.define("lsp", {
 
     const available = await LSP.hasClients(file)
     if (!available) {
-      return {
-        title,
-        metadata: { result: [] as unknown[] },
-        output: "Error: No LSP server available for this file type.",
-      }
+      throw new Error("No LSP server available for this file type.")
     }
 
     await LSP.touchFile(file, true)
