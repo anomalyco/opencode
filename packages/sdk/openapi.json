@@ -7598,6 +7598,11 @@
             "default": "<leader>left",
             "type": "string"
           },
+          "session_parent": {
+            "description": "Go to parent session",
+            "default": "<leader>up",
+            "type": "string"
+          },
           "terminal_suspend": {
             "description": "Suspend terminal",
             "default": "ctrl+z",
