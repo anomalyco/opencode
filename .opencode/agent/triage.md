@@ -13,6 +13,12 @@ Use your github-triage tool to triage issues.
 
 ## Labels
 
+### windows
+
+Use for any issue that mentions Windows (the OS). Be sure they are saying that they are on Windows.
+
+- Use if they mention WSL too
+
 #### perf
 
 Performance-related issues:
@@ -39,6 +45,8 @@ Desktop app issues:
 #### zen
 
 **Only** add if the issue mentions "zen" or "opencode zen". Zen is our gateway for coding models. **Do not** add for other gateways or inference providers.
+
+If the issue doesn't have "zen" in it then don't add zen label
 
 #### docs
 

@@ -1,6 +1,5 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { Binary } from "@opencode-ai/util/binary"
@@ -8,6 +7,7 @@ import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { makeAudioPlayer } from "@solid-primitives/audio"
 import idleSound from "@opencode-ai/ui/audio/staplebops-01.aac"
 import errorSound from "@opencode-ai/ui/audio/nope-03.aac"
+import { persisted } from "@/utils/persist"
 
 type NotificationBase = {
   directory?: string
@@ -44,13 +44,11 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
 
-    const [store, setStore] = makePersisted(
+    const [store, setStore, _, ready] = persisted(
+      "notification.v1",
       createStore({
         list: [] as Notification[],
       }),
-      {
-        name: "notification.v1",
-      },
     )
 
     globalSDK.event.listen((e) => {
@@ -68,7 +66,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
           const isChild = match.found && syncStore.session[match.index].parentID
           if (isChild) break
-          idlePlayer?.play()
+          try {
+            idlePlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "turn-complete",
@@ -84,7 +84,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             const isChild = match.found && syncStore.session[match.index].parentID
             if (isChild) break
           }
-          errorPlayer?.play()
+          try {
+            errorPlayer?.play()
+          } catch {}
           setStore("list", store.list.length, {
             ...base,
             type: "error",
@@ -97,6 +99,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
     })
 
     return {
+      ready,
       session: {
         all(session: string) {
           return store.list.filter((n) => n.session === session)

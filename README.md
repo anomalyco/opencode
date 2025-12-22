@@ -30,7 +30,7 @@ scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
 brew install opencode              # macOS and Linux
 paru -S opencode-bin               # Arch Linux
-mise use -g ubi:sst/opencode # Any OS
+mise use -g github:sst/opencode # Any OS
 nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
 ```
 
@@ -94,7 +94,7 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 ### Building on OpenCode
 
-If you are working on a project that's related to OpenCode and is using "opencode" as a part of its name; for example, "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in anyway.
+If you are working on a project that's related to OpenCode and is using "opencode" as a part of its name; for example, "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
 ### FAQ
 
