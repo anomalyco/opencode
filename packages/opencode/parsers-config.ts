@@ -222,6 +222,20 @@ export default {
       },
     },
     {
+      // NOTE: Pending upstream release with WASM binary
+      // See: https://github.com/gleam-lang/tree-sitter-gleam/pull/137
+      filetype: "gleam",
+      wasm: "https://github.com/gleam-lang/tree-sitter-gleam/releases/download/v1.2.0/tree-sitter-gleam.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/gleam/highlights.scm",
+        ],
+        locals: [
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/gleam/locals.scm",
+        ],
+      },
+    },
+    {
       filetype: "swift",
       wasm: "https://github.com/alex-pinkus/tree-sitter-swift/releases/download/0.7.1/tree-sitter-swift.wasm",
       queries: {
