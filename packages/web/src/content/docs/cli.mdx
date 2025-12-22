@@ -117,6 +117,42 @@ opencode auth logout
 
 ---
 
+### plan
+
+Plan development tasks using sequential-thinking AI.
+
+```bash
+opencode plan <task> [options]
+```
+
+#### Options
+
+| Flag              | Short | Description                                    |
+| ----------------- | ----- | ---------------------------------------------- |
+| `--complexity`    | `-c`  | Planning complexity (simple/standard/complex/initiative) |
+| `--context`       |       | Development context (feature/bugfix/refactor/infrastructure/research/maintenance) |
+| `--create-track`  | `-t`  | Create conductor track from plan               |
+| `--format`        | `-f`  | Output format (markdown/json/checklist)       |
+| `--interactive`   | `-i`  | Interactive planning mode                      |
+| `--output`        | `-o`  | Output file path                               |
+
+#### Examples
+
+```bash
+# Basic planning
+opencode plan "Implement user authentication system"
+
+# Advanced planning
+opencode plan --complexity complex --context feature --create-track "Build API architecture"
+
+# Save plan to file
+opencode plan --format json --output plan.json "Add payment processing"
+```
+
+The plan command uses sequential-thinking AI to break down complex development tasks into structured, actionable steps with time estimates and success criteria. Plans are automatically saved to the project's `conductor/plans/` directory.
+
+---
+
 ### github
 
 Manage the GitHub agent for repository automation.

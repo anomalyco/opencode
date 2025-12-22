@@ -79,12 +79,36 @@ you can switch between these using the `Tab` key.
   - Asks permission before running bash commands
   - Ideal for exploring unfamiliar codebases or planning changes
 
-Also, included is a **general** subagent for complex searches and multi-step tasks.
-This is used internally and can be invoked using `@general` in messages.
+ Also, included is a **general** subagent for complex searches and multi-step tasks.
+ This is used internally and can be invoked using `@general` in messages.
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+ Learn more about [agents](https://opencode.ai/docs/agents).
 
-### Documentation
+ ### Planning with Sequential-Thinking
+
+ OpenCode includes built-in planning capabilities powered by sequential-thinking AI:
+
+ ```bash
+ # Plan a new feature
+ opencode plan "Implement user authentication system"
+
+ # Advanced planning with options
+ opencode plan --complexity complex --context feature --create-track "Build API architecture"
+
+ # Different output formats
+ opencode plan --format json "Add payment processing"
+ ```
+
+ **Features:**
+ - **Complexity Levels**: Simple, Standard, Complex, Initiative
+ - **Development Contexts**: Feature, Bug Fix, Refactor, Infrastructure, Research, Maintenance
+ - **Automatic Track Creation**: Seamlessly creates conductor tracks for implementation
+ - **Multiple Output Formats**: Markdown, JSON, and checklist formats
+ - **Per-Project Storage**: Plans saved to `conductor/plans/` directory
+
+ The planning feature uses sequential-thinking AI to break down complex development tasks into structured, actionable steps with time estimates and success criteria.
+
+ ### Documentation
 
 For more info on how to configure OpenCode [**head over to our docs**](https://opencode.ai/docs).
 
