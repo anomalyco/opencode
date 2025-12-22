@@ -53,9 +53,6 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace Server {
   const log = Log.create({ service: "server" })
 
-  // Port that the server is running on, used to inject into frontend HTML
-  let serverPort: number = 4096
-
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
     Disposed: BusEvent.define("global.disposed", z.object({})),
@@ -2616,15 +2613,24 @@ export namespace Server {
     return result
   }
 
+  let serverPort: number = 4096
+
   export function listen(opts: { port: number; hostname: string }) {
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
-    })
-    // Store the actual port for injection into frontend HTML
-    serverPort = server.port ?? opts.port
-    return server
+    } as const
+    if (opts.port === 0) {
+      try {
+        serverPort = 4096
+        return Bun.serve({ ...args, port: 4096 })
+      } catch {
+        // port 4096 not available, fall through to use port 0
+      }
+    }
+    serverPort = opts.port
+    return Bun.serve({ ...args, port: opts.port })
   }
 }
