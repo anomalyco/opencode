@@ -310,6 +310,11 @@ export function Prompt(props: PromptProps) {
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     input.insertText(evt.properties.text)
+    setTimeout(() => {
+      input.getLayoutNode().markDirty()
+      input.gotoBufferEnd()
+      renderer.requestRender()
+    }, 0)
   })
 
   createEffect(() => {
