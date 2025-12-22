@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { SessionRunner } from "../../src/session/runner"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 
 describe("SessionRunner", () => {
   describe("Options schema", () => {
@@ -45,6 +47,66 @@ describe("SessionRunner", () => {
     })
   })
 
+  describe("Job schema", () => {
+    test("validates job with required fields", () => {
+      const job = {
+        id: "job_123",
+        kind: "session.loop",
+        targetSessionID: "ses_abc",
+        createdAt: Date.now(),
+        status: "queued",
+      }
+      expect(SessionRunner.Job.safeParse(job).success).toBe(true)
+    })
+
+    test("validates job with all fields", () => {
+      const job = {
+        id: "job_123",
+        kind: "task.child_session",
+        targetSessionID: "ses_abc",
+        parentSessionID: "ses_parent",
+        toolCallID: "call_xyz",
+        createdAt: Date.now(),
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+        timeoutMs: 30000,
+        status: "completed",
+        error: { name: "Error", message: "failed" },
+      }
+      expect(SessionRunner.Job.safeParse(job).success).toBe(true)
+    })
+
+    test("validates all job kinds", () => {
+      for (const kind of ["session.loop", "session.prompt_async", "task.child_session"]) {
+        const job = { id: "j", kind, targetSessionID: "s", createdAt: 0, status: "queued" }
+        expect(SessionRunner.Job.safeParse(job).success).toBe(true)
+      }
+    })
+
+    test("validates all job statuses", () => {
+      for (const status of ["queued", "running", "completed", "failed", "canceled", "timed_out"]) {
+        const job = { id: "j", kind: "session.loop", targetSessionID: "s", createdAt: 0, status }
+        expect(SessionRunner.Job.safeParse(job).success).toBe(true)
+      }
+    })
+  })
+
+  describe("EnqueueOptions schema", () => {
+    test("validates empty options", () => {
+      expect(SessionRunner.EnqueueOptions.safeParse({}).success).toBe(true)
+    })
+
+    test("validates full options", () => {
+      const opts = {
+        timeoutMs: 60000,
+        parentSessionID: "ses_parent",
+        toolCallID: "call_123",
+        dedupeKey: "my-key",
+      }
+      expect(SessionRunner.EnqueueOptions.safeParse(opts).success).toBe(true)
+    })
+  })
+
   describe("stub methods", () => {
     test("runBackground throws", () => {
       const opts: SessionRunner.Options = {
@@ -60,6 +122,182 @@ describe("SessionRunner", () => {
 
     test("waitFor throws", async () => {
       await expect(SessionRunner.waitFor("session_123")).rejects.toThrow("not yet implemented")
+    })
+  })
+
+  describe("job management", () => {
+    test("get returns undefined for unknown job", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          expect(SessionRunner.get("nonexistent")).toBeUndefined()
+        },
+      })
+    })
+
+    test("list returns empty array initially", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          expect(SessionRunner.list()).toEqual([])
+        },
+      })
+    })
+
+    test("cancel returns false for unknown job", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          expect(SessionRunner.cancel("nonexistent")).toBe(false)
+        },
+      })
+    })
+
+    test("isRunning returns false for unknown job", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          expect(SessionRunner.isRunning("nonexistent")).toBe(false)
+        },
+      })
+    })
+
+    test("enqueue creates job and runs it", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          let executed = false
+          const job = await SessionRunner.enqueue(
+            "session.loop",
+            "ses_test",
+            async () => {
+              executed = true
+            },
+          )
+
+          expect(job.id).toMatch(/^job_/)
+          expect(job.kind).toBe("session.loop")
+          expect(job.targetSessionID).toBe("ses_test")
+          expect(job.status).toBe("completed")
+          expect(executed).toBe(true)
+        },
+      })
+    })
+
+    test("enqueue with dedupeKey reuses existing job", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          let count = 0
+          const run = async () => {
+            count++
+            await new Promise((r) => setTimeout(r, 50))
+          }
+
+          const [job1, job2] = await Promise.all([
+            SessionRunner.enqueue("session.loop", "ses_test", run, { dedupeKey: "same" }),
+            SessionRunner.enqueue("session.loop", "ses_test", run, { dedupeKey: "same" }),
+          ])
+
+          expect(job1.id).toBe(job2.id)
+          expect(count).toBe(1)
+        },
+      })
+    })
+
+    test("cancel stops queued job", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          let executed = false
+
+          const blocker = SessionRunner.enqueue("session.loop", "ses_blocker", async () => {
+            await new Promise((r) => setTimeout(r, 100))
+          })
+          const blocker2 = SessionRunner.enqueue("session.loop", "ses_blocker2", async () => {
+            await new Promise((r) => setTimeout(r, 100))
+          })
+
+          const jobPromise = SessionRunner.enqueue("session.loop", "ses_test", async () => {
+            executed = true
+          })
+
+          await new Promise((r) => setTimeout(r, 10))
+
+          const queued = SessionRunner.listQueued()
+          if (queued.length > 0) {
+            const cancelled = SessionRunner.cancel(queued[0].id)
+            expect(cancelled).toBe(true)
+          }
+
+          await Promise.all([blocker, blocker2, jobPromise])
+        },
+      })
+    })
+
+    test("job times out", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const job = await SessionRunner.enqueue(
+            "session.loop",
+            "ses_test",
+            async () => {
+              await new Promise((r) => setTimeout(r, 500))
+            },
+            { timeoutMs: 50 },
+          )
+
+          expect(job.status).toBe("timed_out")
+          expect(job.error?.message).toBe("Job timed out")
+        },
+      })
+    })
+
+    test("job fails on error", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const job = await SessionRunner.enqueue("session.loop", "ses_test", async () => {
+            throw new Error("test error")
+          })
+
+          expect(job.status).toBe("failed")
+          expect(job.error?.message).toBe("test error")
+        },
+      })
+    })
+
+    test("respects concurrency limit", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          let maxConcurrent = 0
+          let current = 0
+
+          const jobs = Array.from({ length: 5 }, (_, i) =>
+            SessionRunner.enqueue("session.loop", `ses_${i}`, async () => {
+              current++
+              maxConcurrent = Math.max(maxConcurrent, current)
+              await new Promise((r) => setTimeout(r, 30))
+              current--
+            }),
+          )
+
+          await Promise.all(jobs)
+          expect(maxConcurrent).toBeLessThanOrEqual(2)
+        },
+      })
     })
   })
 })

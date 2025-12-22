@@ -811,6 +811,13 @@ export namespace Config {
             .optional()
             .describe("Tools that should only be available to primary agents."),
           continue_loop_on_deny: z.boolean().optional().describe("Continue the agent loop when a tool call is denied"),
+          backgroundTasks: z
+            .object({
+              timeoutMs: z.number().int().positive().optional().describe("Timeout for background tasks in ms"),
+              maxConcurrent: z.number().int().positive().optional().describe("Max concurrent background tasks"),
+            })
+            .optional()
+            .describe("Background task runner settings"),
         })
         .optional(),
     })
