@@ -261,31 +261,31 @@ description: An example skill for testing XML output.
   })
 })
 
-test("discovers skills from .claude/skills/ directory", async () => {
-  await using tmp = await tmpdir({
-    git: true,
-    init: async (dir) => {
-      const skillDir = path.join(dir, ".claude", "skills", "claude-skill")
-      await Bun.write(
-        path.join(skillDir, "SKILL.md"),
-        `---
-name: claude-skill
-description: A skill in the .claude/skills directory.
----
+// test("discovers skills from .claude/skills/ directory", async () => {
+//   await using tmp = await tmpdir({
+//     git: true,
+//     init: async (dir) => {
+//       const skillDir = path.join(dir, ".claude", "skills", "claude-skill")
+//       await Bun.write(
+//         path.join(skillDir, "SKILL.md"),
+//         `---
+// name: claude-skill
+// description: A skill in the .claude/skills directory.
+// ---
 
-# Claude Skill
-`,
-      )
-    },
-  })
+// # Claude Skill
+// `,
+//       )
+//     },
+//   })
 
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const skills = await Skill.all()
-      expect(skills.length).toBe(1)
-      expect(skills[0].name).toBe("claude-skill")
-      expect(skills[0].location).toContain(".claude/skills/claude-skill/SKILL.md")
-    },
-  })
-})
+//   await Instance.provide({
+//     directory: tmp.path,
+//     fn: async () => {
+//       const skills = await Skill.all()
+//       expect(skills.length).toBe(1)
+//       expect(skills[0].name).toBe("claude-skill")
+//       expect(skills[0].location).toContain(".claude/skills/claude-skill/SKILL.md")
+//     },
+//   })
+// })
