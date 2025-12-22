@@ -93,6 +93,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
 
+      - name: "Upload folders as artifacts"
+        id: upload-artifacts
+        shell: bun {0}
+        working-directory: packages/opencode
+        run: |
+          import * as fs from 'fs/promises';
+          import * as path from 'path';
+          import { DefaultArtifactClient } from "@actions/artifact";
+
+          const artifactClient = new DefaultArtifactClient()
+
+          for await (const folder of $`ls ./dist`.lines()) {
+            if (!folder.startsWith("opencode-")) continue
+
+            const files = await Array.fromAsync(await fs.glob(`./dist/${folder}/bin/*`))
+            await artifactClient.uploadArtifact(folder, files, process.cwd())
+          }
+
     outputs:
       release: ${{ steps.publish.outputs.release }}
       tag: ${{ steps.publish.outputs.tag }}

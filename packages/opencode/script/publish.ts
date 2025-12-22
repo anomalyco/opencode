@@ -3,7 +3,6 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
-import { glob } from "fs/promises"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
