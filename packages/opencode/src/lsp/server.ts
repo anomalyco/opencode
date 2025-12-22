@@ -697,7 +697,7 @@ export namespace LSPServer {
             })
           if (!ok) return
         } else {
-          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
         }
 
         await fs.rm(tempPath, { force: true })
@@ -710,7 +710,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info(`installed zls`, { bin })
@@ -1003,7 +1003,7 @@ export namespace LSPServer {
         if (!ok) return
       }
       if (tar) {
-        await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
+        await $`tar -xf ${archive}`.cwd(Global.Path.bin).quiet().nothrow()
       }
       await fs.rm(archive, { force: true })
 
@@ -1014,7 +1014,7 @@ export namespace LSPServer {
       }
 
       if (platform !== "win32") {
-        await $`chmod +x ${bin}`.nothrow()
+        await $`chmod +x ${bin}`.quiet().nothrow()
       }
 
       await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
@@ -1580,7 +1580,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info(`installed terraform-ls`, { bin })
@@ -1663,7 +1663,7 @@ export namespace LSPServer {
           if (!ok) return
         }
         if (ext === "tar.gz") {
-          await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
         }
 
         await fs.rm(tempPath, { force: true })
@@ -1676,7 +1676,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info("installed texlab", { bin })

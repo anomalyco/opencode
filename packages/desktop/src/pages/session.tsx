@@ -534,7 +534,7 @@ export default function Page() {
   const showTabs = createMemo(() => diffs().length > 0 || tabs().all().length > 0)
 
   return (
-    <div class="relative bg-background-base size-full overflow-x-hidden flex flex-col">
+    <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <div class="min-h-0 grow w-full flex">
         {/* Session pane - always visible */}
         <div
@@ -662,7 +662,15 @@ export default function Page() {
                       </For>
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                      <Tooltip value="Open file" class="flex items-center">
+                      <Tooltip
+                        value={
+                          <div class="flex items-center gap-2">
+                            <span>Open file</span>
+                            <span class="text-icon-base text-12-medium">{command.keybind("file.open")}</span>
+                          </div>
+                        }
+                        class="flex items-center"
+                      >
                         <IconButton
                           icon="plus-small"
                           variant="ghost"
@@ -774,7 +782,15 @@ export default function Page() {
                   <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                 </SortableProvider>
                 <div class="h-full flex items-center justify-center">
-                  <Tooltip value="New Terminal" class="flex items-center">
+                  <Tooltip
+                    value={
+                      <div class="flex items-center gap-2">
+                        <span>New terminal</span>
+                        <span class="text-icon-base text-12-medium">{command.keybind("terminal.new")}</span>
+                      </div>
+                    }
+                    class="flex items-center"
+                  >
                     <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
                   </Tooltip>
                 </div>

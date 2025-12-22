@@ -360,7 +360,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const init = async (path: string) => {
         const relativePath = relative(path)
         if (!store.node[relativePath]) await fetch(path)
-        if (store.node[relativePath].loaded) return
+        if (store.node[relativePath]?.loaded) return
         return load(relativePath)
       }
 
@@ -380,7 +380,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         context.addActive()
         if (options?.pinned) setStore("node", path, "pinned", true)
         if (options?.view && store.node[relativePath].view === undefined) setStore("node", path, "view", options.view)
-        if (store.node[relativePath].loaded) return
+        if (store.node[relativePath]?.loaded) return
         return load(relativePath)
       }
 

@@ -226,6 +226,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
           }
         }
       },
+      keybind(id: string) {
+        const option = options().find((x) => x.id === id || x.id === "suggested." + id)
+        if (!option?.keybind) return ""
+        return formatKeybind(option.keybind)
+      },
       show: showPalette,
       keybinds(enabled: boolean) {
         setSuspendCount((count) => count + (enabled ? -1 : 1))
