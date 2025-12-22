@@ -21,6 +21,11 @@ export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; ass
     ocBinary: "opencode-linux-x64",
     assetExt: "tar.gz",
   },
+  {
+    rustTarget: "aarch64-unknown-linux-gnu",
+    ocBinary: "opencode-linux-arm64",
+    assetExt: "tar.gz",
+  },
 ]
 
 export const RUST_TARGET = Bun.env.RUST_TARGET
