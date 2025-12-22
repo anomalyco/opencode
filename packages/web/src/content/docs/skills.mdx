@@ -1,0 +1,120 @@
+---
+title: "Agent Skills"
+description: "Define reusable behavior via SKILL.md definitions"
+---
+
+Agent skills let OpenCode discover reusable instructions from your repo or home directory.
+When a conversation matches a skill, the agent is prompted to read its `SKILL.md`.
+
+---
+
+## Place files
+
+Create one folder per skill name and put a `SKILL.md` inside it.
+OpenCode searches these locations:
+
+- Project config: `.opencode/skill/<name>/SKILL.md`
+- Global config: `~/.opencode/skill/<name>/SKILL.md`
+- Claude-compatible: `.claude/skills/<name>/SKILL.md`
+
+---
+
+## Understand discovery
+
+For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree.
+It loads any matching `skill/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` along the way.
+
+Global definitions are also loaded from `~/.opencode/skill/*/SKILL.md`.
+
+---
+
+## Write frontmatter
+
+Each `SKILL.md` must start with YAML frontmatter.
+Only these fields are recognized:
+
+- `name` (required)
+- `description` (required)
+- `license` (optional)
+- `compatibility` (optional)
+- `metadata` (optional, string-to-string map)
+
+Unknown frontmatter fields are ignored.
+
+---
+
+## Validate names
+
+`name` must:
+
+- Be 1–64 characters
+- Be lowercase alphanumeric with single hyphen separators
+- Not start or end with `-`
+- Not contain consecutive `--`
+- Match the directory name that contains `SKILL.md`
+
+Equivalent regex:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## Follow length rules
+
+`description` must be 1-1024 characters.
+Keep it specific enough for the agent to choose correctly.
+
+---
+
+## Use an example
+
+Create `.opencode/skill/git-release/SKILL.md` like this:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## Recognize prompt injection
+
+OpenCode adds an `<available_skills>` XML block to the system prompt.
+Each entry includes the skill name, description, and its discovered location.
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+    <location>.opencode/skill/git-release/SKILL.md</location>
+  </skill>
+</available_skills>
+```
+
+---
+
+## Troubleshoot loading
+
+If a skill does not show up, verify the folder name matches `name` exactly.
+Also check that `SKILL.md` is spelled in all caps and includes frontmatter.
