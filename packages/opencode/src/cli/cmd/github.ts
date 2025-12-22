@@ -456,7 +456,7 @@ export const GithubRunCommand = cmd({
         // Skip permission check for schedule events (no actor to check)
         if (!isScheduleEvent) {
           await assertPermissions()
-          await addReaction(commentType!)
+          await addReaction(commentType)
         }
 
         // Setup opencode session
@@ -513,7 +513,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           }
           // Fork PR
           else {
@@ -528,7 +528,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           }
         }
         // Issue
@@ -549,10 +549,10 @@ export const GithubRunCommand = cmd({
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
             await createComment(`Created PR #${pr}${footer({ image: true })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           } else {
             await createComment(`${response}${footer({ image: true })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           }
         }
       } catch (e: any) {
@@ -566,7 +566,7 @@ export const GithubRunCommand = cmd({
         }
         if (!isScheduleEvent) {
           await createComment(`${msg}${footer()}`)
-          await removeReaction(commentType!)
+          await removeReaction(commentType)
         }
         core.setFailed(msg)
         // Also output the clean error message for the action to capture
@@ -1034,7 +1034,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
       }
 
-      async function addReaction(commentType: "issue" | "pr_review") {
+      async function addReaction(commentType?: "issue" | "pr_review") {
         // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Adding reaction...")
         if (triggerCommentId) {
@@ -1061,7 +1061,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         })
       }
 
-      async function removeReaction(commentType: "issue" | "pr_review") {
+      async function removeReaction(commentType?: "issue" | "pr_review") {
         // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Removing reaction...")
         if (triggerCommentId) {
