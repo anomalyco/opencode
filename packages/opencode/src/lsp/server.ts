@@ -276,7 +276,7 @@ export namespace LSPServer {
       }
       if (serverBin) {
         return {
-          process: spawn(serverBin, [], {
+          process: spawn(serverBin, {
             cwd: root,
           }),
         }
@@ -1768,11 +1768,8 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(nixd, [], {
+        process: spawn(nixd, {
           cwd: root,
-          env: {
-            ...process.env,
-          },
         }),
       }
     },
