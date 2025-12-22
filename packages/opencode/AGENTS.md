@@ -25,3 +25,12 @@
 - **Logging**: Use `Log.create({ service: "name" })` pattern
 - **Storage**: Use `Storage` namespace for persistence
 - **API Client**: Go TUI communicates with TypeScript server via stainless SDK. When adding/modifying server endpoints in `packages/opencode/src/server/server.ts`, ask the user to generate a new client SDK to proceed with client-side changes.
+
+## Planning with Sequential-Thinking
+
+- Use `opencode plan` for structured development planning
+- Supports complexity levels: simple, standard, complex, initiative
+- Development contexts: feature, bugfix, refactor, infrastructure, research, maintenance
+- Automatically creates conductor tracks when using `--create-track`
+- Plans are saved to `conductor/plans/` directory per project
+- Use sequential-thinking tool for AI-assisted task breakdown

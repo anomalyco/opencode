@@ -1,0 +1,14 @@
+- Plan and break down complex development tasks using sequential thinking
+- Analyzes requirements and creates structured implementation plans
+- Generates step-by-step development workflows with dependencies
+- Provides time estimates and success criteria for each step
+- Supports different complexity levels from simple to major initiatives
+- Integrates seamlessly with conductor track creation
+
+Usage notes:
+  - Use for planning any software development task or feature
+  - Supports complexity levels: simple, standard, complex, initiative
+  - Development contexts: feature, bugfix, refactor, infrastructure, research, maintenance
+  - Automatically creates conductor tracks when requested
+  - Results are saved to project conductor/plans/ directory
+  - Integrates with existing development workflows
