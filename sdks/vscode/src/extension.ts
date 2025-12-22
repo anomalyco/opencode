@@ -33,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (terminal.name === TERMINAL_NAME) {
-      const env = (terminal.creationOptions as vscode.TerminalOptions)?.env || {};
+      const env = (terminal.creationOptions as vscode.TerminalOptions)?.env || {}
       const port = env?.["_EXTENSION_OPENCODE_PORT"]
       const host = env?.["_EXTENSION_OPENCODE_HOST"] ?? "localhost"
       port ? await appendPrompt(parseInt(port), fileRef, host) : terminal.sendText(fileRef)
@@ -42,6 +42,13 @@ export function activate(context: vscode.ExtensionContext) {
   })
 
   context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+
+  function buildUrl(host: string, port: number, path = "") {
+    if (host.startsWith("http://") || host.startsWith("https://")) {
+      return `${host}:${port}${path}`
+    }
+    return `http://${host}:${port}${path}`
+  }
 
   async function openTerminal() {
     const config = vscode.workspace.getConfiguration("opencode")
@@ -70,7 +77,7 @@ export function activate(context: vscode.ExtensionContext) {
     })
 
     terminal.show()
-    const command = attachEnabled ? `opencode attach http://${host}:${port}` : `opencode --port ${port}`
+    const command = attachEnabled ? `opencode attach ${buildUrl(host, port)}` : `opencode --port ${port}`
     terminal.sendText(command)
 
     const fileRef = getActiveFile()
@@ -84,7 +91,7 @@ export function activate(context: vscode.ExtensionContext) {
     do {
       await new Promise((resolve) => setTimeout(resolve, 200))
       try {
-        await fetch(`http://${host}:${port}/app`)
+        await fetch(buildUrl(host, port, "/app"))
         connected = true
         break
       } catch (e) {}
@@ -100,7 +107,7 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   async function appendPrompt(port: number, text: string, host = "localhost") {
-    await fetch(`http://${host}:${port}/tui/append-prompt`, {
+    await fetch(buildUrl(host, port, "/tui/append-prompt"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
