@@ -1,7 +1,7 @@
-import { createEffect, on, Show, For, type JSX, createSignal } from "solid-js"
+import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { createEffect, createSignal, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
-import { Icon, IconProps } from "./icon"
+import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
 
@@ -149,7 +149,31 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
             {(group) => (
               <div data-slot="list-group">
                 <Show when={group.category}>
-                  <div data-slot="list-header">{group.category}</div>
+                  {(() => {
+                    const [stuck, setStuck] = createSignal(false)
+                    return (
+                      <div
+                        data-slot="list-header"
+                        data-stuck={stuck()}
+                        ref={(el) => {
+                          createEffect(() => {
+                            const scroll = scrollRef()
+                            if (!scroll) return
+                            const handler = () => {
+                              const rect = el.getBoundingClientRect()
+                              const scrollRect = scroll.getBoundingClientRect()
+                              setStuck(rect.top <= scrollRect.top + 1 && scroll.scrollTop > 0)
+                            }
+                            scroll.addEventListener("scroll", handler, { passive: true })
+                            handler()
+                            return () => scroll.removeEventListener("scroll", handler)
+                          })
+                        }}
+                      >
+                        {group.category}
+                      </div>
+                    )
+                  })()}
                 </Show>
                 <div data-slot="list-items">
                   <For each={group.items}>
@@ -160,9 +184,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                         data-active={props.key(item) === active()}
                         data-selected={item === props.current}
                         onClick={() => handleSelect(item, i())}
+                        type="button"
                         onMouseMove={() => {
                           setStore("mouseActive", true)
                           setActive(props.key(item))
+                        }}
+                        onMouseLeave={() => {
+                          setActive(null)
                         }}
                       >
                         {props.children(item)}
