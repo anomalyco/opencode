@@ -29,15 +29,13 @@ declare global {
 }
 
 const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
-const port = window.__OPENCODE__?.port ?? import.meta.env.VITE_OPENCODE_SERVER_PORT ?? location.port ?? "4096"
+const port = window.__OPENCODE__?.port ?? import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
 
 const url =
   new URLSearchParams(document.location.search).get("url") ||
-  (location.hostname.includes("opencode.ai")
+  (location.hostname.includes("opencode.ai") || location.hostname.includes("localhost")
     ? `http://${host}:${port}`
-    : location.hostname.includes("localhost") || location.hostname === "127.0.0.1"
-      ? `${location.protocol}//${location.host}`
-      : "/")
+    : "/")
 
 export function App() {
   return (
