@@ -7,7 +7,7 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
-import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
+import type { IssueCommentEvent, PullRequestReviewCommentEvent, PullRequestEvent } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
@@ -127,7 +127,7 @@ type IssueQueryResponse = {
 const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
-const SUPPORTED_EVENTS = ["issue_comment", "pull_request_review_comment", "schedule"] as const
+const SUPPORTED_EVENTS = ["issue_comment", "pull_request_review_comment", "schedule", "pull_request"] as const
 
 // Parses GitHub remote URLs in various formats:
 // - https://github.com/owner/repo.git
@@ -392,6 +392,7 @@ export const GithubRunCommand = cmd({
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
+      const isCommentEvent = ["issue_comment", "pull_request_review_comment"].includes(context.eventName)
       const isScheduleEvent = context.eventName === "schedule"
 
       const { providerID, modelID } = normalizeModel()
@@ -400,17 +401,17 @@ export const GithubRunCommand = cmd({
       const oidcBaseUrl = normalizeOidcBaseUrl()
       const { owner, repo } = context.repo
       // For schedule events, payload has no issue/comment data
-      const payload = isScheduleEvent
-        ? undefined
-        : (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent)
+      const payload = isCommentEvent
+        ? (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent)
+        : undefined
       const issueEvent = payload && isIssueCommentEvent(payload) ? payload : undefined
       const actor = isScheduleEvent ? undefined : context.actor
 
       const issueId = isScheduleEvent
         ? undefined
-        : context.eventName === "pull_request_review_comment"
-          ? (payload as PullRequestReviewCommentEvent).pull_request.number
-          : (payload as IssueCommentEvent).issue.number
+        : context.eventName === "issue_comment"
+          ? (payload as IssueCommentEvent).issue.number
+          : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
@@ -424,11 +425,11 @@ export const GithubRunCommand = cmd({
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = payload?.comment.id
       const useGithubToken = normalizeUseGithubToken()
-      const commentType = isScheduleEvent
-        ? undefined
-        : context.eventName === "pull_request_review_comment"
+      const commentType = isCommentEvent
+        ? context.eventName === "pull_request_review_comment"
           ? "pr_review"
           : "issue"
+        : undefined
 
       try {
         if (useGithubToken) {
@@ -455,7 +456,7 @@ export const GithubRunCommand = cmd({
         // Skip permission check for schedule events (no actor to check)
         if (!isScheduleEvent) {
           await assertPermissions()
-          await addReaction(commentType!)
+          await addReaction(commentType)
         }
 
         // Setup opencode session
@@ -494,7 +495,10 @@ export const GithubRunCommand = cmd({
           } else {
             console.log("Response:", response)
           }
-        } else if (context.eventName === "pull_request_review_comment" || issueEvent?.issue.pull_request) {
+        } else if (
+          ["pull_request", "pull_request_review_comment"].includes(context.eventName) ||
+          issueEvent?.issue.pull_request
+        ) {
           const prData = await fetchPR()
           // Local PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
@@ -509,7 +513,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           }
           // Fork PR
           else {
@@ -524,7 +528,7 @@ export const GithubRunCommand = cmd({
             }
             const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
             await createComment(`${response}${footer({ image: !hasShared })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           }
         }
         // Issue
@@ -545,10 +549,10 @@ export const GithubRunCommand = cmd({
               `${response}\n\nCloses #${issueId}${footer({ image: true })}`,
             )
             await createComment(`Created PR #${pr}${footer({ image: true })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           } else {
             await createComment(`${response}${footer({ image: true })}`)
-            await removeReaction(commentType!)
+            await removeReaction(commentType)
           }
         }
       } catch (e: any) {
@@ -562,7 +566,7 @@ export const GithubRunCommand = cmd({
         }
         if (!isScheduleEvent) {
           await createComment(`${msg}${footer()}`)
-          await removeReaction(commentType!)
+          await removeReaction(commentType)
         }
         core.setFailed(msg)
         // Also output the clean error message for the action to capture
@@ -657,6 +661,9 @@ export const GithubRunCommand = cmd({
           .map((m) => m.trim().toLowerCase())
           .filter(Boolean)
         let prompt = (() => {
+          if (!isCommentEvent) {
+            return "Review this pull request"
+          }
           const body = payload!.comment.body.trim()
           const bodyLower = body.toLowerCase()
           if (mentions.some((m) => bodyLower === m)) {
@@ -1030,30 +1037,57 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
         if (!["admin", "write"].includes(permission)) throw new Error(`User ${actor} does not have write permissions`)
       }
 
-      async function addReaction(commentType: "issue" | "pr_review") {
+      async function addReaction(commentType?: "issue" | "pr_review") {
         // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Adding reaction...")
-        if (commentType === "pr_review") {
-          return await octoRest.rest.reactions.createForPullRequestReviewComment({
+        if (triggerCommentId) {
+          if (commentType === "pr_review") {
+            return await octoRest.rest.reactions.createForPullRequestReviewComment({
+              owner,
+              repo,
+              comment_id: triggerCommentId!,
+              content: AGENT_REACTION,
+            })
+          }
+          return await octoRest.rest.reactions.createForIssueComment({
             owner,
             repo,
             comment_id: triggerCommentId!,
             content: AGENT_REACTION,
           })
         }
-        return await octoRest.rest.reactions.createForIssueComment({
+        return await octoRest.rest.reactions.createForIssue({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          issue_number: issueId!,
           content: AGENT_REACTION,
         })
       }
 
-      async function removeReaction(commentType: "issue" | "pr_review") {
+      async function removeReaction(commentType?: "issue" | "pr_review") {
         // Only called for non-schedule events, so triggerCommentId is defined
         console.log("Removing reaction...")
-        if (commentType === "pr_review") {
-          const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
+        if (triggerCommentId) {
+          if (commentType === "pr_review") {
+            const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
+              owner,
+              repo,
+              comment_id: triggerCommentId!,
+              content: AGENT_REACTION,
+            })
+
+            const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
+            if (!eyesReaction) return
+
+            return await octoRest.rest.reactions.deleteForPullRequestComment({
+              owner,
+              repo,
+              comment_id: triggerCommentId!,
+              reaction_id: eyesReaction.id,
+            })
+          }
+
+          const reactions = await octoRest.rest.reactions.listForIssueComment({
             owner,
             repo,
             comment_id: triggerCommentId!,
@@ -1063,29 +1097,28 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
           if (!eyesReaction) return
 
-          await octoRest.rest.reactions.deleteForPullRequestComment({
+          return await octoRest.rest.reactions.deleteForIssueComment({
             owner,
             repo,
             comment_id: triggerCommentId!,
             reaction_id: eyesReaction.id,
           })
-          return
         }
 
-        const reactions = await octoRest.rest.reactions.listForIssueComment({
+        const reactions = await octoRest.rest.reactions.listForIssue({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          issue_number: issueId!,
           content: AGENT_REACTION,
         })
 
         const eyesReaction = reactions.data.find((r) => r.user?.login === AGENT_USERNAME)
         if (!eyesReaction) return
 
-        await octoRest.rest.reactions.deleteForIssueComment({
+        await octoRest.rest.reactions.deleteForIssue({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          issue_number: issueId!,
           reaction_id: eyesReaction.id,
         })
       }
@@ -1178,7 +1211,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== payload!.comment.id
+            return id !== triggerCommentId
           })
           .map((c) => `  - ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
@@ -1306,7 +1339,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
-            return id !== payload!.comment.id
+            return id !== triggerCommentId
           })
           .map((c) => `- ${c.author.login} at ${c.createdAt}: ${c.body}`)
 
