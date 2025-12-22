@@ -21,6 +21,7 @@ import Home from "@/pages/home"
 import DirectoryLayout from "@/pages/directory-layout"
 import Session from "@/pages/session"
 import { ErrorPage } from "./pages/error"
+import { iife } from "@opencode-ai/util/iife"
 
 declare global {
   interface Window {
@@ -28,14 +29,17 @@ declare global {
   }
 }
 
-const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "127.0.0.1"
-const port = window.__OPENCODE__?.port ?? import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"
+const url = iife(() => {
+  const param = new URLSearchParams(document.location.search).get("url")
+  if (param) return param
 
-const url =
-  new URLSearchParams(document.location.search).get("url") ||
-  (location.hostname.includes("opencode.ai") || location.hostname.includes("localhost")
-    ? `http://${host}:${port}`
-    : "/")
+  if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+  if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
+  if (import.meta.env.VITE_OPENCODE_SERVER)
+    return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+
+  return "/"
+})
 
 export function App() {
   return (
