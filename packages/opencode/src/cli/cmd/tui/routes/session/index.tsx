@@ -201,6 +201,52 @@ export function Session() {
   let prompt: PromptRef
   const keybind = useKeybind()
 
+  // Helper: Find next visible message boundary in direction
+  const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
+    const children = scroll.getChildren()
+    const messagesList = messages()
+    const scrollTop = scroll.y
+
+    // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
+    const visibleMessages = children
+      .filter((c) => {
+        if (!c.id) return false
+        const message = messagesList.find((m) => m.id === c.id)
+        if (!message) return false
+
+        // Check if message has valid non-synthetic, non-ignored text parts
+        const parts = sync.data.part[message.id]
+        if (!parts || !Array.isArray(parts)) return false
+
+        return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+      })
+      .sort((a, b) => a.y - b.y)
+
+    if (visibleMessages.length === 0) return null
+
+    if (direction === "next") {
+      // Find first message below current position
+      return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
+    }
+    // Find last message above current position
+    return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
+  }
+
+  // Helper: Scroll to message in direction or fallback to page scroll
+  const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
+    const targetID = findNextVisibleMessage(direction)
+
+    if (!targetID) {
+      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
+      dialog.clear()
+      return
+    }
+
+    const child = scroll.getChildren().find((c) => c.id === targetID)
+    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    dialog.clear()
+  }
+
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
@@ -635,6 +681,22 @@ export function Session() {
       },
     },
     {
+      title: "Next message",
+      value: "session.message.next",
+      keybind: "messages_next",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => scrollToMessage("next", dialog),
+    },
+    {
+      title: "Previous message",
+      value: "session.message.previous",
+      keybind: "messages_previous",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => scrollToMessage("prev", dialog),
+    },
+    {
       title: "Copy last assistant message",
       value: "messages.copy",
       keybind: "messages_copy",
@@ -805,6 +867,23 @@ export function Session() {
       disabled: true,
       onSelect: (dialog) => {
         moveChild(-1)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Go to parent session",
+      value: "session.parent",
+      keybind: "session_parent",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        const parentID = session()?.parentID
+        if (parentID) {
+          navigate({
+            type: "session",
+            sessionID: parentID,
+          })
+        }
         dialog.clear()
       },
     },

@@ -109,6 +109,7 @@ OpenCode can be triggered by the following GitHub events:
 | `issue_comment`               | Comment on an issue or PR              | Mention `/opencode` or `/oc` in your comment. OpenCode reads the issue/PR context and can create branches, open PRs, or reply with explanations.                    |
 | `pull_request_review_comment` | Comment on specific code lines in a PR | Mention `/opencode` or `/oc` while reviewing code. OpenCode receives file path, line numbers, and diff context for precise responses.                               |
 | `schedule`                    | Cron-based schedule                    | Run OpenCode on a schedule using the `prompt` input. Useful for automated code reviews, reports, or maintenance tasks. OpenCode can create issues or PRs as needed. |
+| `pull_request`                | PR opened or updated                   | Automatically trigger OpenCode when PRs are opened, synchronized, or reopened. Useful for automated reviews without needing to leave a comment.                     |
 
 ### Schedule Example
 
@@ -147,6 +148,43 @@ jobs:
 For scheduled events, the `prompt` input is **required** since there's no comment to extract instructions from.
 
 > **Note:** Scheduled workflows run without a user context to permission-check, so the workflow must grant `contents: write` and `pull-requests: write` if you expect OpenCode to create branches or PRs during a scheduled run.
+
+---
+
+### Pull Request Example
+
+Automatically review PRs when they are opened or updated:
+
+```yaml title=".github/workflows/opencode-review.yml"
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sst/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
+```
+
+For `pull_request` events, if no `prompt` is provided, OpenCode defaults to reviewing the pull request.
 
 ---
 

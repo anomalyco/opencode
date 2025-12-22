@@ -1,15 +1,15 @@
-import { Component, onCleanup, onMount, Show } from "solid-js"
-import { useLocal } from "@/context/local"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { Button } from "@opencode-ai/ui/button"
-import { Tag } from "@opencode-ai/ui/tag"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { List, ListRef } from "@opencode-ai/ui/list"
+import type { IconName } from "@opencode-ai/ui/icons/provider"
+import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { IconName } from "@opencode-ai/ui/icons/provider"
-import { DialogSelectProvider } from "./dialog-select-provider"
+import { Tag } from "@opencode-ai/ui/tag"
+import { type Component, onCleanup, onMount, Show } from "solid-js"
+import { useLocal } from "@/context/local"
+import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { DialogConnectProvider } from "./dialog-connect-provider"
+import { DialogSelectProvider } from "./dialog-select-provider"
 
 export const DialogSelectModelUnpaid: Component = () => {
   const local = useLocal()
@@ -64,7 +64,7 @@ export const DialogSelectModelUnpaid: Component = () => {
             <div class="px-2 text-14-medium text-text-base">Add more models from popular providers</div>
             <div class="w-full">
               <List
-                class="w-full"
+                class="w-full px-0"
                 key={(x) => x?.id}
                 items={providers.popular}
                 activeIcon="plus-small"
@@ -79,17 +79,8 @@ export const DialogSelectModelUnpaid: Component = () => {
                 }}
               >
                 {(i) => (
-                  <div class="w-full flex items-center gap-x-4">
-                    <ProviderIcon
-                      data-slot="list-item-extra-icon"
-                      id={i.id as IconName}
-                      // TODO: clean this up after we update icon in models.dev
-                      classList={{
-                        "text-icon-weak-base": true,
-                        "size-4 mx-0.5": i.id === "opencode",
-                        "size-5": i.id !== "opencode",
-                      }}
-                    />
+                  <div class="w-full flex items-center gap-x-3">
+                    <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
                     <span>{i.name}</span>
                     <Show when={i.id === "opencode"}>
                       <Tag>Recommended</Tag>

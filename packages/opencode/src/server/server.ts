@@ -1054,6 +1054,7 @@ export namespace Server {
           z.object({
             providerID: z.string(),
             modelID: z.string(),
+            auto: z.boolean().optional().default(false),
           }),
         ),
         async (c) => {
@@ -1075,7 +1076,7 @@ export namespace Server {
               providerID: body.providerID,
               modelID: body.modelID,
             },
-            auto: false,
+            auto: body.auto,
           })
           await SessionPrompt.loop(sessionID)
           return c.json(true)

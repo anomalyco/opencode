@@ -79,6 +79,12 @@ jobs:
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
     outputs:
       release: ${{ steps.publish.outputs.release }}
       tag: ${{ steps.publish.outputs.tag }}
@@ -99,6 +105,8 @@ jobs:
             target: x86_64-pc-windows-msvc
           - host: blacksmith-4vcpu-ubuntu-2404
             target: x86_64-unknown-linux-gnu
+          - host: blacksmith-4vcpu-ubuntu-2404-arm
+            target: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v3
@@ -147,7 +155,6 @@ jobs:
           shared-key: ${{ matrix.settings.target }}
 
       - name: Prepare
-        if: inputs.bump || inputs.version
         run: |
           cd packages/tauri
           bun ./scripts/prepare.ts
@@ -159,6 +166,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
       - name: Install tauri-cli from portable appimage branch
@@ -186,7 +194,7 @@ jobs:
           projectPath: packages/tauri
           uploadWorkflowArtifacts: true
           tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
-          args: --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
+          args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.publish.outputs.release }}
           tagName: ${{ needs.publish.outputs.tag }}

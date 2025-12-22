@@ -1804,6 +1804,10 @@
                   },
                   "modelID": {
                     "type": "string"
+                  },
+                  "auto": {
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": ["providerID", "modelID"]
@@ -7304,6 +7308,16 @@
             "default": "ctrl+alt+g,end",
             "type": "string"
           },
+          "messages_next": {
+            "description": "Navigate to next message",
+            "default": "none",
+            "type": "string"
+          },
+          "messages_previous": {
+            "description": "Navigate to previous message",
+            "default": "none",
+            "type": "string"
+          },
           "messages_last_user": {
             "description": "Navigate to last user message",
             "default": "none",
@@ -7582,6 +7596,11 @@
           "session_child_cycle_reverse": {
             "description": "Previous child session",
             "default": "<leader>left",
+            "type": "string"
+          },
+          "session_parent": {
+            "description": "Go to parent session",
+            "default": "<leader>up",
             "type": "string"
           },
           "terminal_suspend": {
