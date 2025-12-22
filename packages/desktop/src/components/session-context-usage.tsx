@@ -31,38 +31,34 @@ export function SessionContextUsage() {
   })
 
   return (
-    <div class="flex items-center justify-between gap-3">
-      <Show when={context ? context() : undefined}>
-        {(ctx) => (
-          <Tooltip
-            openDelay={300}
-            value={
-              <div class="flex flex-col gap-1 p-2">
-                <div class="flex justify-between gap-4">
-                  <span class="text-text-weaker">Tokens</span>
-                  <span class="text-text-strong">{ctx().tokens}</span>
-                </div>
-                <div class="flex justify-between gap-4">
-                  <span class="text-text-weaker">Usage</span>
-                  <span class="text-text-strong">{ctx().percentage ?? 0}%</span>
-                </div>
-                <div class="flex justify-between gap-4">
-                  <span class="text-text-weaker">Cost</span>
-                  <span class="text-text-strong">{cost()}</span>
-                </div>
+    <Show when={context?.()}>
+      {(ctx) => (
+        <Tooltip
+          openDelay={300}
+          value={
+            <div class="flex flex-col gap-1 p-2">
+              <div class="flex justify-between gap-4">
+                <span class="text-text-weaker">Tokens</span>
+                <span class="text-text-strong">{ctx().tokens}</span>
               </div>
-            }
-            placement="top"
-          >
-            <div class="flex items-center gap-1 cursor-default">
-              <span class="text-12-medium text-text-weak">{`${ctx().percentage ?? 0}%`}</span>
-              <div class="relative size-4">
-                <ProgressCircle size={16} strokeWidth={2} percentage={ctx().percentage ?? 0} />
+              <div class="flex justify-between gap-4">
+                <span class="text-text-weaker">Usage</span>
+                <span class="text-text-strong">{ctx().percentage ?? 0}%</span>
+              </div>
+              <div class="flex justify-between gap-4">
+                <span class="text-text-weaker">Cost</span>
+                <span class="text-text-strong">{cost()}</span>
               </div>
             </div>
-          </Tooltip>
-        )}
-      </Show>
-    </div>
+          }
+          placement="top"
+        >
+          <div class="flex items-center gap-1">
+            <span class="text-12-medium text-text-weak">{`${ctx().percentage ?? 0}%`}</span>
+            <ProgressCircle size={16} strokeWidth={2} percentage={ctx().percentage ?? 0} />
+          </div>
+        </Tooltip>
+      )}
+    </Show>
   )
 }
