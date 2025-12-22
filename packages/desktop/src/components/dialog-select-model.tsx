@@ -35,7 +35,6 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
       }
     >
       <List
-        class="px-2.5"
         search={{ placeholder: "Search models", autofocus: true }}
         emptyMessage="No model results"
         key={(x) => `${x.provider.id}:${x.id}`}
@@ -61,7 +60,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
         }}
       >
         {(i) => (
-          <div class="w-full flex items-center gap-x-2.5">
+          <div class="w-full flex items-center gap-x-3">
             <span>{i.name}</span>
             <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
               <Tag>Free</Tag>

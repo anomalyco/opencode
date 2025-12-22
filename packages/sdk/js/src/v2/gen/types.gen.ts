@@ -891,6 +891,14 @@ export type KeybindsConfig = {
    */
   messages_last?: string
   /**
+   * Navigate to next message
+   */
+  messages_next?: string
+  /**
+   * Navigate to previous message
+   */
+  messages_previous?: string
+  /**
    * Navigate to last user message
    */
   messages_last_user?: string
@@ -2750,6 +2758,7 @@ export type SessionSummarizeData = {
   body?: {
     providerID: string
     modelID: string
+    auto?: boolean
   }
   path: {
     /**
