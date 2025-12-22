@@ -41,18 +41,6 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Setup SSH for AUR
-        if: inputs.bump || inputs.version
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pacman-package-manager
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
-
       - name: Install OpenCode
         if: inputs.bump || inputs.version
         run: bun i -g opencode-ai@1.0.169
@@ -75,9 +63,15 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Setup Git Identity
+        run: |
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+          git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
       - name: Publish
         id: publish
-        run: ./script/publish.ts
+        run: ./script/publish-start.ts
         env:
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
@@ -86,8 +80,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
     outputs:
-      releaseId: ${{ steps.publish.outputs.releaseId }}
-      tagName: ${{ steps.publish.outputs.tagName }}
+      release: ${{ steps.publish.outputs.release }}
+      tag: ${{ steps.publish.outputs.tag }}
+      version: ${{ steps.publish.outputs.version }}
 
   publish-tauri:
     needs: publish
@@ -109,7 +104,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: ${{ needs.publish.outputs.tagName }}
+          ref: ${{ needs.publish.outputs.tag }}
 
       - uses: apple-actions/import-codesign-certs@v2
         if: ${{ runner.os == 'macOS' }}
@@ -152,20 +147,18 @@ jobs:
           shared-key: ${{ matrix.settings.target }}
 
       - name: Prepare
+        if: inputs.bump || inputs.version
         run: |
           cd packages/tauri
           bun ./scripts/prepare.ts
         env:
-          OPENCODE_BUMP: ${{ inputs.bump }}
-          OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_CHANNEL: latest
+          OPENCODE_VERSION: ${{ needs.publish.outputs.version }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
-          OPENCODE_RELEASE_TAG: ${{ needs.publish.outputs.tagName }}
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
       - name: Install tauri-cli from portable appimage branch
@@ -195,8 +188,8 @@ jobs:
           tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
           args: --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json
           updaterJsonPreferNsis: true
-          releaseId: ${{ needs.publish.outputs.releaseId }}
-          tagName: ${{ needs.publish.outputs.tagName }}
+          releaseId: ${{ needs.publish.outputs.release }}
+          tagName: ${{ needs.publish.outputs.tag }}
           releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
           releaseDraft: true
 
@@ -204,14 +197,29 @@ jobs:
     needs:
       - publish
       - publish-tauri
-    if: needs.publish.outputs.tagName
+    if: needs.publish.outputs.tag
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: ${{ needs.publish.outputs.tagName }}
+          ref: ${{ needs.publish.outputs.tag }}
 
-      - run: gh release edit ${{ needs.publish.outputs.tagName }} --draft=false
+      - uses: ./.github/actions/setup-bun
+
+      - name: Setup SSH for AUR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pacman-package-manager
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
+
+      - run: ./script/publish-complete.ts
         env:
-          GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          OPENCODE_VERSION: ${{ needs.publish.outputs.version  }}
+          AUR_KEY: ${{ secrets.AUR_KEY }}
+          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}

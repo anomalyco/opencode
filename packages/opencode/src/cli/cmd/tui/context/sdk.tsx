@@ -2,7 +2,6 @@ import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup, onMount } from "solid-js"
-import { iife } from "@/util/iife"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
@@ -70,6 +69,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       abort.abort()
     })
 
-    return { client: sdk, event: emitter }
+    return { client: sdk, event: emitter, url: props.url }
   },
 })
