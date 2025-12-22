@@ -644,8 +644,11 @@ export const GithubRunCommand = cmd({
       async function getUserPrompt() {
         const customPrompt = process.env["PROMPT"]
         // For schedule events, PROMPT is required since there's no comment to extract from
-        if (isScheduleEvent && !customPrompt) {
-          throw new Error("PROMPT input is required for scheduled and pull request events")
+        if (isScheduleEvent) {
+          if (!customPrompt) {
+            throw new Error("PROMPT input is required for scheduled events")
+          }
+          return { userPrompt: customPrompt, promptFiles: [] }
         }
 
         if (customPrompt) {
