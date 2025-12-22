@@ -414,6 +414,7 @@ export namespace Config {
         .object({
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
           external_directory: Permission.optional(),
@@ -764,6 +765,7 @@ export namespace Config {
         .object({
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
           external_directory: Permission.optional(),
