@@ -1,5 +1,4 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
@@ -66,23 +65,23 @@ export namespace Installation {
     const checks = [
       {
         name: "npm" as const,
-        command: () => $`npm list -g --depth=0`.throws(false).text(),
+        command: () => $`npm list -g --depth=0`.throws(false).quiet().text(),
       },
       {
         name: "yarn" as const,
-        command: () => $`yarn global list`.throws(false).text(),
+        command: () => $`yarn global list`.throws(false).quiet().text(),
       },
       {
         name: "pnpm" as const,
-        command: () => $`pnpm list -g --depth=0`.throws(false).text(),
+        command: () => $`pnpm list -g --depth=0`.throws(false).quiet().text(),
       },
       {
         name: "bun" as const,
-        command: () => $`bun pm ls -g`.throws(false).text(),
+        command: () => $`bun pm ls -g`.throws(false).quiet().text(),
       },
       {
         name: "brew" as const,
-        command: () => $`brew list --formula opencode`.throws(false).text(),
+        command: () => $`brew list --formula opencode`.throws(false).quiet().text(),
       },
     ]
 
@@ -112,9 +111,9 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).text()
+    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
     if (tapFormula.includes("opencode")) return "sst/tap/opencode"
-    const coreFormula = await $`brew list --formula opencode`.throws(false).text()
+    const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
     return "opencode"
   }
