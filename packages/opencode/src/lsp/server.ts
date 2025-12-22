@@ -5,7 +5,6 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { $, readableStreamToText } from "bun"
-import { spawnWrapper } from "../util/spawn-wrapper"
 import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
@@ -197,9 +196,8 @@ export namespace LSPServer {
         }
         await fs.rename(extractedPath, finalPath)
 
-        // Use spawnWrapper to avoid Bun.$ signal handling issues on Windows
-        await spawnWrapper(["npm", "install"], { cwd: finalPath, quiet: true })
-        await spawnWrapper(["npm", "run", "compile"], { cwd: finalPath, quiet: true })
+        await $`npm install`.cwd(finalPath).quiet()
+        await $`npm run compile`.cwd(finalPath).quiet()
 
         log.info("installed VS Code ESLint server", { serverPath })
       }
@@ -699,7 +697,7 @@ export namespace LSPServer {
             })
           if (!ok) return
         } else {
-          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
         }
 
         await fs.rm(tempPath, { force: true })
@@ -712,7 +710,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info(`installed zls`, { bin })
@@ -1005,7 +1003,7 @@ export namespace LSPServer {
         if (!ok) return
       }
       if (tar) {
-        await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
+        await $`tar -xf ${archive}`.cwd(Global.Path.bin).quiet().nothrow()
       }
       await fs.rm(archive, { force: true })
 
@@ -1016,7 +1014,7 @@ export namespace LSPServer {
       }
 
       if (platform !== "win32") {
-        await $`chmod +x ${bin}`.nothrow()
+        await $`chmod +x ${bin}`.quiet().nothrow()
       }
 
       await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
@@ -1582,7 +1580,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info(`installed terraform-ls`, { bin })
@@ -1665,7 +1663,7 @@ export namespace LSPServer {
           if (!ok) return
         }
         if (ext === "tar.gz") {
-          await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
         }
 
         await fs.rm(tempPath, { force: true })
@@ -1678,7 +1676,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info("installed texlab", { bin })

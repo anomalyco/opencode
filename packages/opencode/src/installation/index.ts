@@ -1,8 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import path from "path"
 import { $ } from "bun"
-import { spawnWrapper } from "opencode/util/spawn-wrapper"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
@@ -64,27 +62,26 @@ export namespace Installation {
     if (process.execPath.includes(path.join(".local", "bin"))) return "curl"
     const exec = process.execPath.toLowerCase()
 
-    // Use spawnWrapper to avoid Bun.$ signal handling issues on Windows
     const checks = [
       {
         name: "npm" as const,
-        command: () => spawnWrapper(["npm", "list", "-g", "--depth=0"], { throws: false }).then(result => result.stdout),
+        command: () => $`npm list -g --depth=0`.throws(false).quiet().text(),
       },
       {
         name: "yarn" as const,
-        command: () => spawnWrapper(["yarn", "global", "list"], { throws: false }).then(result => result.stdout),
+        command: () => $`yarn global list`.throws(false).quiet().text(),
       },
       {
         name: "pnpm" as const,
-        command: () => spawnWrapper(["pnpm", "list", "-g", "--depth=0"], { throws: false }).then(result => result.stdout),
+        command: () => $`pnpm list -g --depth=0`.throws(false).quiet().text(),
       },
       {
         name: "bun" as const,
-        command: () => $`bun pm ls -g`.throws(false).text(),
+        command: () => $`bun pm ls -g`.throws(false).quiet().text(),
       },
       {
         name: "brew" as const,
-        command: () => $`brew list --formula opencode`.throws(false).text(),
+        command: () => $`brew list --formula opencode`.throws(false).quiet().text(),
       },
     ]
 
@@ -114,9 +111,9 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).text()
+    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
     if (tapFormula.includes("opencode")) return "sst/tap/opencode"
-    const coreFormula = await $`brew list --formula opencode`.throws(false).text()
+    const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
     return "opencode"
   }
@@ -131,26 +128,26 @@ export namespace Installation {
         })
         break
       case "npm":
-        cmd = spawnWrapper(["npm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false })
+        cmd = $`npm install -g opencode-ai@${target}`
         break
       case "pnpm":
-        cmd = spawnWrapper(["pnpm", "install", "-g", `opencode-ai@${target}`], { quiet: true, throws: false })
+        cmd = $`pnpm install -g opencode-ai@${target}`
         break
       case "bun":
-        cmd = $`bun install -g opencode-ai@${target}`.quiet().throws(false)
+        cmd = $`bun install -g opencode-ai@${target}`
         break
       case "brew": {
         const formula = await getBrewFormula()
         cmd = $`brew install ${formula}`.env({
           HOMEBREW_NO_AUTO_UPDATE: "1",
           ...process.env,
-        }).quiet().throws(false)
+        })
         break
       }
       default:
         throw new Error(`Unknown method: ${method}`)
     }
-    const result = await cmd
+    const result = await cmd.quiet().throws(false)
     log.info("upgraded", {
       method,
       target,
@@ -182,8 +179,7 @@ export namespace Installation {
     }
 
     const registry = await iife(async () => {
-      // Changed to spawnWrapper because of a bug in Bun.$ with npm and Ctrl+C handling in Windows
-      const r = (await spawnWrapper(["npm", "config", "get", "registry"], { throws: false, quiet: true })).stdout.trim()
+      const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
       const reg = r || "https://registry.npmjs.org"
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
