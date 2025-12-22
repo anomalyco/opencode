@@ -495,7 +495,10 @@ export const GithubRunCommand = cmd({
           } else {
             console.log("Response:", response)
           }
-        } else if (["pull_request", "pull_request_review_comment"].includes(context.eventName) || issueEvent?.issue.pull_request) {
+        } else if (
+          ["pull_request", "pull_request_review_comment"].includes(context.eventName) ||
+          issueEvent?.issue.pull_request
+        ) {
           const prData = await fetchPR()
           // Local PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
