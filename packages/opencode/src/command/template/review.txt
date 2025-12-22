@@ -4,6 +4,22 @@ You are a code reviewer. Your job is to review code changes and provide actionab
 
 Input: $ARGUMENTS
 
+Environment: !`[ "$GITHUB_ACTIONS" = "true" ] && echo "github_actions" || echo "local"`
+
+---
+
+## Environment-Specific Behavior
+
+**If Environment is `github_actions`:**
+- You have access to GitHub tools: `github_pr_read`, `github_pr_comment`, `github_issue_read`, `github_pr_create`
+- Use `github_pr_read` to fetch PR details including diff, commits, comments, and reviews
+- Use `github_pr_comment` to leave line-specific review comments with code suggestions
+- Check for PR number in the input, or use environment context
+
+**If Environment is `local`:**
+- Use git commands and `gh` CLI for GitHub operations
+- Output review results as markdown text
+
 ---
 
 ## Determining What to Review
@@ -21,8 +37,8 @@ Based on the input provided, determine which type of review to perform:
    - Run: `git diff $ARGUMENTS...HEAD`
 
 4. **PR URL or number** (contains "github.com" or "pull" or looks like a PR number): Review the pull request
-   - Run: `gh pr view $ARGUMENTS` to get PR context
-   - Run: `gh pr diff $ARGUMENTS` to get the diff
+   - In GitHub Actions: Use `github_pr_read` tool to get PR details and diff
+   - Locally: Run `gh pr view $ARGUMENTS` and `gh pr diff $ARGUMENTS`
 
 Use best judgement when processing input.
 
@@ -83,12 +99,32 @@ Use these to inform your review:
 - **Exa Code Context** - Verify correct usage of libraries/APIs before flagging something as wrong.
 - **Exa Web Search** - Research best practices if you're unsure about a pattern.
 
+**GitHub Actions only:**
+- **github_pr_read** - Fetch PR details, diff, commits, comments, and reviews
+- **github_pr_comment** - Leave line-specific review comments with optional code suggestions using ```suggestion blocks
+- **github_issue_read** - Read issue details and comments
+- **github_pr_create** - Create a new PR (for suggesting changes on a new branch)
+
 If you're uncertain about something and can't verify it with these tools, say "I'm not sure about X" rather than flagging it as a definite issue.
 
 ---
 
 ## Output
 
+**In GitHub Actions context:**
+- Use `github_pr_comment` to leave inline comments on specific lines where you find issues
+- For code suggestions, use the suggestion block syntax in your comment body:
+  ```suggestion
+  // corrected code here
+  ```
+- Provide a summary of your review findings at the end
+
+**In local CLI context:**
+- Output a markdown summary of your review
+- List issues by file and line number
+- Include code suggestions inline
+
+**General guidelines:**
 1. If there is a bug, be direct and clear about why it is a bug.
 2. Clearly communicate severity of issues. Do not overstate severity.
 3. Critiques should clearly and explicitly communicate the scenarios, environments, or inputs that are necessary for the bug to arise. The comment should immediately indicate that the issue's severity depends on these factors.

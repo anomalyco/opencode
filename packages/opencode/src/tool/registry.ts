@@ -23,6 +23,7 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
+import { GithubTools } from "./github"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -105,6 +106,7 @@ export namespace ToolRegistry {
       CodeSearchTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
+      ...GithubTools,
       ...custom,
     ]
   }
@@ -135,8 +137,16 @@ export namespace ToolRegistry {
     return result
   }
 
+  // Tools that are disabled by default and must be explicitly enabled
+  const DISABLED_BY_DEFAULT = ["github_pr_comment", "github_pr_create", "github_pr_read", "github_issue_read"]
+
   export async function enabled(agent: Agent.Info): Promise<Record<string, boolean>> {
     const result: Record<string, boolean> = {}
+
+    // Disable review tools by default - they must be explicitly enabled via command.tools
+    for (const tool of DISABLED_BY_DEFAULT) {
+      result[tool] = false
+    }
 
     if (agent.permission.edit === "deny") {
       result["edit"] = false

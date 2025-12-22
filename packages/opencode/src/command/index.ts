@@ -28,6 +28,7 @@ export namespace Command {
       model: z.string().optional(),
       template: z.string(),
       subtask: z.boolean().optional(),
+      tools: z.record(z.string(), z.boolean()).optional(),
     })
     .meta({
       ref: "Command",
@@ -53,6 +54,12 @@ export namespace Command {
         description: "review changes [commit|branch|pr], defaults to uncommitted",
         template: PROMPT_REVIEW.replace("${path}", Instance.worktree),
         subtask: true,
+        tools: {
+          github_pr_comment: true,
+          github_pr_create: true,
+          github_pr_read: true,
+          github_issue_read: true,
+        },
       },
     }
 
