@@ -277,9 +277,6 @@ export default function Share(props: { id: string; api: string; info: Session.In
 
       if (msg.role === "assistant") {
         result.cost += msg.cost
-        result.tokens.input += msg.tokens.input
-        result.tokens.output += msg.tokens.output
-        result.tokens.reasoning += msg.tokens.reasoning
 
         result.models[`${msg.providerID} ${msg.modelID}`] = [msg.providerID, msg.modelID]
 
@@ -292,6 +289,16 @@ export default function Share(props: { id: string; api: string; info: Session.In
         }
       }
     }
+
+    // Use tokens from the last assistant message (like TUI does)
+    // This represents the actual context size, not cumulative tokens
+    const lastAssistant = msgs.findLast((x) => x.role === "assistant" && x.tokens?.output > 0)
+    if (lastAssistant && lastAssistant.role === "assistant") {
+      result.tokens.input = lastAssistant.tokens.input
+      result.tokens.output = lastAssistant.tokens.output
+      result.tokens.reasoning = lastAssistant.tokens.reasoning
+    }
+
     return result
   })
 
