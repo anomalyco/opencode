@@ -1804,6 +1804,10 @@
                   },
                   "modelID": {
                     "type": "string"
+                  },
+                  "auto": {
+                    "default": false,
+                    "type": "boolean"
                   }
                 },
                 "required": ["providerID", "modelID"]
@@ -7305,6 +7309,16 @@
           "messages_last": {
             "description": "Navigate to last message",
             "default": "ctrl+alt+g,end",
+            "type": "string"
+          },
+          "messages_next": {
+            "description": "Navigate to next message",
+            "default": "none",
+            "type": "string"
+          },
+          "messages_previous": {
+            "description": "Navigate to previous message",
+            "default": "none",
             "type": "string"
           },
           "messages_last_user": {
