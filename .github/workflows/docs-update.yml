@@ -61,3 +61,4 @@ jobs:
             3. If all new features are already documented, report that no updates are needed
 
             Focus on user-facing features and API changes. Skip internal refactors, bug fixes, and test updates unless they affect user-facing behavior.
+            All doc related commits should start with "docs:" prefix.
