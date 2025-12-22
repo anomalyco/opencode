@@ -14,7 +14,6 @@ import PROMPT_POLARIS from "./prompt/polaris.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
-import PROMPT_COMPACTION from "./prompt/compaction.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import type { Provider } from "@/provider/provider"
@@ -117,26 +116,5 @@ export namespace SystemPrompt {
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
     return Promise.all(found).then((result) => result.filter(Boolean))
-  }
-
-  export async function skills() {
-    const all = await Skill.all()
-    if (all.length === 0) return []
-
-    const lines = [
-      "You have access to skills listed in `<available_skills>`. When a task matches a skill's description, read its SKILL.md file to get detailed instructions.",
-      "",
-      "<available_skills>",
-    ]
-    for (const skill of all) {
-      lines.push("  <skill>")
-      lines.push(`    <name>${skill.name}</name>`)
-      lines.push(`    <description>${skill.description}</description>`)
-      lines.push(`    <location>${skill.location}</location>`)
-      lines.push("  </skill>")
-    }
-    lines.push("</available_skills>")
-
-    return [lines.join("\n")]
   }
 }
