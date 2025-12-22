@@ -262,7 +262,7 @@
         "decimal.js": "10.5.0",
         "diff": "catalog:",
         "fuzzysort": "3.1.0",
-        "ghostty-opentui": "1.3.6",
+        "ghostty-opentui": "1.3.8",
         "gray-matter": "4.0.3",
         "hono": "catalog:",
         "hono-openapi": "catalog:",
@@ -2474,7 +2474,7 @@
 
     "get-tsconfig": ["get-tsconfig@4.13.0", "", { "dependencies": { "resolve-pkg-maps": "^1.0.0" } }, "sha512-1VKTZJCwBrvbd+Wn3AOgQP/2Av+TfTCOlE4AcRJE72W1ksZXbAx8PPBR9RzgTeSPzlPMHrbANMH3LbltH73wxQ=="],
 
-    "ghostty-opentui": ["ghostty-opentui@1.3.6", "", { "dependencies": { "strip-ansi": "^7.1.2" }, "peerDependencies": { "@opentui/core": "*" }, "optionalPeers": ["@opentui/core"] }, "sha512-DETUuSiIcTwTIqICmDEezYxt0gXk/4bGC+28Hd4fqFdejB8GTCJvRzGGcwfPoYgIKxsqcVTm1Hku3m6K+NiPAA=="],
+    "ghostty-opentui": ["ghostty-opentui@1.3.8", "", { "dependencies": { "strip-ansi": "^7.1.2" }, "peerDependencies": { "@opentui/core": "*" }, "optionalPeers": ["@opentui/core"] }, "sha512-EvL24Ct7Ut40IavwNM9SL9sL7w9o7p5tJOWPl4FEO0NGcYzfZPKILzhjksID5XCNGz+ebKEuwyX5SEPYo2VtzA=="],
 
     "ghostty-web": ["ghostty-web@0.3.0", "", {}, "sha512-SAdSHWYF20GMZUB0n8kh1N6Z4ljMnuUqT8iTB2n5FAPswEV10MejEpLlhW/769GL5+BQa1NYwEg9y/XCckV5+A=="],
 
