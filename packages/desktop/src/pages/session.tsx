@@ -12,6 +12,7 @@ import {
   createRenderEffect,
   batch,
 } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
@@ -70,7 +71,6 @@ export default function Page() {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
-
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
@@ -79,7 +79,6 @@ export default function Page() {
       .filter((m) => m.role === "user")
       .sort((a, b) => a.id.localeCompare(b.id)),
   )
-  // Visible user messages excludes reverted messages (those >= revertMessageID)
   const visibleUserMessages = createMemo(() => {
     const revert = revertMessageID()
     if (!revert) return userMessages()
@@ -87,15 +86,31 @@ export default function Page() {
   })
   const lastUserMessage = createMemo(() => visibleUserMessages()?.at(-1))
 
-  const [messageStore, setMessageStore] = createStore<{ messageId?: string }>({})
+  const [store, setStore] = createStore({
+    clickTimer: undefined as number | undefined,
+    activeDraggable: undefined as string | undefined,
+    activeTerminalDraggable: undefined as string | undefined,
+    userInteracted: false,
+    stepsExpanded: true,
+    mobileStepsExpanded: {} as Record<string, boolean>,
+    mobileLastScrollTop: 0,
+    mobileLastScrollHeight: 0,
+    mobileAutoScrolled: false,
+    mobileUserScrolled: false,
+    mobileContentRef: undefined as HTMLDivElement | undefined,
+    mobileLastContentWidth: 0,
+    mobileReflowing: false,
+    messageId: undefined as string | undefined,
+  })
+
   const activeMessage = createMemo(() => {
-    if (!messageStore.messageId) return lastUserMessage()
+    if (!store.messageId) return lastUserMessage()
     // If the stored message is no longer visible (e.g., was reverted), fall back to last visible
-    const found = visibleUserMessages()?.find((m) => m.id === messageStore.messageId)
+    const found = visibleUserMessages()?.find((m) => m.id === store.messageId)
     return found ?? lastUserMessage()
   })
   const setActiveMessage = (message: UserMessage | undefined) => {
-    setMessageStore("messageId", message?.id)
+    setStore("messageId", message?.id)
   }
 
   function navigateMessageByOffset(offset: number) {
@@ -119,18 +134,6 @@ export default function Page() {
 
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 
-  const [store, setStore] = createStore({
-    clickTimer: undefined as number | undefined,
-    activeDraggable: undefined as string | undefined,
-    activeTerminalDraggable: undefined as string | undefined,
-    userInteracted: false,
-    stepsExpanded: true,
-    mobileStepsExpanded: {} as Record<string, boolean>,
-    mobileLastScrollTop: 0,
-    mobileLastScrollHeight: 0,
-    mobileAutoScrolled: false,
-    mobileUserScrolled: false,
-  })
   let inputRef!: HTMLDivElement
 
   createEffect(() => {
@@ -151,7 +154,7 @@ export default function Page() {
       () => visibleUserMessages().at(-1)?.id,
       (lastId, prevLastId) => {
         if (lastId && prevLastId && lastId > prevLastId) {
-          setMessageStore("messageId", undefined)
+          setStore("messageId", undefined)
         }
       },
       { defer: true },
@@ -539,7 +542,6 @@ export default function Page() {
   const showTabs = createMemo(() => diffs().length > 0 || tabs().all().length > 0)
 
   let mobileScrollRef: HTMLDivElement | undefined
-
   const mobileWorking = createMemo(() => status().type !== "idle")
 
   function handleMobileScroll() {
@@ -547,6 +549,14 @@ export default function Page() {
 
     const scrollTop = mobileScrollRef.scrollTop
     const scrollHeight = mobileScrollRef.scrollHeight
+
+    if (store.mobileReflowing) {
+      batch(() => {
+        setStore("mobileLastScrollTop", scrollTop)
+        setStore("mobileLastScrollHeight", scrollHeight)
+      })
+      return
+    }
 
     const scrolledUp = scrollTop < store.mobileLastScrollTop - 50
     if (scrolledUp && mobileWorking()) {
@@ -582,21 +592,30 @@ export default function Page() {
     })
   }
 
-  // Reset mobile user scrolled when work completes
   createEffect(() => {
     if (!mobileWorking()) setStore("mobileUserScrolled", false)
   })
 
-  // Auto-scroll when content changes
-  createEffect(() => {
-    // Track changes to messages/parts to trigger scroll
-    const msgs = visibleUserMessages()
-    const lastMsg = msgs.at(-1)
-    if (lastMsg && mobileWorking()) {
-      sync.data.part[lastMsg.id]
-      scrollMobileToBottom()
-    }
-  })
+  createResizeObserver(
+    () => store.mobileContentRef,
+    ({ width }) => {
+      const widthChanged = Math.abs(width - store.mobileLastContentWidth) > 5
+      if (widthChanged && store.mobileLastContentWidth > 0) {
+        setStore("mobileReflowing", true)
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setStore("mobileReflowing", false)
+            if (mobileWorking() && !store.mobileUserScrolled) {
+              scrollMobileToBottom()
+            }
+          })
+        })
+      } else if (!store.mobileReflowing) {
+        scrollMobileToBottom()
+      }
+      setStore("mobileLastContentWidth", width)
+    },
+  )
 
   const MobileTurns = () => (
     <div
@@ -605,7 +624,7 @@ export default function Page() {
       onClick={handleMobileInteraction}
       class="relative mt-2 min-w-0 w-full h-full overflow-y-auto no-scrollbar pb-12"
     >
-      <div class="flex flex-col gap-45 items-start justify-start mt-4">
+      <div ref={(el) => setStore("mobileContentRef", el)} class="flex flex-col gap-45 items-start justify-start mt-4">
         <For each={visibleUserMessages()}>
           {(message) => (
             <SessionTurn
