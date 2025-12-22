@@ -85,6 +85,8 @@ export namespace Provider {
         const env = Env.all()
         if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
+        const config = await Config.get()
+        if (config.provider?.["opencode"]?.options?.apiKey) return true
         return false
       })()
 
