@@ -155,7 +155,6 @@ jobs:
           shared-key: ${{ matrix.settings.target }}
 
       - name: Prepare
-        if: inputs.bump || inputs.version
         run: |
           cd packages/tauri
           bun ./scripts/prepare.ts
@@ -167,6 +166,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
 
       # Fixes AppImage build issues, can be removed when https://github.com/tauri-apps/tauri/pull/12491 is released
       - name: Install tauri-cli from portable appimage branch
