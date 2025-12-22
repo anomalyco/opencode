@@ -38,6 +38,11 @@ export const LspTool = Tool.define("lsp", {
     const relPath = path.relative(Instance.worktree, file)
     const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
 
+    const exists = await Bun.file(file).exists()
+    if (!exists) {
+      throw new Error(`File not found: ${file}`)
+    }
+
     const available = await LSP.hasClients(file)
     if (!available) {
       throw new Error("No LSP server available for this file type.")
