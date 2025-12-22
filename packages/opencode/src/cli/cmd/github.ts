@@ -407,11 +407,11 @@ export const GithubRunCommand = cmd({
       const issueEvent = payload && isIssueCommentEvent(payload) ? payload : undefined
       const actor = isScheduleEvent ? undefined : context.actor
 
-      const issueId = isCommentEvent
-        ? context.eventName === "issue_comment"
+      const issueId = isScheduleEvent
+        ? undefined
+        : context.eventName === "issue_comment"
           ? (payload as IssueCommentEvent).issue.number
           : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
-        : undefined
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
