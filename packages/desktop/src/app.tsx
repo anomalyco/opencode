@@ -38,6 +38,9 @@ const url = iife(() => {
   if (import.meta.env.VITE_OPENCODE_SERVER)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+    return `${location.protocol}//${location.host}`
+
   return "/"
 })
 
