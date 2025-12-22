@@ -227,13 +227,16 @@ export namespace ProviderTransform {
   export function topP(model: Provider.Model) {
     const id = model.id.toLowerCase()
     if (id.includes("qwen")) return 1
-    if (id.includes("minimax-m2")) return 0.95
+    if (id.includes("minimax-m2")) {
+      if (id.includes("m2.1")) return 0.9
+      return 0.95
+    }
     return undefined
   }
 
   export function topK(model: Provider.Model) {
     const id = model.id.toLowerCase()
-    if (id.includes("minimax-m2")) return 40
+    if (id.includes("minimax-m2")) return 20
     return undefined
   }
 
