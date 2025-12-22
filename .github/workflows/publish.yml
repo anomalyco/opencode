@@ -69,19 +69,6 @@ jobs:
           git config --global user.name "opencode"
           git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
-      - name: "Extract Actions runtime variables"
-        id: extract-runtime-environment-variables
-        uses: actions/github-script@v7
-        env:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          script: |
-            core.exportVariable('ACTIONS_RESULTS_URL', process.env['ACTIONS_RESULTS_URL'])
-            core.exportVariable('ACTIONS_RUNTIME_URL', process.env['ACTIONS_RUNTIME_URL'])
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env['ACTIONS_RUNTIME_TOKEN'])
-            core.exportVariable('ACTIONS_CACHE_SERVICE_V2', process.env['ACTIONS_CACHE_SERVICE_V2'])
-            core.exportVariable('ACTIONS_RESULTS_URL', process.env['ACTIONS_RESULTS_URL'])
-
       - name: Publish
         id: publish
         run: ./script/publish-start.ts
@@ -93,24 +80,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
 
-      - name: "Upload folders as artifacts"
-        id: upload-artifacts
-        shell: bun {0}
-        working-directory: packages/opencode
-        run: |
-          import * as fs from 'fs/promises';
-          import * as path from 'path';
-          import { DefaultArtifactClient } from "@actions/artifact";
-          import { $ } from "bun";
-
-          const artifactClient = new DefaultArtifactClient()
-
-          for await (const folder of $`ls ./dist`.lines()) {
-            if (!folder.startsWith("opencode-")) continue
-
-            const files = await Array.fromAsync(await fs.glob(`./dist/${folder}/bin/*`))
-            await artifactClient.uploadArtifact(folder, files, process.cwd())
-          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
 
     outputs:
       release: ${{ steps.publish.outputs.release }}
