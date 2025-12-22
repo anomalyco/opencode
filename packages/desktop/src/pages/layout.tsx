@@ -1,7 +1,19 @@
-import { createEffect, createMemo, createSignal, For, Match, ParentProps, Show, Switch, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  onMount,
+  ParentProps,
+  Show,
+  Switch,
+  type JSX,
+} from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { useLayout, getAvatarColors } from "@/context/layout"
+import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
@@ -15,7 +27,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session, Project } from "@opencode-ai/sdk/v2/client"
+import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore, produce } from "solid-js/store"
 import {
@@ -25,11 +37,10 @@ import {
   SortableProvider,
   closestCenter,
   createSortable,
-  useDragDropContext,
 } from "@thisbeyond/solid-dnd"
-import type { DragEvent, Transformer } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { Toast } from "@opencode-ai/ui/toast"
+import { showToast, Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
@@ -37,22 +48,35 @@ import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { useCommand } from "@/context/command"
+import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
     lastSession: {} as { [directory: string]: string },
     activeDraggable: undefined as string | undefined,
+    mobileSidebarOpen: false,
+    mobileProjectsExpanded: {} as Record<string, boolean>,
   })
 
-  let scrollContainerRef: HTMLDivElement | undefined
-
-  function scrollToSession(sessionId: string) {
-    if (!scrollContainerRef) return
-    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
-    if (element) {
-      element.scrollIntoView({ block: "center", behavior: "smooth" })
-    }
+  const mobileSidebar = {
+    open: () => store.mobileSidebarOpen,
+    show: () => setStore("mobileSidebarOpen", true),
+    hide: () => setStore("mobileSidebarOpen", false),
+    toggle: () => setStore("mobileSidebarOpen", (x) => !x),
   }
+
+  const mobileProjects = {
+    expanded: (directory: string) => store.mobileProjectsExpanded[directory] ?? true,
+    expand: (directory: string) => setStore("mobileProjectsExpanded", directory, true),
+    collapse: (directory: string) => setStore("mobileProjectsExpanded", directory, false),
+  }
+
+  let scrollContainerRef: HTMLDivElement | undefined
+  const xlQuery = window.matchMedia("(min-width: 1280px)")
+  const [isLargeViewport, setIsLargeViewport] = createSignal(xlQuery.matches)
+  const handleViewportChange = (e: MediaQueryListEvent) => setIsLargeViewport(e.matches)
+  xlQuery.addEventListener("change", handleViewportChange)
+  onCleanup(() => xlQuery.removeEventListener("change", handleViewportChange))
 
   const params = useParams()
   const globalSDK = useGlobalSDK()
@@ -64,6 +88,33 @@ export default function Layout(props: ParentProps) {
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
+
+  onMount(async () => {
+    if (platform.checkUpdate && platform.update && platform.restart) {
+      const { updateAvailable, version } = await platform.checkUpdate()
+      if (updateAvailable) {
+        showToast({
+          persistent: true,
+          icon: "download",
+          title: "Update available",
+          description: `A new version of OpenCode (${version}) is now available to install.`,
+          actions: [
+            {
+              label: "Install and restart",
+              onClick: async () => {
+                await platform.update!()
+                await platform.restart!()
+              },
+            },
+            {
+              label: "Not yet",
+              onClick: "dismiss",
+            },
+          ],
+        })
+      }
+    }
+  })
 
   function flattenSessions(sessions: Session[]): Session[] {
     const childrenMap = new Map<string, Session[]>()
@@ -87,10 +138,26 @@ export default function Layout(props: ParentProps) {
     return result
   }
 
+  function scrollToSession(sessionId: string) {
+    if (!scrollContainerRef) return
+    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
+    if (element) {
+      element.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
+  }
+
+  function projectSessions(directory: string) {
+    if (!directory) return []
+    const sessions = globalSync
+      .child(directory)[0]
+      .session.toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+    return flattenSessions(sessions ?? [])
+  }
+
   const currentSessions = createMemo(() => {
     if (!params.dir) return []
     const directory = base64Decode(params.dir)
-    return flattenSessions(globalSync.child(directory)[0].session ?? [])
+    return projectSessions(directory)
   })
 
   function navigateSessionByOffset(offset: number) {
@@ -127,7 +194,7 @@ export default function Layout(props: ParentProps) {
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
-    const nextProjectSessions = flattenSessions(globalSync.child(nextProject.worktree)[0].session ?? [])
+    const nextProjectSessions = projectSessions(nextProject.worktree)
     if (nextProjectSessions.length === 0) {
       navigateToProject(nextProject.worktree)
       return
@@ -224,11 +291,13 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const lastSession = store.lastSession[directory]
     navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
+    mobileSidebar.hide()
   }
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
     navigate(`/${params.dir}/session/${session?.id}`)
+    mobileSidebar.hide()
   }
 
   function openProject(directory: string, navigate = true) {
@@ -267,8 +336,12 @@ export default function Layout(props: ParentProps) {
   })
 
   createEffect(() => {
-    const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
-    document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
+    if (isLargeViewport()) {
+      const sidebarWidth = layout.sidebar.opened() ? layout.sidebar.width() : 48
+      document.documentElement.style.setProperty("--dialog-left-margin", `${sidebarWidth}px`)
+    } else {
+      document.documentElement.style.setProperty("--dialog-left-margin", "0px")
+    }
   })
 
   function getDraggableId(event: unknown): string | undefined {
@@ -301,30 +374,8 @@ export default function Layout(props: ParentProps) {
     setStore("activeDraggable", undefined)
   }
 
-  const ConstrainDragXAxis = (): JSX.Element => {
-    const context = useDragDropContext()
-    if (!context) return <></>
-    const [, { onDragStart, onDragEnd, addTransformer, removeTransformer }] = context
-    const transformer: Transformer = {
-      id: "constrain-x-axis",
-      order: 100,
-      callback: (transform) => ({ ...transform, x: 0 }),
-    }
-    onDragStart((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      addTransformer("draggables", id, transformer)
-    })
-    onDragEnd((event) => {
-      const id = getDraggableId(event)
-      if (!id) return
-      removeTransformer("draggables", id, transformer.id)
-    })
-    return <></>
-  }
-
   const ProjectAvatar = (props: {
-    project: Project
+    project: LocalProject
     class?: string
     expandable?: boolean
     notify?: boolean
@@ -337,7 +388,7 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class="relative size-5 shrink-0 rounded-sm overflow-hidden">
+      <div class="relative size-5 shrink-0 rounded-sm">
         <Avatar
           fallback={name()}
           src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
@@ -367,7 +418,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const ProjectVisual = (props: { project: Project & { expanded: boolean }; class?: string }): JSX.Element => {
+  const ProjectVisual = (props: { project: LocalProject; class?: string }): JSX.Element => {
     const name = createMemo(() => getFilename(props.project.worktree))
     const current = createMemo(() => base64Decode(params.dir ?? ""))
     return (
@@ -403,9 +454,10 @@ export default function Layout(props: ParentProps) {
   const SessionItem = (props: {
     session: Session
     slug: string
-    project: Project
+    project: LocalProject
     depth?: number
     childrenMap: Map<string, Session[]>
+    mobile?: boolean
   }): JSX.Element => {
     const notification = useNotification()
     const depth = props.depth ?? 0
@@ -413,11 +465,11 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-    const isWorking = createMemo(
-      () =>
-        props.session.id !== params.id &&
-        globalSync.child(props.project.worktree)[0].session_status[props.session.id]?.type === "busy",
-    )
+    const isWorking = createMemo(() => {
+      if (props.session.id === params.id) return false
+      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      return status?.type === "busy" || status?.type === "retry"
+    })
     return (
       <>
         <div
@@ -426,7 +478,7 @@ export default function Layout(props: ParentProps) {
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
           style={{ "padding-left": `${16 + depth * 12}px` }}
         >
-          <Tooltip placement="right" value={props.session.title} gutter={10}>
+          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
             <A
               href={`${props.slug}/session/${props.session.id}`}
               class="flex flex-col min-w-0 text-left w-full focus:outline-none"
@@ -473,7 +525,7 @@ export default function Layout(props: ParentProps) {
             </A>
           </Tooltip>
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
-            <Tooltip placement="right" value="Archive session">
+            <Tooltip placement={props.mobile ? "bottom" : "right"} value="Archive session">
               <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
             </Tooltip>
           </div>
@@ -486,6 +538,7 @@ export default function Layout(props: ParentProps) {
               project={props.project}
               depth={depth + 1}
               childrenMap={props.childrenMap}
+              mobile={props.mobile}
             />
           )}
         </For>
@@ -493,12 +546,15 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
+  const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
+    const showExpanded = createMemo(() => props.mobile || layout.sidebar.opened())
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
-    const [store] = globalSync.child(props.project.worktree)
-    const sessions = createMemo(() => store.session ?? [])
+    const [store, setProjectStore] = globalSync.child(props.project.worktree)
+    const sessions = createMemo(() =>
+      store.session.toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)),
+    )
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const childSessionsByParent = createMemo(() => {
       const map = new Map<string, Session[]>()
@@ -511,13 +567,29 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
-    const [expanded, setExpanded] = createSignal(true)
+    const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
+    const loadMoreSessions = async () => {
+      setProjectStore("limit", (limit) => limit + 5)
+      await globalSync.project.loadSessions(props.project.worktree)
+    }
+    const isExpanded = createMemo(() =>
+      props.mobile ? mobileProjects.expanded(props.project.worktree) : props.project.expanded,
+    )
+    const handleOpenChange = (open: boolean) => {
+      if (props.mobile) {
+        if (open) mobileProjects.expand(props.project.worktree)
+        else mobileProjects.collapse(props.project.worktree)
+      } else {
+        if (open) layout.projects.expand(props.project.worktree)
+        else layout.projects.collapse(props.project.worktree)
+      }
+    }
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <Switch>
-          <Match when={layout.sidebar.opened()}>
-            <Collapsible variant="ghost" defaultOpen class="gap-2 shrink-0" onOpenChange={setExpanded}>
+          <Match when={showExpanded()}>
+            <Collapsible variant="ghost" open={isExpanded()} class="gap-2 shrink-0" onOpenChange={handleOpenChange}>
               <Button
                 as={"div"}
                 variant="ghost"
@@ -528,7 +600,7 @@ export default function Layout(props: ParentProps) {
                     project={props.project}
                     class="group-hover/session:hidden"
                     expandable
-                    notify={!expanded()}
+                    notify={!isExpanded()}
                   />
                   <span class="truncate text-14-medium text-text-strong">{name()}</span>
                 </Collapsible.Trigger>
@@ -557,6 +629,7 @@ export default function Layout(props: ParentProps) {
                         slug={slug()}
                         project={props.project}
                         childrenMap={childSessionsByParent()}
+                        mobile={props.mobile}
                       />
                     )}
                   </For>
@@ -567,7 +640,7 @@ export default function Layout(props: ParentProps) {
                     >
                       <div class="flex items-center self-stretch w-full">
                         <div class="flex-1 min-w-0">
-                          <Tooltip placement="right" value="New session">
+                          <Tooltip placement={props.mobile ? "bottom" : "right"} value="New session">
                             <A
                               href={`${slug()}/session`}
                               class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
@@ -581,6 +654,18 @@ export default function Layout(props: ParentProps) {
                           </Tooltip>
                         </div>
                       </div>
+                    </div>
+                  </Show>
+                  <Show when={hasMoreSessions()}>
+                    <div class="relative w-full py-1">
+                      <Button
+                        variant="ghost"
+                        class="flex w-full text-left justify-start text-12-medium opacity-50 px-3.5"
+                        size="large"
+                        onClick={loadMoreSessions}
+                      >
+                        Load more
+                      </Button>
                     </div>
                   </Show>
                 </nav>
@@ -610,31 +695,23 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  return (
-    <div class="relative flex-1 min-h-0 flex flex-col">
-      <Header navigateToProject={navigateToProject} navigateToSession={navigateToSession} />
-      <div class="flex-1 min-h-0 flex">
-        <div
-          classList={{
-            "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
-            "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
-            "border-r border-border-weak-base": true,
-          }}
-          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
-        >
-          <Show when={layout.sidebar.opened()}>
-            <ResizeHandle
-              direction="horizontal"
-              size={layout.sidebar.width()}
-              min={150}
-              max={window.innerWidth * 0.3}
-              collapseThreshold={80}
-              onResize={layout.sidebar.resize}
-              onCollapse={layout.sidebar.close}
-            />
-          </Show>
-          <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
-            <Tooltip class="shrink-0" placement="right" value="Toggle sidebar" inactive={layout.sidebar.opened()}>
+  const SidebarContent = (sidebarProps: { mobile?: boolean }) => {
+    const expanded = () => sidebarProps.mobile || layout.sidebar.opened()
+    return (
+      <>
+        <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
+          <Show when={!sidebarProps.mobile}>
+            <Tooltip
+              class="shrink-0"
+              placement="right"
+              value={
+                <div class="flex items-center gap-2">
+                  <span>Toggle sidebar</span>
+                  <span class="text-icon-base text-12-medium">{command.keybind("sidebar.toggle")}</span>
+                </div>
+              }
+              inactive={expanded()}
+            >
               <Button
                 variant="ghost"
                 size="large"
@@ -665,102 +742,161 @@ export default function Layout(props: ParentProps) {
                 </Show>
               </Button>
             </Tooltip>
-            <DragDropProvider
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragOver={handleDragOver}
-              collisionDetector={closestCenter}
+          </Show>
+          <DragDropProvider
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver}
+            collisionDetector={closestCenter}
+          >
+            <DragDropSensors />
+            <ConstrainDragXAxis />
+            <div
+              ref={sidebarProps.mobile ? undefined : scrollContainerRef}
+              class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
             >
-              <DragDropSensors />
-              <ConstrainDragXAxis />
-              <div
-                ref={scrollContainerRef}
-                class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
-              >
-                <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
-                  <For each={layout.projects.list()}>{(project) => <SortableProject project={project} />}</For>
-                </SortableProvider>
-              </div>
-              <DragOverlay>
-                <ProjectDragOverlay />
-              </DragOverlay>
-            </DragDropProvider>
-          </div>
-          <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
-            <Switch>
-              <Match when={!providers.paid().length && layout.sidebar.opened()}>
-                <div class="rounded-md bg-background-stronger shadow-xs-border-base">
-                  <div class="p-3 flex flex-col gap-2">
-                    <div class="text-12-medium text-text-strong">Getting started</div>
-                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
-                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
-                  </div>
-                  <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
-                    <Button
-                      class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
-                      size="large"
-                      icon="plus"
-                      onClick={connectProvider}
-                    >
-                      <Show when={layout.sidebar.opened()}>Connect provider</Show>
-                    </Button>
-                  </Tooltip>
+              <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
+                <For each={layout.projects.list()}>
+                  {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
+                </For>
+              </SortableProvider>
+            </div>
+            <DragOverlay>
+              <ProjectDragOverlay />
+            </DragOverlay>
+          </DragDropProvider>
+        </div>
+        <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
+          <Switch>
+            <Match when={!providers.paid().length && expanded()}>
+              <div class="rounded-md bg-background-stronger shadow-xs-border-base">
+                <div class="p-3 flex flex-col gap-2">
+                  <div class="text-12-medium text-text-strong">Getting started</div>
+                  <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
+                  <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
                 </div>
-              </Match>
-              <Match when={true}>
-                <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                <Tooltip placement="right" value="Connect provider" inactive={expanded()}>
                   <Button
-                    class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
-                    variant="ghost"
+                    class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
                     size="large"
                     icon="plus"
                     onClick={connectProvider}
                   >
-                    <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                    Connect provider
                   </Button>
                 </Tooltip>
-              </Match>
-            </Switch>
-            <Show when={platform.openDirectoryPickerDialog}>
-              <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
+              </div>
+            </Match>
+            <Match when={true}>
+              <Tooltip placement="right" value="Connect provider" inactive={expanded()}>
                 <Button
-                  class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
                   size="large"
-                  icon="folder-add-left"
-                  onClick={chooseProject}
+                  icon="plus"
+                  onClick={connectProvider}
                 >
-                  <Show when={layout.sidebar.opened()}>Open project</Show>
+                  <Show when={expanded()}>Connect provider</Show>
                 </Button>
               </Tooltip>
-            </Show>
-            {/* <Tooltip placement="right" value="Settings" inactive={layout.sidebar.opened()}> */}
-            {/*   <Button */}
-            {/*     disabled */}
-            {/*     class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2" */}
-            {/*     variant="ghost" */}
-            {/*     size="large" */}
-            {/*     icon="settings-gear" */}
-            {/*   > */}
-            {/*     <Show when={layout.sidebar.opened()}>Settings</Show> */}
-            {/*   </Button> */}
-            {/* </Tooltip> */}
-            <Tooltip placement="right" value="Share feedback" inactive={layout.sidebar.opened()}>
+            </Match>
+          </Switch>
+          <Show when={platform.openDirectoryPickerDialog}>
+            <Tooltip
+              placement="right"
+              value={
+                <div class="flex items-center gap-2">
+                  <span>Open project</span>
+                  <Show when={!sidebarProps.mobile}>
+                    <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
+                  </Show>
+                </div>
+              }
+              inactive={expanded()}
+            >
               <Button
-                as={"a"}
-                href="https://opencode.ai/desktop-feedback"
-                target="_blank"
-                class="flex w-full text-left justify-start text-12-medium text-text-base stroke-[1.5px] rounded-lg px-2"
+                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                 variant="ghost"
                 size="large"
-                icon="bubble-5"
+                icon="folder-add-left"
+                onClick={chooseProject}
               >
-                <Show when={layout.sidebar.opened()}>Share feedback</Show>
+                <Show when={expanded()}>Open project</Show>
               </Button>
             </Tooltip>
+          </Show>
+          <Tooltip placement="right" value="Share feedback" inactive={expanded()}>
+            <Button
+              as={"a"}
+              href="https://opencode.ai/desktop-feedback"
+              target="_blank"
+              class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
+              variant="ghost"
+              size="large"
+              icon="bubble-5"
+            >
+              <Show when={expanded()}>Share feedback</Show>
+            </Button>
+          </Tooltip>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <div class="relative flex-1 min-h-0 flex flex-col">
+      <Header
+        navigateToProject={navigateToProject}
+        navigateToSession={navigateToSession}
+        onMobileMenuToggle={mobileSidebar.toggle}
+      />
+      <div class="flex-1 min-h-0 flex">
+        <div
+          classList={{
+            "hidden xl:flex": true,
+            "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
+            "flex-col gap-5.5 items-start self-stretch justify-between": true,
+            "border-r border-border-weak-base contain-strict": true,
+          }}
+          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
+        >
+          <Show when={layout.sidebar.opened()}>
+            <ResizeHandle
+              direction="horizontal"
+              size={layout.sidebar.width()}
+              min={150}
+              max={window.innerWidth * 0.3}
+              collapseThreshold={80}
+              onResize={layout.sidebar.resize}
+              onCollapse={layout.sidebar.close}
+            />
+          </Show>
+          <SidebarContent />
+        </div>
+        <div class="xl:hidden">
+          <div
+            classList={{
+              "fixed inset-0 bg-black/50 z-40 transition-opacity duration-200": true,
+              "opacity-100 pointer-events-auto": mobileSidebar.open(),
+              "opacity-0 pointer-events-none": !mobileSidebar.open(),
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) mobileSidebar.hide()
+            }}
+          />
+          <div
+            classList={{
+              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pt-12 pb-5 transition-transform duration-200 ease-out": true,
+              "translate-x-0": mobileSidebar.open(),
+              "-translate-x-full": !mobileSidebar.open(),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SidebarContent mobile />
           </div>
         </div>
-        <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
+
+        <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict">{props.children}</main>
       </div>
       <Toast.Region />
     </div>

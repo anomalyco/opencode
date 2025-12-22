@@ -28,6 +28,7 @@ import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
+import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
@@ -48,7 +49,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
-  export const OUTPUT_TOKEN_MAX = 32_000
+  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
   const state = Instance.state(
     () => {
@@ -325,42 +326,60 @@ export namespace SessionPrompt {
               prompt: task.prompt,
               description: task.description,
               subagent_type: task.agent,
+              command: task.command,
             },
             time: {
               start: Date.now(),
             },
           },
         })) as MessageV2.ToolPart
+        const taskArgs = {
+          prompt: task.prompt,
+          description: task.description,
+          subagent_type: task.agent,
+          command: task.command,
+        }
+        await Plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          { args: taskArgs },
+        )
         let executionError: Error | undefined
         const result = await taskTool
-          .execute(
-            {
-              prompt: task.prompt,
-              description: task.description,
-              subagent_type: task.agent,
+          .execute(taskArgs, {
+            agent: task.agent,
+            messageID: assistantMessage.id,
+            sessionID: sessionID,
+            abort,
+            async metadata(input) {
+              await Session.updatePart({
+                ...part,
+                type: "tool",
+                state: {
+                  ...part.state,
+                  ...input,
+                },
+              } satisfies MessageV2.ToolPart)
             },
-            {
-              agent: task.agent,
-              messageID: assistantMessage.id,
-              sessionID: sessionID,
-              abort,
-              async metadata(input) {
-                await Session.updatePart({
-                  ...part,
-                  type: "tool",
-                  state: {
-                    ...part.state,
-                    ...input,
-                  },
-                } satisfies MessageV2.ToolPart)
-              },
-            },
-          )
+          })
           .catch((error) => {
             executionError = error
             log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
             return undefined
           })
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: "task",
+            sessionID,
+            callID: part.id,
+          },
+          result,
+        )
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -396,6 +415,30 @@ export namespace SessionPrompt {
             },
           } satisfies MessageV2.ToolPart)
         }
+
+        // Add synthetic user message to prevent certain reasoning models from erroring
+        // If we create assistant messages w/ out user ones following mid loop thinking signatures
+        // will be missing and it can cause errors for models like gemini for example
+        const summaryUserMsg: MessageV2.User = {
+          id: Identifier.ascending("message"),
+          sessionID,
+          role: "user",
+          time: {
+            created: Date.now(),
+          },
+          agent: lastUser.agent,
+          model: lastUser.model,
+        }
+        await Session.updateMessage(summaryUserMsg)
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: summaryUserMsg.id,
+          sessionID,
+          type: "text",
+          text: "Summarize the task tool output above and continue with your task.",
+          synthetic: true,
+        } satisfies MessageV2.TextPart)
+
         continue
       }
 
@@ -489,7 +532,11 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system: [
+          ...(await SystemPrompt.environment()),
+          ...(await SystemPrompt.skills()),
+          ...(await SystemPrompt.custom()),
+        ],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
@@ -672,7 +719,7 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? "build")
+    const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -683,6 +730,7 @@ export namespace SessionPrompt {
       tools: input.tools,
       agent: agent.name,
       model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      system: input.system,
     }
 
     const parts = await Promise.all(
@@ -1096,7 +1144,7 @@ export namespace SessionPrompt {
           `
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
-            ${input.command}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },
@@ -1105,8 +1153,9 @@ export namespace SessionPrompt {
           "-c",
           "-l",
           `
+            shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
-            ${input.command}
+            eval ${JSON.stringify(input.command)}
           `,
         ],
       },
@@ -1237,7 +1286,7 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
-    const agentName = command.agent ?? input.agent ?? "build"
+    const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
@@ -1264,7 +1313,7 @@ export namespace SessionPrompt {
       const results = await Promise.all(
         shell.map(async ([, cmd]) => {
           try {
-            return await $`${{ raw: cmd }}`.nothrow().text()
+            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
           } catch (error) {
             return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
           }
@@ -1288,6 +1337,20 @@ export namespace SessionPrompt {
       if (input.model) return Provider.parseModel(input.model)
       return await lastModel(input.sessionID)
     })()
+
+    try {
+      await Provider.getModel(model.providerID, model.modelID)
+    } catch (e) {
+      if (Provider.ModelNotFoundError.isInstance(e)) {
+        const { providerID, modelID, suggestions } = e.data
+        const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+        })
+      }
+      throw e
+    }
     const agent = await Agent.get(agentName)
 
     const parts =
@@ -1297,6 +1360,7 @@ export namespace SessionPrompt {
               type: "subtask" as const,
               agent: agent.name,
               description: command.description ?? "",
+              command: input.command,
               // TODO: how can we make task tool accept a more complex input?
               prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
             },
@@ -1365,7 +1429,7 @@ export namespace SessionPrompt {
               time: {
                 created: Date.now(),
               },
-              agent: input.message.info.role === "user" ? input.message.info.agent : "build",
+              agent: input.message.info.role === "user" ? input.message.info.agent : await Agent.defaultAgent(),
               model: {
                 providerID: input.providerID,
                 modelID: input.modelID,

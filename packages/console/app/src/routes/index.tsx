@@ -1,6 +1,6 @@
 import "./index.css"
 import { Title, Meta, Link } from "@solidjs/meta"
-// import { HttpHeader } from "@solidjs/start"
+//import { HttpHeader } from "@solidjs/start"
 import video from "../asset/lander/opencode-min.mp4"
 import videoPoster from "../asset/lander/opencode-poster.png"
 import { IconCopy, IconCheck } from "../component/icon"

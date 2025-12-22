@@ -16,6 +16,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
