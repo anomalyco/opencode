@@ -1777,4 +1777,74 @@ export namespace LSPServer {
       }
     },
   }
+  export const TypstLS: Info = {
+    id: "typst",
+    extensions: [".typ"],
+    root: async () => Instance.directory,
+    async spawn(root) {
+      let bin = Bun.which("tinymist",
+      {
+          PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading tinymist from GitHub releases")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/Myriad-Dreamin/tinymist/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch tinymist release info")
+          return
+        }
+
+        const release = (await releaseResponse.json()) as {
+          tag_name?: string
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+
+        const platforms = [
+          "darwin",
+          "linux",
+          "win32",
+          "alpine",
+        ]
+
+        const tmPlatform = process.platform
+        if (!platforms.includes(tmPlatform)){
+          log.error(`Platform ${tmPlatform} is not supported by tinymist auto-download`)
+          return
+        }
+        const arch = process.arch
+
+        const tmArch = arch === "arm64" ? "arm64" : "x64"
+        const tmExt = tmPlatform === "win32" ? ".exe" : ""
+        const assetName = `tinymist-${tmPlatform}-${tmArch}${tmExt}`
+        const assets = release.assets ?? []
+        const asset = assets.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) {
+          log.error(`Could not find asset ${assetName} in tinymist release`)
+          return
+        }
+        const downloadResponse = await fetch(asset.browser_download_url)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download terraform-ls")
+          return
+        }
+        bin = path.join(Global.Path.bin, `tinymist${tmExt}`)
+        await Bun.file(bin).write(downloadResponse)
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to download tinymist binary")
+          return
+        }
+        if (tmPlatform !== "win32") {
+          await $`chmod +x ${bin}`.quiet().nothrow()
+        }
+        log.info(`installed tinymist`, { bin })
+      }
+      return {
+        process: spawn(bin, {
+          cwd: root
+        })
+      }
+    }
+  }
 }
