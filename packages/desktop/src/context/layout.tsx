@@ -1,10 +1,10 @@
 import { createStore, produce } from "solid-js/store"
 import { batch, createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { makePersisted } from "@solid-primitives/storage"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { Project } from "@opencode-ai/sdk/v2"
+import { persisted } from "@/utils/persist"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -22,14 +22,20 @@ export function getAvatarColors(key?: string) {
   }
 }
 
-type Dialog = "provider" | "model" | "connect"
+type SessionTabs = {
+  active?: string
+  all: string[]
+}
+
+export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
     const globalSdk = useGlobalSDK()
     const globalSync = useGlobalSync()
-    const [store, setStore] = makePersisted(
+    const [store, setStore, _, ready] = persisted(
+      "layout.v3",
       createStore({
         projects: [] as { worktree: string; expanded: boolean }[],
         sidebar: {
@@ -40,27 +46,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: false,
           height: 280,
         },
-        review: {
-          state: "pane" as "pane" | "tab",
+        session: {
+          width: 600,
         },
+        sessionTabs: {} as Record<string, SessionTabs>,
       }),
-      {
-        name: "layout.v1",
-      },
     )
-    const [ephemeral, setEphemeral] = createStore<{
-      connect: {
-        provider?: string
-        state?: "pending" | "complete" | "error"
-        error?: string
-      }
-      dialog: {
-        open?: Dialog
-      }
-    }>({
-      connect: {},
-      dialog: {},
-    })
+
     const usedColors = new Set<AvatarColorKey>()
 
     function pickAvailableColor(): AvatarColorKey {
@@ -71,21 +63,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     function enrich(project: { worktree: string; expanded: boolean }) {
       const metadata = globalSync.data.project.find((x) => x.worktree === project.worktree)
-      if (!metadata) return []
       return [
         {
           ...project,
-          ...metadata,
+          ...(metadata ?? {}),
         },
       ]
     }
 
-    function colorize(project: Project & { expanded: boolean }) {
+    function colorize(project: LocalProject) {
       if (project.icon?.color) return project
       const color = pickAvailableColor()
       usedColors.add(color)
       project.icon = { ...project.icon, color }
-      globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      if (project.id) {
+        globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      }
       return project
     }
 
@@ -101,10 +94,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
 
     return {
+      ready,
       projects: {
         list,
         open(directory: string) {
-          if (store.projects.find((x) => x.worktree === directory)) return
+          if (store.projects.find((x) => x.worktree === directory)) {
+            return
+          }
           globalSync.project.loadSessions(directory)
           setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },
@@ -160,66 +156,87 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "height", height)
         },
       },
-      review: {
-        state: createMemo(() => store.review?.state ?? "closed"),
-        pane() {
-          setStore("review", "state", "pane")
-        },
-        tab() {
-          setStore("review", "state", "tab")
-        },
-      },
-      dialog: {
-        opened: createMemo(() => ephemeral.dialog?.open),
-        open(dialog: Dialog) {
-          batch(() => {
-            // if (dialog !== "connect") {
-            //   setEphemeral("connect", {})
-            // }
-            setEphemeral("dialog", "open", dialog)
-          })
-        },
-        close(dialog: Dialog) {
-          if (ephemeral.dialog.open === dialog) {
-            setEphemeral(
-              produce((state) => {
-                state.dialog.open = undefined
-                state.connect = {}
-              }),
-            )
+      session: {
+        width: createMemo(() => store.session?.width ?? 600),
+        resize(width: number) {
+          if (!store.session) {
+            setStore("session", { width })
+          } else {
+            setStore("session", "width", width)
           }
         },
-        connect(provider: string) {
-          setEphemeral(
-            produce((state) => {
-              state.dialog.open = "connect"
-              state.connect = { provider, state: "pending" }
-            }),
-          )
-        },
       },
-      connect: {
-        provider: createMemo(() => ephemeral.connect.provider),
-        state: createMemo(() => ephemeral.connect.state),
-        complete() {
-          setEphemeral(
-            produce((state) => {
-              state.dialog.open = "model"
-              state.connect.state = "complete"
-            }),
-          )
-        },
-        error(message: string) {
-          setEphemeral(
-            produce((state) => {
-              state.connect.state = "error"
-              state.connect.error = message
-            }),
-          )
-        },
-        clear() {
-          setEphemeral("connect", {})
-        },
+      tabs(sessionKey: string) {
+        const tabs = createMemo(() => store.sessionTabs[sessionKey] ?? { all: [] })
+        return {
+          tabs,
+          active: createMemo(() => tabs().active),
+          all: createMemo(() => tabs().all),
+          setActive(tab: string | undefined) {
+            if (!store.sessionTabs[sessionKey]) {
+              setStore("sessionTabs", sessionKey, { all: [], active: tab })
+            } else {
+              setStore("sessionTabs", sessionKey, "active", tab)
+            }
+          },
+          setAll(all: string[]) {
+            if (!store.sessionTabs[sessionKey]) {
+              setStore("sessionTabs", sessionKey, { all, active: undefined })
+            } else {
+              setStore("sessionTabs", sessionKey, "all", all)
+            }
+          },
+          async open(tab: string) {
+            const current = store.sessionTabs[sessionKey] ?? { all: [] }
+            if (tab !== "review") {
+              if (!current.all.includes(tab)) {
+                if (!store.sessionTabs[sessionKey]) {
+                  setStore("sessionTabs", sessionKey, { all: [tab], active: tab })
+                } else {
+                  setStore("sessionTabs", sessionKey, "all", [...current.all, tab])
+                  setStore("sessionTabs", sessionKey, "active", tab)
+                }
+                return
+              }
+            }
+            if (!store.sessionTabs[sessionKey]) {
+              setStore("sessionTabs", sessionKey, { all: [], active: tab })
+            } else {
+              setStore("sessionTabs", sessionKey, "active", tab)
+            }
+          },
+          close(tab: string) {
+            const current = store.sessionTabs[sessionKey]
+            if (!current) return
+            batch(() => {
+              setStore(
+                "sessionTabs",
+                sessionKey,
+                "all",
+                current.all.filter((x) => x !== tab),
+              )
+              if (current.active === tab) {
+                const index = current.all.findIndex((f) => f === tab)
+                const previous = current.all[Math.max(0, index - 1)]
+                setStore("sessionTabs", sessionKey, "active", previous)
+              }
+            })
+          },
+          move(tab: string, to: number) {
+            const current = store.sessionTabs[sessionKey]
+            if (!current) return
+            const index = current.all.findIndex((f) => f === tab)
+            if (index === -1) return
+            setStore(
+              "sessionTabs",
+              sessionKey,
+              "all",
+              produce((opened) => {
+                opened.splice(to, 0, opened.splice(index, 1)[0])
+              }),
+            )
+          },
+        }
       },
     }
   },

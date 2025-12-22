@@ -91,7 +91,7 @@ export type ToastVariant = "default" | "success" | "error" | "loading"
 
 export interface ToastAction {
   label: string
-  onClick: () => void
+  onClick: "dismiss" | (() => void)
 }
 
 export interface ToastOptions {
@@ -100,13 +100,19 @@ export interface ToastOptions {
   icon?: IconProps["name"]
   variant?: ToastVariant
   duration?: number
+  persistent?: boolean
   actions?: ToastAction[]
 }
 
 export function showToast(options: ToastOptions | string) {
   const opts = typeof options === "string" ? { description: options } : options
   return toaster.show((props) => (
-    <Toast toastId={props.toastId} duration={opts.duration} data-variant={opts.variant ?? "default"}>
+    <Toast
+      toastId={props.toastId}
+      duration={opts.duration}
+      persistent={opts.persistent}
+      data-variant={opts.variant ?? "default"}
+    >
       <Show when={opts.icon}>
         <Toast.Icon name={opts.icon!} />
       </Show>
@@ -120,7 +126,10 @@ export function showToast(options: ToastOptions | string) {
         <Show when={opts.actions?.length}>
           <Toast.Actions>
             {opts.actions!.map((action) => (
-              <button data-slot="toast-action" onClick={action.onClick}>
+              <button
+                data-slot="toast-action"
+                onClick={typeof action.onClick === "function" ? action.onClick : () => toaster.dismiss(props.toastId)}
+              >
                 {action.label}
               </button>
             ))}

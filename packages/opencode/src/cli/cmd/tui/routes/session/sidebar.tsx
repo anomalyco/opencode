@@ -9,6 +9,7 @@ import { Global } from "@/global"
 import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
+import { useKV } from "../../context/kv"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -48,12 +49,13 @@ export function Sidebar(props: { sessionID: string }) {
     }
   })
 
-  const keybind = useKeybind()
   const directory = useDirectory()
+  const kv = useKV()
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
+  const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
 
   return (
     <Show when={session()}>
@@ -152,7 +154,11 @@ export function Sidebar(props: { sessionID: string }) {
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
                 <Show when={sync.data.lsp.length === 0}>
-                  <text fg={theme.textMuted}>LSPs will activate as files are read</text>
+                  <text fg={theme.textMuted}>
+                    {sync.data.config.lsp === false
+                      ? "LSPs have been disabled in settings"
+                      : "LSPs will activate as files are read"}
+                  </text>
                 </Show>
                 <For each={sync.data.lsp}>
                   {(item) => (
@@ -249,7 +255,7 @@ export function Sidebar(props: { sessionID: string }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <Show when={!hasProviders()}>
+          <Show when={!hasProviders() && !gettingStartedDismissed()}>
             <box
               backgroundColor={theme.backgroundElement}
               paddingTop={1}
@@ -263,9 +269,14 @@ export function Sidebar(props: { sessionID: string }) {
                 ⬖
               </text>
               <box flexGrow={1} gap={1}>
-                <text fg={theme.text}>
-                  <b>Getting started</b>
-                </text>
+                <box flexDirection="row" justifyContent="space-between">
+                  <text fg={theme.text}>
+                    <b>Getting started</b>
+                  </text>
+                  <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
+                    ✕
+                  </text>
+                </box>
                 <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
                 <text fg={theme.textMuted}>
                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc

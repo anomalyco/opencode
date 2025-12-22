@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { Skill } from "../skill"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -14,8 +15,7 @@ import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_SUMMARIZE from "./prompt/summarize.txt"
-import PROMPT_TITLE from "./prompt/title.txt"
+
 import PROMPT_CODEX from "./prompt/codex.txt"
 import type { Provider } from "@/provider/provider"
 
@@ -119,30 +119,24 @@ export namespace SystemPrompt {
     return Promise.all(found).then((result) => result.filter(Boolean))
   }
 
-  export function compaction(providerID: string) {
-    switch (providerID) {
-      case "anthropic":
-        return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_COMPACTION]
-      default:
-        return [PROMPT_COMPACTION]
-    }
-  }
+  export async function skills() {
+    const all = await Skill.all()
+    if (all.length === 0) return []
 
-  export function summarize(providerID: string) {
-    switch (providerID) {
-      case "anthropic":
-        return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_SUMMARIZE]
-      default:
-        return [PROMPT_SUMMARIZE]
+    const lines = [
+      "You have access to skills listed in `<available_skills>`. When a task matches a skill's description, read its SKILL.md file to get detailed instructions.",
+      "",
+      "<available_skills>",
+    ]
+    for (const skill of all) {
+      lines.push("  <skill>")
+      lines.push(`    <name>${skill.name}</name>`)
+      lines.push(`    <description>${skill.description}</description>`)
+      lines.push(`    <location>${skill.location}</location>`)
+      lines.push("  </skill>")
     }
-  }
+    lines.push("</available_skills>")
 
-  export function title(providerID: string) {
-    switch (providerID) {
-      case "anthropic":
-        return [PROMPT_ANTHROPIC_SPOOF.trim(), PROMPT_TITLE]
-      default:
-        return [PROMPT_TITLE]
-    }
+    return [lines.join("\n")]
   }
 }
