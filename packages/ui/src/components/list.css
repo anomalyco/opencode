@@ -1,29 +1,18 @@
 @property --bottom-fade {
   syntax: "<length>";
   inherits: false;
-  initial-value: 16px;
-}
-
-@property --top-fade-opacity {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 0;
+  initial-value: 0px;
 }
 
 @keyframes scroll {
   0% {
-    --bottom-fade: 16px;
-    --top-fade-opacity: 0;
-  }
-  10% {
-    --top-fade-opacity: 1;
+    --bottom-fade: 20px;
   }
   90% {
-    --bottom-fade: 16px;
+    --bottom-fade: 20px;
   }
   100% {
     --bottom-fade: 0;
-    --top-fade-opacity: 1;
   }
 }
 
@@ -37,10 +26,11 @@
   [data-slot="list-search"] {
     display: flex;
     flex-shrink: 0;
-    padding: 8px 8px 8px 12px;
+    padding: 8px;
     align-items: center;
     gap: 12px;
     align-self: stretch;
+    margin-bottom: 4px;
 
     border-radius: var(--radius-md);
     background: var(--surface-base);
@@ -118,8 +108,7 @@
       [data-slot="list-header"] {
         display: flex;
         z-index: 10;
-        height: 32px;
-        padding: 0 12px 8px 12px;
+        padding: 0 12px 8px 8px;
         justify-content: space-between;
         align-items: center;
         align-self: stretch;
@@ -146,7 +135,12 @@
           height: 16px;
           background: linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha), transparent);
           pointer-events: none;
-          opacity: var(--top-fade-opacity);
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+
+        &[data-stuck="true"]::after {
+          opacity: 1;
         }
       }
 
@@ -159,10 +153,10 @@
         [data-slot="list-item"] {
           display: flex;
           width: 100%;
-          padding: 6px 8px 6px 4px;
+          padding: 6px 8px 6px 8px;
           align-items: center;
           color: var(--text-strong);
-          scroll-margin-top: 32px;
+          scroll-margin-top: 28px;
 
           /* text-14-medium */
           font-family: var(--font-family-sans);
@@ -178,6 +172,11 @@
           [data-slot="list-item-active-icon"] {
             display: none;
             color: var(--icon-strong-base);
+          }
+
+          [data-slot="list-item-extra-icon"] {
+            color: var(--icon-base);
+            margin-left: -4px;
           }
 
           &[data-active="true"] {
