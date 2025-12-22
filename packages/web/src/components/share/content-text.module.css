@@ -21,14 +21,12 @@
     line-height: 1.5;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
+    max-height: calc(1.5em * 3); /* 3 lines at 1.5 line-height */
     overflow: hidden;
 
     [data-expanded] & {
-      display: block;
+      max-height: none;
+      overflow: visible;
     }
   }
 
