@@ -1123,6 +1123,10 @@ export type KeybindsConfig = {
    */
   session_child_cycle_reverse?: string
   /**
+   * Go to parent session
+   */
+  session_parent?: string
+  /**
    * Suspend terminal
    */
   terminal_suspend?: string
