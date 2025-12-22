@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { ACP } from "../../src/acp/agent"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import type { Event } from "@opencode-ai/sdk/v2"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
 
 type SessionUpdateParams = Parameters<AgentSideConnection["sessionUpdate"]>[0]
 type RequestPermissionParams = Parameters<AgentSideConnection["requestPermission"]>[0]
@@ -192,97 +194,115 @@ function createFakeAgent() {
 
 describe("acp.agent event subscription", () => {
   test("routes message.part.updated by the event sessionID (no cross-session pollution)", async () => {
-    const { agent, controller, updates, stop } = createFakeAgent()
-    const cwd = "/tmp/opencode-acp-test"
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, updates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
 
-    const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
-    const sessionB = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const sessionB = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
 
-    controller.push({
-      directory: cwd,
-      payload: {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            sessionID: sessionB,
-            messageID: "msg_1",
-            type: "text",
-            synthetic: false,
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                sessionID: sessionB,
+                messageID: "msg_1",
+                type: "text",
+                synthetic: false,
+              },
+              delta: "hello",
+            },
           },
-          delta: "hello",
-        },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 10))
+
+        expect((updates.get(sessionA) ?? []).includes("agent_message_chunk")).toBe(false)
+        expect((updates.get(sessionB) ?? []).includes("agent_message_chunk")).toBe(true)
+
+        stop()
       },
-    } as any)
-
-    await new Promise((r) => setTimeout(r, 10))
-
-    expect((updates.get(sessionA) ?? []).includes("agent_message_chunk")).toBe(false)
-    expect((updates.get(sessionB) ?? []).includes("agent_message_chunk")).toBe(true)
-
-    stop()
+    })
   })
 
   test("keeps concurrent sessions isolated when message.part.updated events are interleaved", async () => {
-    const { agent, controller, chunks, stop } = createFakeAgent()
-    const cwd = "/tmp/opencode-acp-test"
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, chunks, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
 
-    const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
-    const sessionB = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const sessionB = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
 
-    const tokenA = ["ALPHA_", "111", "_X"]
-    const tokenB = ["BETA_", "222", "_Y"]
+        const tokenA = ["ALPHA_", "111", "_X"]
+        const tokenB = ["BETA_", "222", "_Y"]
 
-    const push = (sessionId: string, messageID: string, delta: string) => {
-      controller.push({
-        directory: cwd,
-        payload: {
-          type: "message.part.updated",
-          properties: {
-            part: {
-              sessionID: sessionId,
-              messageID,
-              type: "text",
-              synthetic: false,
+        const push = (sessionId: string, messageID: string, delta: string) => {
+          controller.push({
+            directory: cwd,
+            payload: {
+              type: "message.part.updated",
+              properties: {
+                part: {
+                  sessionID: sessionId,
+                  messageID,
+                  type: "text",
+                  synthetic: false,
+                },
+                delta,
+              },
             },
-            delta,
-          },
-        },
-      } as any)
-    }
+          } as any)
+        }
 
-    push(sessionA, "msg_a", tokenA[0])
-    push(sessionB, "msg_b", tokenB[0])
-    push(sessionA, "msg_a", tokenA[1])
-    push(sessionB, "msg_b", tokenB[1])
-    push(sessionA, "msg_a", tokenA[2])
-    push(sessionB, "msg_b", tokenB[2])
+        push(sessionA, "msg_a", tokenA[0])
+        push(sessionB, "msg_b", tokenB[0])
+        push(sessionA, "msg_a", tokenA[1])
+        push(sessionB, "msg_b", tokenB[1])
+        push(sessionA, "msg_a", tokenA[2])
+        push(sessionB, "msg_b", tokenB[2])
 
-    await new Promise((r) => setTimeout(r, 20))
+        await new Promise((r) => setTimeout(r, 20))
 
-    const a = chunks.get(sessionA) ?? ""
-    const b = chunks.get(sessionB) ?? ""
+        const a = chunks.get(sessionA) ?? ""
+        const b = chunks.get(sessionB) ?? ""
 
-    expect(a).toContain(tokenA.join(""))
-    expect(b).toContain(tokenB.join(""))
-    for (const part of tokenB) expect(a).not.toContain(part)
-    for (const part of tokenA) expect(b).not.toContain(part)
+        expect(a).toContain(tokenA.join(""))
+        expect(b).toContain(tokenB.join(""))
+        for (const part of tokenB) expect(a).not.toContain(part)
+        for (const part of tokenA) expect(b).not.toContain(part)
 
-    stop()
+        stop()
+      },
+    })
   })
 
   test("does not create additional event subscriptions on repeated loadSession()", async () => {
-    const { agent, calls, stop } = createFakeAgent()
-    const cwd = "/tmp/opencode-acp-test"
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, calls, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
 
-    const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
 
-    await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
-    await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
-    await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
-    await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
+        await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
+        await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
+        await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
+        await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
 
-    expect(calls.eventSubscribe).toBe(1)
+        expect(calls.eventSubscribe).toBe(1)
 
-    stop()
+        stop()
+      },
+    })
   })
 })
