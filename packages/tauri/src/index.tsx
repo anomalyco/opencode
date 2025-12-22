@@ -1,14 +1,18 @@
 // @refresh reload
 import { render } from "solid-js/web"
 import { App, PlatformProvider, Platform } from "@opencode-ai/desktop"
-import { onMount } from "solid-js"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { AsyncStorage } from "@solid-primitives/storage"
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
+import { Store } from "@tauri-apps/plugin-store"
 
-import { runUpdater, UPDATER_ENABLED } from "./updater"
+import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
+import { check, Update } from "@tauri-apps/plugin-updater"
+import { invoke } from "@tauri-apps/api/core"
+import { relaunch } from "@tauri-apps/plugin-process"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -16,6 +20,8 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
   )
 }
+
+let update: Update | null = null
 
 const platform: Platform = {
   platform: "tauri",
@@ -53,7 +59,7 @@ const platform: Platform = {
   storage: (name = "default.dat") => {
     const api: AsyncStorage = {
       _store: null,
-      _getStore: async () => api._store || (api._store = (await import("@tauri-apps/plugin-store")).Store.load(name)),
+      _getStore: async () => api._store || (api._store = Store.load(name)),
       getItem: async (key: string) => (await (await api._getStore()).get(key)) ?? null,
       setItem: async (key: string, value: string) => await (await api._getStore()).set(key, value),
       removeItem: async (key: string) => await (await api._getStore()).delete(key),
@@ -66,15 +72,37 @@ const platform: Platform = {
     }
     return api
   },
+
+  checkUpdate: async () => {
+    if (!UPDATER_ENABLED) return { updateAvailable: false }
+    update = await check()
+    if (!update) return { updateAvailable: false }
+    await update.download()
+    return { updateAvailable: true, version: update.version }
+  },
+
+  update: async () => {
+    if (!UPDATER_ENABLED || !update) return
+    await update.install()
+  },
+
+  restart: async () => {
+    await invoke("kill_sidecar")
+    await relaunch()
+  },
+
+  // @ts-expect-error
+  fetch: tauriFetch,
 }
 
 createMenu()
 
-render(() => {
-  onMount(() => {
-    if (UPDATER_ENABLED) runUpdater({ alertOnFail: false })
-  })
+// Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
+root?.addEventListener("mousewheel", (e) => {
+  e.stopPropagation()
+})
 
+render(() => {
   return (
     <PlatformProvider value={platform}>
       {ostype() === "macos" && (

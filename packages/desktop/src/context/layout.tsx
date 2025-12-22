@@ -27,6 +27,8 @@ type SessionTabs = {
   all: string[]
 }
 
+export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -44,8 +46,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: false,
           height: 280,
         },
-        review: {
-          state: "pane" as "pane" | "tab",
+        session: {
+          width: 600,
         },
         sessionTabs: {} as Record<string, SessionTabs>,
       }),
@@ -61,21 +63,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     function enrich(project: { worktree: string; expanded: boolean }) {
       const metadata = globalSync.data.project.find((x) => x.worktree === project.worktree)
-      if (!metadata) return []
       return [
         {
           ...project,
-          ...metadata,
+          ...(metadata ?? {}),
         },
       ]
     }
 
-    function colorize(project: Project & { expanded: boolean }) {
+    function colorize(project: LocalProject) {
       if (project.icon?.color) return project
       const color = pickAvailableColor()
       usedColors.add(color)
       project.icon = { ...project.icon, color }
-      globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      if (project.id) {
+        globalSdk.client.project.update({ projectID: project.id, icon: { color } })
+      }
       return project
     }
 
@@ -95,7 +98,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          if (store.projects.find((x) => x.worktree === directory)) return
+          if (store.projects.find((x) => x.worktree === directory)) {
+            return
+          }
           globalSync.project.loadSessions(directory)
           setStore("projects", (x) => [{ worktree: directory, expanded: true }, ...x])
         },
@@ -103,10 +108,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("projects", (x) => x.filter((x) => x.worktree !== directory))
         },
         expand(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: true } : x)))
+          const index = store.projects.findIndex((x) => x.worktree === directory)
+          if (index !== -1) setStore("projects", index, "expanded", true)
         },
         collapse(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: false } : x)))
+          const index = store.projects.findIndex((x) => x.worktree === directory)
+          if (index !== -1) setStore("projects", index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
           setStore("projects", (projects) => {
@@ -151,13 +158,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("terminal", "height", height)
         },
       },
-      review: {
-        state: createMemo(() => store.review?.state ?? "closed"),
-        pane() {
-          setStore("review", "state", "pane")
-        },
-        tab() {
-          setStore("review", "state", "tab")
+      session: {
+        width: createMemo(() => store.session?.width ?? 600),
+        resize(width: number) {
+          if (!store.session) {
+            setStore("session", { width })
+          } else {
+            setStore("session", "width", width)
+          }
         },
       },
       tabs(sessionKey: string) {
@@ -181,14 +189,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             }
           },
           async open(tab: string) {
-            if (tab === "chat") {
-              if (!store.sessionTabs[sessionKey]) {
-                setStore("sessionTabs", sessionKey, { all: [], active: undefined })
-              } else {
-                setStore("sessionTabs", sessionKey, "active", undefined)
-              }
-              return
-            }
             const current = store.sessionTabs[sessionKey] ?? { all: [] }
             if (tab !== "review") {
               if (!current.all.includes(tab)) {

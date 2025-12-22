@@ -26,7 +26,7 @@
       "icons/dev/icon.ico"
     ],
     "active": true,
-    "targets": ["deb", "rpm", "dmg", "nsis", "app"],
+    "targets": ["deb", "rpm", "dmg", "nsis", "app", "appimage"],
     "externalBin": ["sidecars/opencode-cli"],
     "macOS": {
       "entitlements": "./entitlements.plist"
