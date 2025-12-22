@@ -5,9 +5,11 @@ import {
   FilePart,
   Message as MessageType,
   Part as PartType,
+  ReasoningPart,
   TextPart,
   ToolPart,
   UserMessage,
+  Todo,
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -111,7 +113,7 @@ export type ToolInfo = {
   subtitle?: string
 }
 
-export function getToolInfo(tool: string, input: Record<string, any> = {}): ToolInfo {
+export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   switch (tool) {
     case "read":
       return {
@@ -186,8 +188,7 @@ export function getToolInfo(tool: string, input: Record<string, any> = {}): Tool
 }
 
 function getToolPartInfo(part: ToolPart): ToolInfo {
-  const state = part.state as any
-  const input = state.input || {}
+  const input = part.state.input || {}
   return getToolInfo(part.tool, input)
 }
 
@@ -424,7 +425,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
-  const part = props.part as any
+  const part = props.part as ReasoningPart
   return (
     <Show when={part.text.trim()}>
       <div data-component="reasoning-part">
@@ -722,14 +723,14 @@ ToolRegistry.register({
         trigger={{
           title: "To-dos",
           subtitle: props.input.todos
-            ? `${props.input.todos.filter((t: any) => t.status === "completed").length}/${props.input.todos.length}`
+            ? `${props.input.todos.filter((t: Todo) => t.status === "completed").length}/${props.input.todos.length}`
             : "",
         }}
       >
         <Show when={props.input.todos?.length}>
           <div data-component="todos">
             <For each={props.input.todos}>
-              {(todo: any) => (
+              {(todo: Todo) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
                   <div data-slot="message-part-todo-content" data-completed={todo.status === "completed"}>
                     {todo.content}
