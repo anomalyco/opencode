@@ -171,6 +171,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
+        case "session.compacted": {
+          sdk.client.session.messages({ sessionID: event.properties.sessionID, limit: 100 }).then((res) => {
+            if (!res.data) return
+            setStore(
+              produce((draft) => {
+                draft.message[event.properties.sessionID] = res.data!.map((x) => x.info)
+                for (const message of res.data!) {
+                  draft.part[message.info.id] = message.parts
+                }
+              }),
+            )
+          })
+          break
+        }
+
         case "message.updated": {
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
