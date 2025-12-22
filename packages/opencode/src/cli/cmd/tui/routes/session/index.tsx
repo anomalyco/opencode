@@ -28,6 +28,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
+import { formatMarkdownTables } from "@tui/util/markdown-table"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
@@ -1256,6 +1257,12 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+
+  const formattedContent = createMemo(() => {
+    const text = props.part.text.trim()
+    return formatMarkdownTables(text)
+  })
+
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1264,7 +1271,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           drawUnstyledText={false}
           streaming={true}
           syntaxStyle={syntax()}
-          content={props.part.text.trim()}
+          content={formattedContent()}
           conceal={ctx.conceal()}
           fg={theme.text}
         />
