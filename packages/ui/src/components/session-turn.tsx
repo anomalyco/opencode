@@ -3,7 +3,7 @@ import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { batch, createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -19,6 +19,7 @@ import { Button } from "./button"
 import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
+import { createAutoScroll } from "../hooks"
 
 function computeStatusFromPart(part: PartType | undefined): string | undefined {
   if (!part) return undefined
@@ -233,17 +234,14 @@ export function SessionTurn(
     })
   }
 
-  let scrollRef: HTMLDivElement | undefined
+  const autoScroll = createAutoScroll({
+    working,
+    onUserInteracted: props.onUserInteracted,
+  })
+
   const [store, setStore] = createStore({
-    contentRef: undefined as HTMLDivElement | undefined,
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
-    lastScrollTop: 0,
-    lastScrollHeight: 0,
-    lastContainerWidth: 0,
-    autoScrolled: false,
-    userScrolled: false,
-    reflowing: false,
     stickyHeaderHeight: 0,
     retrySeconds: 0,
     status: rawStatus(),
@@ -263,104 +261,6 @@ export function SessionTurn(
     updateSeconds()
     const timer = setInterval(updateSeconds, 1000)
     onCleanup(() => clearInterval(timer))
-  })
-
-  function handleScroll() {
-    if (!scrollRef || store.autoScrolled) return
-
-    const scrollTop = scrollRef.scrollTop
-    const scrollHeight = scrollRef.scrollHeight
-
-    if (store.reflowing) {
-      batch(() => {
-        setStore("lastScrollTop", scrollTop)
-        setStore("lastScrollHeight", scrollHeight)
-      })
-      return
-    }
-
-    const scrollHeightChanged = Math.abs(scrollHeight - store.lastScrollHeight) > 10
-    const scrollTopDelta = scrollTop - store.lastScrollTop
-
-    if (scrollHeightChanged && scrollTopDelta < 0) {
-      const heightRatio = store.lastScrollHeight > 0 ? scrollHeight / store.lastScrollHeight : 1
-      const expectedScrollTop = store.lastScrollTop * heightRatio
-      if (Math.abs(scrollTop - expectedScrollTop) < 100) {
-        batch(() => {
-          setStore("lastScrollTop", scrollTop)
-          setStore("lastScrollHeight", scrollHeight)
-        })
-        return
-      }
-    }
-
-    const reset = scrollTop <= 0 && store.lastScrollTop > 0 && working() && !store.userScrolled
-    if (reset) {
-      batch(() => {
-        setStore("lastScrollTop", scrollTop)
-        setStore("lastScrollHeight", scrollHeight)
-      })
-      requestAnimationFrame(scrollToBottom)
-      return
-    }
-
-    const scrolledUp = scrollTop < store.lastScrollTop - 50 && !scrollHeightChanged
-    if (scrolledUp && working()) {
-      setStore("userScrolled", true)
-      props.onUserInteracted?.()
-    }
-
-    batch(() => {
-      setStore("lastScrollTop", scrollTop)
-      setStore("lastScrollHeight", scrollHeight)
-    })
-  }
-
-  function handleInteraction() {
-    if (working()) {
-      setStore("userScrolled", true)
-      props.onUserInteracted?.()
-    }
-  }
-
-  function scrollToBottom() {
-    if (!scrollRef || store.userScrolled || !working()) return
-    setStore("autoScrolled", true)
-    requestAnimationFrame(() => {
-      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
-      requestAnimationFrame(() => {
-        batch(() => {
-          setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
-          setStore("lastScrollHeight", scrollRef?.scrollHeight ?? 0)
-          setStore("autoScrolled", false)
-        })
-      })
-    })
-  }
-
-  createResizeObserver(
-    () => store.contentRef,
-    ({ width }) => {
-      const widthChanged = Math.abs(width - store.lastContainerWidth) > 5
-      if (widthChanged && store.lastContainerWidth > 0) {
-        setStore("reflowing", true)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setStore("reflowing", false)
-            if (working() && !store.userScrolled) {
-              scrollToBottom()
-            }
-          })
-        })
-      } else if (!store.reflowing) {
-        scrollToBottom()
-      }
-      setStore("lastContainerWidth", width)
-    },
-  )
-
-  createEffect(() => {
-    if (!working()) setStore("userScrolled", false)
   })
 
   createResizeObserver(
@@ -412,12 +312,17 @@ export function SessionTurn(
 
   return (
     <div data-component="session-turn" class={props.classes?.root}>
-      <div ref={scrollRef} onScroll={handleScroll} data-slot="session-turn-content" class={props.classes?.content}>
-        <div onClick={handleInteraction}>
+      <div
+        ref={autoScroll.scrollRef}
+        onScroll={autoScroll.handleScroll}
+        data-slot="session-turn-content"
+        class={props.classes?.content}
+      >
+        <div onClick={autoScroll.handleInteraction}>
           <Show when={message()}>
             {(msg) => (
               <div
-                ref={(el) => setStore("contentRef", el)}
+                ref={autoScroll.contentRef}
                 data-message={msg().id}
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}

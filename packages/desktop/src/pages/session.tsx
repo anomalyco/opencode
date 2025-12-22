@@ -12,7 +12,7 @@ import {
   createRenderEffect,
   batch,
 } from "solid-js"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
+
 import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
@@ -27,6 +27,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import {
@@ -93,13 +94,6 @@ export default function Page() {
     userInteracted: false,
     stepsExpanded: true,
     mobileStepsExpanded: {} as Record<string, boolean>,
-    mobileLastScrollTop: 0,
-    mobileLastScrollHeight: 0,
-    mobileAutoScrolled: false,
-    mobileUserScrolled: false,
-    mobileContentRef: undefined as HTMLDivElement | undefined,
-    mobileLastContentWidth: 0,
-    mobileReflowing: false,
     messageId: undefined as string | undefined,
   })
 
@@ -541,90 +535,20 @@ export default function Page() {
 
   const showTabs = createMemo(() => diffs().length > 0 || tabs().all().length > 0)
 
-  let mobileScrollRef: HTMLDivElement | undefined
   const mobileWorking = createMemo(() => status().type !== "idle")
-
-  function handleMobileScroll() {
-    if (!mobileScrollRef || store.mobileAutoScrolled) return
-
-    const scrollTop = mobileScrollRef.scrollTop
-    const scrollHeight = mobileScrollRef.scrollHeight
-
-    if (store.mobileReflowing) {
-      batch(() => {
-        setStore("mobileLastScrollTop", scrollTop)
-        setStore("mobileLastScrollHeight", scrollHeight)
-      })
-      return
-    }
-
-    const scrolledUp = scrollTop < store.mobileLastScrollTop - 50
-    if (scrolledUp && mobileWorking()) {
-      setStore("mobileUserScrolled", true)
-      setStore("userInteracted", true)
-    }
-
-    batch(() => {
-      setStore("mobileLastScrollTop", scrollTop)
-      setStore("mobileLastScrollHeight", scrollHeight)
-    })
-  }
-
-  function handleMobileInteraction() {
-    if (mobileWorking()) {
-      setStore("mobileUserScrolled", true)
-      setStore("userInteracted", true)
-    }
-  }
-
-  function scrollMobileToBottom() {
-    if (!mobileScrollRef || store.mobileUserScrolled || !mobileWorking()) return
-    setStore("mobileAutoScrolled", true)
-    requestAnimationFrame(() => {
-      mobileScrollRef?.scrollTo({ top: mobileScrollRef.scrollHeight, behavior: "smooth" })
-      requestAnimationFrame(() => {
-        batch(() => {
-          setStore("mobileLastScrollTop", mobileScrollRef?.scrollTop ?? 0)
-          setStore("mobileLastScrollHeight", mobileScrollRef?.scrollHeight ?? 0)
-          setStore("mobileAutoScrolled", false)
-        })
-      })
-    })
-  }
-
-  createEffect(() => {
-    if (!mobileWorking()) setStore("mobileUserScrolled", false)
+  const mobileAutoScroll = createAutoScroll({
+    working: mobileWorking,
+    onUserInteracted: () => setStore("userInteracted", true),
   })
-
-  createResizeObserver(
-    () => store.mobileContentRef,
-    ({ width }) => {
-      const widthChanged = Math.abs(width - store.mobileLastContentWidth) > 5
-      if (widthChanged && store.mobileLastContentWidth > 0) {
-        setStore("mobileReflowing", true)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setStore("mobileReflowing", false)
-            if (mobileWorking() && !store.mobileUserScrolled) {
-              scrollMobileToBottom()
-            }
-          })
-        })
-      } else if (!store.mobileReflowing) {
-        scrollMobileToBottom()
-      }
-      setStore("mobileLastContentWidth", width)
-    },
-  )
 
   const MobileTurns = () => (
     <div
-      ref={mobileScrollRef}
-      onScroll={handleMobileScroll}
-      onClick={handleMobileInteraction}
+      ref={mobileAutoScroll.scrollRef}
+      onScroll={mobileAutoScroll.handleScroll}
+      onClick={mobileAutoScroll.handleInteraction}
       class="relative mt-2 min-w-0 w-full h-full overflow-y-auto no-scrollbar pb-12"
     >
-      <div ref={(el) => setStore("mobileContentRef", el)} class="flex flex-col gap-45 items-start justify-start mt-4">
+      <div ref={mobileAutoScroll.contentRef} class="flex flex-col gap-45 items-start justify-start mt-4">
         <For each={visibleUserMessages()}>
           {(message) => (
             <SessionTurn
