@@ -39,19 +39,6 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 
 const tags = [Script.channel]
 
-if (Bun.env.ACTIONS_RUNTIME_TOKEN) {
-  const { DefaultArtifactClient } = await import("@actions/artifact")
-
-  const artifactClient = new DefaultArtifactClient()
-
-  for await (const folder of $`ls ./dist`.lines()) {
-    if (!folder.startsWith("opencode-")) continue
-
-    const files = await Array.fromAsync(glob(`./dist/${folder}/bin/*`))
-    await artifactClient.uploadArtifact(folder, files, process.cwd())
-  }
-}
-
 const tasks = Object.entries(binaries).map(async ([name]) => {
   if (process.platform !== "win32") {
     await $`chmod -R 755 .`.cwd(`./dist/${name}`)
