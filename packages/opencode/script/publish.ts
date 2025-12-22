@@ -39,13 +39,13 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 
 const tags = [Script.channel]
 
-if(Bun.env.ACTIONS_RUNTIME_TOKEN) {
+if (Bun.env.ACTIONS_RUNTIME_TOKEN) {
   const { DefaultArtifactClient } = await import("@actions/artifact")
 
-  const artifactClient = new DefaultArtifactClient();
+  const artifactClient = new DefaultArtifactClient()
 
   for await (const folder of $`ls ./dist`.lines()) {
-    if (!folder.startsWith("opencode-")) continue;
+    if (!folder.startsWith("opencode-")) continue
 
     const files = await Array.fromAsync(glob(`./dist/${folder}/bin/*`))
     await artifactClient.uploadArtifact(folder, files, process.cwd())
