@@ -119,8 +119,8 @@ export namespace SystemPrompt {
     return Promise.all(found).then((result) => result.filter(Boolean))
   }
 
-  export async function skills() {
-    const all = await Skill.all()
+  export async function skills(agentSkills?: Record<string, boolean>) {
+    const all = agentSkills ? await Skill.forAgent(agentSkills) : await Skill.all()
     if (all.length === 0) return []
 
     const lines = [

@@ -289,3 +289,102 @@ description: A skill in the .claude/skills directory.
     },
   })
 })
+
+test("Skill.filter() with undefined returns all skills", async () => {
+  const skills = [
+    { name: "git-commit", description: "Git commit", location: "/path" },
+    { name: "git-push", description: "Git push", location: "/path" },
+    { name: "code-review", description: "Code review", location: "/path" },
+  ] as Skill.Info[]
+
+  const result = Skill.filter(skills, undefined)
+  expect(result).toEqual(skills)
+})
+
+test("Skill.filter() with empty object returns all skills", async () => {
+  const skills = [
+    { name: "git-commit", description: "Git commit", location: "/path" },
+    { name: "git-push", description: "Git push", location: "/path" },
+  ] as Skill.Info[]
+
+  const result = Skill.filter(skills, {})
+  expect(result).toEqual(skills)
+})
+
+test("Skill.filter() excludes skills with false values (blacklist mode)", async () => {
+  const skills = [
+    { name: "git-commit", description: "Git commit", location: "/path" },
+    { name: "git-push", description: "Git push", location: "/path" },
+    { name: "code-review", description: "Code review", location: "/path" },
+  ] as Skill.Info[]
+
+  const result = Skill.filter(skills, { "git-push": false })
+  expect(result.length).toBe(2)
+  expect(result.map((s) => s.name)).toEqual(["git-commit", "code-review"])
+})
+
+test("Skill.filter() supports wildcard patterns in blacklist mode", async () => {
+  const skills = [
+    { name: "git-commit", description: "Git commit", location: "/path" },
+    { name: "git-push", description: "Git push", location: "/path" },
+    { name: "code-review", description: "Code review", location: "/path" },
+  ] as Skill.Info[]
+
+  const result = Skill.filter(skills, { "git-*": false })
+  expect(result.length).toBe(1)
+  expect(result[0].name).toBe("code-review")
+})
+
+test("Skill.filter() with true values operates in whitelist mode", async () => {
+  const skills = [
+    { name: "git-commit", description: "Git commit", location: "/path" },
+    { name: "git-push", description: "Git push", location: "/path" },
+    { name: "code-review", description: "Code review", location: "/path" },
+  ] as Skill.Info[]
+
+  // Only spreadsheets: true means ONLY show skills matching true patterns
+  const result = Skill.filter(skills, { "git-commit": true })
+  expect(result.length).toBe(1)
+  expect(result[0].name).toBe("git-commit")
+})
+
+test("SystemPrompt.skills() filters skills when agent pattern provided", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir1 = path.join(dir, ".opencode", "skill", "git-commit")
+      await Bun.write(
+        path.join(skillDir1, "SKILL.md"),
+        `---
+name: git-commit
+description: Git commit helper.
+---
+`,
+      )
+      const skillDir2 = path.join(dir, ".opencode", "skill", "code-review")
+      await Bun.write(
+        path.join(skillDir2, "SKILL.md"),
+        `---
+name: code-review
+description: Code review helper.
+---
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      // Without filter
+      const allResult = await SystemPrompt.skills()
+      expect(allResult[0]).toContain("git-commit")
+      expect(allResult[0]).toContain("code-review")
+
+      // With filter excluding git-*
+      const filteredResult = await SystemPrompt.skills({ "git-*": false })
+      expect(filteredResult[0]).not.toContain("git-commit")
+      expect(filteredResult[0]).toContain("code-review")
+    },
+  })
+})

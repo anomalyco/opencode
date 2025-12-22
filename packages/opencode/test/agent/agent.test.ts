@@ -144,3 +144,37 @@ Custom primary agent`,
     },
   })
 })
+
+test("agent markdown frontmatter supports skills filtering", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const agentDir = path.join(opencodeDir, "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Bun.write(
+        path.join(agentDir, "restricted.md"),
+        `---
+mode: subagent
+skills:
+  "*": false
+  "git-*": true
+---
+Restricted agent with skills filter`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const agents = await Agent.list()
+      const restricted = agents.find((a) => a.name === "restricted")
+      expect(restricted).toBeDefined()
+      expect(restricted?.skills).toEqual({
+        "*": false,
+        "git-*": true,
+      })
+    },
+  })
+})

@@ -42,6 +42,7 @@ export namespace Agent {
         .optional(),
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()),
+      skills: z.record(z.string(), z.boolean()).optional(),
       options: z.record(z.string(), z.any()),
       maxSteps: z.number().int().positive().optional(),
     })
@@ -212,6 +213,7 @@ export namespace Agent {
         model,
         prompt,
         tools,
+        skills,
         description,
         temperature,
         top_p,
@@ -236,6 +238,11 @@ export namespace Agent {
         ...defaultTools,
         ...item.tools,
       }
+      if (skills)
+        item.skills = {
+          ...item.skills,
+          ...skills,
+        }
       if (description) item.description = description
       if (temperature != undefined) item.temperature = temperature
       if (top_p != undefined) item.topP = top_p

@@ -6,6 +6,7 @@ import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
 import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
+import { Wildcard } from "../util/wildcard"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -150,5 +151,45 @@ export namespace Skill {
 
   export async function all(): Promise<Info[]> {
     return state()
+  }
+
+  /**
+   * Filter skills based on a pattern map.
+   * Uses the same wildcard logic as tools filtering.
+   *
+   * Behavior:
+   * - If patterns contain any `true` values, operates in whitelist mode:
+   *   skills must explicitly match a `true` pattern to be included.
+   * - If patterns contain only `false` values, operates in blacklist mode:
+   *   skills are included unless they match a `false` pattern.
+   *
+   * @param skills List of skills to filter
+   * @param patterns Record of patterns to boolean (true = include, false = exclude)
+   * @returns Filtered list of skills
+   */
+  export function filter(skills: Info[], patterns: Record<string, boolean> | undefined): Info[] {
+    if (!patterns || Object.keys(patterns).length === 0) return skills
+
+    const hasIncludes = Object.values(patterns).some((v) => v === true)
+
+    return skills.filter((skill) => {
+      const match = Wildcard.all(skill.name, patterns)
+      if (hasIncludes) {
+        // Whitelist mode: must explicitly match true
+        return match === true
+      }
+      // Blacklist mode: include unless explicitly false
+      return match !== false
+    })
+  }
+
+  /**
+   * Get skills filtered for a specific agent.
+   * @param agentSkills The agent's skills filter configuration
+   * @returns Filtered list of skills
+   */
+  export async function forAgent(agentSkills: Record<string, boolean> | undefined): Promise<Info[]> {
+    const skills = await all()
+    return filter(skills, agentSkills)
   }
 }
