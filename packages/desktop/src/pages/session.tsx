@@ -12,6 +12,7 @@ import {
   createRenderEffect,
   batch,
 } from "solid-js"
+
 import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
@@ -26,6 +27,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import {
@@ -70,7 +72,6 @@ export default function Page() {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
-
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
@@ -79,7 +80,6 @@ export default function Page() {
       .filter((m) => m.role === "user")
       .sort((a, b) => a.id.localeCompare(b.id)),
   )
-  // Visible user messages excludes reverted messages (those >= revertMessageID)
   const visibleUserMessages = createMemo(() => {
     const revert = revertMessageID()
     if (!revert) return userMessages()
@@ -87,15 +87,24 @@ export default function Page() {
   })
   const lastUserMessage = createMemo(() => visibleUserMessages()?.at(-1))
 
-  const [messageStore, setMessageStore] = createStore<{ messageId?: string }>({})
+  const [store, setStore] = createStore({
+    clickTimer: undefined as number | undefined,
+    activeDraggable: undefined as string | undefined,
+    activeTerminalDraggable: undefined as string | undefined,
+    userInteracted: false,
+    stepsExpanded: true,
+    mobileStepsExpanded: {} as Record<string, boolean>,
+    messageId: undefined as string | undefined,
+  })
+
   const activeMessage = createMemo(() => {
-    if (!messageStore.messageId) return lastUserMessage()
+    if (!store.messageId) return lastUserMessage()
     // If the stored message is no longer visible (e.g., was reverted), fall back to last visible
-    const found = visibleUserMessages()?.find((m) => m.id === messageStore.messageId)
+    const found = visibleUserMessages()?.find((m) => m.id === store.messageId)
     return found ?? lastUserMessage()
   })
   const setActiveMessage = (message: UserMessage | undefined) => {
-    setMessageStore("messageId", message?.id)
+    setStore("messageId", message?.id)
   }
 
   function navigateMessageByOffset(offset: number) {
@@ -119,13 +128,6 @@ export default function Page() {
 
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 
-  const [store, setStore] = createStore({
-    clickTimer: undefined as number | undefined,
-    activeDraggable: undefined as string | undefined,
-    activeTerminalDraggable: undefined as string | undefined,
-    userInteracted: false,
-    stepsExpanded: true,
-  })
   let inputRef!: HTMLDivElement
 
   createEffect(() => {
@@ -146,7 +148,7 @@ export default function Page() {
       () => visibleUserMessages().at(-1)?.id,
       (lastId, prevLastId) => {
         if (lastId && prevLastId && lastId > prevLastId) {
-          setMessageStore("messageId", undefined)
+          setStore("messageId", undefined)
         }
       },
       { defer: true },
@@ -533,72 +535,161 @@ export default function Page() {
 
   const showTabs = createMemo(() => diffs().length > 0 || tabs().all().length > 0)
 
+  const mobileWorking = createMemo(() => status().type !== "idle")
+  const mobileAutoScroll = createAutoScroll({
+    working: mobileWorking,
+    onUserInteracted: () => setStore("userInteracted", true),
+  })
+
+  const MobileTurns = () => (
+    <div
+      ref={mobileAutoScroll.scrollRef}
+      onScroll={mobileAutoScroll.handleScroll}
+      onClick={mobileAutoScroll.handleInteraction}
+      class="relative mt-2 min-w-0 w-full h-full overflow-y-auto no-scrollbar pb-12"
+    >
+      <div ref={mobileAutoScroll.contentRef} class="flex flex-col gap-45 items-start justify-start mt-4">
+        <For each={visibleUserMessages()}>
+          {(message) => (
+            <SessionTurn
+              sessionID={params.id!}
+              messageID={message.id}
+              stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
+              onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
+              onUserInteracted={() => setStore("userInteracted", true)}
+              classes={{
+                root: "min-w-0 w-full relative",
+                content:
+                  "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                container: "px-4",
+              }}
+            />
+          )}
+        </For>
+      </div>
+    </div>
+  )
+
+  const NewSessionView = () => (
+    <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
+      <div class="text-20-medium text-text-weaker">New session</div>
+      <div class="flex justify-center items-center gap-3">
+        <Icon name="folder" size="small" />
+        <div class="text-12-medium text-text-weak">
+          {getDirectory(sync.data.path.directory)}
+          <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
+        </div>
+      </div>
+      <Show when={sync.project}>
+        {(project) => (
+          <div class="flex justify-center items-center gap-3">
+            <Icon name="pencil-line" size="small" />
+            <div class="text-12-medium text-text-weak">
+              Last modified&nbsp;
+              <span class="text-text-strong">
+                {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
+              </span>
+            </div>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+
+  const DesktopSessionContent = () => (
+    <Switch>
+      <Match when={params.id}>
+        <div class="flex items-start justify-start h-full min-h-0">
+          <SessionMessageRail
+            messages={visibleUserMessages()}
+            current={activeMessage()}
+            onMessageSelect={setActiveMessage}
+            wide={!showTabs()}
+          />
+          <Show when={activeMessage()}>
+            <SessionTurn
+              sessionID={params.id!}
+              messageID={activeMessage()!.id}
+              stepsExpanded={store.stepsExpanded}
+              onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
+              onUserInteracted={() => setStore("userInteracted", true)}
+              classes={{
+                root: "pb-20 flex-1 min-w-0",
+                content: "pb-20",
+                container:
+                  "w-full " +
+                  (!showTabs() ? "max-w-200 mx-auto px-6" : visibleUserMessages().length > 1 ? "pr-6 pl-18" : "px-6"),
+              }}
+            />
+          </Show>
+        </div>
+      </Match>
+      <Match when={true}>
+        <NewSessionView />
+      </Match>
+    </Switch>
+  )
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      <div class="min-h-0 grow w-full flex">
-        {/* Session pane - always visible */}
+      <div class="md:hidden flex-1 min-h-0 flex flex-col bg-background-stronger">
+        <Switch>
+          <Match when={!params.id}>
+            <div class="flex-1 min-h-0 overflow-hidden">
+              <NewSessionView />
+            </div>
+          </Match>
+          <Match when={diffs().length > 0}>
+            <Tabs class="flex-1 min-h-0 flex flex-col pb-28">
+              <Tabs.List>
+                <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
+                  Session
+                </Tabs.Trigger>
+                <Tabs.Trigger value="review" class="w-1/2 !border-r-0" classes={{ button: "w-full" }}>
+                  {diffs().length} Files Changed
+                </Tabs.Trigger>
+              </Tabs.List>
+              <Tabs.Content value="session" class="flex-1 !overflow-hidden">
+                <MobileTurns />
+              </Tabs.Content>
+              <Tabs.Content forceMount value="review" class="flex-1 !overflow-hidden hidden data-[selected]:block">
+                <div class="relative h-full mt-6 overflow-y-auto no-scrollbar">
+                  <SessionReview
+                    diffs={diffs()}
+                    classes={{
+                      root: "pb-32",
+                      header: "px-4",
+                      container: "px-4",
+                    }}
+                  />
+                </div>
+              </Tabs.Content>
+            </Tabs>
+          </Match>
+          <Match when={true}>
+            <div class="flex-1 min-h-0 overflow-hidden">
+              <MobileTurns />
+            </div>
+          </Match>
+        </Switch>
+        <div class="absolute inset-x-0 bottom-4 flex flex-col justify-center items-center z-50 px-4">
+          <div class="w-full">
+            <PromptInput
+              ref={(el) => {
+                inputRef = el
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="hidden md:flex min-h-0 grow w-full">
         <div
           class="@container relative shrink-0 py-3 flex flex-col gap-6 min-h-0 h-full bg-background-stronger"
           style={{ width: showTabs() ? `${layout.session.width()}px` : "100%" }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
-            <Switch>
-              <Match when={params.id}>
-                <div class="flex items-start justify-start h-full min-h-0">
-                  <SessionMessageRail
-                    messages={visibleUserMessages()}
-                    current={activeMessage()}
-                    onMessageSelect={setActiveMessage}
-                    wide={!showTabs()}
-                  />
-                  <Show when={activeMessage()}>
-                    <SessionTurn
-                      sessionID={params.id!}
-                      messageID={activeMessage()!.id}
-                      stepsExpanded={store.stepsExpanded}
-                      onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
-                      onUserInteracted={() => setStore("userInteracted", true)}
-                      classes={{
-                        root: "pb-20 flex-1 min-w-0",
-                        content: "pb-20",
-                        container:
-                          "w-full " +
-                          (!showTabs()
-                            ? "max-w-200 mx-auto px-6"
-                            : visibleUserMessages().length > 1
-                              ? "pr-6 pl-18"
-                              : "px-6"),
-                      }}
-                    />
-                  </Show>
-                </div>
-              </Match>
-              <Match when={true}>
-                <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
-                  <div class="text-20-medium text-text-weaker">New session</div>
-                  <div class="flex justify-center items-center gap-3">
-                    <Icon name="folder" size="small" />
-                    <div class="text-12-medium text-text-weak">
-                      {getDirectory(sync.data.path.directory)}
-                      <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
-                    </div>
-                  </div>
-                  <Show when={sync.project}>
-                    {(project) => (
-                      <div class="flex justify-center items-center gap-3">
-                        <Icon name="pencil-line" size="small" />
-                        <div class="text-12-medium text-text-weak">
-                          Last modified&nbsp;
-                          <span class="text-text-strong">
-                            {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              </Match>
-            </Switch>
+            <DesktopSessionContent />
           </div>
           <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
             <div
@@ -625,7 +716,6 @@ export default function Page() {
           </Show>
         </div>
 
-        {/* Tabs pane - visible when there are diffs or file tabs */}
         <Show when={showTabs()}>
           <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
             <DragDropProvider
@@ -683,7 +773,7 @@ export default function Page() {
                 </div>
                 <Show when={diffs().length}>
                   <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden contain-strict">
-                    <div class="relative pt-3 flex-1 min-h-0 overflow-hidden">
+                    <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                       <SessionReview
                         classes={{
                           root: "pb-40",
@@ -754,9 +844,10 @@ export default function Page() {
           </div>
         </Show>
       </div>
+
       <Show when={layout.terminal.opened()}>
         <div
-          class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
+          class="hidden md:flex relative w-full flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
         >
           <ResizeHandle

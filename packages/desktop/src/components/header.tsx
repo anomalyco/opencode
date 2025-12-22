@@ -20,6 +20,7 @@ import { iife } from "@opencode-ai/util/iife"
 export function Header(props: {
   navigateToProject: (directory: string) => void
   navigateToSession: (session: Session | undefined) => void
+  onMobileMenuToggle?: () => void
 }) {
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
@@ -29,11 +30,19 @@ export function Header(props: {
 
   return (
     <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
+      <button
+        type="button"
+        class="xl:hidden w-12 shrink-0 flex items-center justify-center border-r border-border-weak-base hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors"
+        onClick={props.onMobileMenuToggle}
+      >
+        <Icon name="menu" size="small" />
+      </button>
       <A
         href="/"
         classList={{
+          "hidden xl:flex": true,
           "w-12 shrink-0 px-4 py-3.5": true,
-          "flex items-center justify-start self-stretch": true,
+          "items-center justify-start self-stretch": true,
           "border-r border-border-weak-base": true,
         }}
         style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
@@ -46,30 +55,32 @@ export function Header(props: {
           {(directory) => {
             const currentDirectory = createMemo(() => base64Decode(directory()))
             const store = createMemo(() => globalSync.child(currentDirectory())[0])
-            const sessions = createMemo(() => store().session ?? [])
+            const sessions = createMemo(() => (store().session ?? []).filter((s) => !s.parentID))
             const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
             const shareEnabled = createMemo(() => store().config.share !== "disabled")
             return (
               <>
-                <div class="flex items-center gap-3">
-                  <div class="flex items-center gap-2">
-                    <Select
-                      options={layout.projects.list().map((project) => project.worktree)}
-                      current={currentDirectory()}
-                      label={(x) => getFilename(x)}
-                      onSelect={(x) => (x ? props.navigateToProject(x) : undefined)}
-                      class="text-14-regular text-text-base"
-                      variant="ghost"
-                    >
-                      {/* @ts-ignore */}
-                      {(i) => (
-                        <div class="flex items-center gap-2">
-                          <Icon name="folder" size="small" />
-                          <div class="text-text-strong">{getFilename(i)}</div>
-                        </div>
-                      )}
-                    </Select>
-                    <div class="text-text-weaker">/</div>
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <div class="hidden xl:flex items-center gap-2">
+                      <Select
+                        options={layout.projects.list().map((project) => project.worktree)}
+                        current={currentDirectory()}
+                        label={(x) => getFilename(x)}
+                        onSelect={(x) => (x ? props.navigateToProject(x) : undefined)}
+                        class="text-14-regular text-text-base"
+                        variant="ghost"
+                      >
+                        {/* @ts-ignore */}
+                        {(i) => (
+                          <div class="flex items-center gap-2">
+                            <Icon name="folder" size="small" />
+                            <div class="text-text-strong">{getFilename(i)}</div>
+                          </div>
+                        )}
+                      </Select>
+                      <div class="text-text-weaker">/</div>
+                    </div>
                     <Select
                       options={sessions()}
                       current={currentSession()}
@@ -77,12 +88,13 @@ export function Header(props: {
                       label={(x) => x.title}
                       value={(x) => x.id}
                       onSelect={props.navigateToSession}
-                      class="text-14-regular text-text-base max-w-md"
+                      class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
                       variant="ghost"
                     />
                   </div>
                   <Show when={currentSession()}>
                     <Tooltip
+                      class="hidden xl:block"
                       value={
                         <div class="flex items-center gap-2">
                           <span>New session</span>
@@ -98,7 +110,7 @@ export function Header(props: {
                 </div>
                 <div class="flex items-center gap-4">
                   <Tooltip
-                    class="shrink-0"
+                    class="hidden md:block shrink-0"
                     value={
                       <div class="flex items-center gap-2">
                         <span>Toggle terminal</span>
