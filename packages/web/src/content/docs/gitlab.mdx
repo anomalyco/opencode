@@ -3,45 +3,48 @@ title: GitLab
 description: Use OpenCode in GitLab issues and merge requests.
 ---
 
-## Integration options
-
-There are at least two approaches to run OpenCode in GitLab:
-
-- Run it in GitLab pipelines as a regular pipeline
-- Run it through GitLab Duo
+OpenCode integrates with your GitLab workflow through your GitLab CI/CD pipeline or with GitLab Duo.
 
 In both cases, OpenCode will run on your GitLab runners.
 
-## GitLab CI integration
+---
 
-OpenCode works in a regular GitLab pipeline. You build it into a pipeline as a [CI component](https://docs.gitlab.com/ee/ci/components/)
+## GitLab CI
+
+OpenCode works in a regular GitLab pipeline. You can build it into a pipeline as a [CI component](https://docs.gitlab.com/ee/ci/components/)
+
+Here we are using a community-created CI/CD component for OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
 ### Features
 
-- **Use custom configuration per job**: Configure OpenCode with a [custom configuration directory](./config/#custom-directory) to enable/disable functionality per OpenCode invocation.
+- **Use custom configuration per job**: Configure OpenCode with a custom configuration directory, for example `./config/#custom-directory` to enable or disable functionality per OpenCode invocation.
 - **Minimal setup**: The CI component sets up OpenCode in the background, you only need to create the OpenCode configuration and the initial prompt.
 - **Flexible**: The CI component supports several inputs for customizing its behavior
 
+---
+
 ### Setup
 
-1. Store your OpenCode authentication JSON as a File type CI environment variables under **Settings -> CI/CD -> Variables**. Tip: Mark it "Masked and hidden".
-2. Add code blocks like the following to your `.gitlab-ci.yml` file:
+1. Store your OpenCode authentication JSON as a File type CI environment variables under **Settings** > **CI/CD** > **Variables**. Make sure to mark them as "Masked and hidden".
+2. Add the following to your `.gitlab-ci.yml` file.
 
-```
-include:
-  - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@1.0.0
-    inputs:
-      config_dir: ${CI_PROJECT_DIR}/opencode-config
-      auth_json: $OPENCODE_AUTH_JSON  # The variable name for your OpenCode authentication JSON
-      command: optional-custom-command
-      message: "Your prompt here"
-```
+   ```yaml title=".gitlab-ci.yml"
+   include:
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@1.0.0
+       inputs:
+         config_dir: ${CI_PROJECT_DIR}/opencode-config
+         auth_json: $OPENCODE_AUTH_JSON  # The variable name for your OpenCode authentication JSON
+         command: optional-custom-command
+         message: "Your prompt here"
+   ```
 
-See more inputs and use cases in [its documentation](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode).
+For more inputs and use cases [check out the docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) for this component.
 
-## GitLab Duo integration
+---
+
+## GitLab Duo
 
 OpenCode integrates with your GitLab workflow.
 Mention `@opencode` in a comment, and OpenCode will execute tasks within your GitLab CI pipeline.
