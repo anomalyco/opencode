@@ -5,9 +5,11 @@ import {
   FilePart,
   Message as MessageType,
   Part as PartType,
+  ReasoningPart,
   TextPart,
   ToolPart,
   UserMessage,
+  Todo,
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -21,6 +23,7 @@ import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
+import { createAutoScroll } from "../hooks"
 
 interface Diagnostic {
   range: {
@@ -85,6 +88,109 @@ function relativizeProjectPaths(text: string, directory?: string) {
 function getDirectory(path: string | undefined) {
   const data = useData()
   return relativizeProjectPaths(_getDirectory(path), data.directory)
+}
+
+export function getSessionToolParts(store: ReturnType<typeof useData>["store"], sessionId: string): ToolPart[] {
+  const messages = store.message[sessionId]?.filter((m) => m.role === "assistant")
+  if (!messages) return []
+
+  const parts: ToolPart[] = []
+  for (const m of messages) {
+    const msgParts = store.part[m.id]
+    if (msgParts) {
+      for (const p of msgParts) {
+        if (p && p.type === "tool") parts.push(p as ToolPart)
+      }
+    }
+  }
+  return parts
+}
+
+import type { IconProps } from "./icon"
+
+export type ToolInfo = {
+  icon: IconProps["name"]
+  title: string
+  subtitle?: string
+}
+
+export function getToolInfo(tool: string, input: any = {}): ToolInfo {
+  switch (tool) {
+    case "read":
+      return {
+        icon: "glasses",
+        title: "Read",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "list":
+      return {
+        icon: "bullet-list",
+        title: "List",
+        subtitle: input.path ? getFilename(input.path) : undefined,
+      }
+    case "glob":
+      return {
+        icon: "magnifying-glass-menu",
+        title: "Glob",
+        subtitle: input.pattern,
+      }
+    case "grep":
+      return {
+        icon: "magnifying-glass-menu",
+        title: "Grep",
+        subtitle: input.pattern,
+      }
+    case "webfetch":
+      return {
+        icon: "window-cursor",
+        title: "Webfetch",
+        subtitle: input.url,
+      }
+    case "task":
+      return {
+        icon: "task",
+        title: `${input.subagent_type || "task"} Agent`,
+        subtitle: input.description,
+      }
+    case "bash":
+      return {
+        icon: "console",
+        title: "Shell",
+        subtitle: input.description,
+      }
+    case "edit":
+      return {
+        icon: "code-lines",
+        title: "Edit",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "write":
+      return {
+        icon: "code-lines",
+        title: "Write",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "todowrite":
+      return {
+        icon: "checklist",
+        title: "To-dos",
+      }
+    case "todoread":
+      return {
+        icon: "checklist",
+        title: "Read to-dos",
+      }
+    default:
+      return {
+        icon: "mcp",
+        title: tool,
+      }
+  }
+}
+
+function getToolPartInfo(part: ToolPart): ToolInfo {
+  const input = part.state.input || {}
+  return getToolInfo(part.tool, input)
 }
 
 export function registerPartComponent(type: string, component: PartComponent) {
@@ -225,6 +331,7 @@ export interface ToolProps {
   metadata: Record<string, any>
   tool: string
   output?: string
+  status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
 }
@@ -293,6 +400,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             tool={part.tool}
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
+            status={part.state.status}
             hideDetails={props.hideDetails}
             defaultOpen={props.defaultOpen}
           />
@@ -320,7 +428,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
-  const part = props.part as any
+  const part = props.part as ReasoningPart
   return (
     <Show when={part.text.trim()}>
       <div data-component="reasoning-part">
@@ -453,23 +561,41 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "task",
   render(props) {
+    const summary = () =>
+      (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
+
+    const autoScroll = createAutoScroll({
+      working: () => true,
+    })
+
     return (
       <BasicTool
-        {...props}
         icon="task"
+        defaultOpen={true}
         trigger={{
           title: `${props.input.subagent_type || props.tool} Agent`,
           titleClass: "capitalize",
           subtitle: props.input.description,
         }}
       >
-        {/* <Show when={false && props.output}> */}
-        {/*   {(output) => ( */}
-        {/*     <div data-component="tool-output" data-scrollable> */}
-        {/*       <Markdown text={output()} /> */}
-        {/*     </div> */}
-        {/*   )} */}
-        {/* </Show> */}
+        <div ref={autoScroll.scrollRef} onScroll={autoScroll.handleScroll} data-component="tool-output" data-scrollable>
+          <div ref={autoScroll.contentRef} data-component="task-tools">
+            <For each={summary()}>
+              {(item) => {
+                const info = getToolInfo(item.tool)
+                return (
+                  <div data-slot="task-tool-item">
+                    <Icon name={info.icon} size="small" />
+                    <span data-slot="task-tool-title">{info.title}</span>
+                    <Show when={item.state.title}>
+                      <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </div>
       </BasicTool>
     )
   },
@@ -604,14 +730,14 @@ ToolRegistry.register({
         trigger={{
           title: "To-dos",
           subtitle: props.input.todos
-            ? `${props.input.todos.filter((t: any) => t.status === "completed").length}/${props.input.todos.length}`
+            ? `${props.input.todos.filter((t: Todo) => t.status === "completed").length}/${props.input.todos.length}`
             : "",
         }}
       >
         <Show when={props.input.todos?.length}>
           <div data-component="todos">
             <For each={props.input.todos}>
-              {(todo: any) => (
+              {(todo: Todo) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
                   <div data-slot="message-part-todo-content" data-completed={todo.status === "completed"}>
                     {todo.content}
