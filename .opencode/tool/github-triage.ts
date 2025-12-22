@@ -1,5 +1,5 @@
 /// <reference path="../env.d.ts" />
-import { Octokit } from "@octokit/rest"
+// import { Octokit } from "@octokit/rest"
 import { tool } from "@opencode-ai/plugin"
 import DESCRIPTION from "./github-triage.txt"
 
@@ -7,6 +7,22 @@ function getIssueNumber(): number {
   const issue = parseInt(process.env.ISSUE_NUMBER ?? "", 10)
   if (!issue) throw new Error("ISSUE_NUMBER env var not set")
   return issue
+}
+
+async function githubFetch(endpoint: string, options: RequestInit = {}) {
+  const response = await fetch(`https://api.github.com${endpoint}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  })
+  if (!response.ok) {
+    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`)
+  }
+  return response.json()
 }
 
 export default tool({
@@ -17,13 +33,13 @@ export default tool({
       .describe("The username of the assignee")
       .default("rekram1-node"),
     labels: tool.schema
-      .array(tool.schema.enum(["nix", "opentui", "perf", "desktop", "zen", "docs"]))
+      .array(tool.schema.enum(["nix", "opentui", "perf", "desktop", "zen", "docs", "windows"]))
       .describe("The labels(s) to add to the issue")
       .default([]),
   },
   async execute(args) {
     const issue = getIssueNumber()
-    const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
+    // const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN })
     const owner = "sst"
     const repo = "opencode"
 
@@ -41,22 +57,30 @@ export default tool({
       throw new Error("Only opentui issues should be assigned to kommander")
     }
 
-    await octokit.rest.issues.addAssignees({
-      owner,
-      repo,
-      issue_number: issue,
-      assignees: [args.assignee],
+    // await octokit.rest.issues.addAssignees({
+    //   owner,
+    //   repo,
+    //   issue_number: issue,
+    //   assignees: [args.assignee],
+    // })
+    await githubFetch(`/repos/${owner}/${repo}/issues/${issue}/assignees`, {
+      method: "POST",
+      body: JSON.stringify({ assignees: [args.assignee] }),
     })
     results.push(`Assigned @${args.assignee} to issue #${issue}`)
 
     const labels: string[] = args.labels.map((label) => (label === "desktop" ? "web" : label))
 
     if (labels.length > 0) {
-      await octokit.rest.issues.addLabels({
-        owner,
-        repo,
-        issue_number: issue,
-        labels,
+      // await octokit.rest.issues.addLabels({
+      //   owner,
+      //   repo,
+      //   issue_number: issue,
+      //   labels,
+      // })
+      await githubFetch(`/repos/${owner}/${repo}/issues/${issue}/labels`, {
+        method: "POST",
+        body: JSON.stringify({ labels }),
       })
       results.push(`Added labels: ${args.labels.join(", ")}`)
     }

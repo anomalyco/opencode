@@ -1,7 +1,7 @@
-import { createEffect, createMemo, createSignal, For, Match, ParentProps, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, For, Match, onMount, ParentProps, Show, Switch, type JSX } from "solid-js"
 import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
-import { useLayout, getAvatarColors } from "@/context/layout"
+import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
@@ -15,7 +15,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session, Project } from "@opencode-ai/sdk/v2/client"
+import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore, produce } from "solid-js/store"
 import {
@@ -28,7 +28,7 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { Toast } from "@opencode-ai/ui/toast"
+import { showToast, Toast } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
@@ -46,14 +46,6 @@ export default function Layout(props: ParentProps) {
 
   let scrollContainerRef: HTMLDivElement | undefined
 
-  function scrollToSession(sessionId: string) {
-    if (!scrollContainerRef) return
-    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
-    if (element) {
-      element.scrollIntoView({ block: "center", behavior: "smooth" })
-    }
-  }
-
   const params = useParams()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
@@ -64,6 +56,33 @@ export default function Layout(props: ParentProps) {
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
+
+  onMount(async () => {
+    if (platform.checkUpdate && platform.update && platform.restart) {
+      const { updateAvailable, version } = await platform.checkUpdate()
+      if (updateAvailable) {
+        showToast({
+          persistent: true,
+          icon: "download",
+          title: "Update available",
+          description: `A new version of OpenCode (${version}) is now available to install.`,
+          actions: [
+            {
+              label: "Install and restart",
+              onClick: async () => {
+                await platform.update!()
+                await platform.restart!()
+              },
+            },
+            {
+              label: "Not yet",
+              onClick: "dismiss",
+            },
+          ],
+        })
+      }
+    }
+  })
 
   function flattenSessions(sessions: Session[]): Session[] {
     const childrenMap = new Map<string, Session[]>()
@@ -87,10 +106,26 @@ export default function Layout(props: ParentProps) {
     return result
   }
 
+  function scrollToSession(sessionId: string) {
+    if (!scrollContainerRef) return
+    const element = scrollContainerRef.querySelector(`[data-session-id="${sessionId}"]`)
+    if (element) {
+      element.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
+  }
+
+  function projectSessions(directory: string) {
+    if (!directory) return []
+    const sessions = globalSync
+      .child(directory)[0]
+      .session.toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+    return flattenSessions(sessions ?? [])
+  }
+
   const currentSessions = createMemo(() => {
     if (!params.dir) return []
     const directory = base64Decode(params.dir)
-    return flattenSessions(globalSync.child(directory)[0].session ?? [])
+    return projectSessions(directory)
   })
 
   function navigateSessionByOffset(offset: number) {
@@ -127,7 +162,7 @@ export default function Layout(props: ParentProps) {
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
-    const nextProjectSessions = flattenSessions(globalSync.child(nextProject.worktree)[0].session ?? [])
+    const nextProjectSessions = projectSessions(nextProject.worktree)
     if (nextProjectSessions.length === 0) {
       navigateToProject(nextProject.worktree)
       return
@@ -302,7 +337,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const ProjectAvatar = (props: {
-    project: Project
+    project: LocalProject
     class?: string
     expandable?: boolean
     notify?: boolean
@@ -315,7 +350,7 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class="relative size-5 shrink-0 rounded-sm overflow-hidden">
+      <div class="relative size-5 shrink-0 rounded-sm">
         <Avatar
           fallback={name()}
           src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
@@ -345,7 +380,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const ProjectVisual = (props: { project: Project & { expanded: boolean }; class?: string }): JSX.Element => {
+  const ProjectVisual = (props: { project: LocalProject; class?: string }): JSX.Element => {
     const name = createMemo(() => getFilename(props.project.worktree))
     const current = createMemo(() => base64Decode(params.dir ?? ""))
     return (
@@ -381,7 +416,7 @@ export default function Layout(props: ParentProps) {
   const SessionItem = (props: {
     session: Session
     slug: string
-    project: Project
+    project: LocalProject
     depth?: number
     childrenMap: Map<string, Session[]>
   }): JSX.Element => {
@@ -471,12 +506,14 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SortableProject = (props: { project: Project & { expanded: boolean } }): JSX.Element => {
+  const SortableProject = (props: { project: LocalProject }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
     const [store, setProjectStore] = globalSync.child(props.project.worktree)
-    const sessions = createMemo(() => store.session ?? [])
+    const sessions = createMemo(() =>
+      store.session.toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)),
+    )
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const childSessionsByParent = createMemo(() => {
       const map = new Map<string, Session[]>()
@@ -491,16 +528,24 @@ export default function Layout(props: ParentProps) {
     })
     const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
     const loadMoreSessions = async () => {
-      setProjectStore("limit", (limit) => limit + 10)
+      setProjectStore("limit", (limit) => limit + 5)
       await globalSync.project.loadSessions(props.project.worktree)
     }
-    const [expanded, setExpanded] = createSignal(true)
+    const handleOpenChange = (open: boolean) => {
+      if (open) layout.projects.expand(props.project.worktree)
+      else layout.projects.collapse(props.project.worktree)
+    }
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <Switch>
           <Match when={layout.sidebar.opened()}>
-            <Collapsible variant="ghost" defaultOpen class="gap-2 shrink-0" onOpenChange={setExpanded}>
+            <Collapsible
+              variant="ghost"
+              open={props.project.expanded}
+              class="gap-2 shrink-0"
+              onOpenChange={handleOpenChange}
+            >
               <Button
                 as={"div"}
                 variant="ghost"
@@ -511,7 +556,7 @@ export default function Layout(props: ParentProps) {
                     project={props.project}
                     class="group-hover/session:hidden"
                     expandable
-                    notify={!expanded()}
+                    notify={!props.project.expanded}
                   />
                   <span class="truncate text-14-medium text-text-strong">{name()}</span>
                 </Collapsible.Trigger>
@@ -613,7 +658,7 @@ export default function Layout(props: ParentProps) {
           classList={{
             "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
             "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
-            "border-r border-border-weak-base": true,
+            "border-r border-border-weak-base contain-strict": true,
           }}
           style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
         >
@@ -629,7 +674,17 @@ export default function Layout(props: ParentProps) {
             />
           </Show>
           <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
-            <Tooltip class="shrink-0" placement="right" value="Toggle sidebar" inactive={layout.sidebar.opened()}>
+            <Tooltip
+              class="shrink-0"
+              placement="right"
+              value={
+                <div class="flex items-center gap-2">
+                  <span>Toggle sidebar</span>
+                  <span class="text-icon-base text-12-medium">{command.keybind("sidebar.toggle")}</span>
+                </div>
+              }
+              inactive={layout.sidebar.opened()}
+            >
               <Button
                 variant="ghost"
                 size="large"
@@ -717,7 +772,16 @@ export default function Layout(props: ParentProps) {
               </Match>
             </Switch>
             <Show when={platform.openDirectoryPickerDialog}>
-              <Tooltip placement="right" value="Open project" inactive={layout.sidebar.opened()}>
+              <Tooltip
+                placement="right"
+                value={
+                  <div class="flex items-center gap-2">
+                    <span>Open project</span>
+                    <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
+                  </div>
+                }
+                inactive={layout.sidebar.opened()}
+              >
                 <Button
                   class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
@@ -755,7 +819,7 @@ export default function Layout(props: ParentProps) {
             </Tooltip>
           </div>
         </div>
-        <main class="size-full overflow-x-hidden flex flex-col items-start">{props.children}</main>
+        <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict">{props.children}</main>
       </div>
       <Toast.Region />
     </div>

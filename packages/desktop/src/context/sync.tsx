@@ -1,9 +1,11 @@
 import { produce } from "solid-js/store"
 import { createMemo } from "solid-js"
 import { Binary } from "@opencode-ai/util/binary"
+import { retry } from "@opencode-ai/util/retry"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
+import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -30,12 +32,40 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (match.found) return store.session[match.index]
           return undefined
         },
+        addOptimisticMessage(input: {
+          sessionID: string
+          messageID: string
+          parts: Part[]
+          agent: string
+          model: { providerID: string; modelID: string }
+        }) {
+          const message: Message = {
+            id: input.messageID,
+            sessionID: input.sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: input.agent,
+            model: input.model,
+          }
+          setStore(
+            produce((draft) => {
+              const messages = draft.message[input.sessionID]
+              if (!messages) {
+                draft.message[input.sessionID] = [message]
+              } else {
+                const result = Binary.search(messages, input.messageID, (m) => m.id)
+                messages.splice(result.index, 0, message)
+              }
+              draft.part[input.messageID] = input.parts.slice()
+            }),
+          )
+        },
         async sync(sessionID: string, _isRetry = false) {
           const [session, messages, todo, diff] = await Promise.all([
-            sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
-            sdk.client.session.todo({ sessionID }),
-            sdk.client.session.diff({ sessionID }),
+            retry(() => sdk.client.session.get({ sessionID })),
+            retry(() => sdk.client.session.messages({ sessionID, limit: 100 })),
+            retry(() => sdk.client.session.todo({ sessionID })),
+            retry(() => sdk.client.session.diff({ sessionID })),
           ])
           setStore(
             produce((draft) => {

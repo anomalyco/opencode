@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { Skill } from "../skill"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -116,5 +117,26 @@ export namespace SystemPrompt {
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
     return Promise.all(found).then((result) => result.filter(Boolean))
+  }
+
+  export async function skills() {
+    const all = await Skill.all()
+    if (all.length === 0) return []
+
+    const lines = [
+      "You have access to skills listed in `<available_skills>`. When a task matches a skill's description, read its SKILL.md file to get detailed instructions.",
+      "",
+      "<available_skills>",
+    ]
+    for (const skill of all) {
+      lines.push("  <skill>")
+      lines.push(`    <name>${skill.name}</name>`)
+      lines.push(`    <description>${skill.description}</description>`)
+      lines.push(`    <location>${skill.location}</location>`)
+      lines.push("  </skill>")
+    }
+    lines.push("</available_skills>")
+
+    return [lines.join("\n")]
   }
 }

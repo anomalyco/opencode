@@ -1,17 +1,27 @@
+mod window_customizer;
+
 use std::{
+    collections::VecDeque,
     net::{SocketAddr, TcpListener},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-#[cfg(target_os = "macos")]
-use tauri::TitleBarStyle;
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow, path::BaseDirectory};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
 
+use crate::window_customizer::PinchZoomDisablePlugin;
+
 #[derive(Clone)]
 struct ServerState(Arc<Mutex<Option<CommandChild>>>);
+
+#[derive(Clone)]
+struct LogState(Arc<Mutex<VecDeque<String>>>);
+
+const MAX_LOG_ENTRIES: usize = 200;
 
 #[tauri::command]
 fn kill_sidecar(app: AppHandle) {
@@ -35,7 +45,37 @@ fn kill_sidecar(app: AppHandle) {
     println!("Killed server");
 }
 
-fn get_sidecar_port() -> u16 {
+#[tauri::command]
+async fn copy_logs_to_clipboard(app: AppHandle) -> Result<(), String> {
+    let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
+
+    let logs = log_state
+        .0
+        .lock()
+        .map_err(|_| "Failed to acquire log lock")?;
+
+    let log_text = logs.iter().cloned().collect::<Vec<_>>().join("");
+
+    app.clipboard()
+        .write_text(log_text)
+        .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_logs(app: AppHandle) -> Result<String, String> {
+    let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
+
+    let logs = log_state
+        .0
+        .lock()
+        .map_err(|_| "Failed to acquire log lock")?;
+
+    Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
+}
+
+fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
         .map(|s| s.to_string())
         .or_else(|| std::env::var("OPENCODE_PORT").ok())
@@ -46,14 +86,22 @@ fn get_sidecar_port() -> u16 {
                 .local_addr()
                 .expect("Failed to get local address")
                 .port()
-        })
+        }) as u32
 }
 
 fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
+fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
+    let log_state = app.state::<LogState>();
+    let log_state_clone = log_state.inner().clone();
+
+    let state_dir = app
+        .path()
+        .resolve("", BaseDirectory::AppLocalData)
+        .expect("Failed to resolve app local data dir");
+
     #[cfg(target_os = "windows")]
     let (mut rx, child) = app
         .shell()
@@ -61,6 +109,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
         .unwrap()
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
         .env("OPENCODE_CLIENT", "desktop")
+        .env("XDG_STATE_HOME", &state_dir)
         .args(["serve", &format!("--port={port}")])
         .spawn()
         .expect("Failed to spawn opencode");
@@ -77,6 +126,7 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
             .command(&shell)
             .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
             .env("OPENCODE_CLIENT", "desktop")
+            .env("XDG_STATE_HOME", &state_dir)
             .args([
                 "-il",
                 "-c",
@@ -92,10 +142,28 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
                 CommandEvent::Stdout(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes);
                     print!("{line}");
+
+                    // Store log in shared state
+                    if let Ok(mut logs) = log_state_clone.0.lock() {
+                        logs.push_back(format!("[STDOUT] {}", line));
+                        // Keep only the last MAX_LOG_ENTRIES
+                        while logs.len() > MAX_LOG_ENTRIES {
+                            logs.pop_front();
+                        }
+                    }
                 }
                 CommandEvent::Stderr(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes);
                     eprint!("{line}");
+
+                    // Store log in shared state
+                    if let Ok(mut logs) = log_state_clone.0.lock() {
+                        logs.push_back(format!("[STDERR] {}", line));
+                        // Keep only the last MAX_LOG_ENTRIES
+                        while logs.len() > MAX_LOG_ENTRIES {
+                            logs.pop_front();
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -105,12 +173,12 @@ fn spawn_sidecar(app: &AppHandle, port: u16) -> CommandChild {
     child
 }
 
-async fn is_server_running(port: u16) -> bool {
+async fn is_server_running(port: u32) -> bool {
     TcpSocket::new_v4()
         .unwrap()
         .connect(SocketAddr::new(
             "127.0.0.1".parse().expect("Failed to parse IP"),
-            port,
+            port as u16,
         ))
         .await
         .is_ok()
@@ -128,9 +196,19 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![kill_sidecar])
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(PinchZoomDisablePlugin)
+        .invoke_handler(tauri::generate_handler![
+            kill_sidecar,
+            copy_logs_to_clipboard,
+            get_logs
+        ])
         .setup(move |app| {
             let app = app.handle().clone();
+
+            // Initialize log state
+            app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
 
             tauri::async_runtime::spawn(async move {
                 let port = get_sidecar_port();
@@ -143,7 +221,22 @@ pub fn run() {
                     let timestamp = Instant::now();
                     loop {
                         if timestamp.elapsed() > Duration::from_secs(7) {
-                            todo!("Handle server spawn timeout");
+                            let res = app.dialog()
+                              .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
+                              .title("Startup Failed")
+                              .buttons(MessageDialogButtons::OkCancelCustom("Copy Logs And Exit".to_string(), "Exit".to_string()))
+                              .blocking_show_with_result();
+
+                            if matches!(&res, MessageDialogResult::Custom(name) if name == "Copy Logs And Exit") {
+                                match copy_logs_to_clipboard(app.clone()).await {
+                                    Ok(()) => println!("Logs copied to clipboard successfully"),
+                                    Err(e) => println!("Failed to copy logs to clipboard: {}", e),
+                                }
+                            }
+
+                            app.exit(1);
+
+                            return;
                         }
 
                         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -186,7 +279,7 @@ pub fn run() {
                 #[cfg(target_os = "macos")]
                 {
                     window_builder = window_builder
-                        .title_bar_style(TitleBarStyle::Overlay)
+                        .title_bar_style(tauri::TitleBarStyle::Overlay)
                         .hidden_title(true);
                 }
 

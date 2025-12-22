@@ -843,6 +843,14 @@ export type KeybindsConfig = {
    */
   session_timeline?: string
   /**
+   * Fork session from message
+   */
+  session_fork?: string
+  /**
+   * Rename session
+   */
+  session_rename?: string
+  /**
    * Share current session
    */
   session_share?: string
@@ -1110,6 +1118,10 @@ export type KeybindsConfig = {
    * Suspend terminal
    */
   terminal_suspend?: string
+  /**
+   * Toggle terminal title
+   */
+  terminal_title_toggle?: string
 }
 
 export type AgentConfig = {
@@ -1402,6 +1414,10 @@ export type Config = {
    * Small model to use for tasks like title generation in the format of provider/model
    */
   small_model?: string
+  /**
+   * Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.
+   */
+  default_agent?: string
   /**
    * Custom username to display in conversations instead of system username
    */
@@ -1755,6 +1771,7 @@ export type Agent = {
   mode: "subagent" | "primary" | "all"
   native?: boolean
   hidden?: boolean
+  default?: boolean
   topP?: number
   temperature?: number
   color?: string
@@ -2733,6 +2750,7 @@ export type SessionSummarizeData = {
   body?: {
     providerID: string
     modelID: string
+    auto?: boolean
   }
   path: {
     /**
@@ -2902,6 +2920,94 @@ export type SessionMessageResponses = {
 }
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
+
+export type PartDeleteData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Message ID
+     */
+    messageID: string
+    /**
+     * Part ID
+     */
+    partID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
+}
+
+export type PartDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PartDeleteError = PartDeleteErrors[keyof PartDeleteErrors]
+
+export type PartDeleteResponses = {
+  /**
+   * Successfully deleted part
+   */
+  200: boolean
+}
+
+export type PartDeleteResponse = PartDeleteResponses[keyof PartDeleteResponses]
+
+export type PartUpdateData = {
+  body?: Part
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Message ID
+     */
+    messageID: string
+    /**
+     * Part ID
+     */
+    partID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
+}
+
+export type PartUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PartUpdateError = PartUpdateErrors[keyof PartUpdateErrors]
+
+export type PartUpdateResponses = {
+  /**
+   * Successfully updated part
+   */
+  200: Part
+}
+
+export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
 
 export type SessionPromptAsyncData = {
   body?: {
