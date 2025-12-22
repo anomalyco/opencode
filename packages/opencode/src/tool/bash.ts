@@ -14,7 +14,6 @@ import { Permission } from "@/permission"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
-import { iife } from "@/util/iife"
 import { ptyToText } from "ghostty-opentui"
 import { Shell } from "@/shell/shell"
 
