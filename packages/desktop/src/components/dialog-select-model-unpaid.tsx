@@ -80,16 +80,7 @@ export const DialogSelectModelUnpaid: Component = () => {
               >
                 {(i) => (
                   <div class="w-full flex items-center gap-x-3">
-                    <ProviderIcon
-                      data-slot="list-item-extra-icon"
-                      id={i.id as IconName}
-                      // TODO: clean this up after we update icon in models.dev
-                      classList={{
-                        "text-icon-weak-base": true,
-                        "size-4 mx-0.5": i.id === "opencode",
-                        "size-5": i.id !== "opencode",
-                      }}
-                    />
+                    <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
                     <span>{i.name}</span>
                     <Show when={i.id === "opencode"}>
                       <Tag>Recommended</Tag>
