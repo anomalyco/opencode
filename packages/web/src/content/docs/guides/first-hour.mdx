@@ -1,0 +1,352 @@
+---
+title: First Hour
+description: Go from install to productive in under an hour.
+lastUpdated: 2025-12-21
+---
+
+This guide walks you through your first hour with OpenCode. By the end, you'll understand the core workflow and be productive with your codebase.
+
+**The essentials**:
+
+- Install and run `/connect` to add an API key
+- Run `/init` to scan your project, then start chatting
+- Use **Tab** to switch between Plan and Build modes
+- Use `@` to reference files
+- Use `/undo` if something goes wrong
+
+That's it. Read on for the full walkthrough.
+
+---
+
+## What you'll learn
+
+By the end of this guide you will:
+
+- Have OpenCode installed and configured
+- Understand the Plan → Build workflow
+- Know how to reference files and provide context
+- Be able to undo mistakes and iterate on changes
+
+---
+
+## Install
+
+Get OpenCode running in under a minute.
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+Or use your package manager. [See all install options](/docs/#install).
+
+---
+
+## Connect a provider
+
+Launch OpenCode and connect to an LLM provider.
+
+```bash
+opencode
+```
+
+Run the connect command and follow the prompts.
+
+```txt frame="none"
+/connect
+```
+
+You can also run this from the command line without launching the TUI.
+
+```bash
+opencode auth login
+```
+
+We recommend [OpenCode Zen](/docs/zen) - select **opencode** and sign up at [opencode.ai/auth](https://opencode.ai/auth). Zen gives you access to the best coding models from OpenAI, Anthropic, Google, and others through a single API key. We benchmark and curate these models specifically for coding agents, so you get optimal performance without the guesswork.
+
+If you already have API keys from Anthropic, OpenAI, or other providers, you can use those instead.
+
+---
+
+## Initialize your project
+
+Navigate to a project and run OpenCode.
+
+```bash
+cd ~/my-project
+opencode
+```
+
+Run the init command to scan your codebase.
+
+```txt frame="none"
+/init
+```
+
+This creates an `AGENTS.md` file that helps OpenCode understand your project structure, coding patterns, and conventions. Commit this file to Git so your team benefits too.
+
+:::tip
+The `/init` command analyzes your entire codebase. For large projects, this may take a minute.
+:::
+
+---
+
+## Your first conversation
+
+Now let's actually use OpenCode. Start with something simple.
+
+```txt frame="none"
+Give me a quick summary of this codebase.
+```
+
+OpenCode will read through your project and explain what it does. This is a good sanity check that everything is working.
+
+---
+
+## Reference files with @
+
+The `@` symbol is your best friend. It lets you reference specific files in your prompts.
+
+```txt frame="none"
+What does @src/auth/login.ts do?
+```
+
+Start typing `@` and a fuzzy finder appears. Search for any file in your project.
+
+:::tip
+Reference files when you want OpenCode to focus on specific code. This gives it precise context instead of searching the whole codebase.
+:::
+
+You can reference multiple files in one prompt.
+
+```txt frame="none"
+Compare @src/api/users.ts and @src/api/posts.ts - are they following the same patterns?
+```
+
+---
+
+## The Plan-Build workflow
+
+This is the core of working with OpenCode. There are two modes:
+
+| Mode      | Purpose                                     | Makes changes? |
+| --------- | ------------------------------------------- | -------------- |
+| **Plan**  | Analyze code, create plans, suggest changes | No             |
+| **Build** | Execute changes, write code, run commands   | Yes            |
+
+Press **Tab** to switch between them. You'll see the current mode in the bottom-right corner.
+
+---
+
+### Start with Plan mode
+
+When tackling something new, start in Plan mode. Press **Tab** until you see "Plan" in the corner.
+
+```txt frame="none"
+I want to add rate limiting to our API endpoints. How should we approach this?
+```
+
+OpenCode will analyze your codebase and suggest an implementation plan without making any changes. This lets you review the approach before committing to it.
+
+---
+
+### Iterate on the plan
+
+Plans are meant to be refined. Give feedback and ask questions.
+
+```txt frame="none"
+I like option 2, but can we use Redis instead of in-memory storage?
+```
+
+Keep iterating until you're happy with the approach.
+
+---
+
+### Switch to Build mode
+
+Once the plan looks good, press **Tab** to switch to Build mode.
+
+```txt frame="none"
+Sounds good. Go ahead and implement it.
+```
+
+OpenCode will now make actual changes to your files. You'll see each file edit as it happens.
+
+---
+
+## Undo mistakes
+
+Made a change you don't like? No problem.
+
+```txt frame="none"
+/undo
+```
+
+This reverts all file changes from the last message and removes it from the conversation. Your original prompt reappears so you can rephrase it.
+
+:::tip
+Run `/undo` multiple times to undo multiple changes. Use `/redo` to restore undone changes.
+:::
+
+This works because OpenCode uses Git under the hood. Your project needs to be a Git repository.
+
+---
+
+## Run shell commands
+
+Prefix any message with `!` to run a shell command and add the output to the conversation.
+
+```txt frame="none"
+!npm test
+```
+
+This is useful for showing OpenCode test failures, build errors, or any command output.
+
+```txt frame="none"
+!npm test
+
+These tests are failing. Can you fix them?
+```
+
+---
+
+## Share your conversation
+
+Found something useful? Share it with your team.
+
+```txt frame="none"
+/share
+```
+
+This creates a link and copies it to your clipboard. Conversations are private by default - only people with the link can view them.
+
+---
+
+## Quick tips
+
+A few things that will make you more productive:
+
+**Give context generously.** Tell OpenCode about your constraints, preferences, and requirements. It can't read your mind.
+
+```txt frame="none"
+We use Tailwind for styling and prefer functional components with hooks.
+Add a user profile card that shows name, avatar, and email.
+```
+
+**Talk like you're mentoring a junior developer.** Explain the "why" not just the "what".
+
+```txt frame="none"
+We're seeing timeouts on the /search endpoint during peak traffic.
+Users are reporting 30+ second load times. The database query looks fine
+so I suspect it's the external API calls. Can you investigate?
+```
+
+**Use images for UI work.** Drag and drop screenshots or mockups directly into the terminal. You can also paste images from your clipboard with **Ctrl+V**.
+
+```txt frame="none"
+[Image #1] Implement this design for our settings page.
+```
+
+---
+
+## Add MCP servers
+
+MCP servers extend OpenCode with external tools. Two we recommend:
+
+- [**Context7**](https://context7.com) - Search library documentation. Great for current API references.
+- [**Exa**](https://exa.ai) - Search the web and code repositories. Useful for recent solutions.
+
+These ground responses in real documentation instead of potentially outdated training data.
+
+---
+
+### Config locations
+
+OpenCode config can live in two places:
+
+| Location | Path                               | Scope             |
+| -------- | ---------------------------------- | ----------------- |
+| Global   | `~/.config/opencode/opencode.json` | All projects      |
+| Project  | `opencode.json` in project root    | That project only |
+
+---
+
+### Global config
+
+For tools you'll use everywhere, add them to your global config:
+
+```json title="~/.config/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "exa": {
+      "type": "remote",
+      "url": "https://mcp.exa.ai/mcp"
+    }
+  }
+}
+```
+
+---
+
+### Project config
+
+For project-specific tools, add them to your project's `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "neon": {
+      "type": "remote",
+      "url": "https://mcp.neon.tech/sse",
+      "headers": {
+        "Authorization": "Bearer {env:NEON_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Use MCP tools
+
+Ask OpenCode to use them when you need current information.
+
+```txt frame="none"
+How do I set up authentication in Next.js 16? use context7
+```
+
+[Learn more about MCP servers](/docs/mcp-servers).
+
+---
+
+## What's next
+
+You now know the fundamentals. Here's where to go deeper:
+
+- [Agents](/docs/agents) - Create specialized agents for specific tasks
+- [Commands](/docs/commands) - Build custom commands for repetitive workflows
+- [Rules](/docs/rules) - Customize OpenCode's behavior with AGENTS.md
+- [Keybinds](/docs/keybinds) - Learn keyboard shortcuts for faster navigation
+- [Themes](/docs/themes) - Customize the look and feel
+
+---
+
+## Cheat sheet
+
+| Action             | How                   |
+| ------------------ | --------------------- |
+| Switch modes       | **Tab**               |
+| Reference file     | `@filename`           |
+| Run shell command  | `!command`            |
+| Undo changes       | `/undo`               |
+| Redo changes       | `/redo`               |
+| Start new session  | `/new`                |
+| Share conversation | `/share`              |
+| See all commands   | `/help`               |
+| Exit               | `/exit` or `ctrl+x q` |

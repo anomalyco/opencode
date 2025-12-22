@@ -58,6 +58,10 @@ export default defineConfig({
         "troubleshooting",
         "1-0",
         {
+          label: "Guides",
+          items: ["guides/first-hour"],
+        },
+        {
           label: "Usage",
           items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
         },
