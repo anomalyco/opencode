@@ -33,21 +33,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (terminal.name === TERMINAL_NAME) {
-      // @ts-ignore
-      const env = terminal.creationOptions.env
+      const env = (terminal.creationOptions as vscode.TerminalOptions)?.env || {};
       const port = env?.["_EXTENSION_OPENCODE_PORT"]
       const host = env?.["_EXTENSION_OPENCODE_HOST"] ?? "localhost"
-      if (port) {
-        await appendPrompt(parseInt(port), fileRef, host)
-      const env = terminal.creationOptions.env
-      const port = env?.["_EXTENSION_OPENCODE_PORT"]
-      const host = env?.["_EXTENSION_OPENCODE_HOST"] ?? "localhost"
-      if (port) {
-        await appendPrompt(parseInt(port), fileRef, host)
-      } else {
-        terminal.sendText(fileRef)
-      }
-      terminal.show()
+      port ? await appendPrompt(parseInt(port), fileRef, host) : terminal.sendText(fileRef)
       terminal.show()
     }
   })
