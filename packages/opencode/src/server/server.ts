@@ -6,6 +6,7 @@ import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler 
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { stream, streamSSE } from "hono/streaming"
+import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -52,9 +53,6 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
   const log = Log.create({ service: "server" })
-
-  // Port that the server is running on, used to inject into frontend HTML
-  let serverPort: number = 4096
 
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
@@ -2580,25 +2578,12 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        const response = await fetch(`https://desktop.opencode.ai${c.req.path}`, {
-          method: c.req.method,
+        return proxy(`https://desktop.opencode.ai${c.req.path}`, {
+          ...c.req,
           headers: {
             host: "desktop.opencode.ai",
           },
         })
-
-        const contentType = response.headers.get("content-type") || ""
-
-        // If this is an HTML response, inject the server port
-        if (contentType.includes("text/html")) {
-          const html = await response.text()
-          const portScript = `<script>window.__OPENCODE__ = window.__OPENCODE__ || {}; window.__OPENCODE__.port = ${serverPort};</script>`
-          // Inject the script right after the opening <head> tag
-          const modifiedHtml = html.replace("<head>", `<head>${portScript}`)
-          return c.html(modifiedHtml)
-        }
-
-        return response
       }),
   )
 
@@ -2622,9 +2607,14 @@ export namespace Server {
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
-    })
-    // Store the actual port for injection into frontend HTML
-    serverPort = server.port ?? opts.port
-    return server
+    } as const
+    if (opts.port === 0) {
+      try {
+        return Bun.serve({ ...args, port: 4096 })
+      } catch {
+        // port 4096 not available, fall through to use port 0
+      }
+    }
+    return Bun.serve({ ...args, port: opts.port })
   }
 }

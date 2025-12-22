@@ -35,7 +35,7 @@ const url =
   new URLSearchParams(document.location.search).get("url") ||
   (location.hostname.includes("opencode.ai") || location.hostname.includes("localhost")
     ? `http://${host}:${port}`
-    : window.location.origin)
+    : "/")
 
 export function App() {
   return (
