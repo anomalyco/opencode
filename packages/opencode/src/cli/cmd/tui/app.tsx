@@ -707,7 +707,7 @@ function ErrorComponent(props: {
   }
 
   useKeyboard((evt) => {
-    if (evt.ctrl && evt.name === "c") {
+    if (evt.ctrl && (evt.name === "c" || evt.baseCode === 99)) {
       handleExit()
     }
   })
