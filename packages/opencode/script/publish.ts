@@ -3,6 +3,7 @@ import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 import { fileURLToPath } from "url"
+import { glob } from "fs/promises"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
@@ -38,9 +39,22 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 
 const tags = [Script.channel]
 
+if(Bun.env.ACTIONS_RUNTIME_TOKEN) {
+  const { DefaultArtifactClient } = await import("@actions/artifact")
+
+  const artifactClient = new DefaultArtifactClient();
+
+  for await (const folder of $`ls ./dist`.lines()) {
+    if (!folder.startsWith("opencode-")) continue;
+
+    const files = await Array.fromAsync(glob(`./dist/${folder}/bin/*`))
+    await artifactClient.uploadArtifact(folder, files, process.cwd())
+  }
+}
+
 const tasks = Object.entries(binaries).map(async ([name]) => {
   if (process.platform !== "win32") {
-    await $`chmod 755 -R .`.cwd(`./dist/${name}`)
+    await $`chmod -R 755 .`.cwd(`./dist/${name}`)
   }
   await $`bun pm pack`.cwd(`./dist/${name}`)
   for (const tag of tags) {
