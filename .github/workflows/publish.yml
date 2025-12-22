@@ -194,7 +194,7 @@ jobs:
           projectPath: packages/tauri
           uploadWorkflowArtifacts: true
           tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
-          args: --target ${{ matrix.settings.target }} --config src-tauri/tauri.prod.conf.json --vvv
+          args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.publish.outputs.release }}
           tagName: ${{ needs.publish.outputs.tag }}
