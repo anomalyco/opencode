@@ -119,7 +119,6 @@ function DialogCommand(props: { options: CommandOption[] }) {
   return (
     <Dialog title="Commands">
       <List
-        class="px-2.5"
         search={{ placeholder: "Search commands", autofocus: true }}
         emptyMessage="No commands found"
         items={() => props.options.filter((x) => !x.id.startsWith("suggested.") || !x.disabled)}
