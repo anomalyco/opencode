@@ -1,24 +1,24 @@
+import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
+import { Button } from "@opencode-ai/ui/button"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Dialog } from "@opencode-ai/ui/dialog"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
+import type { IconName } from "@opencode-ai/ui/icons/provider"
+import { List, type ListRef } from "@opencode-ai/ui/list"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { Spinner } from "@opencode-ai/ui/spinner"
+import { TextField } from "@opencode-ai/ui/text-field"
+import { showToast } from "@opencode-ai/ui/toast"
+import { iife } from "@opencode-ai/util/iife"
 import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useGlobalSync } from "@/context/global-sync"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { usePlatform } from "@/context/platform"
-import { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List, ListRef } from "@opencode-ai/ui/list"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Icon } from "@opencode-ai/ui/icon"
-import { showToast } from "@opencode-ai/ui/toast"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { IconName } from "@opencode-ai/ui/icons/provider"
-import { iife } from "@opencode-ai/util/iife"
 import { Link } from "@/components/link"
-import { DialogSelectProvider } from "./dialog-select-provider"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
+import { usePlatform } from "@/context/platform"
 import { DialogSelectModel } from "./dialog-select-model"
+import { DialogSelectProvider } from "./dialog-select-provider"
 
 export function DialogConnectProvider(props: { provider: string }) {
   const dialog = useDialog()
@@ -154,7 +154,9 @@ export function DialogConnectProvider(props: { provider: string }) {
               <div class="text-14-regular text-text-base">Select login method for {provider().name}.</div>
               <div class="">
                 <List
-                  ref={(ref) => (listRef = ref)}
+                  ref={(ref) => {
+                    listRef = ref
+                  }}
                   items={methods}
                   key={(m) => m?.label}
                   onSelect={async (method, index) => {
@@ -163,7 +165,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                   }}
                 >
                   {(i) => (
-                    <div class="w-full flex items-center gap-x-4">
+                    <div class="w-full flex items-center gap-x-2">
                       <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
                         <div class="w-2.5 h-0.5 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
                       </div>
@@ -175,7 +177,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             </Match>
             <Match when={store.state === "pending"}>
               <div class="text-14-regular text-text-base">
-                <div class="flex items-center gap-x-4">
+                <div class="flex items-center gap-x-2">
                   <Spinner />
                   <span>Authorization in progress...</span>
                 </div>
@@ -183,7 +185,7 @@ export function DialogConnectProvider(props: { provider: string }) {
             </Match>
             <Match when={store.state === "error"}>
               <div class="text-14-regular text-text-base">
-                <div class="flex items-center gap-x-4">
+                <div class="flex items-center gap-x-2">
                   <Icon name="circle-ban-sign" class="text-icon-critical-base" />
                   <span>Authorization failed: {store.error}</span>
                 </div>

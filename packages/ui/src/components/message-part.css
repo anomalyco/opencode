@@ -287,6 +287,44 @@
   }
 }
 
+[data-component="task-tools"] {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  [data-slot="task-tool-item"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-weak);
+
+    [data-slot="icon-svg"] {
+      flex-shrink: 0;
+      color: var(--icon-weak);
+    }
+  }
+
+  [data-slot="task-tool-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-weak);
+  }
+
+  [data-slot="task-tool-subtitle"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    color: var(--text-weaker);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 [data-component="diagnostics"] {
   display: flex;
   flex-direction: column;
