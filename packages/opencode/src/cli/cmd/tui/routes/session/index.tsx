@@ -944,7 +944,9 @@ export function Session() {
                 {(view) => {
                   const output = createMemo(() => {
                     const parts = sync.data.part[view().messageID] ?? []
-                    const part = parts.find((p) => p.id === view().partID)
+                    const partIndex = parts.findIndex((p) => p.id === view().partID)
+                    if (partIndex < 0) return ""
+                    const part = sync.data.part[view().messageID]?.[partIndex]
                     if (part?.type === "tool" && "metadata" in part.state) {
                       const metadata = part.state.metadata as { output?: string } | undefined
                       return (metadata?.output ?? "").trim()
