@@ -66,4 +66,5 @@ jobs:
             4. If you are creating a new documentation file be sure to update packages/web/astro.config.mjs too.
 
             Focus on user-facing features and API changes. Skip internal refactors, bug fixes, and test updates unless they affect user-facing behavior.
-            All doc related commits should start with "docs:" prefix.
+            Don't feel the need to document every little thing. It is perfectly okay to make 0 changes at all.
+            Try to keep documentation only for large features or changes that already have a good spot to be documented.
