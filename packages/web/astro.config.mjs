@@ -59,7 +59,7 @@ export default defineConfig({
         "1-0",
         {
           label: "Guides",
-          items: ["guides/first-hour"],
+          items: ["guides/first-hour", "guides/subagents"],
         },
         {
           label: "Usage",

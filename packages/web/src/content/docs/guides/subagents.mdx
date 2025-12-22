@@ -1,0 +1,578 @@
+---
+title: Subagents
+description: Delegate tasks and work faster with specialized agents.
+lastUpdated: 2025-12-21
+---
+
+Subagents are specialized assistants that handle specific tasks. Use them to delegate work, run tasks in parallel, and keep your main conversation focused.
+
+**The essentials**:
+
+- Built-in: `@explore` (find files), `@general` (complex research)
+- Invoke manually with `@agent-name` in your prompt
+- Primary agents delegate automatically based on descriptions
+- Create custom subagents in `~/.config/opencode/agent/` or `.opencode/agent/`
+
+---
+
+## Built-in subagents
+
+OpenCode includes two subagents ready to use.
+
+| Agent        | Best for                                        |
+| ------------ | ----------------------------------------------- |
+| **@explore** | Finding files, understanding codebase structure |
+| **@general** | Multi-step research, complex questions          |
+
+---
+
+### Explore
+
+A fast, read-only agent for navigating codebases. It can search files by pattern, grep for content, and read files - but cannot make changes.
+
+```txt frame="none"
+@explore find all React components that use the useAuth hook
+```
+
+Specify thoroughness when needed:
+
+```txt frame="none"
+@explore do a very thorough search for all API endpoint definitions
+```
+
+---
+
+### General
+
+A general-purpose agent for research and multi-step tasks. Has full tool access except for todo management.
+
+```txt frame="none"
+@general research how error handling works across the codebase and suggest improvements
+```
+
+---
+
+## Invoke subagents
+
+There are two ways subagents get invoked.
+
+---
+
+### Manual invocation
+
+Type `@` followed by the agent name in your prompt.
+
+```txt frame="none"
+@explore find all files that import the Button component
+```
+
+Use this when you know which agent you want for a specific task.
+
+---
+
+### Automatic delegation
+
+Primary agents (Build, Plan) automatically delegate to subagents based on their descriptions. When you ask the Build agent to explore the codebase, it may spawn an `@explore` subagent behind the scenes.
+
+This happens automatically - you'll see subagent activity in the session.
+
+---
+
+### Navigate between sessions
+
+Subagents run in child sessions. Navigate between parent and child sessions with:
+
+- **`<Leader>+Right`** - Cycle forward through sessions
+- **`<Leader>+Left`** - Cycle backward through sessions
+
+This lets you inspect what subagents are doing or check their detailed output.
+
+---
+
+## Create custom subagents
+
+Define subagents as markdown files or in your `opencode.json`.
+
+---
+
+### File locations
+
+| Location | Path                            | Scope             |
+| -------- | ------------------------------- | ----------------- |
+| Global   | `~/.config/opencode/agent/*.md` | All projects      |
+| Project  | `.opencode/agent/*.md`          | That project only |
+
+The filename becomes the agent name. `review.md` creates `@review`.
+
+---
+
+### Markdown format
+
+Create a markdown file with YAML frontmatter for config and the body as the system prompt.
+
+```markdown title="~/.config/opencode/agent/review.md"
+---
+description: Reviews code for quality issues and best practices
+mode: subagent
+tools:
+  write: false
+  edit: false
+---
+
+You are a senior code reviewer. Analyze code for:
+
+- Code quality and readability
+- Potential bugs and edge cases
+- Performance issues
+- Security concerns
+
+Provide specific, actionable feedback. Do not make changes directly.
+```
+
+---
+
+### JSON format
+
+Alternatively, configure agents in `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "review": {
+      "description": "Reviews code for quality issues and best practices",
+      "mode": "subagent",
+      "prompt": "You are a senior code reviewer...",
+      "tools": {
+        "write": false,
+        "edit": false
+      }
+    }
+  }
+}
+```
+
+---
+
+## Configuration reference
+
+All available options for configuring subagents.
+
+---
+
+### description
+
+**Required for automatic invocation.** Tells primary agents when to use this subagent.
+
+```yaml
+description: Reviews code for security vulnerabilities
+```
+
+Write clear descriptions - primary agents use this to decide when to delegate.
+
+---
+
+### mode
+
+Controls how the agent can be used.
+
+```yaml
+mode: subagent
+```
+
+| Value      | Meaning                                                      |
+| ---------- | ------------------------------------------------------------ |
+| `subagent` | Only available as a subagent (invoked via `@` or delegation) |
+| `primary`  | Only available as a primary agent (Tab to switch)            |
+| `all`      | Available as both (default)                                  |
+
+---
+
+### model
+
+Override the model for this agent. The format is `provider/model`.
+
+```yaml
+# Direct provider
+model: anthropic/claude-sonnet-4
+
+# OpenCode Zen
+model: opencode/claude-sonnet-4
+```
+
+Find model IDs on [Models.dev](https://models.dev) or run `/models` in OpenCode. For Zen models, see the [Zen docs](/docs/zen#endpoints).
+
+Useful for using faster models for simple tasks or more capable models for complex ones. If not specified, subagents inherit the model from the primary agent that invoked them.
+
+---
+
+### temperature
+
+Control randomness and creativity. Lower values are more focused and deterministic.
+
+```yaml
+temperature: 0.1
+```
+
+| Range     | Best for                      |
+| --------- | ----------------------------- |
+| 0.0 - 0.2 | Code analysis, precise tasks  |
+| 0.3 - 0.5 | General development           |
+| 0.6 - 1.0 | Brainstorming, creative tasks |
+
+---
+
+### top_p
+
+Nucleus sampling parameter. Alternative to temperature for controlling randomness.
+
+```yaml
+top_p: 0.9
+```
+
+---
+
+### prompt
+
+The system prompt for the agent. In markdown files, this is the body content after the frontmatter.
+
+```yaml
+prompt: "You are a technical writer. Focus on clarity and completeness."
+```
+
+Or in markdown format:
+
+```markdown title="~/.config/opencode/agent/docs.md"
+---
+description: Writes documentation
+mode: subagent
+---
+
+You are a technical writer. Focus on:
+
+- Clear explanations
+- Practical examples
+- Consistent formatting
+```
+
+---
+
+### tools
+
+Enable or disable specific tools.
+
+```yaml
+tools:
+  write: false
+  edit: false
+  bash: true
+  webfetch: true
+```
+
+Common patterns:
+
+```yaml
+# Read-only agent
+tools:
+  write: false
+  edit: false
+
+# No shell access
+tools:
+  bash: false
+
+# Disable MCP tools by pattern
+tools:
+  "mymcp_*": false
+```
+
+---
+
+### permission
+
+Fine-grained control over tool permissions. Values: `allow`, `ask`, `deny`.
+
+```yaml
+permission:
+  edit: deny
+  webfetch: allow
+  bash:
+    "git status": allow
+    "git diff*": allow
+    "git log*": allow
+    "*": ask
+```
+
+The `bash` field supports glob patterns. More specific patterns override `*`.
+
+---
+
+### maxSteps
+
+Limit the number of agentic iterations before forcing a text response.
+
+```yaml
+maxSteps: 10
+```
+
+Useful for controlling costs or preventing runaway agents.
+
+---
+
+### color
+
+Hex color for visual identification in the UI.
+
+```yaml
+color: "#FF5733"
+```
+
+---
+
+### disable
+
+Disable a built-in or previously defined agent.
+
+```yaml
+disable: true
+```
+
+---
+
+### Additional options
+
+Any other options are passed through to the model provider.
+
+```yaml
+reasoningEffort: high
+textVerbosity: low
+```
+
+Check your provider's documentation for available options.
+
+---
+
+## Example subagents
+
+Ready-to-use examples for common workflows.
+
+---
+
+### Code reviewer
+
+Reviews code without making changes.
+
+```markdown title="~/.config/opencode/agent/review.md"
+---
+description: Reviews code for quality, bugs, and best practices
+mode: subagent
+temperature: 0.2
+tools:
+  write: false
+  edit: false
+---
+
+You are a senior code reviewer. For each piece of code:
+
+1. Check for bugs and edge cases
+2. Evaluate code quality and readability
+3. Look for performance issues
+4. Identify security concerns
+5. Suggest improvements
+
+Be specific and actionable. Reference line numbers when relevant.
+```
+
+---
+
+### Test writer
+
+Writes tests for existing code.
+
+```markdown title="~/.config/opencode/agent/test-writer.md"
+---
+description: Writes comprehensive tests for code
+mode: subagent
+temperature: 0.3
+---
+
+You are a test engineer. When writing tests:
+
+- Cover happy paths and edge cases
+- Test error conditions
+- Use descriptive test names
+- Follow existing test patterns in the codebase
+- Aim for high coverage of critical paths
+
+Match the testing framework already used in the project.
+```
+
+---
+
+### Documentation writer
+
+Creates and updates documentation.
+
+```markdown title="~/.config/opencode/agent/docs.md"
+---
+description: Writes and maintains documentation
+mode: subagent
+tools:
+  bash: false
+---
+
+You are a technical writer. Create clear, comprehensive documentation.
+
+Guidelines:
+
+- Write for developers who are new to the codebase
+- Include practical code examples
+- Use consistent formatting
+- Keep explanations concise but complete
+- Update existing docs rather than duplicating
+```
+
+---
+
+### Security auditor
+
+Focuses on security analysis.
+
+```markdown title="~/.config/opencode/agent/security.md"
+---
+description: Audits code for security vulnerabilities
+mode: subagent
+temperature: 0.1
+tools:
+  write: false
+  edit: false
+permission:
+  bash:
+    "grep*": allow
+    "rg*": allow
+    "find*": allow
+    "*": deny
+---
+
+You are a security expert. Analyze code for:
+
+- Input validation vulnerabilities
+- Authentication and authorization flaws
+- Data exposure risks
+- Injection vulnerabilities (SQL, XSS, command)
+- Insecure dependencies
+- Configuration security issues
+
+Classify findings by severity: Critical, High, Medium, Low.
+```
+
+---
+
+### Git committer
+
+Handles git operations.
+
+```markdown title="~/.config/opencode/agent/commit.md"
+---
+description: Creates well-formatted git commits
+mode: subagent
+permission:
+  edit: deny
+  bash:
+    "git *": allow
+    "*": deny
+---
+
+You are a git expert. When creating commits:
+
+1. Review staged changes with git diff --staged
+2. Write clear, conventional commit messages
+3. Keep commits focused and atomic
+4. Follow the repository's commit conventions
+
+Commit message format:
+
+- Start with type: feat, fix, docs, refactor, test, chore
+- Keep subject line under 72 characters
+- Use imperative mood ("add feature" not "added feature")
+```
+
+---
+
+## Best practices
+
+Tips for effective subagent usage.
+
+---
+
+### Write clear descriptions
+
+The `description` field determines when primary agents delegate automatically. Be specific.
+
+```yaml
+# Good - specific about when to use
+description: Reviews Python code for PEP 8 compliance and type hints
+
+# Bad - too vague
+description: Reviews code
+```
+
+---
+
+### Restrict tools appropriately
+
+Only enable tools the agent needs. Read-only agents shouldn't have write access.
+
+```yaml
+# Security auditor - read only
+tools:
+  write: false
+  edit: false
+  bash: false
+```
+
+---
+
+### Use lower temperature for precise tasks
+
+Code review, security audits, and analysis benefit from deterministic responses.
+
+```yaml
+temperature: 0.1
+```
+
+---
+
+### Be explicit about intent in prompts
+
+Tell the agent whether to research or make changes.
+
+```markdown
+You are a code reviewer. Analyze code and provide feedback.
+Do NOT make changes directly - only suggest improvements.
+```
+
+---
+
+### Use maxSteps for cost control
+
+Limit iterations for agents that might run long.
+
+```yaml
+maxSteps: 15
+```
+
+---
+
+## Cheat sheet
+
+| Action                     | How                                    |
+| -------------------------- | -------------------------------------- |
+| Invoke subagent            | `@agent-name your request`             |
+| Navigate to child session  | `<Leader>+Right`                       |
+| Navigate to parent session | `<Leader>+Left`                        |
+| Create global agent        | `~/.config/opencode/agent/name.md`     |
+| Create project agent       | `.opencode/agent/name.md`              |
+| Disable agent              | `disable: true` in config              |
+| Read-only agent            | `tools: { write: false, edit: false }` |
+| Limit iterations           | `maxSteps: 10`                         |
