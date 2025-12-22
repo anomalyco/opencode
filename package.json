@@ -89,7 +89,6 @@
   "trustedDependencies": [
     "esbuild",
     "protobufjs",
-    "sharp",
     "tree-sitter",
     "tree-sitter-bash",
     "web-tree-sitter"
