@@ -108,10 +108,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("projects", (x) => x.filter((x) => x.worktree !== directory))
         },
         expand(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: true } : x)))
+          const index = store.projects.findIndex((x) => x.worktree === directory)
+          if (index !== -1) setStore("projects", index, "expanded", true)
         },
         collapse(directory: string) {
-          setStore("projects", (x) => x.map((x) => (x.worktree === directory ? { ...x, expanded: false } : x)))
+          const index = store.projects.findIndex((x) => x.worktree === directory)
+          if (index !== -1) setStore("projects", index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
           setStore("projects", (projects) => {
