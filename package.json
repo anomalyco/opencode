@@ -64,10 +64,17 @@
     "turbo": "2.5.6"
   },
   "dependencies": {
+    "@ai-sdk/cerebras": "1.0.33",
+    "@ai-sdk/cohere": "2.0.21",
+    "@ai-sdk/deepinfra": "1.0.30",
+    "@ai-sdk/gateway": "2.0.23",
+    "@ai-sdk/groq": "2.0.33",
+    "@ai-sdk/perplexity": "2.0.22",
+    "@ai-sdk/togetherai": "1.0.30",
     "@aws-sdk/client-s3": "3.933.0",
+    "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
