@@ -101,6 +101,7 @@ jobs:
           import * as fs from 'fs/promises';
           import * as path from 'path';
           import { DefaultArtifactClient } from "@actions/artifact";
+          import { $ } from "bun";
 
           const artifactClient = new DefaultArtifactClient()
 
