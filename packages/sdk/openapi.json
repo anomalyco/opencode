@@ -7687,6 +7687,24 @@
                   }
                 ]
               },
+              "skill": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["ask", "allow", "deny"]
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": ["ask", "allow", "deny"]
+                    }
+                  }
+                ]
+              },
               "webfetch": {
                 "type": "string",
                 "enum": ["ask", "allow", "deny"]
@@ -8378,6 +8396,24 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "bash": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["ask", "allow", "deny"]
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": ["ask", "allow", "deny"]
+                    }
+                  }
+                ]
+              },
+              "skill": {
                 "anyOf": [
                   {
                     "type": "string",
@@ -9204,6 +9240,16 @@
                   "enum": ["ask", "allow", "deny"]
                 }
               },
+              "skill": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "enum": ["ask", "allow", "deny"]
+                }
+              },
               "webfetch": {
                 "type": "string",
                 "enum": ["ask", "allow", "deny"]
@@ -9217,7 +9263,7 @@
                 "enum": ["ask", "allow", "deny"]
               }
             },
-            "required": ["edit", "bash"]
+            "required": ["edit", "bash", "skill"]
           },
           "model": {
             "type": "object",
