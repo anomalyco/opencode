@@ -585,6 +585,13 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    prompt_history_max_size: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .default(50)
+      .describe("Maximum number of prompt history entries to keep in memory"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({

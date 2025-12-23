@@ -25,12 +25,13 @@ export type PromptInfo = {
   )[]
 }
 
-const MAX_HISTORY_ENTRIES = 50
-
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
     const historyFile = Bun.file(path.join(Global.Path.state, "prompt-history.jsonl"))
+    // Default to 50, this will be overridden by config if set
+    let maxEntries = 50
+
     onMount(async () => {
       const text = await historyFile.text().catch(() => "")
       const lines = text
@@ -44,7 +45,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
           }
         })
         .filter((line): line is PromptInfo => line !== null)
-        .slice(-MAX_HISTORY_ENTRIES)
+        .slice(-maxEntries)
 
       setStore("history", lines)
 
@@ -87,8 +88,8 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         setStore(
           produce((draft) => {
             draft.history.push(entry)
-            if (draft.history.length > MAX_HISTORY_ENTRIES) {
-              draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
+            if (draft.history.length > maxEntries) {
+              draft.history = draft.history.slice(-maxEntries)
               trimmed = true
             }
             draft.index = 0
