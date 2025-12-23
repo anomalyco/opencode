@@ -9,8 +9,8 @@ import { wrapLanguageModel } from "ai"
  * the AI SDK to wait indefinitely for tool execution. This function intercepts
  * the fetch responses and removes empty tool_calls arrays when finish_reason is "stop".
  */
-export function createFilteredFetch(originalFetch: typeof fetch): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
-  return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+export function createFilteredFetch(originalFetch: typeof fetch): typeof fetch {
+  const filteredFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await originalFetch(input, init)
     
     // Only process JSON responses from chat completions endpoints
@@ -183,6 +183,7 @@ export function createFilteredFetch(originalFetch: typeof fetch): (input: Reques
     
     return response
   }
+  return filteredFetch as typeof fetch
 }
 
 /**

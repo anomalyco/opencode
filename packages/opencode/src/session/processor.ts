@@ -278,7 +278,6 @@ export namespace SessionProcessor {
                           },
                         })
                         delete toolcalls[part.callID]
-                        delete toolStartTimes[part.callID]
                       }
                     }
                   }
