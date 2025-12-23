@@ -7,7 +7,12 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
-import type { IssueCommentEvent, PullRequestReviewCommentEvent, PullRequestEvent } from "@octokit/webhooks-types"
+import type {
+  IssueCommentEvent,
+  PullRequestReviewCommentEvent,
+  WorkflowRunEvent,
+  PullRequestEvent,
+} from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
@@ -401,10 +406,12 @@ export const GithubRunCommand = cmd({
       const oidcBaseUrl = normalizeOidcBaseUrl()
       const { owner, repo } = context.repo
       // For schedule events, payload has no issue/comment data
-      const payload = isCommentEvent
-        ? (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent)
-        : undefined
-      const issueEvent = payload && isIssueCommentEvent(payload) ? payload : undefined
+      const payload = context.payload as
+        | IssueCommentEvent
+        | PullRequestReviewCommentEvent
+        | WorkflowRunEvent
+        | PullRequestEvent
+      const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
       const actor = isScheduleEvent ? undefined : context.actor
 
       const issueId = isScheduleEvent
@@ -423,7 +430,9 @@ export const GithubRunCommand = cmd({
       let shareId: string | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
-      const triggerCommentId = payload?.comment.id
+      const triggerCommentId = isCommentEvent
+        ? (payload as IssueCommentEvent | PullRequestReviewCommentEvent).comment.id
+        : undefined
       const useGithubToken = normalizeUseGithubToken()
       const commentType = isCommentEvent
         ? context.eventName === "pull_request_review_comment"
@@ -619,7 +628,7 @@ export const GithubRunCommand = cmd({
       }
 
       function isIssueCommentEvent(
-        event: IssueCommentEvent | PullRequestReviewCommentEvent,
+        event: IssueCommentEvent | PullRequestReviewCommentEvent | WorkflowRunEvent | PullRequestEvent,
       ): event is IssueCommentEvent {
         return "issue" in event
       }
@@ -664,7 +673,7 @@ export const GithubRunCommand = cmd({
           if (!isCommentEvent) {
             return "Review this pull request"
           }
-          const body = payload!.comment.body.trim()
+          const body = (payload as IssueCommentEvent | PullRequestReviewCommentEvent).comment.body.trim()
           const bodyLower = body.toLowerCase()
           if (mentions.some((m) => bodyLower === m)) {
             if (reviewContext) {
