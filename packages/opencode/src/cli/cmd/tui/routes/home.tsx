@@ -52,7 +52,10 @@ export function Home() {
   onMount(() => {
     if (once) return
     if (args.command) {
+    if (args.command) {
       prompt.set({ input: `/${args.command} ${args.prompt || ""}`.trim(), parts: [] })
+      once = true
+    } else if (route.initialPrompt) {
     } else if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
       once = true
