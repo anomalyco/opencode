@@ -14,12 +14,46 @@ import { Permission } from "@/permission"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
+import fs from "fs/promises"
 import { Shell } from "@/shell/shell"
 
 const MAX_OUTPUT_LENGTH = Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH || 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+const OUTPUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
+
+const outputDir = () => path.join(Instance.directory, ".opencode", "bashOutputs")
+
+const cleanupOutputFiles = async () => {
+  const dir = outputDir()
+  const stats = await fs.stat(dir).catch(() => undefined)
+  if (!stats?.isDirectory()) return
+  const now = Date.now()
+  const glob = new Bun.Glob("*.txt")
+  const files = await Array.fromAsync(
+    glob.scan({
+      cwd: dir,
+      absolute: true,
+      onlyFiles: true,
+    }),
+  )
+  await Promise.all(
+    files.map(async (file) => {
+      const info = await fs.stat(file).catch(() => undefined)
+      if (!info) return
+      if (now - info.mtimeMs <= OUTPUT_RETENTION_MS) return
+      await fs.unlink(file).catch(() => {})
+    }),
+  )
+}
+
+const initOutputCleanup = Instance.state(() => {
+  void cleanupOutputFiles().catch((error) => {
+    log.warn("bash output cleanup failed", { error })
+  })
+  return true
+})
 
 const resolveWasm = (asset: string) => {
   if (asset.startsWith("file://")) return fileURLToPath(asset)
@@ -53,6 +87,7 @@ const parser = lazy(async () => {
 export const BashTool = Tool.define("bash", async () => {
   const shell = Shell.acceptable()
   log.info("bash tool using shell", { shell })
+  initOutputCleanup()
 
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory),
@@ -206,6 +241,11 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       let output = ""
+      let outputFileRelative: string | undefined
+      let outputWriter: ReturnType<ReturnType<typeof Bun.file>["writer"]> | undefined
+      let outputBytes = 0
+      let overflowed = false
+      let outputWrite = Promise.resolve()
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -215,16 +255,56 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
-      const append = (chunk: Buffer) => {
-        if (output.length <= MAX_OUTPUT_LENGTH) {
-          output += chunk.toString()
-          ctx.metadata({
-            metadata: {
-              output,
-              description: params.description,
-            },
+      const queueWrite = (data: Buffer | string) => {
+        const byteCount = typeof data === "string" ? Buffer.byteLength(data) : data.length
+        outputWrite = outputWrite
+          .then(async () => {
+            if (!outputWriter) {
+              outputFileRelative = path.join(".opencode", "bashOutputs", `${ctx.sessionID}_${ctx.callID}.txt`)
+              const outputFileAbsolute = path.join(Instance.directory, outputFileRelative)
+              await fs.mkdir(path.dirname(outputFileAbsolute), { recursive: true })
+              outputWriter = Bun.file(outputFileAbsolute).writer()
+            }
+            outputWriter.write(data)
+            outputWriter.flush()
+            outputBytes += byteCount
           })
+          .catch((error) => {
+            log.warn("bash output file write failed", { error })
+          })
+      }
+
+      const appendPreview = (chunk: Buffer) => {
+        output += chunk.toString()
+        if (output.length > MAX_OUTPUT_LENGTH) {
+          output = output.slice(output.length - MAX_OUTPUT_LENGTH)
         }
+      }
+
+      const closeWriter = () => {
+        if (!outputWriter) return
+        const writer = outputWriter as { end?: () => void }
+        writer.end?.()
+      }
+
+      const append = (chunk: Buffer) => {
+        if (overflowed) {
+          queueWrite(chunk)
+          appendPreview(chunk)
+        } else {
+          output += chunk.toString()
+          if (output.length > MAX_OUTPUT_LENGTH) {
+            overflowed = true
+            queueWrite(output)
+            output = output.slice(output.length - MAX_OUTPUT_LENGTH)
+          }
+        }
+        ctx.metadata({
+          metadata: {
+            output,
+            description: params.description,
+          },
+        })
       }
 
       proc.stdout?.on("data", append)
@@ -272,13 +352,22 @@ export const BashTool = Tool.define("bash", async () => {
         })
       })
 
-      let resultMetadata: String[] = ["<bash_metadata>"]
+      await outputWrite
+      closeWriter()
 
-      if (output.length > MAX_OUTPUT_LENGTH) {
-        output = output.slice(0, MAX_OUTPUT_LENGTH)
-        resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
+      
+      if (outputFileRelative) {
+        let outputMetadata: string[] = ["<bash_output_info>"]
+        outputMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
+        outputMetadata.push(`full output is available in output_file="${outputFileRelative}" file_size_bytes=${outputBytes}`)
+        outputMetadata.push(`use grep/read tools to view specific parts of the output file`)
+        outputMetadata.push("</bash_output_info>")
+
+        output = output + "'\n\n" + outputMetadata.join("\n") 
       }
 
+      let resultMetadata: string[] = ["<bash_metadata>"]
+      
       if (timedOut) {
         resultMetadata.push(`bash tool terminated commmand after exceeding timeout ${timeout} ms`)
       }
@@ -298,6 +387,7 @@ export const BashTool = Tool.define("bash", async () => {
           output,
           exit: proc.exitCode,
           description: params.description,
+          ...(outputFileRelative ? { outputFile: outputFileRelative, outputBytes } : {}),
         },
         output,
       }
