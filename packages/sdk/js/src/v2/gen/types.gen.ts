@@ -891,6 +891,14 @@ export type KeybindsConfig = {
    */
   messages_last?: string
   /**
+   * Navigate to next message
+   */
+  messages_next?: string
+  /**
+   * Navigate to previous message
+   */
+  messages_previous?: string
+  /**
    * Navigate to last user message
    */
   messages_last_user?: string
@@ -1115,6 +1123,10 @@ export type KeybindsConfig = {
    */
   session_child_cycle_reverse?: string
   /**
+   * Go to parent session
+   */
+  session_parent?: string
+  /**
    * Suspend terminal
    */
   terminal_suspend?: string
@@ -1155,6 +1167,13 @@ export type AgentConfig = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1175,6 +1194,13 @@ export type AgentConfig = {
     | {
         edit?: "ask" | "allow" | "deny"
         bash?:
+          | "ask"
+          | "allow"
+          | "deny"
+          | {
+              [key: string]: "ask" | "allow" | "deny"
+            }
+        skill?:
           | "ask"
           | "allow"
           | "deny"
@@ -1500,6 +1526,13 @@ export type Config = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1780,6 +1813,9 @@ export type Agent = {
     bash: {
       [key: string]: "ask" | "allow" | "deny"
     }
+    skill: {
+      [key: string]: "ask" | "allow" | "deny"
+    }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1860,6 +1896,25 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type GlobalHealthData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/health"
+}
+
+export type GlobalHealthResponses = {
+  /**
+   * Health information
+   */
+  200: {
+    healthy: true
+    version: string
+  }
+}
+
+export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
 
 export type GlobalEventData = {
   body?: never
@@ -2750,6 +2805,7 @@ export type SessionSummarizeData = {
   body?: {
     providerID: string
     modelID: string
+    auto?: boolean
   }
   path: {
     /**

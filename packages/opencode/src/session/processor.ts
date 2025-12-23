@@ -365,6 +365,20 @@ export namespace SessionProcessor {
               error: input.assistantMessage.error,
             })
           }
+          if (snapshot) {
+            const patch = await Snapshot.patch(snapshot)
+            if (patch.files.length) {
+              await Session.updatePart({
+                id: Identifier.ascending("part"),
+                messageID: input.assistantMessage.id,
+                sessionID: input.sessionID,
+                type: "patch",
+                hash: patch.hash,
+                files: patch.files,
+              })
+            }
+            snapshot = undefined
+          }
           const p = await MessageV2.parts(input.assistantMessage.id)
           for (const part of p) {
             if (part.type === "tool" && part.state.status !== "completed" && part.state.status !== "error") {
