@@ -122,15 +122,15 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                             <LocalProvider>
                               <KeybindProvider>
                                 <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <PromptHistoryProvider>
+                                  <PromptHistoryProvider>
+                                    <DialogProvider>
+                                      <CommandProvider>
                                         <PromptRefProvider>
                                           <App />
                                         </PromptRefProvider>
-                                      </PromptHistoryProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
+                                      </CommandProvider>
+                                    </DialogProvider>
+                                  </PromptHistoryProvider>
                                 </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>

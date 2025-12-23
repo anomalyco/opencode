@@ -7623,6 +7623,11 @@
             "default": "down",
             "type": "string"
           },
+          "prompt_history_list": {
+            "description": "Show prompt history modal",
+            "default": "none",
+            "type": "string"
+          },
           "session_child_cycle": {
             "description": "Next child session",
             "default": "<leader>right",

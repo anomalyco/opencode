@@ -28,6 +28,7 @@ import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { DialogPromptHistory } from "../dialog-prompt-history"
 import { useToast } from "../../ui/toast"
 
 export type PromptProps = {
@@ -484,6 +485,25 @@ export function Prompt(props: PromptProps) {
         ))
       },
     },
+    {
+      title: "Show prompt history",
+      value: "prompt.history.list",
+      category: "Prompt",
+      keybind: "prompt_history_list",
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogPromptHistory
+            onSelect={(item) => {
+              input.setText(item.input)
+              setStore("prompt", item)
+              setStore("mode", item.mode ?? "normal")
+              restoreExtmarksFromParts(item.parts)
+              input.cursorOffset = input.plainText.length
+            }}
+          />
+        ))
+      },
+    },
   ])
 
   props.ref?.({
@@ -614,6 +634,7 @@ export function Prompt(props: PromptProps) {
     }
     history.append({
       ...store.prompt,
+      input: store.prompt.input.trim().replace(/\n+/g, " "),
       mode: currentMode,
     })
     input.extmarks.clear()
@@ -846,6 +867,23 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  // Show prompt history modal
+                  if (keybind.match("prompt_history_list", e)) {
+                    dialog.replace(() => (
+                      <DialogPromptHistory
+                        onSelect={(item) => {
+                          input.setText(item.input)
+                          setStore("prompt", item)
+                          setStore("mode", item.mode ?? "normal")
+                          restoreExtmarksFromParts(item.parts)
+                          input.cursorOffset = input.plainText.length
+                        }}
+                      />
+                    ))
+                    e.preventDefault()
+                    return
+                  }
+
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
                     (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
