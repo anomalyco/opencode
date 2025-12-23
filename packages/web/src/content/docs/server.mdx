@@ -68,11 +68,12 @@ The opencode server exposes the following APIs.
 
 ---
 
-### Global Events
+### Global
 
-| Method | Path            | Description                    | Response     |
-| ------ | --------------- | ------------------------------ | ------------ |
-| `GET`  | `/global/event` | Get global events (SSE stream) | Event stream |
+| Method | Path             | Description                    | Response                             |
+| ------ | ---------------- | ------------------------------ | ------------------------------------ |
+| `GET`  | `/global/health` | Get server health and version  | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | Get global events (SSE stream) | Event stream                         |
 
 ---
 

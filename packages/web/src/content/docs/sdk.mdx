@@ -123,6 +123,23 @@ The SDK exposes all server APIs through a type-safe client.
 
 ---
 
+### Global
+
+| Method            | Description                     | Response                             |
+| ----------------- | ------------------------------- | ------------------------------------ |
+| `global.health()` | Check server health and version | `{ healthy: true, version: string }` |
+
+---
+
+#### Examples
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
 ### App
 
 | Method         | Description               | Response                                    |
