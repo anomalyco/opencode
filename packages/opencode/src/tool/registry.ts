@@ -115,7 +115,7 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(providerID: string) {
+  export async function tools(providerID: string, agent?: Agent.Info) {
     const tools = await all()
     const result = await Promise.all(
       tools
@@ -130,7 +130,7 @@ export namespace ToolRegistry {
           using _ = log.time(t.id)
           return {
             id: t.id,
-            ...(await t.init()),
+            ...(await t.init({ agent })),
           }
         }),
     )
