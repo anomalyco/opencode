@@ -148,6 +148,10 @@ declare module "sst" {
       "name": string
       "type": "sst.cloudflare.Bucket"
     }
+    "ZenDataNew": {
+      "name": string
+      "type": "sst.cloudflare.Bucket"
+    }
   }
 }
 /// <reference path="sst-env.d.ts" />
