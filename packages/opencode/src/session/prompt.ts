@@ -606,11 +606,13 @@ export namespace SessionPrompt {
               args,
             },
           )
+          const toolPart = input.processor.partFromToolCall(options.toolCallId)
           const result = await item.execute(args, {
             sessionID: input.sessionID,
             abort: options.abortSignal!,
             messageID: input.processor.message.id,
             callID: options.toolCallId,
+            toolPartID: toolPart?.id,
             extra: { model: input.model },
             agent: input.agent.name,
             metadata: async (val) => {
