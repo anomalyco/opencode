@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background-color: transparent;
+  background-color: hsl(from var(--background-base) h s l / 0.2);
 
   /* animation: overlayHide 250ms ease 100ms forwards; */
   /**/
@@ -43,13 +43,14 @@
 
       /* padding: 8px; */
       /* padding: 8px 8px 0 8px; */
-      border: 1px solid var(--border-base);
+      border: 1px solid hsl(from var(--border-base) h s l / 0.2);
       border-radius: var(--radius-xl);
       background: var(--surface-raised-stronger-non-alpha);
+      background-clip: padding-box;
       box-shadow:
-        0 15px 45px 0 rgba(19, 16, 16, 0.22),
-        0 3.35px 10.051px 0 rgba(19, 16, 16, 0.13),
-        0 0.998px 2.993px 0 rgba(19, 16, 16, 0.09);
+        0 15px 45px 0 rgba(19, 16, 16, 0.35),
+        0 3.35px 10.051px 0 rgba(19, 16, 16, 0.25),
+        0 0.998px 2.993px 0 rgba(19, 16, 16, 0.2);
 
       /* animation: contentHide 300ms ease-in forwards; */
       /**/
@@ -59,8 +60,7 @@
 
       [data-slot="dialog-header"] {
         display: flex;
-        padding: 16px;
-        padding-left: 20px;
+        padding: 16px 16px 16px 24px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
