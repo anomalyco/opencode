@@ -32,6 +32,7 @@ import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { SessionPrompt } from "../session/prompt"
+import { SessionRunner } from "../session/runner"
 import { SessionCompaction } from "../session/compaction"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
@@ -1325,13 +1326,14 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          c.status(204)
-          c.header("Content-Type", "application/json")
-          return stream(c, async () => {
-            const sessionID = c.req.valid("param").sessionID
-            const body = c.req.valid("json")
-            SessionPrompt.prompt({ ...body, sessionID })
-          })
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+          void SessionRunner.promptBackground({
+            ...body,
+            sessionID,
+            kind: "session.prompt_async",
+          }).catch((err) => log.error("prompt_async failed", { sessionID, error: err }))
+          return c.body(null, 204)
         },
       )
       .post(

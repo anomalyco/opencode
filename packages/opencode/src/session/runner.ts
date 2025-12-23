@@ -377,20 +377,107 @@ export namespace SessionRunner {
     return Object.keys(state().abortById)
   }
 
-  export const runOnce = fn(SessionPrompt.PromptInput, async (input): Promise<MessageV2.WithParts> => {
+  export async function runOnce(input: SessionPrompt.PromptInput): Promise<MessageV2.WithParts> {
     log.info("runOnce", { sessionID: input.sessionID, agent: input.agent })
     return SessionPrompt.prompt(input)
+  }
+
+  export const LoopBackgroundInput = z.object({
+    sessionID: Identifier.schema("session"),
+    kind: JobKind.optional(),
+    parentSessionID: Identifier.schema("session").optional(),
+    toolCallID: z.string().optional(),
+    timeoutMs: z.number().optional(),
+    dedupeKey: z.string().optional(),
+  })
+  export type LoopBackgroundInput = z.infer<typeof LoopBackgroundInput>
+
+  export const loopBackground = fn(LoopBackgroundInput, async (input): Promise<Job> => {
+    log.info("loopBackground", { sessionID: input.sessionID })
+    return enqueue(
+      input.kind ?? "session.loop",
+      input.sessionID,
+      async () => {
+        await SessionPrompt.loop(input.sessionID)
+      },
+      {
+        parentSessionID: input.parentSessionID,
+        toolCallID: input.toolCallID,
+        timeoutMs: input.timeoutMs,
+        dedupeKey: input.dedupeKey,
+      },
+    )
   })
 
-  export function runBackground(_id: string, _options: Options): void {
-    throw new Error("SessionRunner.runBackground not yet implemented")
+  // Note: Defined inline to avoid circular dependency with SessionPrompt
+  // (prompt.ts -> task.ts -> runner.ts -> prompt.ts)
+  export const PromptBackgroundInput = z.object({
+    sessionID: Identifier.schema("session"),
+    messageID: Identifier.schema("message").optional(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
+    agent: z.string().optional(),
+    noReply: z.boolean().optional(),
+    tools: z.record(z.string(), z.boolean()).optional(),
+    system: z.string().optional(),
+    parts: z.array(
+      z.discriminatedUnion("type", [
+        MessageV2.TextPart.omit({ messageID: true, sessionID: true }).partial({ id: true }),
+        MessageV2.FilePart.omit({ messageID: true, sessionID: true }).partial({ id: true }),
+        MessageV2.AgentPart.omit({ messageID: true, sessionID: true }).partial({ id: true }),
+        MessageV2.SubtaskPart.omit({ messageID: true, sessionID: true }).partial({ id: true }),
+      ]),
+    ),
+    kind: JobKind.optional(),
+    parentSessionID: Identifier.schema("session").optional(),
+    toolCallID: z.string().optional(),
+    timeoutMs: z.number().optional(),
+    dedupeKey: z.string().optional(),
+  })
+  export type PromptBackgroundInput = z.infer<typeof PromptBackgroundInput>
+
+  export const PromptBackgroundResult = z.object({
+    job: Job,
+    message: MessageV2.WithParts,
+  })
+  export type PromptBackgroundResult = z.infer<typeof PromptBackgroundResult>
+
+  export const promptBackground = fn(PromptBackgroundInput, async (input): Promise<PromptBackgroundResult> => {
+    log.info("promptBackground", { sessionID: input.sessionID, agent: input.agent })
+    const message = await SessionPrompt.prompt({ ...input, noReply: true })
+    const job = await loopBackground({
+      sessionID: input.sessionID,
+      kind: input.kind ?? "session.prompt_async",
+      parentSessionID: input.parentSessionID,
+      toolCallID: input.toolCallID,
+      timeoutMs: input.timeoutMs,
+      dedupeKey: input.dedupeKey,
+    })
+    return { job, message }
+  })
+
+  export function cancelBySession(sessionID: string): boolean {
+    const s = state()
+    for (const job of Object.values(s.jobsById)) {
+      if (job.targetSessionID === sessionID && (job.status === "queued" || job.status === "running")) {
+        SessionPrompt.cancel(sessionID)
+        return cancel(job.id)
+      }
+    }
+    return false
   }
 
-  export function cancelBackground(_id: string): boolean {
-    throw new Error("SessionRunner.cancelBackground not yet implemented")
-  }
-
-  export async function waitFor(_id: string): Promise<RunResult> {
-    throw new Error("SessionRunner.waitFor not yet implemented")
+  export function getBySession(sessionID: string): Job | undefined {
+    const s = state()
+    for (const job of Object.values(s.jobsById)) {
+      if (job.targetSessionID === sessionID && (job.status === "queued" || job.status === "running")) {
+        return job
+      }
+    }
+    return undefined
   }
 }

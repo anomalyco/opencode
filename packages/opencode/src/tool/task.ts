@@ -7,8 +7,8 @@ import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
+import { SessionRunner } from "../session/runner"
 import { iife } from "@/util/iife"
-import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 
 export const TaskTool = Tool.define("task", async () => {
@@ -81,32 +81,62 @@ export const TaskTool = Tool.define("task", async () => {
         providerID: msg.info.providerID,
       }
 
-      function cancel() {
+      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      const config = await Config.get()
+
+      const cancelChild = () => {
+        SessionRunner.cancelBySession(session.id)
         SessionPrompt.cancel(session.id)
       }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
-      const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+      ctx.abort.addEventListener("abort", cancelChild, { once: true })
 
-      const config = await Config.get()
-      const result = await SessionPrompt.prompt({
-        messageID,
-        sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
+      let result: MessageV2.WithParts | undefined
+      const job = await SessionRunner.enqueue(
+        "task.child_session",
+        session.id,
+        async () => {
+          result = await SessionPrompt.prompt({
+            messageID,
+            sessionID: session.id,
+            model: {
+              modelID: model.modelID,
+              providerID: model.providerID,
+            },
+            agent: agent.name,
+            tools: {
+              todowrite: false,
+              todoread: false,
+              task: false,
+              ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+              ...agent.tools,
+            },
+            parts: promptParts,
+          })
         },
-        agent: agent.name,
-        tools: {
-          todowrite: false,
-          todoread: false,
-          task: false,
-          ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-          ...agent.tools,
+        {
+          parentSessionID: ctx.sessionID,
+          toolCallID: ctx.messageID,
         },
-        parts: promptParts,
-      })
+      )
       unsub()
+      ctx.abort.removeEventListener("abort", cancelChild)
+
+      if (job.status === "canceled" || ctx.abort.aborted) {
+        return {
+          title: params.description,
+          metadata: { summary: [], sessionId: session.id },
+          output: "Task was canceled",
+        }
+      }
+
+      if (job.status !== "completed" || !result) {
+        const error = job.error?.message ?? "Task failed"
+        return {
+          title: params.description,
+          metadata: { summary: [], sessionId: session.id },
+          output: `Task failed: ${error}`,
+        }
+      }
       const messages = await Session.messages({ sessionID: session.id })
       const summary = messages
         .filter((x) => x.info.role === "assistant")
