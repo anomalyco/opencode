@@ -78,6 +78,7 @@ export default defineConfig({
             "lsp",
             "mcp-servers",
             "acp",
+            "skills",
             "custom-tools",
           ],
         },

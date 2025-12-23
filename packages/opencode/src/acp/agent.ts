@@ -22,6 +22,7 @@ import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig, ACPSessionState } from "./types"
 import { Provider } from "../provider/provider"
+import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
@@ -698,14 +699,15 @@ export namespace ACP {
         })
 
       const availableModes = agents
-        .filter((agent) => agent.mode !== "subagent")
+        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
         .map((agent) => ({
           id: agent.name,
           name: agent.name,
           description: agent.description,
         }))
 
-      const currentModeId = availableModes.find((m) => m.name === "build")?.id ?? availableModes[0].id
+      const defaultAgentName = await AgentModule.defaultAgent()
+      const currentModeId = availableModes.find((m) => m.name === defaultAgentName)?.id ?? availableModes[0].id
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
@@ -807,7 +809,7 @@ export namespace ACP {
       if (!current) {
         this.sessionManager.setModel(session.id, model)
       }
-      const agent = session.modeId ?? "build"
+      const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
         { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }

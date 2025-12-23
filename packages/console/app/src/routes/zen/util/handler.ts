@@ -112,6 +112,8 @@ export async function handler(
           headers.delete("content-length")
           headers.delete("x-opencode-request")
           headers.delete("x-opencode-session")
+          headers.delete("x-opencode-project")
+          headers.delete("x-opencode-client")
           return headers
         })(),
         body: reqBody,
@@ -143,6 +145,9 @@ export async function handler(
     // Store sticky provider
     await stickyTracker?.set(providerInfo.id)
 
+    // Temporarily change 404 to 400 status code b/c solid start automatically override 404 response
+    const resStatus = res.status === 404 ? 400 : res.status
+
     // Scrub response headers
     const resHeaders = new Headers()
     const keepHeaders = ["content-type", "cache-control"]
@@ -153,7 +158,7 @@ export async function handler(
     }
     logger.debug("STATUS: " + res.status + " " + res.statusText)
 
-    // Handle non-streaming response for non-stream request
+    // Handle non-streaming response
     if (!isStream) {
       const responseConverter = createResponseConverter(providerInfo.format, opts.format)
       const json = await res.json()
@@ -168,23 +173,7 @@ export async function handler(
       await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
       await reload(authInfo)
       return new Response(body, {
-        status: res.status,
-        statusText: res.statusText,
-        headers: resHeaders,
-      })
-    }
-
-    // Handle non-streaming response for stream request
-    const contentType = res.headers.get("content-type") ?? ""
-    if (!contentType.includes("text/event-stream")) {
-      const body = await res.text()
-      logger.metric({ response_length: body.length })
-      logger.debug("RESPONSE: " + body)
-      dataDumper?.provideResponse(body)
-      dataDumper?.flush()
-      await rateLimiter?.track()
-      return new Response(body, {
-        status: res.status,
+        status: resStatus,
         statusText: res.statusText,
         headers: resHeaders,
       })
@@ -262,7 +251,7 @@ export async function handler(
     })
 
     return new Response(stream, {
-      status: res.status,
+      status: resStatus,
       statusText: res.statusText,
       headers: resHeaders,
     })

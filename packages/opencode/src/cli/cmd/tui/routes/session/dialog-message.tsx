@@ -54,7 +54,7 @@ export function DialogMessage(props: {
         {
           title: "Copy",
           value: "message.copy",
-          description: "copy message text to clipboard",
+          description: "message text to clipboard",
           onSelect: async (dialog) => {
             const msg = message()
             if (!msg) return
@@ -80,9 +80,25 @@ export function DialogMessage(props: {
               sessionID: props.sessionID,
               messageID: props.messageID,
             })
+            const initialPrompt = (() => {
+              const msg = message()
+              if (!msg) return undefined
+              const parts = sync.data.part[msg.id]
+              return parts.reduce(
+                (agg, part) => {
+                  if (part.type === "text") {
+                    if (!part.synthetic) agg.input += part.text
+                  }
+                  if (part.type === "file") agg.parts.push(part)
+                  return agg
+                },
+                { input: "", parts: [] as PromptInfo["parts"] },
+              )
+            })()
             route.navigate({
               sessionID: result.data!.id,
               type: "session",
+              initialPrompt,
             })
             dialog.clear()
           },

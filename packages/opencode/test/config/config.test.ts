@@ -450,6 +450,38 @@ test("merges plugin arrays from global and local configs", async () => {
   })
 })
 
+test("does not error when only custom agent is a subagent", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const agentDir = path.join(opencodeDir, "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Bun.write(
+        path.join(agentDir, "helper.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Helper subagent prompt`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["helper"]).toEqual({
+        name: "helper",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Helper subagent prompt",
+      })
+    },
+  })
+})
+
 test("deduplicates duplicate plugins from global and local configs", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
