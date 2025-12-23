@@ -7,7 +7,12 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
-import type { IssueCommentEvent, PullRequestReviewCommentEvent, WorkflowRunEvent, PullRequestEvent } from "@octokit/webhooks-types"
+import type {
+  IssueCommentEvent,
+  PullRequestReviewCommentEvent,
+  WorkflowRunEvent,
+  PullRequestEvent,
+} from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { ModelsDev } from "../../provider/models"
@@ -401,7 +406,11 @@ export const GithubRunCommand = cmd({
       const oidcBaseUrl = normalizeOidcBaseUrl()
       const { owner, repo } = context.repo
       // For schedule events, payload has no issue/comment data
-      const payload = (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent | WorkflowRunEvent | PullRequestEvent)
+      const payload = context.payload as
+        | IssueCommentEvent
+        | PullRequestReviewCommentEvent
+        | WorkflowRunEvent
+        | PullRequestEvent
       const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
       const actor = isScheduleEvent ? undefined : context.actor
 
