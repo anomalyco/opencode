@@ -268,7 +268,7 @@ export const McpAuthListCommand = cmd({
 
         // Get OAuth-capable servers
         const oauthServers = Object.entries(mcpServers).filter(
-          ([_, cfg]) => cfg.type === "remote" && cfg.oauth !== false,
+          ([_, cfg]) => "type" in cfg && cfg.type === "remote" && cfg.oauth !== false,
         )
 
         if (oauthServers.length === 0) {
@@ -281,7 +281,7 @@ export const McpAuthListCommand = cmd({
           const authStatus = await MCP.getAuthStatus(name)
           const icon = getAuthStatusIcon(authStatus)
           const statusText = getAuthStatusText(authStatus)
-          const url = serverConfig.type === "remote" ? serverConfig.url : ""
+          const url = "type" in serverConfig && serverConfig.type === "remote" ? serverConfig.url : ""
 
           prompts.log.info(`${icon} ${name} ${UI.Style.TEXT_DIM}${statusText}\n    ${UI.Style.TEXT_DIM}${url}`)
         }
@@ -511,7 +511,7 @@ export const McpDebugCommand = cmd({
           return
         }
 
-        if (serverConfig.type !== "remote") {
+        if (!("type" in serverConfig) || serverConfig.type !== "remote") {
           prompts.log.error(`MCP server ${serverName} is not a remote server`)
           prompts.outro("Done")
           return
