@@ -101,6 +101,7 @@ export const TaskTool = Tool.define("task", async () => {
           todowrite: false,
           todoread: false,
           task: false,
+          askquestion: false,
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
           ...agent.tools,
         },
