@@ -3,8 +3,10 @@ import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
 import { ConfigMarkdown } from "../config/markdown"
+import { Log } from "../util/log"
 
 export namespace Skill {
+  const log = Log.create({ service: "skill" })
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
@@ -50,6 +52,16 @@ export namespace Skill {
 
         const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
         if (!parsed.success) continue
+
+        // Warn on duplicate skill names
+        if (skills[parsed.data.name]) {
+          log.warn("duplicate skill name", {
+            name: parsed.data.name,
+            existing: skills[parsed.data.name].location,
+            duplicate: match,
+          })
+        }
+
         skills[parsed.data.name] = {
           name: parsed.data.name,
           description: parsed.data.description,
