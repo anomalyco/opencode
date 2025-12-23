@@ -20,6 +20,8 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
+import { ImageOptimizer } from "../../util/image-optimizer"
+import { DialogSelect } from "../../ui/dialog-select"
 import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
@@ -142,6 +144,16 @@ export function Prompt(props: PromptProps) {
   const textareaKeybindings = createMemo(() => {
     const keybinds = keybind.all
 
+    // When a dialog is open (e.g., image compression confirmation), don't bind
+    // return to submit. This prevents the prompt from being submitted when the
+    // user presses Enter to confirm the dialog action.
+    if (dialog.stack.length > 0) {
+      return [
+        { name: "return", meta: true, action: "newline" },
+        ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
+      ] satisfies KeyBinding[]
+    }
+
     return [
       { name: "return", action: "submit" },
       { name: "return", meta: true, action: "newline" },
@@ -219,11 +231,7 @@ export function Prompt(props: PromptProps) {
         onSelect: async () => {
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
-            await pasteImage({
-              filename: "clipboard",
-              mime: content.mime,
-              content: content.data,
-            })
+            await handleImagePaste(content.data, content.mime, "clipboard")
           }
         },
       },
@@ -670,6 +678,55 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  async function handleImagePaste(base64: string, mime: string, filename?: string) {
+    const buffer = Buffer.from(base64, "base64")
+    const imageSize = buffer.byteLength
+
+    let content = base64
+    let targetMime = mime
+
+    if (ImageOptimizer.needsOptimization(imageSize)) {
+      const confirmed = await new Promise<boolean>((resolve) => {
+        dialog.replace(
+          () => (
+            <DialogSelect
+              title={`Large Image (${ImageOptimizer.formatBytes(imageSize)}) — exceeds ${ImageOptimizer.formatBytes(ImageOptimizer.SIZE_LIMIT)} limit`}
+              options={[
+                { value: "compress", title: "Compress" },
+                { value: "cancel", title: "Cancel" },
+              ]}
+              onSelect={(option) => {
+                resolve(option.value === "compress")
+                dialog.clear()
+              }}
+            />
+          ),
+          () => resolve(false),
+        )
+      })
+      if (!confirmed) return
+
+      try {
+        const result = await ImageOptimizer.optimize(buffer)
+        content = result.data
+        targetMime = result.mime
+      } catch (error) {
+        console.error("Image compression failed:", error)
+        toast.show({
+          variant: "error",
+          message: "Failed to compress image",
+        })
+        return
+      }
+    }
+
+    await pasteImage({
+      filename,
+      mime: targetMime,
+      content,
+    })
+  }
+
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
@@ -805,11 +862,7 @@ export function Prompt(props: PromptProps) {
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
                     e.preventDefault()
-                    await pasteImage({
-                      filename: "clipboard",
-                      mime: content.mime,
-                      content: content.data,
-                    })
+                    await handleImagePaste(content.data, content.mime, "clipboard")
                     return
                   }
                   // If no image, let the default paste behavior continue
@@ -905,18 +958,9 @@ export function Prompt(props: PromptProps) {
                     }
                     if (file.type.startsWith("image/")) {
                       event.preventDefault()
-                      const content = await file
-                        .arrayBuffer()
-                        .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(() => {})
-                      if (content) {
-                        await pasteImage({
-                          filename: file.name,
-                          mime: file.type,
-                          content,
-                        })
-                        return
-                      }
+                      const buffer = await file.arrayBuffer()
+                      await handleImagePaste(Buffer.from(buffer).toString("base64"), file.type, file.name)
+                      return
                     }
                   } catch {}
                 }
