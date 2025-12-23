@@ -1,7 +1,5 @@
-import path from "path"
 import z from "zod"
 import { Config } from "../config/config"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
 import { ConfigMarkdown } from "../config/markdown"
@@ -9,35 +7,12 @@ import { Log } from "../util/log"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
-
-  // Name: 1-64 chars, lowercase alphanumeric and hyphens, no consecutive hyphens, can't start/end with hyphen
-  const NAME_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/
-
-  export const Frontmatter = z.object({
-    name: z
-      .string()
-      .min(1)
-      .max(64)
-      .refine((val) => NAME_REGEX.test(val), {
-        message:
-          "Name must be lowercase alphanumeric with hyphens, no consecutive hyphens, cannot start or end with hyphen",
-      }),
-    description: z.string().min(1).max(1024),
-    license: z.string().optional(),
-    compatibility: z.string().max(500).optional(),
-    metadata: z.record(z.string(), z.string()).optional(),
+  export const Info = z.object({
+    name: z.string(),
+    description: z.string(),
+    location: z.string(),
   })
-
-  export type Frontmatter = z.infer<typeof Frontmatter>
-
-  export interface Info {
-    name: string
-    description: string
-    location: string
-    license?: string
-    compatibility?: string
-    metadata?: Record<string, string>
-  }
+  export type Info = z.infer<typeof Info>
 
   export const InvalidError = NamedError.create(
     "SkillInvalidError",
@@ -57,15 +32,12 @@ export namespace Skill {
     }),
   )
 
-  const SKILL_GLOB = new Bun.Glob("skill/*/SKILL.md")
-  const CLAUDE_SKILL_GLOB = new Bun.Glob("*/SKILL.md")
+  const SKILL_GLOB = new Bun.Glob("skill/**/SKILL.md")
 
-  async function discover(): Promise<string[]> {
+  export const state = Instance.state(async () => {
     const directories = await Config.directories()
+    const skills: Record<string, Info> = {}
 
-    const paths: string[] = []
-
-    // Scan skill/ subdirectory in config directories (.opencode/, ~/.opencode/, etc.)
     for (const dir of directories) {
       for await (const match of SKILL_GLOB.scan({
         cwd: dir,
@@ -73,82 +45,39 @@ export namespace Skill {
         onlyFiles: true,
         followSymlinks: true,
       })) {
-        paths.push(match)
+        const md = await ConfigMarkdown.parse(match)
+        if (!md) {
+          continue
+        }
+
+        const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+        if (!parsed.success) continue
+
+        // Warn on duplicate skill names
+        if (skills[parsed.data.name]) {
+          log.warn("duplicate skill name", {
+            name: parsed.data.name,
+            existing: skills[parsed.data.name].location,
+            duplicate: match,
+          })
+        }
+
+        skills[parsed.data.name] = {
+          name: parsed.data.name,
+          description: parsed.data.description,
+          location: match,
+        }
       }
-    }
-
-    // Also scan .claude/skills/ walking up from cwd to worktree
-    for await (const dir of Filesystem.up({
-      targets: [".claude/skills"],
-      start: Instance.directory,
-      stop: Instance.worktree,
-    })) {
-      for await (const match of CLAUDE_SKILL_GLOB.scan({
-        cwd: dir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-      })) {
-        paths.push(match)
-      }
-    }
-
-    return paths
-  }
-
-  async function load(skillMdPath: string): Promise<Info> {
-    const md = await ConfigMarkdown.parse(skillMdPath)
-    if (!md.data) {
-      throw new InvalidError({
-        path: skillMdPath,
-        message: "SKILL.md must have YAML frontmatter",
-      })
-    }
-
-    const parsed = Frontmatter.safeParse(md.data)
-    if (!parsed.success) {
-      throw new InvalidError({
-        path: skillMdPath,
-        issues: parsed.error.issues,
-      })
-    }
-
-    const frontmatter = parsed.data
-    const skillDir = path.dirname(skillMdPath)
-    const dirName = path.basename(skillDir)
-
-    if (frontmatter.name !== dirName) {
-      throw new NameMismatchError({
-        path: skillMdPath,
-        expected: dirName,
-        actual: frontmatter.name,
-      })
-    }
-
-    return {
-      name: frontmatter.name,
-      description: frontmatter.description,
-      location: skillMdPath,
-      license: frontmatter.license,
-      compatibility: frontmatter.compatibility,
-      metadata: frontmatter.metadata,
-    }
-  }
-
-  export const state = Instance.state(async () => {
-    const paths = await discover()
-    const skills: Info[] = []
-
-    for (const skillPath of paths) {
-      const info = await load(skillPath)
-      log.info("loaded skill", { name: info.name, location: info.location })
-      skills.push(info)
     }
 
     return skills
   })
 
-  export async function all(): Promise<Info[]> {
-    return state()
+  export async function get(name: string) {
+    return state().then((x) => x[name])
+  }
+
+  export async function all() {
+    return state().then((x) => Object.values(x))
   }
 }
