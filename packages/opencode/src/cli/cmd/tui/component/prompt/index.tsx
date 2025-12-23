@@ -931,11 +931,10 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                const value = input.plainText
-                setStore("prompt", "input", value)
-                // Force layout update and render
+                // Force layout update and render for the pasted content
                 setTimeout(() => {
                   input.getLayoutNode().markDirty()
+                  input.gotoBufferEnd()
                   renderer.requestRender()
                 }, 0)
               }}
