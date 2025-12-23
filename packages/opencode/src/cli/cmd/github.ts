@@ -401,9 +401,9 @@ export const GithubRunCommand = cmd({
       const oidcBaseUrl = normalizeOidcBaseUrl()
       const { owner, repo } = context.repo
       // For schedule events, payload has no issue/comment data
-      const payload = isCommentEvent
-        ? (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent)
-        : undefined
+      const payload = isScheduleEvent
+        ? undefined
+        : (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent)
       const issueEvent = payload && isIssueCommentEvent(payload) ? payload : undefined
       const actor = isScheduleEvent ? undefined : context.actor
 
@@ -423,7 +423,7 @@ export const GithubRunCommand = cmd({
       let shareId: string | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
-      const triggerCommentId = payload?.comment.id
+      const triggerCommentId = isCommentEvent ? payload?.comment.id : undefined
       const useGithubToken = normalizeUseGithubToken()
       const commentType = isCommentEvent
         ? context.eventName === "pull_request_review_comment"
