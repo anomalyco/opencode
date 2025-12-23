@@ -547,6 +547,48 @@ export type EventSessionCompacted = {
   }
 }
 
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -639,48 +681,6 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
 export type Pty = {
   id: string
   title: string
@@ -752,6 +752,9 @@ export type Event =
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -760,9 +763,6 @@ export type Event =
   | EventSessionError
   | EventFileWatcherUpdated
   | EventVcsBranchUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -890,6 +890,14 @@ export type KeybindsConfig = {
    * Navigate to last message
    */
   messages_last?: string
+  /**
+   * Navigate to next message
+   */
+  messages_next?: string
+  /**
+   * Navigate to previous message
+   */
+  messages_previous?: string
   /**
    * Navigate to last user message
    */
@@ -1115,6 +1123,10 @@ export type KeybindsConfig = {
    */
   session_child_cycle_reverse?: string
   /**
+   * Go to parent session
+   */
+  session_parent?: string
+  /**
    * Suspend terminal
    */
   terminal_suspend?: string
@@ -1155,6 +1167,13 @@ export type AgentConfig = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1175,6 +1194,13 @@ export type AgentConfig = {
     | {
         edit?: "ask" | "allow" | "deny"
         bash?:
+          | "ask"
+          | "allow"
+          | "deny"
+          | {
+              [key: string]: "ask" | "allow" | "deny"
+            }
+        skill?:
           | "ask"
           | "allow"
           | "deny"
@@ -1500,6 +1526,13 @@ export type Config = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1780,6 +1813,9 @@ export type Agent = {
     bash: {
       [key: string]: "ask" | "allow" | "deny"
     }
+    skill: {
+      [key: string]: "ask" | "allow" | "deny"
+    }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1860,6 +1896,25 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type GlobalHealthData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/health"
+}
+
+export type GlobalHealthResponses = {
+  /**
+   * Health information
+   */
+  200: {
+    healthy: true
+    version: string
+  }
+}
+
+export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
 
 export type GlobalEventData = {
   body?: never
