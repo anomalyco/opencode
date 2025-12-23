@@ -32,7 +32,7 @@ Here we are using a community-created CI/CD component for OpenCode — [nagyv/gi
 
    ```yaml title=".gitlab-ci.yml"
    include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@1.0.0
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
          auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON

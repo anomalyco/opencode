@@ -45,19 +45,14 @@ new sst.cloudflare.x.Astro("Web", {
   },
 })
 
-const webApp = new sst.cloudflare.StaticSite("WebApp", {
-  domain: "app." + domain,
+new sst.cloudflare.StaticSite("WebApp", {
+  domain: {
+    name: "app." + domain,
+    // redirects: ["desktop." + domain],
+  },
   path: "packages/app",
   build: {
     command: "bun turbo build",
     output: "./dist",
   },
-})
-
-// Temporarily deploy the same app to desktop.domain without doing a full build
-webApp.url.apply((url) => {
-  new sst.cloudflare.StaticSite("Desktop", {
-    domain: "desktop." + domain,
-    path: "packages/app/dist",
-  })
 })
