@@ -62,6 +62,7 @@ export function Sidebar(props: { sessionID: string }) {
       <box
         backgroundColor={theme.backgroundPanel}
         width={42}
+        height="100%"
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
