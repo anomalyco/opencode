@@ -32,6 +32,7 @@ OpenCode comes with several built-in LSP servers for popular languages:
 | lua-ls             | .lua                                                 | Auto-installs for Lua projects                               |
 | sourcekit-lsp      | .swift, .objc, .objcpp                               | `swift` installed (`xcode` on macOS)                         |
 | php intelephense   | .php                                                 | Auto-installs for PHP projects                               |
+| dart               | .dart                                                | `dart` command available                                     |
 
 LSP servers are automatically enabled when one of the above file extensions are detected and the requirements are met.
 
@@ -77,7 +78,16 @@ Let's look at some examples.
 
 ### Disabling LSP servers
 
-To disable a specific LSP server, set `disabled` to `true`:
+To disable **all** LSP servers globally, set `lsp` to `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+To disable a **specific** LSP server, set `disabled` to `true`:
 
 ```json title="opencode.json" {5}
 {

@@ -30,7 +30,7 @@ export function BasicTool(props: BasicToolProps) {
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
-            <Icon name={props.icon} size="small" data-slot="basic-tool-tool-icon" />
+            <Icon name={props.icon} size="small" />
             <div data-slot="basic-tool-tool-info">
               <Switch>
                 <Match when={isTriggerTitle(props.trigger) && props.trigger}>

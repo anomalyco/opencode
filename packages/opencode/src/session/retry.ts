@@ -1,3 +1,4 @@
+import type { NamedError } from "@opencode-ai/util/error"
 import { MessageV2 } from "./message-v2"
 
 export namespace SessionRetry {
@@ -50,5 +51,23 @@ export namespace SessionRetry {
     }
 
     return Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS)
+  }
+
+  export function retryable(error: ReturnType<NamedError["toObject"]>) {
+    if (MessageV2.APIError.isInstance(error)) {
+      if (!error.data.isRetryable) return undefined
+      return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
+    }
+
+    if (typeof error.data?.message === "string") {
+      try {
+        const json = JSON.parse(error.data.message)
+        if (json.type === "error" && json.error?.type === "too_many_requests") {
+          return "Too Many Requests"
+        }
+      } catch {}
+    }
+
+    return undefined
   }
 }

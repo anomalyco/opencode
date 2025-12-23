@@ -6,6 +6,7 @@ import { ModelsDev } from "../../provider/models"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
+import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
@@ -103,7 +104,22 @@ export const AuthLoginCommand = cmd({
           return
         }
         await ModelsDev.refresh().catch(() => {})
-        const providers = await ModelsDev.get()
+
+        const config = await Config.get()
+
+        const disabled = new Set(config.disabled_providers ?? [])
+        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+
+        const providers = await ModelsDev.get().then((x) => {
+          const filtered: Record<string, (typeof x)[string]> = {}
+          for (const [key, value] of Object.entries(x)) {
+            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
+              filtered[key] = value
+            }
+          }
+          return filtered
+        })
+
         const priority: Record<string, number> = {
           opencode: 0,
           anthropic: 1,

@@ -18,6 +18,7 @@ import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { sanitizePart } from "@opencode-ai/util/sanitize"
+import { unwrap } from "solid-js/store"
 
 export interface MessageProps {
   message: MessageType
@@ -83,7 +84,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
 export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
-  const part = createMemo(() => sanitizePart(props.part, props.sanitize))
+  const part = createMemo(() => sanitizePart(unwrap(props.part), props.sanitize))
   return (
     <Show when={component()}>
       <Dynamic component={component()} part={part()} message={props.message} hideDetails={props.hideDetails} />
@@ -139,7 +140,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             return (
               <Card variant="error">
                 <div data-component="tool-error">
-                  <Icon name="circle-ban-sign" size="small" data-slot="message-part-tool-error-icon" />
+                  <Icon name="circle-ban-sign" size="small" />
                   <Switch>
                     <Match when={title && title.length < 30}>
                       <div data-slot="message-part-tool-error-content">
@@ -175,7 +176,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const part = props.part as TextPart
-  const sanitized = createMemo(() => (props.sanitize ? (sanitizePart(part, props.sanitize) as TextPart) : part))
+  const sanitized = createMemo(() => (props.sanitize ? (sanitizePart(unwrap(part), props.sanitize) as TextPart) : part))
   return (
     <Show when={part.text.trim()}>
       <div data-component="text-part">

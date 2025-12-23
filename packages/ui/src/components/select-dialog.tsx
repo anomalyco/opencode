@@ -91,7 +91,7 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
       </Dialog.Header>
       <div data-component="select-dialog-input">
         <div data-slot="select-dialog-input-container">
-          <Icon data-slot="select-dialog-icon" name="magnifying-glass" />
+          <Icon name="magnifying-glass" />
           <Input
             data-slot="select-dialog-input"
             type="text"
@@ -108,7 +108,6 @@ export function SelectDialog<T>(props: SelectDialogProps<T>) {
         </div>
         <Show when={filter()}>
           <IconButton
-            data-slot="select-dialog-clear-button"
             icon="circle-x"
             variant="ghost"
             onClick={() => {

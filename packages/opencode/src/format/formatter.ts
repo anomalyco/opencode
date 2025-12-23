@@ -246,3 +246,12 @@ export const htmlbeautifier: Info = {
     return Bun.which("htmlbeautifier") !== null
   },
 }
+
+export const dart: Info = {
+  name: "dart",
+  command: ["dart", "format", "$FILE"],
+  extensions: [".dart"],
+  async enabled() {
+    return Bun.which("dart") !== null
+  },
+}

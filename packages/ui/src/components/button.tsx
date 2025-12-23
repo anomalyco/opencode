@@ -25,7 +25,7 @@ export function Button(props: ButtonProps) {
       }}
     >
       <Show when={split.icon}>
-        <Icon data-slot="button-icon" name={split.icon!} size="small" />
+        <Icon name={split.icon!} size="small" />
       </Show>
       {props.children}
     </Kobalte>

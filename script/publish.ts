@@ -73,6 +73,44 @@ if (!Script.preview) {
   console.log(notes.join("\n"))
   console.log("-----------------------------")
   opencode.server.close()
+
+  // Get contributors
+  const team = [
+    "actions-user",
+    "opencode",
+    "rekram1-node",
+    "thdxr",
+    "kommander",
+    "jayair",
+    "fwang",
+    "adamdotdevin",
+    "opencode-agent[bot]",
+  ]
+  const compare =
+    await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
+  const contributors = new Map<string, string[]>()
+
+  for (const line of compare.split("\n").filter(Boolean)) {
+    const { login, message } = JSON.parse(line) as { login: string | null; message: string }
+    const title = message.split("\n")[0] ?? ""
+    if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
+
+    if (login && !team.includes(login)) {
+      if (!contributors.has(login)) contributors.set(login, [])
+      contributors.get(login)?.push(title)
+    }
+  }
+
+  if (contributors.size > 0) {
+    notes.push("")
+    notes.push(`**Thank you to ${contributors.size} community contributor${contributors.size > 1 ? "s" : ""}:**`)
+    for (const [username, userCommits] of contributors) {
+      notes.push(`- @${username}:`)
+      for (const commit of userCommits) {
+        notes.push(`  - ${commit}`)
+      }
+    }
+  }
 }
 
 const pkgjsons = await Array.fromAsync(

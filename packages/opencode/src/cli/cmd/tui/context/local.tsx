@@ -175,8 +175,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return item
           }
         }
+
         const provider = sync.data.provider[0]
-        const model = sync.data.provider_default[provider.id] ?? Object.values(provider.models)[0].id
+        if (!provider) return undefined
+        const defaultModel = sync.data.provider_default[provider.id]
+        const firstModel = Object.values(provider.models)[0]
+        const model = defaultModel ?? firstModel?.id
+        if (!model) return undefined
         return {
           providerID: provider.id,
           modelID: model,
@@ -185,11 +190,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
-        return getFirstValidModel(
-          () => modelStore.model[a.name],
-          () => a.model,
-          fallbackModel,
-        )!
+        return (
+          getFirstValidModel(
+            () => modelStore.model[a.name],
+            () => a.model,
+            fallbackModel,
+          ) ?? undefined
+        )
       })
 
       return {
@@ -205,11 +212,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         parsed: createMemo(() => {
           const value = currentModel()
-          const provider = sync.data.provider.find((x) => x.id === value.providerID)!
-          const model = provider.models[value.modelID]
+          if (!value) {
+            return {
+              provider: "Connect a provider",
+              model: "No provider selected",
+            }
+          }
+          const provider = sync.data.provider.find((x) => x.id === value.providerID)
+          const info = provider?.models[value.modelID]
           return {
-            provider: provider.name ?? value.providerID,
-            model: model.name ?? value.modelID,
+            provider: provider?.name ?? value.providerID,
+            model: info?.name ?? value.modelID,
           }
         }),
         cycle(direction: 1 | -1) {
@@ -236,7 +249,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return
           }
           const current = currentModel()
-          let index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+          let index = -1
+          if (current) {
+            index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+          }
           if (index === -1) {
             index = direction === 1 ? 0 : favorites.length - 1
           } else {
