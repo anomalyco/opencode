@@ -107,21 +107,118 @@ describe("SessionRunner", () => {
     })
   })
 
-  describe("stub methods", () => {
-    test("runBackground throws", () => {
-      const opts: SessionRunner.Options = {
-        model: { providerID: "anthropic", modelID: "claude-3-5-sonnet" },
-        agent: "code",
+  describe("LoopBackgroundInput schema", () => {
+    test("validates minimal input", () => {
+      const input = { sessionID: "session_123" }
+      expect(SessionRunner.LoopBackgroundInput.safeParse(input).success).toBe(true)
+    })
+
+    test("validates full input", () => {
+      const input = {
+        sessionID: "session_123",
+        kind: "session.loop" as const,
+        parentSessionID: "session_parent",
+        toolCallID: "tool_123",
+        timeoutMs: 30000,
+        dedupeKey: "my-key",
       }
-      expect(() => SessionRunner.runBackground("session_123", opts)).toThrow("not yet implemented")
+      expect(SessionRunner.LoopBackgroundInput.safeParse(input).success).toBe(true)
+    })
+  })
+
+  describe("PromptBackgroundInput schema", () => {
+    test("validates minimal input", () => {
+      const input = {
+        sessionID: "session_123",
+        parts: [{ type: "text" as const, text: "hello" }],
+      }
+      expect(SessionRunner.PromptBackgroundInput.safeParse(input).success).toBe(true)
     })
 
-    test("cancelBackground throws", () => {
-      expect(() => SessionRunner.cancelBackground("session_123")).toThrow("not yet implemented")
+    test("validates full input with job options", () => {
+      const input = {
+        sessionID: "session_123",
+        parts: [{ type: "text" as const, text: "hello" }],
+        model: { providerID: "anthropic", modelID: "claude-3-5-sonnet" },
+        agent: "build",
+        kind: "session.prompt_async" as const,
+        parentSessionID: "session_parent",
+        timeoutMs: 60000,
+      }
+      expect(SessionRunner.PromptBackgroundInput.safeParse(input).success).toBe(true)
+    })
+  })
+
+  describe("helper functions", () => {
+    test("cancelBySession returns false for unknown session", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          expect(SessionRunner.cancelBySession("unknown_session")).toBe(false)
+        },
+      })
     })
 
-    test("waitFor throws", async () => {
-      await expect(SessionRunner.waitFor("session_123")).rejects.toThrow("not yet implemented")
+    test("getBySession returns undefined for unknown session", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: () => {
+          expect(SessionRunner.getBySession("unknown_session")).toBeUndefined()
+        },
+      })
+    })
+
+    test("getBySession finds active job", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          let resolve: () => void
+          const blocker = new Promise<void>((r) => {
+            resolve = r
+          })
+
+          const jobPromise = SessionRunner.enqueue("session.loop", "ses_target", async () => {
+            await blocker
+          })
+
+          await new Promise((r) => setTimeout(r, 10))
+
+          const found = SessionRunner.getBySession("ses_target")
+          expect(found).toBeDefined()
+          expect(found?.targetSessionID).toBe("ses_target")
+          expect(["queued", "running"]).toContain(found!.status)
+
+          resolve!()
+          await jobPromise
+        },
+      })
+    })
+
+    test("cancelBySession cancels running job", async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          let started = false
+          const jobPromise = SessionRunner.enqueue("session.loop", "ses_cancel", async () => {
+            started = true
+            await new Promise((r) => setTimeout(r, 5000))
+          })
+
+          while (!started) {
+            await new Promise((r) => setTimeout(r, 5))
+          }
+
+          const cancelled = SessionRunner.cancelBySession("ses_cancel")
+          expect(cancelled).toBe(true)
+
+          const job = await jobPromise
+          expect(job.status).toBe("canceled")
+        },
+      })
     })
   })
 
