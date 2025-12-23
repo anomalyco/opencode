@@ -6,6 +6,41 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/global/health": {
+      "get": {
+        "operationId": "global.health",
+        "summary": "Get health",
+        "description": "Get health information about the OpenCode server.",
+        "responses": {
+          "200": {
+            "description": "Health information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "healthy": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["healthy", "version"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/event": {
       "get": {
         "operationId": "global.event",
