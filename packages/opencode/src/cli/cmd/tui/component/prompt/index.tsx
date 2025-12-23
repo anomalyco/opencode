@@ -930,6 +930,8 @@ export function Prompt(props: PromptProps) {
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
+
+                input.insertText(pastedContent)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
