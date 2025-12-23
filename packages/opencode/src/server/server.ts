@@ -47,6 +47,7 @@ import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
+import { Installation } from "@/installation"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -96,6 +97,27 @@ export namespace Server {
         }
       })
       .use(cors())
+      .get(
+        "/global/health",
+        describeRoute({
+          summary: "Get health",
+          description: "Get health information about the OpenCode server.",
+          operationId: "global.health",
+          responses: {
+            200: {
+              description: "Health information",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json({ healthy: true, version: Installation.VERSION })
+        },
+      )
       .get(
         "/global/event",
         describeRoute({
@@ -193,7 +215,7 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") ?? c.req.header("x-opencode-directory") ?? process.cwd()
+        const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
@@ -1054,17 +1076,18 @@ export namespace Server {
           z.object({
             providerID: z.string(),
             modelID: z.string(),
+            auto: z.boolean().optional().default(false),
           }),
         ),
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
           const msgs = await Session.messages({ sessionID })
-          let currentAgent = "build"
+          let currentAgent = await Agent.defaultAgent()
           for (let i = msgs.length - 1; i >= 0; i--) {
             const info = msgs[i].info
             if (info.role === "user") {
-              currentAgent = info.agent || "build"
+              currentAgent = info.agent || (await Agent.defaultAgent())
               break
             }
           }
@@ -1075,7 +1098,7 @@ export namespace Server {
               providerID: body.providerID,
               modelID: body.modelID,
             },
-            auto: false,
+            auto: body.auto,
           })
           await SessionPrompt.loop(sessionID)
           return c.json(true)
@@ -1186,6 +1209,79 @@ export namespace Server {
             messageID: params.messageID,
           })
           return c.json(message)
+        },
+      )
+      .delete(
+        "/session/:sessionID/message/:messageID/part/:partID",
+        describeRoute({
+          description: "Delete a part from a message",
+          operationId: "part.delete",
+          responses: {
+            200: {
+              description: "Successfully deleted part",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+            partID: z.string().meta({ description: "Part ID" }),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          await Session.removePart({
+            sessionID: params.sessionID,
+            messageID: params.messageID,
+            partID: params.partID,
+          })
+          return c.json(true)
+        },
+      )
+      .patch(
+        "/session/:sessionID/message/:messageID/part/:partID",
+        describeRoute({
+          description: "Update a part in a message",
+          operationId: "part.update",
+          responses: {
+            200: {
+              description: "Successfully updated part",
+              content: {
+                "application/json": {
+                  schema: resolver(MessageV2.Part),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+            partID: z.string().meta({ description: "Part ID" }),
+          }),
+        ),
+        validator("json", MessageV2.Part),
+        async (c) => {
+          const params = c.req.valid("param")
+          const body = c.req.valid("json")
+          if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.sessionID) {
+            throw new Error(
+              `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
+            )
+          }
+          const part = await Session.updatePart(body)
+          return c.json(part)
         },
       )
       .post(
@@ -2504,10 +2600,10 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://desktop.opencode.ai${c.req.path}`, {
+        return proxy(`https://app.opencode.ai${c.req.path}`, {
           ...c.req,
           headers: {
-            host: "desktop.opencode.ai",
+            host: "app.opencode.ai",
           },
         })
       }),
@@ -2528,13 +2624,19 @@ export namespace Server {
   }
 
   export function listen(opts: { port: number; hostname: string }) {
-    const server = Bun.serve({
-      port: opts.port,
+    const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
-    })
-    return server
+    } as const
+    if (opts.port === 0) {
+      try {
+        return Bun.serve({ ...args, port: 4096 })
+      } catch {
+        // port 4096 not available, fall through to use port 0
+      }
+    }
+    return Bun.serve({ ...args, port: opts.port })
   }
 }

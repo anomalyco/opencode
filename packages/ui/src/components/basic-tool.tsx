@@ -1,4 +1,4 @@
-import { children, For, Match, Show, Switch, type JSX } from "solid-js"
+import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
 
@@ -27,7 +27,6 @@ export interface BasicToolProps {
 }
 
 export function BasicTool(props: BasicToolProps) {
-  const resolved = children(() => props.children)
   return (
     <Collapsible defaultOpen={props.defaultOpen}>
       <Collapsible.Trigger>
@@ -81,13 +80,13 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={resolved() && !props.hideDetails}>
+          <Show when={props.children && !props.hideDetails}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={resolved() && !props.hideDetails}>
-        <Collapsible.Content>{resolved()}</Collapsible.Content>
+      <Show when={props.children && !props.hideDetails}>
+        <Collapsible.Content>{props.children}</Collapsible.Content>
       </Show>
     </Collapsible>
   )

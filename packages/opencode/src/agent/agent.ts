@@ -5,6 +5,9 @@ import { generateObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "agent" })
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -20,12 +23,14 @@ export namespace Agent {
       mode: z.enum(["subagent", "primary", "all"]),
       native: z.boolean().optional(),
       hidden: z.boolean().optional(),
+      default: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
       permission: z.object({
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
+        skill: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
         doom_loop: Config.Permission.optional(),
         external_directory: Config.Permission.optional(),
@@ -52,6 +57,9 @@ export namespace Agent {
     const defaultPermission: Info["permission"] = {
       edit: "allow",
       bash: {
+        "*": "allow",
+      },
+      skill: {
         "*": "allow",
       },
       webfetch: "allow",
@@ -245,6 +253,27 @@ export namespace Agent {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})
       }
     }
+
+    // Mark the default agent
+    const defaultName = cfg.default_agent ?? "build"
+    const defaultCandidate = result[defaultName]
+    if (defaultCandidate && defaultCandidate.mode !== "subagent") {
+      defaultCandidate.default = true
+    } else {
+      // Fall back to "build" if configured default is invalid
+      if (result["build"]) {
+        result["build"].default = true
+      }
+    }
+
+    const hasPrimaryAgents = Object.values(result).filter((a) => a.mode !== "subagent" && !a.hidden).length > 0
+    if (!hasPrimaryAgents) {
+      throw new Config.InvalidError({
+        path: "config",
+        message: "No primary agents are available. Please configure at least one agent with mode 'primary' or 'all'.",
+      })
+    }
+
     return result
   })
 
@@ -254,6 +283,12 @@ export namespace Agent {
 
   export async function list() {
     return state().then((x) => Object.values(x))
+  }
+
+  export async function defaultAgent(): Promise<string> {
+    const agents = await state()
+    const defaultCandidate = Object.values(agents).find((a) => a.default)
+    return defaultCandidate?.name ?? "build"
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
@@ -306,6 +341,17 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       "*": overridePermission.bash,
     }
   }
+
+  if (typeof basePermission.skill === "string") {
+    basePermission.skill = {
+      "*": basePermission.skill,
+    }
+  }
+  if (typeof overridePermission.skill === "string") {
+    overridePermission.skill = {
+      "*": overridePermission.skill,
+    }
+  }
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
   let mergedBash
   if (merged.bash) {
@@ -323,10 +369,27 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     }
   }
 
+  let mergedSkill
+  if (merged.skill) {
+    if (typeof merged.skill === "string") {
+      mergedSkill = {
+        "*": merged.skill,
+      }
+    } else if (typeof merged.skill === "object") {
+      mergedSkill = mergeDeep(
+        {
+          "*": "allow",
+        },
+        merged.skill,
+      )
+    }
+  }
+
   const result: Agent.Info["permission"] = {
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
+    skill: mergedSkill ?? { "*": "allow" },
     doom_loop: merged.doom_loop,
     external_directory: merged.external_directory,
   }

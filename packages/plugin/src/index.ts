@@ -191,6 +191,17 @@ export interface Hooks {
       system: string[]
     },
   ) => Promise<void>
+  /**
+   * Called before session compaction starts. Allows plugins to customize
+   * the compaction prompt.
+   *
+   * - `context`: Additional context strings appended to the default prompt
+   * - `prompt`: If set, replaces the default compaction prompt entirely
+   */
+  "experimental.session.compacting"?: (
+    input: { sessionID: string },
+    output: { context: string[]; prompt?: string },
+  ) => Promise<void>
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
