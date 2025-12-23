@@ -45,7 +45,7 @@ new sst.cloudflare.x.Astro("Web", {
   },
 })
 
-new sst.cloudflare.StaticSite("App", {
+new sst.cloudflare.StaticSite("WebApp", {
   domain: "app." + domain,
   path: "packages/app",
   build: {
