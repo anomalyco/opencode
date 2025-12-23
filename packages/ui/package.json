@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.191",
+  "version": "1.0.193",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
@@ -47,7 +47,7 @@
     "marked": "16.2.0",
     "marked-shiki": "1.2.1",
     "remeda": "catalog:",
-    "shiki": "3.9.2",
+    "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "virtua": "catalog:"

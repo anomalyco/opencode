@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.0.191",
+  "version": "1.0.193",
   "description": "",
   "type": "module",
   "exports": {
@@ -52,7 +52,7 @@
     "marked": "16.2.0",
     "marked-shiki": "1.2.1",
     "remeda": "catalog:",
-    "shiki": "3.9.2",
+    "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",

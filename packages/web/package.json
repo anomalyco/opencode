@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/web",
   "type": "module",
-  "version": "1.0.191",
+  "version": "1.0.193",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
@@ -28,7 +28,7 @@
     "marked-shiki": "1.2.1",
     "rehype-autolink-headings": "7.1.0",
     "remeda": "catalog:",
-    "shiki": "3.4.2",
+    "shiki": "catalog:",
     "solid-js": "catalog:",
     "toolbeam-docs-theme": "0.4.8"
   },
