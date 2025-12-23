@@ -151,12 +151,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/tauri/src-tauri
+          workspaces: packages/desktop/src-tauri
           shared-key: ${{ matrix.settings.target }}
 
       - name: Prepare
         run: |
-          cd packages/tauri
+          cd packages/desktop
           bun ./scripts/prepare.ts
         env:
           OPENCODE_VERSION: ${{ needs.publish.outputs.version }}
@@ -191,7 +191,7 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
         with:
-          projectPath: packages/tauri
+          projectPath: packages/desktop
           uploadWorkflowArtifacts: true
           tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
           args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
