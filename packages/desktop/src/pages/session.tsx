@@ -222,6 +222,15 @@ export default function Page() {
       onSelect: () => layout.terminal.toggle(),
     },
     {
+      id: "review.toggle",
+      title: "Toggle review",
+      description: "Show or hide the review panel",
+      category: "View",
+      keybind: "mod+b",
+      slash: "review",
+      onSelect: () => layout.review.toggle(),
+    },
+    {
       id: "terminal.new",
       title: "New terminal",
       description: "Create a new terminal tab",
@@ -533,7 +542,7 @@ export default function Page() {
     )
   }
 
-  const showTabs = createMemo(() => diffs().length > 0 || tabs().all().length > 0)
+  const showTabs = createMemo(() => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0))
 
   const mobileWorking = createMemo(() => status().type !== "idle")
   const mobileAutoScroll = createAutoScroll({
