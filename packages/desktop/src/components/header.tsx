@@ -113,6 +113,35 @@ export function Header(props: {
                     class="hidden md:block shrink-0"
                     value={
                       <div class="flex items-center gap-2">
+                        <span>Toggle review</span>
+                        <span class="text-icon-base text-12-medium">{command.keybind("review.toggle")}</span>
+                      </div>
+                    }
+                  >
+                    <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
+                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                        <Icon
+                          size="small"
+                          name={layout.review.opened() ? "layout-right-full" : "layout-right"}
+                          class="group-hover/review-toggle:hidden"
+                        />
+                        <Icon
+                          size="small"
+                          name="layout-right-partial"
+                          class="hidden group-hover/review-toggle:inline-block"
+                        />
+                        <Icon
+                          size="small"
+                          name={layout.review.opened() ? "layout-right" : "layout-right-full"}
+                          class="hidden group-active/review-toggle:inline-block"
+                        />
+                      </div>
+                    </Button>
+                  </Tooltip>
+                  <Tooltip
+                    class="hidden md:block shrink-0"
+                    value={
+                      <div class="flex items-center gap-2">
                         <span>Toggle terminal</span>
                         <span class="text-icon-base text-12-medium">{command.keybind("terminal.toggle")}</span>
                       </div>

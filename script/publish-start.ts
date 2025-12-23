@@ -19,14 +19,7 @@ if (!Script.preview) {
   const log =
     await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/desktop`.text()
 
-  const commits = log
-    .split("\n")
-    .filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
-    .join("\n")
-
-  const opencode = await createOpencode()
-  const session = await opencode.client.session.create()
-  console.log("generating changelog since " + previous)
+  const commits = log.split("\n").filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
 
   const team = [
     "actions-user",
@@ -41,20 +34,25 @@ if (!Script.preview) {
     "opencode-agent[bot]",
   ]
 
-  const raw = await opencode.client.session
-    .prompt({
-      path: {
-        id: session.data!.id,
-      },
-      body: {
-        model: {
-          providerID: "opencode",
-          modelID: "gemini-3-flash",
+  async function generateChangelog() {
+    const opencode = await createOpencode()
+    const session = await opencode.client.session.create()
+    console.log("generating changelog since " + previous)
+
+    const raw = await opencode.client.session
+      .prompt({
+        path: {
+          id: session.data!.id,
         },
-        parts: [
-          {
-            type: "text",
-            text: `
+        body: {
+          model: {
+            providerID: "opencode",
+            modelID: "gemini-3-flash",
+          },
+          parts: [
+            {
+              type: "text",
+              text: `
             Analyze these commits and generate a changelog of all notable user facing changes, grouped by area.
 
             Each commit below includes:
@@ -62,7 +60,7 @@ if (!Script.preview) {
             - [areas: ...] showing which areas of the codebase were modified
 
             Commits between ${previous} and HEAD:
-            ${commits}
+            ${commits.join("\n")}
 
             Group the changes into these categories based on the [areas: ...] tags (omit any category with no changes):
             - **TUI**: Changes to "opencode" area (the terminal/CLI interface)
@@ -105,20 +103,34 @@ if (!Script.preview) {
             - Added OIDC_BASE_URL support for custom GitHub App installations (@elithrar)
             </example>
           `,
-          },
-        ],
-      },
-    })
-    .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
-  for (const line of raw?.split("\n") ?? []) {
-    if (line.startsWith("- ")) {
-      notes.push(line)
+            },
+          ],
+        },
+      })
+      .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
+    opencode.server.close()
+    return raw
+  }
+
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 120_000))
+  const raw = await Promise.race([generateChangelog(), timeout])
+
+  if (raw) {
+    for (const line of raw.split("\n")) {
+      if (line.startsWith("- ")) {
+        notes.push(line)
+      }
+    }
+    console.log("---- Generated Changelog ----")
+    console.log(notes.join("\n"))
+    console.log("-----------------------------")
+  } else {
+    console.log("Changelog generation timed out, using raw commits")
+    for (const commit of commits) {
+      const message = commit.replace(/^\w+ /, "")
+      notes.push(`- ${message}`)
     }
   }
-  console.log("---- Generated Changelog ----")
-  console.log(notes.join("\n"))
-  console.log("-----------------------------")
-  opencode.server.close()
 
   const compare =
     await $`gh api "/repos/sst/opencode/compare/v${previous}...HEAD" --jq '.commits[] | {login: .author.login, message: .commit.message}'`.text()
