@@ -282,12 +282,11 @@ export function Session() {
   const local = useLocal()
 
   function moveChild(direction: number) {
-    const parentID = session()?.parentID ?? session()?.id
-    let children = sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    const currentSession = session()
+    if (!currentSession) return
+    const children = sync.session.siblings(currentSession.id)
     if (children.length === 1) return
-    let next = children.findIndex((x) => x.id === session()?.id) + direction
+    let next = children.findIndex((x) => x.id === currentSession.id) + direction
     if (next >= children.length) next = 0
     if (next < 0) next = children.length - 1
     if (children[next]) {

@@ -331,6 +331,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (match.found) return store.session[match.index]
           return undefined
         },
+        siblings(sessionID: string) {
+          const session = result.session.get(sessionID)
+          if (!session) return []
+          const parentID = session.parentID ?? session.id
+          return store.session
+            .filter((x) => x.parentID === parentID || x.id === parentID)
+            .toSorted((b, a) => a.id.localeCompare(b.id))
+        },
         status(sessionID: string) {
           const session = result.session.get(sessionID)
           if (!session) return "idle"
