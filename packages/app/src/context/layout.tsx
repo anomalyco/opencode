@@ -46,6 +46,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: false,
           height: 280,
         },
+        review: {
+          opened: true,
+        },
         session: {
           width: 600,
         },
@@ -156,6 +159,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         height: createMemo(() => store.terminal.height),
         resize(height: number) {
           setStore("terminal", "height", height)
+        },
+      },
+      review: {
+        opened: createMemo(() => store.review?.opened ?? true),
+        open() {
+          setStore("review", "opened", true)
+        },
+        close() {
+          setStore("review", "opened", false)
+        },
+        toggle() {
+          setStore("review", "opened", (x) => !x)
         },
       },
       session: {

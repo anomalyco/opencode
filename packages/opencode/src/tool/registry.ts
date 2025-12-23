@@ -10,6 +10,7 @@ import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -103,6 +104,7 @@ export namespace ToolRegistry {
       TodoReadTool,
       WebSearchTool,
       CodeSearchTool,
+      SkillTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...custom,
@@ -113,7 +115,7 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(providerID: string) {
+  export async function tools(providerID: string, agent?: Agent.Info) {
     const tools = await all()
     const result = await Promise.all(
       tools
@@ -128,7 +130,7 @@ export namespace ToolRegistry {
           using _ = log.time(t.id)
           return {
             id: t.id,
-            ...(await t.init()),
+            ...(await t.init({ agent })),
           }
         }),
     )
@@ -149,6 +151,10 @@ export namespace ToolRegistry {
       result["webfetch"] = false
       result["codesearch"] = false
       result["websearch"] = false
+    }
+    // Disable skill tool if all skills are denied
+    if (agent.permission.skill["*"] === "deny" && Object.keys(agent.permission.skill).length === 1) {
+      result["skill"] = false
     }
 
     return result
