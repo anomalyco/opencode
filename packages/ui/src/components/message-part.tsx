@@ -23,6 +23,7 @@ import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
+import { createAutoScroll } from "../hooks"
 
 interface Diagnostic {
   range: {
@@ -330,6 +331,7 @@ export interface ToolProps {
   metadata: Record<string, any>
   tool: string
   output?: string
+  status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
 }
@@ -398,6 +400,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             tool={part.tool}
             metadata={metadata}
             output={part.state.status === "completed" ? part.state.output : undefined}
+            status={part.state.status}
             hideDetails={props.hideDetails}
             defaultOpen={props.defaultOpen}
           />
@@ -561,6 +564,10 @@ ToolRegistry.register({
     const summary = () =>
       (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
 
+    const autoScroll = createAutoScroll({
+      working: () => true,
+    })
+
     return (
       <BasicTool
         icon="task"
@@ -571,8 +578,8 @@ ToolRegistry.register({
           subtitle: props.input.description,
         }}
       >
-        <div data-component="tool-output" data-scrollable>
-          <div data-component="task-tools">
+        <div ref={autoScroll.scrollRef} onScroll={autoScroll.handleScroll} data-component="tool-output" data-scrollable>
+          <div ref={autoScroll.contentRef} data-component="task-tools">
             <For each={summary()}>
               {(item) => {
                 const info = getToolInfo(item.tool)

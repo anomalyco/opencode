@@ -31,6 +31,7 @@ export namespace Agent {
       permission: z.object({
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
+        skill: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
         doom_loop: Config.Permission.optional(),
         external_directory: Config.Permission.optional(),
@@ -58,6 +59,9 @@ export namespace Agent {
     const defaultPermission: Info["permission"] = {
       edit: "allow",
       bash: {
+        "*": "allow",
+      },
+      skill: {
         "*": "allow",
       },
       webfetch: "allow",
@@ -341,6 +345,17 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       "*": overridePermission.bash,
     }
   }
+
+  if (typeof basePermission.skill === "string") {
+    basePermission.skill = {
+      "*": basePermission.skill,
+    }
+  }
+  if (typeof overridePermission.skill === "string") {
+    overridePermission.skill = {
+      "*": overridePermission.skill,
+    }
+  }
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
   let mergedBash
   if (merged.bash) {
@@ -370,10 +385,27 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     }
   }
 
+  let mergedSkill
+  if (merged.skill) {
+    if (typeof merged.skill === "string") {
+      mergedSkill = {
+        "*": merged.skill,
+      }
+    } else if (typeof merged.skill === "object") {
+      mergedSkill = mergeDeep(
+        {
+          "*": "allow",
+        },
+        merged.skill,
+      )
+    }
+  }
+
   const result: Agent.Info["permission"] = {
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
+    skill: mergedSkill ?? { "*": "allow" },
     doom_loop: merged.doom_loop,
     external_directory: merged.external_directory,
     task: mergedTask,
