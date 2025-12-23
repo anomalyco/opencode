@@ -403,7 +403,7 @@ export const GithubRunCommand = cmd({
       // For schedule events, payload has no issue/comment data
       const payload = isScheduleEvent
         ? undefined
-        : (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent)
+        : (context.payload as IssueCommentEvent | PullRequestReviewCommentEvent | PullRequestEvent)
       const issueEvent = payload && isIssueCommentEvent(payload) ? payload : undefined
       const actor = isScheduleEvent ? undefined : context.actor
 
@@ -619,7 +619,7 @@ export const GithubRunCommand = cmd({
       }
 
       function isIssueCommentEvent(
-        event: IssueCommentEvent | PullRequestReviewCommentEvent,
+        event: IssueCommentEvent | PullRequestReviewCommentEvent | PullRequestEvent,
       ): event is IssueCommentEvent {
         return "issue" in event
       }
@@ -664,7 +664,7 @@ export const GithubRunCommand = cmd({
           if (!isCommentEvent) {
             return "Review this pull request"
           }
-          const body = payload!.comment.body.trim()
+          const body = (payload as IssueCommentEvent | PullRequestReviewCommentEvent).comment.body.trim()
           const bodyLower = body.toLowerCase()
           if (mentions.some((m) => bodyLower === m)) {
             if (reviewContext) {
