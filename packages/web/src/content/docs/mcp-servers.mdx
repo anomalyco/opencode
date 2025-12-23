@@ -171,7 +171,7 @@ For most OAuth-enabled MCP servers, no special configuration is needed. Just con
 }
 ```
 
-If the server requires authentication, OpenCode will prompt you to authenticate when you first try to use it.
+If the server requires authentication, OpenCode will prompt you to authenticate when you first try to use it. If not, you can [manually trigger the flow](#authenticating) with `opencode mcp auth <server-name>`.
 
 #### Pre-registered Client
 
@@ -239,6 +239,20 @@ opencode mcp logout my-oauth-server
 ```
 
 The `mcp auth` command will open your browser for authorization. After you authorize, OpenCode will store the tokens securely in `~/.local/share/opencode/mcp-auth.json`.
+
+#### Debugging
+
+If a remote MCP server is failing to authenticate, you can diagnose issues with:
+
+```bash
+# View auth status for all OAuth-capable servers
+opencode mcp auth list
+
+# Debug connection and OAuth flow for a specific server
+opencode mcp debug my-oauth-server
+```
+
+The `mcp debug` command shows the current auth status, tests HTTP connectivity, and attempts the OAuth discovery flow.
 
 ---
 
