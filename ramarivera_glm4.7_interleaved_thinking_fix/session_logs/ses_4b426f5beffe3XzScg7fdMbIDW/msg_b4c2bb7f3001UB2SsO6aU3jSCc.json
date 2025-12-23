@@ -1,0 +1,17 @@
+{
+  "id": "msg_b4c2bb7f3001UB2SsO6aU3jSCc",
+  "sessionID": "ses_4b426f5beffe3XzScg7fdMbIDW",
+  "role": "user",
+  "time": {
+    "created": 1766509492220
+  },
+  "summary": {
+    "title": "Tool call in thinking block",
+    "diffs": []
+  },
+  "agent": "build",
+  "model": {
+    "providerID": "zai-coding-plan",
+    "modelID": "glm-4.7"
+  }
+}
