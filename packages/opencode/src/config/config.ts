@@ -872,6 +872,25 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
             ),
+          tls: z
+            .object({
+              rejectUnauthorized: z
+                .boolean()
+                .optional()
+                .describe("Set to false to accept self-signed certificates. Default is true."),
+              cert: z.string().optional().describe("Path to client certificate file (PEM format) for mTLS."),
+              key: z.string().optional().describe("Path to client private key file (PEM format) for mTLS."),
+              ca: z
+                .union([z.string(), z.array(z.string())])
+                .optional()
+                .describe("Path(s) to CA certificate file(s) (PEM format) to trust."),
+            })
+            .optional()
+            .describe("TLS configuration for secure connections, including mTLS and custom CA certificates."),
+          proxy: z
+            .string()
+            .optional()
+            .describe("Proxy URL for this provider (e.g., http://proxy.example.com:8080). Overrides environment variables."),
         })
         .catchall(z.any())
         .optional(),

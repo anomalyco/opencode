@@ -50,8 +50,131 @@ For proxies requiring advanced authentication like NTLM or Kerberos, consider us
 
 If your enterprise uses custom CAs for HTTPS connections, configure OpenCode to trust them.
 
+### System certificate store
+
+Use certificates from your operating system's trusted certificate store (macOS Keychain, Windows Certificate Store, or Linux system certificates):
+
+```bash
+# Option 1: Set for all Bun executions
+export BUN_OPTIONS="--use-system-ca"
+
+# Option 2: Set via NODE_OPTIONS
+export NODE_OPTIONS="--use-system-ca"
+```
+
+This is ideal for enterprise environments where IT has pre-installed certificates in the system store.
+
+### Extra CA certificates
+
+To add additional CA certificates without replacing the default bundle:
+
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
 ```
 
 This works for both proxy connections and direct API access.
+
+---
+
+## Per-provider proxy
+
+Override the global proxy settings for a specific provider:
+
+```json
+{
+  "provider": {
+    "anthropic": {
+      "options": {
+        "proxy": "http://proxy.example.com:8080"
+      }
+    }
+  }
+}
+```
+
+This takes precedence over the `HTTPS_PROXY` and `HTTP_PROXY` environment variables for that provider.
+
+---
+
+## Per-provider TLS configuration
+
+For more granular control over TLS settings, you can configure TLS options per provider in your `opencode.json`:
+
+### Self-signed certificates
+
+Accept self-signed certificates for a specific provider:
+
+```json
+{
+  "provider": {
+    "my-proxy": {
+      "api": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://my-internal-proxy.example.com",
+        "tls": {
+          "rejectUnauthorized": false
+        }
+      }
+    }
+  }
+}
+```
+
+:::caution
+Disabling certificate validation (`rejectUnauthorized: false`) bypasses TLS security checks. Only use this for trusted internal services.
+:::
+
+### Custom CA certificates
+
+Trust a custom CA certificate for a provider:
+
+```json
+{
+  "provider": {
+    "my-proxy": {
+      "options": {
+        "baseURL": "https://my-internal-proxy.example.com",
+        "tls": {
+          "ca": "/path/to/ca-cert.pem"
+        }
+      }
+    }
+  }
+}
+```
+
+You can also specify multiple CA certificates:
+
+```json
+{
+  "tls": {
+    "ca": ["/path/to/ca1.pem", "/path/to/ca2.pem"]
+  }
+}
+```
+
+---
+
+## mTLS (Mutual TLS)
+
+For services requiring client certificate authentication, configure both the certificate and private key:
+
+```json
+{
+  "provider": {
+    "mtls-proxy": {
+      "api": "@ai-sdk/anthropic",
+      "options": {
+        "baseURL": "https://llm-proxy-mtls.internal.example.com",
+        "tls": {
+          "cert": "/path/to/client-cert.pem",
+          "key": "/path/to/client-key.pem",
+          "ca": "/path/to/ca-cert.pem"
+        }
+      }
+    }
+  }
+}
+```
+
+This is useful for enterprise environments with mTLS proxies that provide access to LLM APIs.

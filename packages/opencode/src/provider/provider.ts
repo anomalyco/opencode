@@ -982,9 +982,17 @@ export namespace Provider {
       if (existing) return existing
 
       const customFetch = options["fetch"]
+      const tlsConfig = options["tls"] as
+        | {
+            rejectUnauthorized?: boolean
+            cert?: string
+            key?: string
+            ca?: string | string[]
+          }
+        | undefined
+      const proxyUrl = options["proxy"] as string | undefined
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
-        // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
 
@@ -1016,10 +1024,30 @@ export namespace Provider {
           }
         }
 
+        let tls: BunFetchRequestInit["tls"] | undefined
+        if (tlsConfig) {
+          tls = {}
+          if (tlsConfig.rejectUnauthorized !== undefined) {
+            tls.rejectUnauthorized = tlsConfig.rejectUnauthorized
+          }
+          if (tlsConfig.cert) {
+            tls.cert = Bun.file(tlsConfig.cert)
+          }
+          if (tlsConfig.key) {
+            tls.key = Bun.file(tlsConfig.key)
+          }
+          if (tlsConfig.ca) {
+            const caFiles = Array.isArray(tlsConfig.ca) ? tlsConfig.ca : [tlsConfig.ca]
+            tls.ca = caFiles.map((path) => Bun.file(path))
+          }
+        }
+
         return fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
+          ...(tls && { tls }),
+          ...(proxyUrl && { proxy: proxyUrl }),
         })
       }
 
