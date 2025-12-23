@@ -49,7 +49,8 @@ export const GrepTool = Tool.define("grep", {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
 
-    const lines = output.trim().split("\n")
+    // Handle both Unix (\n) and Windows (\r\n) line endings
+    const lines = output.trim().split(/\r?\n/)
     const matches = []
 
     for (const line of lines) {
