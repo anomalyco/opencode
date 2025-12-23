@@ -1,11 +1,11 @@
 import { defineConfig } from "vite"
-import desktopPlugin from "@opencode-ai/desktop/vite"
+import appPlugin from "@opencode-ai/app/vite"
 
 const host = process.env.TAURI_DEV_HOST
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [desktopPlugin],
+  plugins: [appPlugin],
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

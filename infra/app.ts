@@ -44,3 +44,12 @@ new sst.cloudflare.x.Astro("Web", {
     VITE_API_URL: api.url.apply((url) => url!),
   },
 })
+
+new sst.cloudflare.StaticSite("App", {
+  domain: "app." + domain,
+  path: "packages/app",
+  build: {
+    command: "bun turbo build",
+    output: "./dist",
+  },
+})

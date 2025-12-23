@@ -15,6 +15,6 @@
     "emitDeclarationOnly": false,
     "outDir": "node_modules/.ts-dist"
   },
-  "references": [{ "path": "../desktop" }],
+  "references": [{ "path": "../app" }],
   "include": ["src"]
 }
