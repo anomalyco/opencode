@@ -1,40 +1,7 @@
-import { describe, expect, test, beforeAll } from "bun:test"
-import { ImageOptimizer } from "../../src/cli/cmd/tui/util/image-optimizer"
+import { describe, expect, test, beforeAll, afterAll } from "bun:test"
+import { ImageOptimizer } from "../../src/util/image-optimizer"
 import { Transformer } from "@napi-rs/image"
-
-// Create a large PNG by generating an uncompressed BMP and converting it
-// BMP with random data doesn't compress well, ensuring we get a >5MB PNG
-async function createLargePNG(targetSizeMB: number = 6) {
-  const scale = Math.sqrt(targetSizeMB / 6)
-  const width = Math.floor(4500 * scale)
-  const height = Math.floor(4500 * scale)
-
-  // Build minimal BMP: 54-byte header + RGB pixel data
-  const rowSize = Math.ceil((width * 3) / 4) * 4
-  const pixelDataSize = rowSize * height
-  const buffer = Buffer.alloc(54 + pixelDataSize)
-
-  // BMP header
-  buffer.write("BM", 0)
-  buffer.writeUInt32LE(54 + pixelDataSize, 2)
-  buffer.writeUInt32LE(54, 10)
-  buffer.writeUInt32LE(40, 14)
-  buffer.writeInt32LE(width, 18)
-  buffer.writeInt32LE(height, 22)
-  buffer.writeUInt16LE(1, 26)
-  buffer.writeUInt16LE(24, 28)
-  buffer.writeUInt32LE(pixelDataSize, 34)
-
-  // Fill with pseudo-random pixels (LCG PRNG for reproducibility)
-  let state = 12345
-  for (let i = 54; i < buffer.length; i++) {
-    state = (state * 1103515245 + 12345) & 0x7fffffff
-    buffer[i] = state % 256
-  }
-
-  const png = await new Transformer(buffer).png()
-  return { buffer: png, size: png.length, width, height }
-}
+import { getLargeTestImage, getSmallTestImage, clearImageCache } from "../fixture/image"
 
 describe("ImageOptimizer", () => {
   describe("formatBytes", () => {
@@ -72,12 +39,16 @@ describe("ImageOptimizer", () => {
   })
 
   describe("optimize", () => {
-    let testImage: Awaited<ReturnType<typeof createLargePNG>> | null = null
+    let testImage: Awaited<ReturnType<typeof getLargeTestImage>> | null = null
     let optimizedResult: ImageOptimizer.OptimizationResult | null = null
 
     beforeAll(async () => {
-      testImage = await createLargePNG(6)
+      testImage = await getLargeTestImage()
       optimizedResult = await ImageOptimizer.optimize(testImage.buffer)
+    })
+
+    afterAll(() => {
+      clearImageCache()
     })
 
     test("optimizes large image under size limit", () => {
@@ -125,6 +96,42 @@ describe("ImageOptimizer", () => {
     test("opaque PNG converts to JPEG", () => {
       expect(optimizedResult).not.toBeNull()
       expect(optimizedResult!.mime).toBe("image/jpeg")
+    })
+  })
+
+  describe("optimize (small image - no optimization needed)", () => {
+    let smallImage: Awaited<ReturnType<typeof getSmallTestImage>> | null = null
+    let result: ImageOptimizer.OptimizationResult | null = null
+
+    beforeAll(async () => {
+      smallImage = await getSmallTestImage()
+      result = await ImageOptimizer.optimize(smallImage.buffer)
+    })
+
+    afterAll(() => {
+      clearImageCache()
+    })
+
+    test("small image is under size limit", () => {
+      expect(smallImage).not.toBeNull()
+      expect(smallImage!.size).toBeLessThan(ImageOptimizer.SIZE_LIMIT)
+    })
+
+    test("returns image without dimension reduction", async () => {
+      expect(result).not.toBeNull()
+      expect(smallImage).not.toBeNull()
+
+      const resultBuffer = Buffer.from(result!.data, "base64")
+      const metadata = await new Transformer(resultBuffer).metadata()
+
+      // Dimensions should remain the same since no optimization was needed
+      expect(metadata.width).toBe(smallImage!.width)
+      expect(metadata.height).toBe(smallImage!.height)
+    })
+
+    test("result is valid base64", () => {
+      expect(result).not.toBeNull()
+      expect(result!.data).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
     })
   })
 

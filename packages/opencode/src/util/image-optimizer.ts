@@ -1,12 +1,20 @@
 import { Transformer, ResizeFilterType, JsColorType, losslessCompressPng } from "@napi-rs/image"
 
-const ALPHA_COLOR_TYPES = [
+const ALPHA_COLOR_TYPES = new Set([
   JsColorType.La8,
   JsColorType.Rgba8,
   JsColorType.La16,
   JsColorType.Rgba16,
   JsColorType.Rgba32F,
-]
+])
+
+async function encodeImage(img: Transformer, hasAlpha: boolean, quality: number): Promise<Buffer> {
+  if (hasAlpha) {
+    const pngBuffer = await img.png()
+    return losslessCompressPng(pngBuffer)
+  }
+  return img.jpeg(quality)
+}
 
 export namespace ImageOptimizer {
   export const SIZE_LIMIT = 5 * 1024 * 1024 // 5MB
@@ -33,64 +41,49 @@ export namespace ImageOptimizer {
    * - Reduces dimensions first (bigger savings), then quality for JPEG
    */
   export async function optimize(input: Buffer): Promise<OptimizationResult> {
-    const buffer = input
-    const metadata = await new Transformer(buffer).metadata()
-    const hasAlpha = ALPHA_COLOR_TYPES.includes(metadata.colorType)
-
-    let width = metadata.width
-    let height = metadata.height
-    let quality = 85
-    let triedLowerQuality = false
-    let result: Buffer = buffer
+    const metadata = await new Transformer(input).metadata()
+    const hasAlpha = ALPHA_COLOR_TYPES.has(metadata.colorType)
+    const state = { width: metadata.width, height: metadata.height, quality: 85, triedLowerQuality: false }
 
     // Iterative optimization: reduce dimensions first, then quality (JPEG only)
-    while (true) {
-      const img = new Transformer(buffer)
+    for (;;) {
+      const img = new Transformer(input)
 
       // Resize from original if dimensions changed (avoids cascading quality loss)
-      if (width !== metadata.width || height !== metadata.height) {
-        img.resize(width, height, ResizeFilterType.Lanczos3)
+      if (state.width !== metadata.width || state.height !== metadata.height) {
+        img.resize(state.width, state.height, ResizeFilterType.Lanczos3)
       }
 
-      // PNG for transparency, JPEG for opaque
-      if (hasAlpha) {
-        const pngBuffer = await img.png()
-        result = await losslessCompressPng(pngBuffer)
-      } else {
-        result = await img.jpeg(quality)
+      const result = await encodeImage(img, hasAlpha, state.quality)
+
+      if (result.length <= SIZE_LIMIT || state.width < 100 || state.height < 100) {
+        return {
+          data: result.toString("base64"),
+          mime: hasAlpha ? "image/png" : "image/jpeg",
+        }
       }
-
-      if (result.length <= SIZE_LIMIT) break
-
-      // Safety: minimum dimensions reached
-      if (width < 100 || height < 100) break
 
       // First pass at original dimensions - try reducing size
-      if (width === metadata.width && height === metadata.height) {
-        width = Math.floor(width * 0.8)
-        height = Math.floor(height * 0.8)
+      if (state.width === metadata.width && state.height === metadata.height) {
+        state.width = Math.floor(state.width * 0.8)
+        state.height = Math.floor(state.height * 0.8)
         continue
       }
 
       // JPEG: try quality reduction once before more dimension reduction
-      if (!hasAlpha && !triedLowerQuality && quality > 75) {
-        quality = 75
-        triedLowerQuality = true
+      if (!hasAlpha && !state.triedLowerQuality && state.quality > 75) {
+        state.quality = 75
+        state.triedLowerQuality = true
         continue
       }
 
       // Further dimension reduction needed
-      width = Math.floor(width * 0.8)
-      height = Math.floor(height * 0.8)
+      state.width = Math.floor(state.width * 0.8)
+      state.height = Math.floor(state.height * 0.8)
       if (!hasAlpha) {
-        quality = 85
-        triedLowerQuality = false
+        state.quality = 85
+        state.triedLowerQuality = false
       }
-    }
-
-    return {
-      data: result.toString("base64"),
-      mime: hasAlpha ? "image/png" : "image/jpeg",
     }
   }
 }

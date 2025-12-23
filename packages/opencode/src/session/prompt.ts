@@ -28,6 +28,7 @@ import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
+import { ImageOptimizer } from "../util/image-optimizer"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
@@ -50,6 +51,34 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+
+  /** Compress image if it exceeds size limit, returns original data if compression fails */
+  function compressImageIfNeeded(
+    buffer: Buffer,
+    mime: string,
+    data: string,
+    source: string,
+  ): Promise<{ mime: string; data: string }> {
+    if (!ImageOptimizer.needsOptimization(buffer.length)) {
+      return Promise.resolve({ mime, data })
+    }
+
+    log.info(`Compressing ${source} image`, {
+      originalSize: ImageOptimizer.formatBytes(buffer.length),
+    })
+
+    return ImageOptimizer.optimize(buffer)
+      .then((result) => {
+        log.info("Compression successful", {
+          newSize: ImageOptimizer.formatBytes(Buffer.from(result.data, "base64").length),
+        })
+        return { mime: result.mime, data: result.data }
+      })
+      .catch((error) => {
+        log.error("Compression failed, using original", { error })
+        return { mime, data }
+      })
+  }
 
   const state = Instance.state(
     () => {
@@ -683,13 +712,21 @@ export namespace SessionPrompt {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
+            const buffer = Buffer.from(contentItem.data, "base64")
+            const compressed = await compressImageIfNeeded(
+              buffer,
+              contentItem.mimeType,
+              contentItem.data,
+              "tool-returned",
+            )
+
             attachments.push({
               id: Identifier.ascending("part"),
               sessionID: input.sessionID,
               messageID: input.processor.message.id,
               type: "file",
-              mime: contentItem.mimeType,
-              url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
+              mime: compressed.mime,
+              url: `data:${compressed.mime};base64,${compressed.data}`,
             })
           }
           // Add support for other types if needed
@@ -921,6 +958,18 @@ export namespace SessionPrompt {
 
               const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
+              const fileBuffer = Buffer.from(await file.bytes())
+
+              let fileMime = part.mime
+              let fileData = fileBuffer.toString("base64")
+
+              // Compress images if needed
+              if (part.mime?.startsWith("image/")) {
+                const compressed = await compressImageIfNeeded(fileBuffer, part.mime, fileData, "file-provided")
+                fileMime = compressed.mime
+                fileData = compressed.data
+              }
+
               return [
                 {
                   id: Identifier.ascending("part"),
@@ -935,8 +984,8 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url: `data:${part.mime};base64,` + Buffer.from(await file.bytes()).toString("base64"),
-                  mime: part.mime,
+                  url: `data:${fileMime};base64,${fileData}`,
+                  mime: fileMime,
                   filename: part.filename!,
                   source: part.source,
                 },
@@ -963,6 +1012,32 @@ export namespace SessionPrompt {
                 part.name,
             },
           ]
+        }
+
+        // Handle image compression for file parts with data: URLs
+        if (part.type === "file" && part.mime?.startsWith("image/")) {
+          const match = part.url.match(/^data:image\/[^;]+;base64,(.+)$/)
+          if (match) {
+            const fileMime = part.mime
+            const buffer = Buffer.from(match[1], "base64")
+            const compressed = await compressImageIfNeeded(
+              buffer,
+              fileMime,
+              match[1],
+              "user-provided",
+            )
+
+            return [
+              {
+                id: part.id ?? Identifier.ascending("part"),
+                ...part,
+                mime: compressed.mime,
+                url: `data:${compressed.mime};base64,${compressed.data}`,
+                messageID: info.id,
+                sessionID: input.sessionID,
+              },
+            ]
+          }
         }
 
         return [
