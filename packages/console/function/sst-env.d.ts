@@ -98,6 +98,10 @@ declare module "sst" {
       "type": "sst.cloudflare.Astro"
       "url": string
     }
+    "WebApp": {
+      "type": "sst.cloudflare.StaticSite"
+      "url": string
+    }
     "ZEN_MODELS1": {
       "type": "sst.sst.Secret"
       "value": string
