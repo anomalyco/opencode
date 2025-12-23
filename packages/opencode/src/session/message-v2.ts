@@ -306,6 +306,7 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    client: z.enum(["tui", "web", "desktop"]).optional(),
   }).meta({
     ref: "UserMessage",
   })

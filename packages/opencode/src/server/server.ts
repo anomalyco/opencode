@@ -1299,7 +1299,9 @@ export namespace Server {
           return stream(c, async (stream) => {
             const sessionID = c.req.valid("param").sessionID
             const body = c.req.valid("json")
-            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            const clientHeader = c.req.header("x-opencode-client")
+            const client = clientHeader === "tui" ? "tui" : "web"
+            const msg = await SessionPrompt.prompt({ ...body, sessionID, client })
             stream.write(JSON.stringify(msg))
           })
         },
@@ -1331,7 +1333,9 @@ export namespace Server {
           return stream(c, async () => {
             const sessionID = c.req.valid("param").sessionID
             const body = c.req.valid("json")
-            SessionPrompt.prompt({ ...body, sessionID })
+            const clientHeader = c.req.header("x-opencode-client")
+            const client = clientHeader === "tui" ? "tui" : "web"
+            SessionPrompt.prompt({ ...body, sessionID, client })
           })
         },
       )
@@ -1368,8 +1372,9 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.command({ ...body, sessionID })
-          return c.json(msg)
+          const clientHeader = c.req.header("x-opencode-client")
+          const client = clientHeader === "tui" ? "tui" : "web"
+          await SessionPrompt.command({ ...body, sessionID, client })
         },
       )
       .post(
@@ -1400,7 +1405,9 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const msg = await SessionPrompt.shell({ ...body, sessionID })
+          const clientHeader = c.req.header("x-opencode-client")
+          const client = clientHeader === "tui" ? "tui" : "web"
+          const msg = await SessionPrompt.shell({ ...body, sessionID, client })
           return c.json(msg)
         },
       )
