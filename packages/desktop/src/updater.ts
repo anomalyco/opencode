@@ -35,7 +35,7 @@ export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
   if (!shouldUpdate) return
 
   try {
-    if(ostype() === "windows") await invoke("kill_sidecar")
+    if (ostype() === "windows") await invoke("kill_sidecar")
     await update.install()
   } catch {
     await message("Failed to install update", { title: "Update Failed" })
