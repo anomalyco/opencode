@@ -17,7 +17,7 @@ if (!Script.preview) {
     .then((data: any) => data.version)
 
   const log =
-    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/desktop`.text()
+    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/app`.text()
 
   const commits = log.split("\n").filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
 
@@ -64,7 +64,7 @@ if (!Script.preview) {
 
             Group the changes into these categories based on the [areas: ...] tags (omit any category with no changes):
             - **TUI**: Changes to "opencode" area (the terminal/CLI interface)
-            - **Desktop**: Changes to "desktop" or "tauri" areas (the desktop application)
+            - **Desktop**: Changes to "app" or "tauri" areas (the desktop application)
             - **SDK**: Changes to "sdk" or "plugin" areas (the SDK and plugin system)
             - **Extensions**: Changes to "extensions/zed", "extensions/vscode", or "github" areas (editor extensions and GitHub Action)
             - **Other**: Any user-facing changes that don't fit the above categories
