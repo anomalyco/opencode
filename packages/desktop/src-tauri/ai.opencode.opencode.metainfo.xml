@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ai.opencode.opencode</id>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>OpenCode</name>
+  <summary>Open source AI coding agent</summary>
+
+  <developer id="ly.anoma">
+    <name>Anomaly Innovations Inc.</name>
+  </developer>
+
+  <description>
+    <p>
+      OpenCode is an open source agent that helps you write and run code with any AI model.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">ai.opencode.opencode.desktop</launchable>
+
+  <content_rating type="oars-1.1" />
+
+  <url type="bugtracker">https://github.com/sst/opencode/issues</url>
+  <url type="homepage">https://opencode.ai</url>
+  <url type="vcs-browser">https://github.com/sst/opencode</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://opencode.ai/docs/_astro/screenshot.Bs5D4atL_ZvsvFu.webp</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="1.0.191" date="2025-12-23">
+      <url type="details">https://github.com/sst/opencode/releases/tag/v1.0.191</url>
+    </release>
+  </releases>
+</component>

@@ -28,6 +28,13 @@
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app", "appimage"],
     "externalBin": ["sidecars/opencode-cli"],
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/ai.opencode.opencode.metainfo.xml": "ai.opencode.opencode.metainfo.xml"
+        }
+      }
+    },
     "macOS": {
       "entitlements": "./entitlements.plist"
     },
