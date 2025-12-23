@@ -2,7 +2,7 @@ import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createMemo, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Logo } from "../component/logo"
-import { DidYouKnow, ShowTipsHint, randomizeTip } from "../component/did-you-know"
+import { DidYouKnow, randomizeTip } from "../component/did-you-know"
 import { Locale } from "@/util/locale"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -105,7 +105,7 @@ export function Home() {
         <Toast />
       </box>
       <Show when={!isFirstTimeUser()}>
-        <Show when={showTips()} fallback={<ShowTipsHint />}>
+        <Show when={showTips()}>
           <DidYouKnow />
         </Show>
       </Show>

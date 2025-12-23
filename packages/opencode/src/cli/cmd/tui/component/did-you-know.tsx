@@ -83,19 +83,3 @@ export function DidYouKnow() {
     </box>
   )
 }
-
-export function ShowTipsHint() {
-  const { theme } = useTheme()
-  const keybind = useKeybind()
-
-  return (
-    <box position="absolute" bottom={3} right={2}>
-      <box flexDirection="row" justifyContent="flex-end">
-        <text>
-          <span style={{ fg: theme.text }}>{keybind.print("tips_toggle")}</span>
-          <span style={{ fg: theme.textMuted }}> show tips</span>
-        </text>
-      </box>
-    </box>
-  )
-}
