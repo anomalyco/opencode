@@ -6,6 +6,41 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/global/health": {
+      "get": {
+        "operationId": "global.health",
+        "summary": "Get health",
+        "description": "Get health information about the OpenCode server.",
+        "responses": {
+          "200": {
+            "description": "Health information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "healthy": {
+                      "type": "boolean",
+                      "const": true
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["healthy", "version"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/event": {
       "get": {
         "operationId": "global.event",
@@ -7601,6 +7636,11 @@
             "default": "<leader>left",
             "type": "string"
           },
+          "session_parent": {
+            "description": "Go to parent session",
+            "default": "<leader>up",
+            "type": "string"
+          },
           "terminal_suspend": {
             "description": "Suspend terminal",
             "default": "ctrl+z",
@@ -7668,6 +7708,24 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "bash": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["ask", "allow", "deny"]
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": ["ask", "allow", "deny"]
+                    }
+                  }
+                ]
+              },
+              "skill": {
                 "anyOf": [
                   {
                     "type": "string",
@@ -8376,6 +8434,24 @@
                 "enum": ["ask", "allow", "deny"]
               },
               "bash": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["ask", "allow", "deny"]
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "enum": ["ask", "allow", "deny"]
+                    }
+                  }
+                ]
+              },
+              "skill": {
                 "anyOf": [
                   {
                     "type": "string",
@@ -9202,6 +9278,16 @@
                   "enum": ["ask", "allow", "deny"]
                 }
               },
+              "skill": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "enum": ["ask", "allow", "deny"]
+                }
+              },
               "webfetch": {
                 "type": "string",
                 "enum": ["ask", "allow", "deny"]
@@ -9215,7 +9301,7 @@
                 "enum": ["ask", "allow", "deny"]
               }
             },
-            "required": ["edit", "bash"]
+            "required": ["edit", "bash", "skill"]
           },
           "model": {
             "type": "object",
