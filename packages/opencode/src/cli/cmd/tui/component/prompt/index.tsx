@@ -931,7 +931,13 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                input.insertText(pastedContent)
+                const value = input.plainText
+                setStore("prompt", "input", value)
+                // Force layout update and render
+                setTimeout(() => {
+                  input.getLayoutNode().markDirty()
+                  renderer.requestRender()
+                }, 0)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
