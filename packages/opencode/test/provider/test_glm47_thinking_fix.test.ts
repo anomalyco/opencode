@@ -65,6 +65,7 @@ After running the tests, I'll analyze the results.`
     expect(toolCalls[0].toolName).toBe("bash")
     expect(toolCalls[0].input).toEqual({
       command: "bun test packages/portal/scripts/generate/workflow/workflow.test.ts 2>&1",
+      description: "Run workflow inference unit tests",
     })
 
     // Check that reasoning was cleaned
@@ -207,13 +208,22 @@ After running the tests, I'll analyze the results.`
     expect(toolCalls.length).toBe(3)
 
     expect(toolCalls[0].toolName).toBe("bash")
-    expect(toolCalls[0].input).toEqual({ command: "ls -la" })
+    expect(toolCalls[0].input).toEqual({
+      command: "ls -la",
+      description: "List files",
+    })
 
     expect(toolCalls[1].toolName).toBe("bash")
-    expect(toolCalls[1].input).toEqual({ command: "bun install" })
+    expect(toolCalls[1].input).toEqual({
+      command: "bun install",
+      description: "Install dependencies",
+    })
 
     expect(toolCalls[2].toolName).toBe("bash")
-    expect(toolCalls[2].input).toEqual({ command: "bun test" })
+    expect(toolCalls[2].input).toEqual({
+      command: "bun test",
+      description: "Run tests",
+    })
   })
 
   test("Properly formatted GLM-4.7 response should not be affected", () => {

@@ -75,6 +75,97 @@ export namespace ProviderTransform {
     }
 
     if (
+      model.providerID === "z.ai" ||
+      model.providerID === "zai-coding-plan" ||
+      model.api.id.toLowerCase().includes("glm-4.7") ||
+      model.api.id.toLowerCase().includes("glm-4.6")
+    ) {
+      return msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+
+          // Pattern: <invoke name="toolName">...</invoke>
+          const invokePattern = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/g
+          const hasMalformedTools = invokePattern.test(reasoningText)
+          invokePattern.lastIndex = 0 // Reset regex state after test()
+
+          if (hasMalformedTools) {
+            const toolCalls: Array<any> = []
+            let match
+
+            while ((match = invokePattern.exec(reasoningText)) !== null) {
+              const toolName = match[1]
+              const argsText = match[2]
+
+              // Try parsing <arg_key>/<arg_value> pairs first
+              const argKeyPattern =
+                /<arg_key>([^<]+)<\/arg_key>\s*<arg_value>([^<]*(?:(?!<arg_key>)[^<]+)*)<\/arg_value>/g
+              const args: Record<string, string> = {}
+              let argMatch = argKeyPattern.exec(argsText)
+
+              if (argMatch) {
+                // Found arg_key/arg_value pairs - use them
+                argKeyPattern.lastIndex = 0 // Reset regex
+                while ((argMatch = argKeyPattern.exec(argsText)) !== null) {
+                  const key = argMatch[1].trim()
+                  const value = argMatch[2].trim()
+                  args[key] = value
+                }
+              } else {
+                // No arg_key/arg_value pairs - extract direct child tags as arguments
+                const directTagPattern = /<(\w+)>([^<]+)<\/\1>/g
+                let directMatch
+                while ((directMatch = directTagPattern.exec(argsText)) !== null) {
+                  const key = directMatch[1]
+                  const value = directMatch[2].trim()
+                  if (key !== "invoke" && !key.startsWith("/")) {
+                    args[key] = value
+                  }
+                }
+              }
+
+              toolCalls.push({
+                type: "tool-call",
+                toolCallId: `tc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+                toolName,
+                input: args,
+              })
+            }
+
+            // Clean the reasoning text
+            let cleanText = reasoningText
+            cleanText = cleanText.replace(invokePattern, "")
+            cleanText = cleanText.replace(/<arg_key>[\s\S]*?<\/arg_key>/g, "")
+            cleanText = cleanText.replace(/<arg_value>[\s\S]*?<\/arg_value>/g, "")
+            cleanText = cleanText.replace(/<description>[\s\S]*?<\/description>/g, "")
+            cleanText = cleanText.replace(/<(\w+)>[^<]+<\/\1>/g, "") // Remove any remaining direct tags
+            cleanText = cleanText.replace(/\s+/g, " ").trim()
+
+            // Rebuild content with extracted tool calls
+            const nonReasoningContent = msg.content.filter((part: any) => part.type !== "reasoning")
+            const newContent = [...nonReasoningContent, ...toolCalls]
+
+            if (cleanText.length > 0) {
+              newContent.push({
+                type: "reasoning",
+                text: cleanText,
+              })
+            }
+
+            return {
+              ...msg,
+              content: newContent,
+            }
+          }
+          // No malformed tools - fall through to interleaved check below
+        }
+
+        return msg
+      })
+    }
+
+    if (
       model.capabilities.interleaved &&
       typeof model.capabilities.interleaved === "object" &&
       model.capabilities.interleaved.field === "reasoning_content"
