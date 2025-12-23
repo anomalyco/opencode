@@ -22,6 +22,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
+import { SessionContextUsage } from "@/components/session-context-usage"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -972,7 +973,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
           />
           <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
-            <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
+            <div class="absolute top-0 inset-x-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? "Enter shell command..."
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
@@ -1026,12 +1027,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     }
                   >
                     {local.model.current()?.name ?? "Select model"}
-                    <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
+                    <span class="hidden md:block ml-0.5 text-text-weak text-12-regular">
+                      {local.model.current()?.provider.name}
+                    </span>
                     <Icon name="chevron-down" size="small" />
                   </Button>
                 </Tooltip>
               </Match>
             </Switch>
+            <SessionContextUsage />
           </div>
           <div class="flex items-center gap-1 absolute right-2 bottom-2">
             <input
