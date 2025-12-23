@@ -10,12 +10,14 @@ import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
+import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const sync = useSync()
+    const sdk = useSDK()
     const toast = useToast()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
@@ -50,11 +52,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
+      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: agents().find((x) => x.default)?.name ?? agents()[0].name,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -310,9 +312,27 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const mcp = {
+      isEnabled(name: string) {
+        const status = sync.data.mcp[name]
+        return status?.status === "connected"
+      },
+      async toggle(name: string) {
+        const status = sync.data.mcp[name]
+        if (status?.status === "connected") {
+          // Disable: disconnect the MCP
+          await sdk.client.mcp.disconnect({ name })
+        } else {
+          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
+          await sdk.client.mcp.connect({ name })
+        }
+      },
+    }
+
     const result = {
       model,
       agent,
+      mcp,
     }
     return result
   },

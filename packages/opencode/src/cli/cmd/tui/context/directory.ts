@@ -8,7 +8,8 @@ export function useDirectory() {
   const sdk = useSDK()
   return createMemo(() => {
     const remote = sdk.remoteHost
-    const cwd = remote ? (sync.data.path?.directory ?? "...") : process.cwd().replace(Global.Path.home, "~")
+    const directory = sync.data.path.directory || process.cwd()
+    const cwd = remote ? sync.data.path.directory || "..." : directory.replace(Global.Path.home, "~")
     const prefix = remote ? `${remote} ` : ""
     if (sync.data.vcs?.branch) return prefix + cwd + ":" + sync.data.vcs.branch
     return prefix + cwd

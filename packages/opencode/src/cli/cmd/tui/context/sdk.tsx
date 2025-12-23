@@ -1,4 +1,4 @@
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk"
+import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup, onMount } from "solid-js"
@@ -27,9 +27,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     onMount(async () => {
       while (true) {
         if (abort.signal.aborted) break
-        const events = await sdk.event.subscribe({
-          signal: abort.signal,
-        })
+        const events = await sdk.event.subscribe(
+          {},
+          {
+            signal: abort.signal,
+          },
+        )
         let queue: Event[] = []
         let timer: Timer | undefined
         let last = 0
@@ -74,6 +77,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       abort.abort()
     })
 
-    return { client: sdk, event: emitter, remoteHost }
+    return { client: sdk, event: emitter, url: props.url, remoteHost }
   },
 })

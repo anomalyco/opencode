@@ -2,10 +2,18 @@ import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
-import PROMPT_GENERATE from "./generate.txt"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { mergeDeep } from "remeda"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "agent" })
+
+import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_SUMMARY from "./prompt/summary.txt"
+import PROMPT_TITLE from "./prompt/title.txt"
 
 export namespace Agent {
   export const Info = z
@@ -13,13 +21,16 @@ export namespace Agent {
       name: z.string(),
       description: z.string().optional(),
       mode: z.enum(["subagent", "primary", "all"]),
-      builtIn: z.boolean(),
+      native: z.boolean().optional(),
+      hidden: z.boolean().optional(),
+      default: z.boolean().optional(),
       topP: z.number().optional(),
       temperature: z.number().optional(),
       color: z.string().optional(),
       permission: z.object({
         edit: Config.Permission,
         bash: z.record(z.string(), Config.Permission),
+        skill: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
         doom_loop: Config.Permission.optional(),
         external_directory: Config.Permission.optional(),
@@ -33,6 +44,7 @@ export namespace Agent {
       prompt: z.string().optional(),
       tools: z.record(z.string(), z.boolean()),
       options: z.record(z.string(), z.any()),
+      maxSteps: z.number().int().positive().optional(),
     })
     .meta({
       ref: "Agent",
@@ -45,6 +57,9 @@ export namespace Agent {
     const defaultPermission: Info["permission"] = {
       edit: "allow",
       bash: {
+        "*": "allow",
+      },
+      skill: {
         "*": "allow",
       },
       webfetch: "allow",
@@ -100,6 +115,24 @@ export namespace Agent {
     )
 
     const result: Record<string, Info> = {
+      build: {
+        name: "build",
+        tools: { ...defaultTools },
+        options: {},
+        permission: agentPermission,
+        mode: "primary",
+        native: true,
+      },
+      plan: {
+        name: "plan",
+        options: {},
+        permission: planPermission,
+        tools: {
+          ...defaultTools,
+        },
+        mode: "primary",
+        native: true,
+      },
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,
@@ -111,7 +144,8 @@ export namespace Agent {
         options: {},
         permission: agentPermission,
         mode: "subagent",
-        builtIn: true,
+        native: true,
+        hidden: true,
       },
       explore: {
         name: "explore",
@@ -123,48 +157,43 @@ export namespace Agent {
           ...defaultTools,
         },
         description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
-        prompt: [
-          `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.`,
-          ``,
-          `Your strengths:`,
-          `- Rapidly finding files using glob patterns`,
-          `- Searching code and text with powerful regex patterns`,
-          `- Reading and analyzing file contents`,
-          ``,
-          `Guidelines:`,
-          `- Use Glob for broad file pattern matching`,
-          `- Use Grep for searching file contents with regex`,
-          `- Use Read when you know the specific file path you need to read`,
-          `- Use Bash for file operations like copying, moving, or listing directory contents`,
-          `- Adapt your search approach based on the thoroughness level specified by the caller`,
-          `- Return file paths as absolute paths in your final response`,
-          `- For clear communication, avoid using emojis`,
-          `- Do not create any files, or run bash commands that modify the user's system state in any way`,
-          ``,
-          `Complete the user's search request efficiently and report your findings clearly.`,
-        ].join("\n"),
+        prompt: PROMPT_EXPLORE,
         options: {},
         permission: agentPermission,
         mode: "subagent",
-        builtIn: true,
+        native: true,
       },
-      build: {
-        name: "build",
-        tools: { ...defaultTools },
+      compaction: {
+        name: "compaction",
+        mode: "primary",
+        native: true,
+        hidden: true,
+        prompt: PROMPT_COMPACTION,
+        tools: {
+          "*": false,
+        },
         options: {},
         permission: agentPermission,
-        mode: "primary",
-        builtIn: true,
       },
-      plan: {
-        name: "plan",
-        options: {},
-        permission: planPermission,
-        tools: {
-          ...defaultTools,
-        },
+      title: {
+        name: "title",
         mode: "primary",
-        builtIn: true,
+        options: {},
+        native: true,
+        hidden: true,
+        permission: agentPermission,
+        prompt: PROMPT_TITLE,
+        tools: {},
+      },
+      summary: {
+        name: "summary",
+        mode: "primary",
+        options: {},
+        native: true,
+        hidden: true,
+        permission: agentPermission,
+        prompt: PROMPT_SUMMARY,
+        tools: {},
       },
     }
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
@@ -180,9 +209,22 @@ export namespace Agent {
           permission: agentPermission,
           options: {},
           tools: {},
-          builtIn: false,
+          native: false,
         }
-      const { name, model, prompt, tools, description, temperature, top_p, mode, permission, color, ...extra } = value
+      const {
+        name,
+        model,
+        prompt,
+        tools,
+        description,
+        temperature,
+        top_p,
+        mode,
+        permission,
+        color,
+        maxSteps,
+        ...extra
+      } = value
       item.options = {
         ...item.options,
         ...extra,
@@ -205,11 +247,33 @@ export namespace Agent {
       if (color) item.color = color
       // just here for consistency & to prevent it from being added as an option
       if (name) item.name = name
+      if (maxSteps != undefined) item.maxSteps = maxSteps
 
       if (permission ?? cfg.permission) {
         item.permission = mergeAgentPermissions(cfg.permission ?? {}, permission ?? {})
       }
     }
+
+    // Mark the default agent
+    const defaultName = cfg.default_agent ?? "build"
+    const defaultCandidate = result[defaultName]
+    if (defaultCandidate && defaultCandidate.mode !== "subagent") {
+      defaultCandidate.default = true
+    } else {
+      // Fall back to "build" if configured default is invalid
+      if (result["build"]) {
+        result["build"].default = true
+      }
+    }
+
+    const hasPrimaryAgents = Object.values(result).filter((a) => a.mode !== "subagent" && !a.hidden).length > 0
+    if (!hasPrimaryAgents) {
+      throw new Config.InvalidError({
+        path: "config",
+        message: "No primary agents are available. Please configure at least one agent with mode 'primary' or 'all'.",
+      })
+    }
+
     return result
   })
 
@@ -221,15 +285,29 @@ export namespace Agent {
     return state().then((x) => Object.values(x))
   }
 
-  export async function generate(input: { description: string }) {
-    const defaultModel = await Provider.defaultModel()
+  export async function defaultAgent(): Promise<string> {
+    const agents = await state()
+    const defaultCandidate = Object.values(agents).find((a) => a.default)
+    return defaultCandidate?.name ?? "build"
+  }
+
+  export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {
+    const cfg = await Config.get()
+    const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
+    const language = await Provider.getLanguage(model)
     const system = SystemPrompt.header(defaultModel.providerID)
     system.push(PROMPT_GENERATE)
     const existing = await list()
     const result = await generateObject({
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+        },
+      },
       temperature: 0.3,
-      prompt: [
+      messages: [
         ...system.map(
           (item): ModelMessage => ({
             role: "system",
@@ -241,7 +319,7 @@ export namespace Agent {
           content: `Create an agent configuration based on this request: \"${input.description}\".\n\nIMPORTANT: The following identifiers already exist and must NOT be used: ${existing.map((i) => i.name).join(", ")}\n  Return ONLY the JSON object, no other text, do not wrap in backticks`,
         },
       ],
-      model: model.language,
+      model: language,
       schema: z.object({
         identifier: z.string(),
         whenToUse: z.string(),
@@ -263,6 +341,17 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
       "*": overridePermission.bash,
     }
   }
+
+  if (typeof basePermission.skill === "string") {
+    basePermission.skill = {
+      "*": basePermission.skill,
+    }
+  }
+  if (typeof overridePermission.skill === "string") {
+    overridePermission.skill = {
+      "*": overridePermission.skill,
+    }
+  }
   const merged = mergeDeep(basePermission ?? {}, overridePermission ?? {}) as any
   let mergedBash
   if (merged.bash) {
@@ -280,10 +369,27 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     }
   }
 
+  let mergedSkill
+  if (merged.skill) {
+    if (typeof merged.skill === "string") {
+      mergedSkill = {
+        "*": merged.skill,
+      }
+    } else if (typeof merged.skill === "object") {
+      mergedSkill = mergeDeep(
+        {
+          "*": "allow",
+        },
+        merged.skill,
+      )
+    }
+  }
+
   const result: Agent.Info["permission"] = {
     edit: merged.edit ?? "allow",
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
+    skill: mergedSkill ?? { "*": "allow" },
     doom_loop: merged.doom_loop,
     external_directory: merged.external_directory,
   }

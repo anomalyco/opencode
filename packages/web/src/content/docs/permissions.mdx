@@ -132,6 +132,18 @@ The wildcard uses simple regex globbing patterns.
 
 ---
 
+#### Scope of the `"ask"` option
+
+When the agent asks for permission to run a particular bash command, it will
+request feedback with the three options "accept", "accept always" and "deny".
+The "accept always" answer applies for the rest of the current session.
+
+In addition, command permissions are applied to the first two elements of a command. So, an "accept always" response for a command like `git log` would whitelist `git log *` but not `git commit ...`.
+
+When an agent asks for permission to run a command in a pipeline, we use tree sitter to parse each command in the pipeline. The "accept always" permission thus applies separately to each command in the pipeline.
+
+---
+
 ### webfetch
 
 Use the `permission.webfetch` key to control whether the LLM can fetch web pages.

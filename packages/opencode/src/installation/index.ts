@@ -1,10 +1,11 @@
+import { BusEvent } from "@/bus/bus-event"
 import path from "path"
 import { $ } from "bun"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { iife } from "@/util/iife"
+import { Flag } from "../flag/flag"
 
 declare global {
   const OPENCODE_VERSION: string
@@ -17,13 +18,13 @@ export namespace Installation {
   export type Method = Awaited<ReturnType<typeof method>>
 
   export const Event = {
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "installation.updated",
       z.object({
         version: z.string(),
       }),
     ),
-    UpdateAvailable: Bus.event(
+    UpdateAvailable: BusEvent.define(
       "installation.update-available",
       z.object({
         version: z.string(),
@@ -64,23 +65,23 @@ export namespace Installation {
     const checks = [
       {
         name: "npm" as const,
-        command: () => $`npm list -g --depth=0`.throws(false).text(),
+        command: () => $`npm list -g --depth=0`.throws(false).quiet().text(),
       },
       {
         name: "yarn" as const,
-        command: () => $`yarn global list`.throws(false).text(),
+        command: () => $`yarn global list`.throws(false).quiet().text(),
       },
       {
         name: "pnpm" as const,
-        command: () => $`pnpm list -g --depth=0`.throws(false).text(),
+        command: () => $`pnpm list -g --depth=0`.throws(false).quiet().text(),
       },
       {
         name: "bun" as const,
-        command: () => $`bun pm ls -g`.throws(false).text(),
+        command: () => $`bun pm ls -g`.throws(false).quiet().text(),
       },
       {
         name: "brew" as const,
-        command: () => $`brew list --formula opencode`.throws(false).text(),
+        command: () => $`brew list --formula opencode`.throws(false).quiet().text(),
       },
     ]
 
@@ -110,9 +111,9 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).text()
+    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
     if (tapFormula.includes("opencode")) return "sst/tap/opencode"
-    const coreFormula = await $`brew list --formula opencode`.throws(false).text()
+    const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
     return "opencode"
   }
@@ -161,16 +162,30 @@ export namespace Installation {
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
   export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
-  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}`
+  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
-  export async function latest() {
+  export async function latest(installMethod?: Method) {
+    const detectedMethod = installMethod || (await method())
+    if (detectedMethod === "brew") {
+      const formula = await getBrewFormula()
+      if (formula === "opencode") {
+        return fetch("https://formulae.brew.sh/api/formula/opencode.json")
+          .then((res) => {
+            if (!res.ok) throw new Error(res.statusText)
+            return res.json()
+          })
+          .then((data: any) => data.versions.stable)
+      }
+    }
+
     const registry = await iife(async () => {
       const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
       const reg = r || "https://registry.npmjs.org"
       return reg.endsWith("/") ? reg.slice(0, -1) : reg
     })
     const [major] = VERSION.split(".").map((x) => Number(x))
-    const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    // const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
+    const channel = CHANNEL
     return fetch(`${registry}/opencode-ai/${channel}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)

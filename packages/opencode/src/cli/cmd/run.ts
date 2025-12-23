@@ -7,9 +7,10 @@ import { bootstrap } from "../bootstrap"
 import { Command } from "../../command"
 import { EOL } from "os"
 import { select } from "@clack/prompts"
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
+import { Agent } from "../../agent/agent"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -88,7 +89,9 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
-    let message = args.message.join(" ")
+    let message = [...args.message, ...(args["--"] || [])]
+      .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
+      .join(" ")
 
     const fileParts: any[] = []
     if (args.file) {
@@ -212,33 +215,53 @@ export const RunCommand = cmd({
               initialValue: "once",
             }).catch(() => "reject")
             const response = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
-            await sdk.postSessionIdPermissionsPermissionId({
-              path: { id: sessionID, permissionID: permission.id },
-              body: { response },
+            await sdk.permission.respond({
+              sessionID,
+              permissionID: permission.id,
+              response,
             })
           }
         }
       })()
 
+      // Validate agent if specified
+      const resolvedAgent = await (async () => {
+        if (!args.agent) return undefined
+        const agent = await Agent.get(args.agent)
+        if (!agent) {
+          UI.println(
+            UI.Style.TEXT_WARNING_BOLD + "!",
+            UI.Style.TEXT_NORMAL,
+            `agent "${args.agent}" not found. Falling back to default agent`,
+          )
+          return undefined
+        }
+        if (agent.mode === "subagent") {
+          UI.println(
+            UI.Style.TEXT_WARNING_BOLD + "!",
+            UI.Style.TEXT_NORMAL,
+            `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+          )
+          return undefined
+        }
+        return args.agent
+      })()
+
       if (args.command) {
         await sdk.session.command({
-          path: { id: sessionID },
-          body: {
-            agent: args.agent || "build",
-            model: args.model,
-            command: args.command,
-            arguments: message,
-          },
+          sessionID,
+          agent: resolvedAgent,
+          model: args.model,
+          command: args.command,
+          arguments: message,
         })
       } else {
         const modelParam = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
-          path: { id: sessionID },
-          body: {
-            agent: args.agent || "build",
-            model: modelParam,
-            parts: [...fileParts, { type: "text", text: message }],
-          },
+          sessionID,
+          agent: resolvedAgent,
+          model: modelParam,
+          parts: [...fileParts, { type: "text", text: message }],
         })
       }
 
@@ -263,7 +286,7 @@ export const RunCommand = cmd({
               : args.title
             : undefined
 
-        const result = await sdk.session.create({ body: title ? { title } : {} })
+        const result = await sdk.session.create(title ? { title } : {})
         return result.data?.id
       })()
 
@@ -274,14 +297,14 @@ export const RunCommand = cmd({
 
       const cfgResult = await sdk.config.get()
       if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
-        const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
+        const shareResult = await sdk.session.share({ sessionID }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
           }
           return { error }
         })
-        if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
         }
       }
 
@@ -315,7 +338,7 @@ export const RunCommand = cmd({
               : args.title
             : undefined
 
-        const result = await sdk.session.create({ body: title ? { title } : {} })
+        const result = await sdk.session.create(title ? { title } : {})
         return result.data?.id
       })()
 
@@ -327,14 +350,14 @@ export const RunCommand = cmd({
 
       const cfgResult = await sdk.config.get()
       if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
-        const shareResult = await sdk.session.share({ path: { id: sessionID } }).catch((error) => {
+        const shareResult = await sdk.session.share({ sessionID }).catch((error) => {
           if (error instanceof Error && error.message.includes("disabled")) {
             UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
           }
           return { error }
         })
-        if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
         }
       }
 
