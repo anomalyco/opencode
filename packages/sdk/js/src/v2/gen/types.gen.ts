@@ -548,6 +548,48 @@ export type EventSessionCompacted = {
   }
 }
 
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -640,48 +682,6 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
 export type Pty = {
   id: string
   title: string
@@ -753,6 +753,9 @@ export type Event =
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -761,9 +764,6 @@ export type Event =
   | EventSessionError
   | EventFileWatcherUpdated
   | EventVcsBranchUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
