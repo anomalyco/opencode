@@ -12,6 +12,8 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import { usePromptStash } from "./stash"
+import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
@@ -118,6 +120,7 @@ export function Prompt(props: PromptProps) {
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
+  const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
@@ -150,6 +153,39 @@ export function Prompt(props: PromptProps) {
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId: number
+
+
+  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+    input.insertText(evt.properties.text)
+    setTimeout(() => {
+      input.getLayoutNode().markDirty()
+      input.gotoBufferEnd()
+      renderer.requestRender()
+    }, 0)
+  })
+
+  createEffect(() => {
+    if (props.disabled) input.cursorColor = theme.backgroundElement
+    if (!props.disabled) input.cursorColor = theme.text
+  })
+
+  const [store, setStore] = createStore<{
+    prompt: PromptInfo
+    mode: "normal" | "shell"
+    extmarkToPartIndex: Map<number, number>
+    interrupt: number
+    placeholder: number
+  }>({
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
+    prompt: {
+      input: "",
+      parts: [],
+    },
+    mode: "normal",
+    extmarkToPartIndex: new Map(),
+    interrupt: 0,
+  })
+
 
   command.register(() => {
     return [
@@ -311,37 +347,6 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    input.insertText(evt.properties.text)
-    setTimeout(() => {
-      input.getLayoutNode().markDirty()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
-  })
-
-  createEffect(() => {
-    if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.text
-  })
-
-  const [store, setStore] = createStore<{
-    prompt: PromptInfo
-    mode: "normal" | "shell"
-    extmarkToPartIndex: Map<number, number>
-    interrupt: number
-    placeholder: number
-  }>({
-    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
-    prompt: {
-      input: "",
-      parts: [],
-    },
-    mode: "normal",
-    extmarkToPartIndex: new Map(),
-    interrupt: 0,
-  })
-
   createEffect(() => {
     input.focus()
   })
@@ -427,6 +432,61 @@ export function Prompt(props: PromptProps) {
       }),
     )
   }
+
+  command.register(() => [
+    {
+      title: "Stash prompt",
+      value: "prompt.stash",
+      category: "Prompt",
+      disabled: !store.prompt.input,
+      onSelect: (dialog) => {
+        if (!store.prompt.input) return
+        stash.push({
+          input: store.prompt.input,
+          parts: store.prompt.parts,
+        })
+        input.extmarks.clear()
+        input.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        dialog.clear()
+      },
+    },
+    {
+      title: "Stash pop",
+      value: "prompt.stash.pop",
+      category: "Prompt",
+      disabled: stash.list().length === 0,
+      onSelect: (dialog) => {
+        const entry = stash.pop()
+        if (entry) {
+          input.setText(entry.input)
+          setStore("prompt", { input: entry.input, parts: entry.parts })
+          restoreExtmarksFromParts(entry.parts)
+          input.gotoBufferEnd()
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Stash list",
+      value: "prompt.stash.list",
+      category: "Prompt",
+      disabled: stash.list().length === 0,
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogStash
+            onSelect={(entry) => {
+              input.setText(entry.input)
+              setStore("prompt", { input: entry.input, parts: entry.parts })
+              restoreExtmarksFromParts(entry.parts)
+              input.gotoBufferEnd()
+            }}
+          />
+        ))
+      },
+    },
+  ])
 
   props.ref?.({
     get focused() {

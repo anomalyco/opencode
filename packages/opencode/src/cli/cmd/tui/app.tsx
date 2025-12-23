@@ -24,6 +24,7 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
+import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
@@ -120,15 +121,17 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
                               <KeybindProvider>
-                                <DialogProvider>
-                                  <CommandProvider>
-                                    <PromptHistoryProvider>
-                                      <PromptRefProvider>
-                                        <App />
-                                      </PromptRefProvider>
-                                    </PromptHistoryProvider>
-                                  </CommandProvider>
-                                </DialogProvider>
+                                <PromptStashProvider>
+                                  <DialogProvider>
+                                    <CommandProvider>
+                                      <PromptHistoryProvider>
+                                        <PromptRefProvider>
+                                          <App />
+                                        </PromptRefProvider>
+                                      </PromptHistoryProvider>
+                                    </CommandProvider>
+                                  </DialogProvider>
+                                </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
