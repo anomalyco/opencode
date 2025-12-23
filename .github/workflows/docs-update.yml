@@ -2,9 +2,8 @@ name: Docs Update
 
 on:
   schedule:
-    # Run every 4 hours
-    - cron: "0 */4 * * *"
-  workflow_dispatch: # Allow manual trigger for testing
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
 
 jobs:
   update-docs:
