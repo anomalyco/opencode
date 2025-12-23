@@ -2606,10 +2606,10 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://desktop.opencode.ai${c.req.path}`, {
+        return proxy(`https://app.opencode.ai${c.req.path}`, {
           ...c.req,
           headers: {
-            host: "desktop.opencode.ai",
+            host: "app.opencode.ai",
           },
         })
       }),
