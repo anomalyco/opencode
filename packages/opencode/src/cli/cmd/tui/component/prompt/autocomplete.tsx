@@ -364,12 +364,25 @@ export function Autocomplete(props: {
     }))
   })
 
-  const options = createMemo(() => {
+  const options = createMemo((prev: AutocompleteOption[] | undefined) => {
+    const filesValue = files()
+    const agentsValue = agents()
+    const commandsValue = commands()
+
     const mixed: AutocompleteOption[] = (
-      store.visible === "@" ? [...agents(), ...(files() || [])] : [...commands()]
+      store.visible === "@" ? [...agentsValue, ...(filesValue || [])] : [...commandsValue]
     ).filter((x) => x.disabled !== true)
+
     const currentFilter = filter()
-    if (!currentFilter) return mixed
+
+    if (!currentFilter) {
+      return mixed
+    }
+
+    if (files.loading && prev && prev.length > 0) {
+      return prev
+    }
+
     const result = fuzzysort.go(currentFilter, mixed, {
       keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
@@ -381,6 +394,7 @@ export function Autocomplete(props: {
         return objResults.score
       },
     })
+
     return result.map((arr) => arr.obj)
   })
 
