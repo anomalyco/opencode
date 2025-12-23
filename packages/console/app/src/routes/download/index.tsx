@@ -260,7 +260,6 @@ export default function Download() {
                   Download
                 </a>
               </div>
-
             </div>
           </section>
 
