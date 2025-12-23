@@ -295,6 +295,15 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
+    const health = await globalSDK.client.global.health().then((x) => x.data)
+    if (!health?.healthy) {
+      setGlobalStore(
+        "error",
+        new Error(`Could not connect to server. Is there a server running at \`${globalSDK.url}\`?`),
+      )
+      return
+    }
+
     return Promise.all([
       retry(() =>
         globalSDK.client.path.get().then((x) => {
