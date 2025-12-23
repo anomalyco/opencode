@@ -415,6 +415,7 @@ export namespace Config {
         .object({
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
           external_directory: Permission.optional(),
@@ -563,6 +564,7 @@ export namespace Config {
       history_next: z.string().optional().default("down").describe("Next history item"),
       session_child_cycle: z.string().optional().default("<leader>right").describe("Next child session"),
       session_child_cycle_reverse: z.string().optional().default("<leader>left").describe("Previous child session"),
+      session_parent: z.string().optional().default("<leader>up").describe("Go to parent session"),
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
     })
@@ -764,6 +766,7 @@ export namespace Config {
         .object({
           edit: Permission.optional(),
           bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
+          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
           external_directory: Permission.optional(),
