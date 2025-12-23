@@ -49,6 +49,22 @@ export type PromptRef = {
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 
+// Bun.file() only recognizes lowercase extensions, so uppercase extensions like .PNG, .JPG
+// return "application/octet-stream". This function returns the correct MIME type.
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+}
+
+function getImageMime(filepath: string): string | undefined {
+  const ext = filepath.slice(filepath.lastIndexOf(".")).toLowerCase()
+  return IMAGE_EXTENSIONS[ext]
+}
+
 const TEXTAREA_ACTIONS = [
   "submit",
   "newline",
@@ -836,8 +852,11 @@ export function Prompt(props: PromptProps) {
                 if (!isUrl) {
                   try {
                     const file = Bun.file(filepath)
+                    // Bun.file() only recognizes lowercase extensions, so use our helper
+                    // to get the correct MIME type for uppercase extensions like .PNG, .JPG
+                    const mime = getImageMime(filepath) ?? file.type
                     // Handle SVG as raw text content, not as base64 image
-                    if (file.type === "image/svg+xml") {
+                    if (mime === "image/svg+xml") {
                       event.preventDefault()
                       const content = await file.text().catch(() => {})
                       if (content) {
@@ -845,7 +864,7 @@ export function Prompt(props: PromptProps) {
                         return
                       }
                     }
-                    if (file.type.startsWith("image/")) {
+                    if (mime.startsWith("image/")) {
                       event.preventDefault()
                       const content = await file
                         .arrayBuffer()
@@ -854,7 +873,7 @@ export function Prompt(props: PromptProps) {
                       if (content) {
                         await pasteImage({
                           filename: file.name,
-                          mime: file.type,
+                          mime,
                           content,
                         })
                         return
