@@ -10,6 +10,10 @@ import { SessionPrompt } from "../session/prompt"
 import { SessionRunner } from "../session/runner"
 import { iife } from "@/util/iife"
 import { Config } from "../config/config"
+import { Log } from "../util/log"
+import { Storage } from "../storage/storage"
+
+const log = Log.create({ service: "tool.task" })
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -45,36 +49,8 @@ export const TaskTool = Tool.define("task", async () => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
-      ctx.metadata({
-        title: params.description,
-        metadata: {
-          sessionId: session.id,
-        },
-      })
-
       const messageID = Identifier.ascending("message")
       const parts: Record<string, { id: string; tool: string; state: { status: string; title?: string } }> = {}
-      const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-        if (evt.properties.part.sessionID !== session.id) return
-        if (evt.properties.part.messageID === messageID) return
-        if (evt.properties.part.type !== "tool") return
-        const part = evt.properties.part
-        parts[part.id] = {
-          id: part.id,
-          tool: part.tool,
-          state: {
-            status: part.state.status,
-            title: part.state.status === "completed" ? part.state.title : undefined,
-          },
-        }
-        ctx.metadata({
-          title: params.description,
-          metadata: {
-            summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
-            sessionId: session.id,
-          },
-        })
-      })
 
       const model = agent.model ?? {
         modelID: msg.info.modelID,
@@ -90,12 +66,89 @@ export const TaskTool = Tool.define("task", async () => {
       }
       ctx.abort.addEventListener("abort", cancelChild, { once: true })
 
-      let result: MessageV2.WithParts | undefined
-      const job = await SessionRunner.enqueue(
+      // Helper to update parent tool part metadata (works after execute returns)
+      const updateParentToolPart = async (metadata: {
+        summary: typeof parts[string][]
+        sessionId: string
+        jobId?: string
+        status?: string
+      }) => {
+        if (!ctx.toolPartID) return
+        const currentPart = await Storage.read<MessageV2.ToolPart>(["part", ctx.messageID, ctx.toolPartID]).catch(
+          (err) => {
+            log.warn("failed to read parent tool part", { error: err, partID: ctx.toolPartID })
+            return undefined
+          },
+        )
+        if (!currentPart || currentPart.type !== "tool") return
+        // Skip pending (no metadata field) and error (terminal state)
+        if (currentPart.state.status === "pending" || currentPart.state.status === "error") return
+        await Session.updatePart({
+          ...currentPart,
+          state: {
+            ...currentPart.state,
+            metadata,
+          },
+        }).catch((err) => log.warn("failed to update parent tool part", { error: err }))
+      }
+
+      // Subscribe to child session part updates for live progress
+      const unsub = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+        if (evt.properties.part.sessionID !== session.id) return
+        if (evt.properties.part.messageID === messageID) return
+        if (evt.properties.part.type !== "tool") return
+        const part = evt.properties.part
+        parts[part.id] = {
+          id: part.id,
+          tool: part.tool,
+          state: {
+            status: part.state.status,
+            title: part.state.status === "completed" ? part.state.title : undefined,
+          },
+        }
+        await updateParentToolPart({
+          summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
+          sessionId: session.id,
+        })
+      })
+
+      // Cleanup function for all subscriptions
+      const cleanup = () => {
+        unsub()
+        ctx.abort.removeEventListener("abort", cancelChild)
+      }
+
+      // Subscribe to job lifecycle events for cleanup and status updates
+      const jobEvents = [
+        SessionRunner.Event.Completed,
+        SessionRunner.Event.Failed,
+        SessionRunner.Event.Canceled,
+        SessionRunner.Event.TimedOut,
+      ] as const
+      const jobUnsubs = jobEvents.map((event) =>
+        Bus.subscribe(event, async (evt) => {
+          if (evt.properties.job.targetSessionID !== session.id) return
+          const job = evt.properties.job
+          // Update parent metadata with final status
+          await updateParentToolPart({
+            summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
+            sessionId: session.id,
+            status: job.status,
+          })
+          if (job.status !== "completed") {
+            log.info("child session job ended", { jobId: job.id, status: job.status, error: job.error })
+          }
+          cleanup()
+          jobUnsubs.forEach((u) => u())
+        }),
+      )
+
+      // Enqueue the child session work (fire-and-forget)
+      SessionRunner.enqueue(
         "task.child_session",
         session.id,
         async () => {
-          result = await SessionPrompt.prompt({
+          await SessionPrompt.prompt({
             messageID,
             sessionID: session.id,
             model: {
@@ -115,51 +168,23 @@ export const TaskTool = Tool.define("task", async () => {
         },
         {
           parentSessionID: ctx.sessionID,
-          toolCallID: ctx.messageID,
+          toolCallID: ctx.callID ?? ctx.messageID,
         },
-      )
-      unsub()
-      ctx.abort.removeEventListener("abort", cancelChild)
+      ).catch((err) => {
+        log.error("failed to enqueue child session", { error: err, sessionID: session.id })
+        cleanup()
+        jobUnsubs.forEach((u) => u())
+      })
 
-      if (job.status === "canceled" || ctx.abort.aborted) {
-        return {
-          title: params.description,
-          metadata: { summary: [], sessionId: session.id },
-          output: "Task was canceled",
-        }
-      }
-
-      if (job.status !== "completed" || !result) {
-        const error = job.error?.message ?? "Task failed"
-        return {
-          title: params.description,
-          metadata: { summary: [], sessionId: session.id },
-          output: `Task failed: ${error}`,
-        }
-      }
-      const messages = await Session.messages({ sessionID: session.id })
-      const summary = messages
-        .filter((x) => x.info.role === "assistant")
-        .flatMap((msg) => msg.parts.filter((x: any) => x.type === "tool") as MessageV2.ToolPart[])
-        .map((part) => ({
-          id: part.id,
-          tool: part.tool,
-          state: {
-            status: part.state.status,
-            title: part.state.status === "completed" ? part.state.title : undefined,
-          },
-        }))
-      const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-
-      const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
-
+      // Return immediately without waiting for job completion
       return {
         title: params.description,
         metadata: {
-          summary,
+          summary: [] as (typeof parts)[string][],
           sessionId: session.id,
+          status: "running",
         },
-        output,
+        output: `Task started in background.\n\n<task_metadata>\nsession_id: ${session.id}\n</task_metadata>`,
       }
     },
   }

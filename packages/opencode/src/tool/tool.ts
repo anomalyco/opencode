@@ -12,6 +12,7 @@ export namespace Tool {
     agent: string
     abort: AbortSignal
     callID?: string
+    toolPartID?: string
     extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
   }
