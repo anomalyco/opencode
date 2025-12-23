@@ -30,6 +30,7 @@ import type {
   FormatterStatusResponses,
   GlobalDisposeResponses,
   GlobalEventResponses,
+  GlobalHealthResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -188,6 +189,18 @@ class HeyApiRegistry<T> {
 }
 
 export class Global extends HeyApiClient {
+  /**
+   * Get health
+   *
+   * Get health information about the OpenCode server.
+   */
+  public health<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalHealthResponses, unknown, ThrowOnError>({
+      url: "/global/health",
+      ...options,
+    })
+  }
+
   /**
    * Get global events
    *
