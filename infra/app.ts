@@ -46,10 +46,7 @@ new sst.cloudflare.x.Astro("Web", {
 })
 
 new sst.cloudflare.StaticSite("WebApp", {
-  domain: {
-    name: "app." + domain,
-    // redirects: ["desktop." + domain],
-  },
+  domain: "app." + domain,
   path: "packages/app",
   build: {
     command: "bun turbo build",
