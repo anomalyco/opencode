@@ -1,323 +1,454 @@
 ---
 title: Commands
-description: Create custom commands for repetitive tasks.
+description: Automate repetitive workflows with custom commands.
+lastUpdated: 2025-12-21
 ---
 
-Custom commands let you specify a prompt you want to run when that command is executed in the TUI.
+Custom commands let you save prompts you run frequently. Instead of typing the same instructions repeatedly, create a command once and run it with `/command-name`.
 
-```bash frame="none"
-/my-command
-```
+**The essentials**:
+
+- Create commands in `~/.config/opencode/command/` (global) or `.opencode/command/` (project)
+- Use `$ARGUMENTS` for input, `$1`/`$2` for positional args
+- Use `` !`command` `` to inject shell output
+- Use `@file` to include file contents
+- Set `subtask: true` to run in a child session
 
 Custom commands are in addition to the built-in commands like `/init`, `/undo`, `/redo`, `/share`, `/help`. [Learn more](/docs/tui#commands).
 
 ---
 
-## Create command files
+## Quick example
 
-Create markdown files in the `command/` directory to define custom commands.
+Create a file `.opencode/command/test.md`:
 
-Create `.opencode/command/test.md`:
-
-```md title=".opencode/command/test.md"
+```markdown title=".opencode/command/test.md"
 ---
-description: Run tests with coverage
+description: Run tests and fix failures
+---
+
+Run the test suite. If any tests fail, analyze the failures and fix them.
+```
+
+Now run it:
+
+```txt frame="none"
+/test
+```
+
+That's it. The prompt in the file is sent to the LLM.
+
+---
+
+## Create commands
+
+Commands can be defined as markdown files or in JSON config.
+
+---
+
+### File locations
+
+| Location | Path                              | Scope             |
+| -------- | --------------------------------- | ----------------- |
+| Global   | `~/.config/opencode/command/*.md` | All projects      |
+| Project  | `.opencode/command/*.md`          | That project only |
+
+The filename becomes the command name. `review.md` creates `/review`.
+
+---
+
+### Markdown format
+
+Create a markdown file with YAML frontmatter for options and the body as the prompt template.
+
+```markdown title=".opencode/command/lint.md"
+---
+description: Lint and fix code issues
 agent: build
-model: anthropic/claude-3-5-sonnet-20241022
 ---
 
-Run the full test suite with coverage report and show any failures.
-Focus on the failing tests and suggest fixes.
-```
-
-The frontmatter defines command properties. The content becomes the template.
-
-Use the command by typing `/` followed by the command name.
-
-```bash frame="none"
-"/test"
+Run the linter and fix any issues found. Show me what you changed.
 ```
 
 ---
 
-## Configure
+### JSON format
 
-You can add custom commands through the OpenCode config or by creating markdown files in the `command/` directory.
+Alternatively, add commands to `opencode.json`:
 
----
-
-### JSON
-
-Use the `command` option in your OpenCode [config](/docs/config):
-
-```json title="opencode.jsonc" {4-12}
+```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
-    // This becomes the name of the command
-    "test": {
-      // This is the prompt that will be sent to the LLM
-      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
-      // This is show as the description in the TUI
-      "description": "Run tests with coverage",
-      "agent": "build",
-      "model": "anthropic/claude-3-5-sonnet-20241022"
+    "lint": {
+      "description": "Lint and fix code issues",
+      "template": "Run the linter and fix any issues found. Show me what you changed.",
+      "agent": "build"
     }
   }
 }
 ```
 
-Now you can run this command in the TUI:
+---
 
-```bash frame="none"
-/test
+## Template syntax
+
+Commands support special placeholders to make them dynamic.
+
+---
+
+### $ARGUMENTS
+
+Captures everything after the command name.
+
+```markdown title=".opencode/command/explain.md"
+---
+description: Explain code or concepts
+---
+
+Explain $ARGUMENTS in simple terms with examples.
 ```
 
----
+Usage:
 
-### Markdown
-
-You can also define commands using markdown files. Place them in:
-
-- Global: `~/.config/opencode/command/`
-- Per-project: `.opencode/command/`
-
-```markdown title="~/.config/opencode/command/test.md"
----
-description: Run tests with coverage
-agent: build
-model: anthropic/claude-3-5-sonnet-20241022
----
-
-Run the full test suite with coverage report and show any failures.
-Focus on the failing tests and suggest fixes.
+```txt frame="none"
+/explain how the auth middleware works
 ```
 
-The markdown file name becomes the command name. For example, `test.md` lets
-you run:
+The `$ARGUMENTS` placeholder becomes `how the auth middleware works`.
 
-```bash frame="none"
-/test
+---
+
+### Positional arguments
+
+Use `$1`, `$2`, `$3`, etc. for specific arguments.
+
+```markdown title=".opencode/command/rename.md"
+---
+description: Rename a symbol across the codebase
+---
+
+Rename all occurrences of $1 to $2 across the codebase.
+Update imports and references.
 ```
 
----
+Usage:
 
-## Prompt config
-
-The prompts for the custom commands support several special placeholders and syntax.
-
----
-
-### Arguments
-
-Pass arguments to commands using the `$ARGUMENTS` placeholder.
-
-```md title=".opencode/command/component.md"
----
-description: Create a new component
----
-
-Create a new React component named $ARGUMENTS with TypeScript support.
-Include proper typing and basic structure.
+```txt frame="none"
+/rename getUserData fetchUserProfile
 ```
 
-Run the command with arguments:
+- `$1` = `getUserData`
+- `$2` = `fetchUserProfile`
 
-```bash frame="none"
-/component Button
-```
-
-And `$ARGUMENTS` will be replaced with `Button`.
-
-You can also access individual arguments using positional parameters:
-
-- `$1` - First argument
-- `$2` - Second argument
-- `$3` - Third argument
-- And so on...
-
-For example:
-
-```md title=".opencode/command/create-file.md"
----
-description: Create a new file with content
----
-
-Create a file named $1 in the directory $2
-with the following content: $3
-```
-
-Run the command:
-
-```bash frame="none"
-/create-file config.json src "{ \"key\": \"value\" }"
-```
-
-This replaces:
-
-- `$1` with `config.json`
-- `$2` with `src`
-- `$3` with `{ "key": "value" }`
+:::tip
+The last positional argument captures all remaining text. So `/cmd a b c d` with `$1` and `$2` gives `$2` = `b c d`.
+:::
 
 ---
 
 ### Shell output
 
-Use _!`command`_ to inject [bash command](/docs/tui#bash-commands) output into your prompt.
+Inject command output with `` !`command` ``.
 
-For example, to create a custom command that analyzes test coverage:
-
-```md title=".opencode/command/analyze-coverage.md"
+```markdown title=".opencode/command/review-diff.md"
 ---
-description: Analyze test coverage
+description: Review uncommitted changes
 ---
 
-Here are the current test results:
-!`npm test`
+Here are the current uncommitted changes:
 
-Based on these results, suggest improvements to increase coverage.
+!`git diff`
+
+Review these changes for bugs, style issues, and potential improvements.
 ```
 
-Or to review recent changes:
-
-```md title=".opencode/command/review-changes.md"
----
-description: Review recent changes
----
-
-Recent git commits:
-!`git log --oneline -10`
-
-Review these changes and suggest any improvements.
-```
-
-Commands run in your project's root directory and their output becomes part of the prompt.
+The shell command runs and its output is inserted into the prompt. Commands run in your project's root directory.
 
 ---
 
 ### File references
 
-Include files in your command using `@` followed by the filename.
+Include file contents with `@filepath`.
 
-```md title=".opencode/command/review-component.md"
+```markdown title=".opencode/command/review-file.md"
 ---
-description: Review component
+description: Review a specific file
 ---
 
-Review the component in @src/components/Button.tsx.
-Check for performance issues and suggest improvements.
+Review @$1 for:
+
+- Code quality
+- Potential bugs
+- Performance issues
+
+Suggest improvements.
 ```
 
-The file content gets included in the prompt automatically.
+Usage:
+
+```txt frame="none"
+/review-file src/auth/login.ts
+```
+
+The file content is automatically included in the prompt.
 
 ---
 
 ## Options
 
-Let's look at the configuration options in detail.
+All available options for commands.
+
+| Option        | Required | Description                                  |
+| ------------- | -------- | -------------------------------------------- |
+| `template`    | Yes      | The prompt template (body in markdown files) |
+| `description` | No       | Shown in command list                        |
+| `agent`       | No       | Which agent runs the command                 |
+| `model`       | No       | Override the model                           |
+| `subtask`     | No       | Run as child session                         |
 
 ---
 
-### Template
+### template
 
-The `template` option defines the prompt that will be sent to the LLM when the command is executed.
+The prompt that will be sent to the LLM when the command is executed. In markdown files, this is the body content after the frontmatter.
 
 ```json title="opencode.json"
 {
   "command": {
     "test": {
-      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+      "template": "Run the test suite and fix any failures."
     }
   }
 }
 ```
 
-This is a **required** config option.
-
 ---
 
-### Description
+### description
 
-Use the `description` option to provide a brief description of what the command does.
+Brief text shown when listing commands in the TUI.
 
-```json title="opencode.json"
-{
-  "command": {
-    "test": {
-      "description": "Run tests with coverage"
-    }
-  }
-}
+```yaml
+description: Run tests and fix failures
 ```
 
-This is shown as the description in the TUI when you type in the command.
-
 ---
 
-### Agent
+### agent
 
-Use the `agent` config to optionally specify which [agent](/docs/agents) should execute this command.
-If this is a [subagent](/docs/agents/#subagents) the command will trigger a subagent invocation by default.
-To disable this behavior, set `subtask` to `false`.
+Specify which [agent](/docs/agents) executes the command.
 
-```json title="opencode.json"
-{
-  "command": {
-    "review": {
-      "agent": "plan"
-    }
-  }
-}
+```yaml
+agent: plan
 ```
 
-This is an **optional** config option. If not specified, defaults to your current agent.
+If the agent is a [subagent](/docs/agents#subagents) (like `@explore`), the command automatically runs as a subtask. Use `subtask: false` to override this.
 
 ---
 
-### Subtask
+### model
 
-Use the `subtask` boolean to force the command to trigger a [subagent](/docs/agents/#subagents) invocation.
-This useful if you want the command to not pollute your primary context and will **force** the agent to act as a subagent,
-even if `mode` is set to `primary` on the [agent](/docs/agents) configuration.
+Override the model for this command. Format is `provider/model`.
 
-```json title="opencode.json"
-{
-  "command": {
-    "analyze": {
-      "subtask": true
-    }
-  }
-}
+```yaml
+model: anthropic/claude-sonnet-4
 ```
 
-This is an **optional** config option.
-
 ---
 
-### Model
+### subtask
 
-Use the `model` config to override the default model for this command.
+Force the command to run in a child session.
 
-```json title="opencode.json"
-{
-  "command": {
-    "analyze": {
-      "model": "anthropic/claude-3-5-sonnet-20241022"
-    }
-  }
-}
+```yaml
+subtask: true
 ```
 
-This is an **optional** config option.
+Benefits of subtask execution:
+
+- Keeps main conversation focused
+- Doesn't consume primary context
+- Can be navigated separately with `<Leader>+Right/Left`
+
+Use this for commands that do extensive work you don't need in your main context.
 
 ---
 
-## Built-in
+## Examples
 
-opencode includes several built-in commands like `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
+Practical commands for common workflows.
+
+---
+
+### Test runner
+
+Run tests and fix failures automatically.
+
+```markdown title=".opencode/command/test.md"
+---
+description: Run tests and fix failures
+---
+
+Run the test suite:
+!`npm test 2>&1`
+
+If any tests failed, analyze the failures and fix them.
+If all tests pass, say so.
+```
+
+---
+
+### PR reviewer
+
+Review changes before creating a PR.
+
+```markdown title=".opencode/command/pr-check.md"
+---
+description: Review changes before PR
+subtask: true
+---
+
+Review the changes on this branch:
+
+!`git log main..HEAD --oneline`
+
+!`git diff main...HEAD`
+
+Check for:
+
+1. Bugs or edge cases
+2. Missing tests
+3. Documentation needs
+4. Code style issues
+
+Summarize what this PR does and flag any concerns.
+```
+
+---
+
+### Commit helper
+
+Create well-formatted commits.
+
+```markdown title=".opencode/command/commit.md"
+---
+description: Stage and commit changes
+---
+
+Here are the current changes:
+!`git status --short`
+
+!`git diff`
+
+Stage the appropriate files and create a commit with a clear message.
+Follow conventional commit format (feat:, fix:, docs:, etc.).
+```
+
+---
+
+### Documentation generator
+
+Generate docs for a file.
+
+```markdown title=".opencode/command/docs.md"
+---
+description: Generate documentation for a file
+subtask: true
+---
+
+Generate documentation for @$1.
+
+Include:
+
+- Overview of what it does
+- Public API/exports
+- Usage examples
+- Parameter descriptions
+
+Match the documentation style used elsewhere in this project.
+```
+
+Usage:
+
+```txt frame="none"
+/docs src/utils/parser.ts
+```
+
+---
+
+### Quick refactor
+
+Refactor code with specific instructions.
+
+```markdown title=".opencode/command/refactor.md"
+---
+description: Refactor with instructions
+---
+
+Refactor @$1 with the following goal: $2
+
+Preserve existing behavior. Show me the changes.
+```
+
+Usage:
+
+```txt frame="none"
+/refactor src/api/users.ts extract the validation logic into a separate function
+```
+
+---
+
+## Use with subagents
+
+Commands and [subagents](/docs/agents#subagents) work well together.
+
+Set `subtask: true` to run in a child session:
+
+```markdown title=".opencode/command/analyze.md"
+---
+description: Deep code analysis
+subtask: true
+agent: explore
+---
+
+Do a thorough analysis of the codebase architecture.
+Find patterns, potential issues, and areas for improvement.
+```
+
+This runs `@explore` in a child session, keeping your main context clean.
+
+You can also reference subagents directly in your template:
+
+```markdown title=".opencode/command/security.md"
+---
+description: Security audit
+---
+
+@security-auditor Audit this codebase for security vulnerabilities.
+Focus on authentication, authorization, and data validation.
+```
+
+---
+
+## Built-in commands
+
+OpenCode includes several built-in commands like `/init`, `/undo`, `/redo`, `/share`, `/help`. [Learn more](/docs/tui#commands).
 
 :::note
 Custom commands can override built-in commands.
 :::
 
-If you define a custom command with the same name, it will override the built-in command.
+---
+
+## Cheat sheet
+
+| Syntax                  | Description                      |
+| ----------------------- | -------------------------------- |
+| `$ARGUMENTS`            | All arguments after command name |
+| `$1`, `$2`, `$3`        | Positional arguments             |
+| `` !`cmd` ``            | Inject shell command output      |
+| `@filepath`             | Include file contents            |
+| `subtask: true`         | Run in child session             |
+| `agent: name`           | Use specific agent               |
+| `model: provider/model` | Override model                   |
