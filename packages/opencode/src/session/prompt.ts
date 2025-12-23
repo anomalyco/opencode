@@ -534,11 +534,7 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [
-          ...(await SystemPrompt.environment()),
-          ...(await SystemPrompt.skills()),
-          ...(await SystemPrompt.custom()),
-        ],
+        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
@@ -590,7 +586,8 @@ export namespace SessionPrompt {
       mergeDeep(await ToolRegistry.enabled(input.agent)),
       mergeDeep(input.tools ?? {}),
     )
-    for (const item of await ToolRegistry.tools(input.model.providerID)) {
+
+    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent)) {
       if (item.id === "askquestion" && input.client !== "tui") continue
       if (Wildcard.all(item.id, enabledTools) === false) continue
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
