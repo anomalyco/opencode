@@ -9,7 +9,7 @@ import { wrapLanguageModel } from "ai"
  * the AI SDK to wait indefinitely for tool execution. This function intercepts
  * the fetch responses and removes empty tool_calls arrays when finish_reason is "stop".
  */
-export function createFilteredFetch(originalFetch: typeof fetch): typeof fetch {
+export function createFilteredFetch(originalFetch: typeof fetch): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
   return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await originalFetch(input, init)
     
@@ -187,40 +187,13 @@ export function createFilteredFetch(originalFetch: typeof fetch): typeof fetch {
 
 /**
  * Wraps a language model to filter out empty tool_calls from responses.
- * This is a fallback approach that works at the model level.
+ * Note: This is a placeholder - the actual filtering happens at the fetch level
+ * via createFilteredFetch. This function just returns the model as-is since
+ * wrapLanguageModel middleware only supports transformParams, not transformResult.
  */
 export function filterEmptyToolCalls<T extends LanguageModelV2>(model: T): T {
-  return wrapLanguageModel({
-    model,
-    middleware: [
-      {
-        async transformResult(result) {
-          // Handle non-streaming results
-          if (result.type === "generate") {
-            const content = result.content || []
-            // Filter out any tool-call items that don't have proper IDs
-            // This handles cases where empty tool_calls arrays were parsed
-            const filteredContent = content.filter((item) => {
-              if (item.type === "tool-call") {
-                // Only keep tool-calls that have valid IDs
-                return item.toolCallId && item.toolName
-              }
-              return true
-            })
-            
-            // If we filtered anything and finish_reason is "stop", use filtered content
-            if (filteredContent.length !== content.length && result.finishReason === "stop") {
-              return {
-                ...result,
-                content: filteredContent,
-              }
-            }
-          }
-          
-          return result
-        },
-      },
-    ],
-  }) as T
+  // The filtering is handled at the fetch level in createFilteredFetch
+  // No need to wrap with middleware since transformResult is not supported
+  return model
 }
 
