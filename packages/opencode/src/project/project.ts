@@ -89,6 +89,14 @@ export namespace Project {
             const id = `${cachedRootCommit}|${cachedWorktreeHash}`
             return { id, worktree, vcs: "git", oldProjectID: undefined }
           }
+          if (isLinkedWorktree && !cachedWorktreeHash) {
+            // Linked worktree opened for first time after upgrade - need to migrate from old ID format
+            // Old format used root commit only, new format includes worktree hash
+            const worktreeHash = Bun.hash(worktree).toString(16)
+            const id = `${cachedRootCommit}|${worktreeHash}`
+            await Bun.file(path.join(gitDir, "opencode-worktree")).write(worktreeHash)
+            return { id, worktree, vcs: "git", oldProjectID: cachedRootCommit }
+          }
           if (!isLinkedWorktree) {
             return { id: cachedRootCommit, worktree, vcs: "git", oldProjectID: undefined }
           }
@@ -121,14 +129,14 @@ export namespace Project {
         if (isLinkedWorktree) {
           const worktreeHash = Bun.hash(worktree).toString(16)
           id = `${rootCommit}|${worktreeHash}`
-          Bun.file(path.join(gitDir, "opencode-worktree")).write(worktreeHash)
+          await Bun.file(path.join(gitDir, "opencode-worktree")).write(worktreeHash)
         } else {
           id = rootCommit
         }
 
         // Write root commit to .git/opencode
         if (!cachedRootCommit) {
-          Bun.file(path.join(gitDir, "opencode")).write(rootCommit)
+          await Bun.file(path.join(gitDir, "opencode")).write(rootCommit)
         }
 
         // No migration needed - main worktree keeps same ID format
