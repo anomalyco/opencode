@@ -19,9 +19,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
-import { useCommand, formatKeybind } from "@/context/command"
+import { useCommand } from "@/context/command"
 import { persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
+import { SessionContextUsage } from "@/components/session-context-usage"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -889,8 +890,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             custom
                           </span>
                         </Show>
-                        <Show when={cmd.keybind}>
-                          <span class="text-12-regular text-text-subtle">{formatKeybind(cmd.keybind!)}</span>
+                        <Show when={command.keybind(cmd.id)}>
+                          <span class="text-12-regular text-text-subtle">{command.keybind(cmd.id)}</span>
                         </Show>
                       </div>
                     </button>
@@ -972,7 +973,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
           />
           <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
-            <div class="absolute top-0 left-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none">
+            <div class="absolute top-0 inset-x-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? "Enter shell command..."
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
@@ -990,28 +991,51 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </div>
               </Match>
               <Match when={store.mode === "normal"}>
-                <Select
-                  options={local.agent.list().map((agent) => agent.name)}
-                  current={local.agent.current().name}
-                  onSelect={local.agent.set}
-                  class="capitalize"
-                  variant="ghost"
-                />
-                <Button
-                  as="div"
-                  variant="ghost"
-                  onClick={() =>
-                    dialog.show(() =>
-                      providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
-                    )
+                <Tooltip
+                  placement="top"
+                  value={
+                    <div class="flex items-center gap-2">
+                      <span>Cycle agent</span>
+                      <span class="text-icon-base text-12-medium">{command.keybind("agent.cycle")}</span>
+                    </div>
                   }
                 >
-                  {local.model.current()?.name ?? "Select model"}
-                  <span class="ml-0.5 text-text-weak text-12-regular">{local.model.current()?.provider.name}</span>
-                  <Icon name="chevron-down" size="small" />
-                </Button>
+                  <Select
+                    options={local.agent.list().map((agent) => agent.name)}
+                    current={local.agent.current().name}
+                    onSelect={local.agent.set}
+                    class="capitalize"
+                    variant="ghost"
+                  />
+                </Tooltip>
+                <Tooltip
+                  placement="top"
+                  value={
+                    <div class="flex items-center gap-2">
+                      <span>Choose model</span>
+                      <span class="text-icon-base text-12-medium">{command.keybind("model.choose")}</span>
+                    </div>
+                  }
+                >
+                  <Button
+                    as="div"
+                    variant="ghost"
+                    onClick={() =>
+                      dialog.show(() =>
+                        providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
+                      )
+                    }
+                  >
+                    {local.model.current()?.name ?? "Select model"}
+                    <span class="hidden md:block ml-0.5 text-text-weak text-12-regular">
+                      {local.model.current()?.provider.name}
+                    </span>
+                    <Icon name="chevron-down" size="small" />
+                  </Button>
+                </Tooltip>
               </Match>
             </Switch>
+            <SessionContextUsage />
           </div>
           <div class="flex items-center gap-1 absolute right-2 bottom-2">
             <input

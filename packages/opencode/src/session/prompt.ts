@@ -583,7 +583,7 @@ export namespace SessionPrompt {
       mergeDeep(await ToolRegistry.enabled(input.agent)),
       mergeDeep(input.tools ?? {}),
     )
-    for (const item of await ToolRegistry.tools(input.model.providerID)) {
+    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent)) {
       if (Wildcard.all(item.id, enabledTools) === false) continue
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
@@ -1311,7 +1311,7 @@ export namespace SessionPrompt {
       const results = await Promise.all(
         shell.map(async ([, cmd]) => {
           try {
-            return await $`${{ raw: cmd }}`.nothrow().text()
+            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
           } catch (error) {
             return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
           }

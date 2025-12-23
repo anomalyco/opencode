@@ -1,14 +1,16 @@
-import { type Tool } from "ai"
-import { experimental_createMCPClient } from "@ai-sdk/mcp"
+import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod/v4"
 import { Instance } from "../project/instance"
+import { Installation } from "../installation"
 import { withTimeout } from "@/util/timeout"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
@@ -25,7 +27,7 @@ export namespace MCP {
     }),
   )
 
-  type Client = Awaited<ReturnType<typeof experimental_createMCPClient>>
+  type MCPClient = Client
 
   export const Status = z
     .discriminatedUnion("status", [
@@ -71,7 +73,30 @@ export namespace MCP {
       ref: "MCPStatus",
     })
   export type Status = z.infer<typeof Status>
-  type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
+
+  // Convert MCP tool definition to AI SDK Tool type
+  function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient): Tool {
+    const inputSchema = mcpTool.inputSchema
+
+    // Spread first, then override type to ensure it's always "object"
+    const schema: JSONSchema7 = {
+      ...(inputSchema as JSONSchema7),
+      type: "object",
+      properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
+      additionalProperties: false,
+    }
+
+    return dynamicTool({
+      description: mcpTool.description ?? "",
+      inputSchema: jsonSchema(schema),
+      execute: async (args: unknown) => {
+        return client.callTool({
+          name: mcpTool.name,
+          arguments: args as Record<string, unknown>,
+        })
+      },
+    })
+  }
 
   // Store transports for OAuth servers to allow finishing auth
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
@@ -81,7 +106,7 @@ export namespace MCP {
     async () => {
       const cfg = await Config.get()
       const config = cfg.mcp ?? {}
-      const clients: Record<string, Client> = {}
+      const clients: Record<string, MCPClient> = {}
       const status: Record<string, Status> = {}
 
       await Promise.all(
@@ -204,10 +229,12 @@ export namespace MCP {
       let lastError: Error | undefined
       for (const { name, transport } of transports) {
         try {
-          mcpClient = await experimental_createMCPClient({
+          const client = new Client({
             name: "opencode",
-            transport,
+            version: Installation.VERSION,
           })
+          await client.connect(transport)
+          mcpClient = client
           log.info("connected", { key, transport: name })
           status = { status: "connected" }
           break
@@ -248,36 +275,38 @@ export namespace MCP {
 
     if (mcp.type === "local") {
       const [cmd, ...args] = mcp.command
-      await experimental_createMCPClient({
-        name: "opencode",
-        transport: new StdioClientTransport({
-          stderr: "ignore",
-          command: cmd,
-          args,
-          env: {
-            ...process.env,
-            ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-            ...mcp.environment,
-          },
-        }),
+      const transport = new StdioClientTransport({
+        stderr: "ignore",
+        command: cmd,
+        args,
+        env: {
+          ...process.env,
+          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+          ...mcp.environment,
+        },
       })
-        .then((client) => {
-          mcpClient = client
-          status = {
-            status: "connected",
-          }
+
+      try {
+        const client = new Client({
+          name: "opencode",
+          version: Installation.VERSION,
         })
-        .catch((error) => {
-          log.error("local mcp startup failed", {
-            key,
-            command: mcp.command,
-            error: error instanceof Error ? error.message : String(error),
-          })
-          status = {
-            status: "failed" as const,
-            error: error instanceof Error ? error.message : String(error),
-          }
+        await client.connect(transport)
+        mcpClient = client
+        status = {
+          status: "connected",
+        }
+      } catch (error) {
+        log.error("local mcp startup failed", {
+          key,
+          command: mcp.command,
+          error: error instanceof Error ? error.message : String(error),
         })
+        status = {
+          status: "failed" as const,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      }
     }
 
     if (!status) {
@@ -294,7 +323,7 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.tools(), mcp.timeout ?? 5000).catch((err) => {
+    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? 5000).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
@@ -317,7 +346,7 @@ export namespace MCP {
       }
     }
 
-    log.info("create() successfully created client", { key, toolCount: Object.keys(result).length })
+    log.info("create() successfully created client", { key, toolCount: result.tools.length })
     return {
       mcpClient,
       status,
@@ -392,7 +421,7 @@ export namespace MCP {
         continue
       }
 
-      const tools = await client.tools().catch((e) => {
+      const toolsResult = await client.listTools().catch((e) => {
         log.error("failed to get tools", { clientName, error: e.message })
         const failedStatus = {
           status: "failed" as const,
@@ -400,14 +429,15 @@ export namespace MCP {
         }
         s.status[clientName] = failedStatus
         delete s.clients[clientName]
+        return undefined
       })
-      if (!tools) {
+      if (!toolsResult) {
         continue
       }
-      for (const [toolName, tool] of Object.entries(tools)) {
+      for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
-        const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = tool
+        const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+        result[sanitizedClientName + "_" + sanitizedToolName] = convertMcpTool(mcpTool, client)
       }
     }
     return result
@@ -469,10 +499,11 @@ export namespace MCP {
 
     // Try to connect - this will trigger the OAuth flow
     try {
-      await experimental_createMCPClient({
+      const client = new Client({
         name: "opencode",
-        transport,
+        version: Installation.VERSION,
       })
+      await client.connect(transport)
       // If we get here, we're already authenticated
       return { authorizationUrl: "" }
     } catch (error) {

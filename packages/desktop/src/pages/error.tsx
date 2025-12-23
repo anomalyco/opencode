@@ -62,12 +62,54 @@ function formatInitError(error: InitError): string {
   }
 }
 
-function formatError(error: unknown): string {
+function formatErrorChain(error: unknown, depth = 0, parentMessage?: string): string {
   if (!error) return "Unknown error"
-  if (isInitError(error)) return formatInitError(error)
-  if (error instanceof Error) return `${error.name}: ${error.message}\n\n${error.stack}`
-  if (typeof error === "string") return error
-  return JSON.stringify(error, null, 2)
+
+  if (isInitError(error)) {
+    const message = formatInitError(error)
+    if (depth > 0 && parentMessage === message) return ""
+    const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
+    return indent + message
+  }
+
+  if (error instanceof Error) {
+    const isDuplicate = depth > 0 && parentMessage === error.message
+    const parts: string[] = []
+    const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
+
+    if (!isDuplicate) {
+      // Stack already includes error name and message, so prefer it
+      parts.push(indent + (error.stack ?? `${error.name}: ${error.message}`))
+    } else if (error.stack) {
+      // Duplicate message - only show the stack trace lines (skip message)
+      const trace = error.stack.split("\n").slice(1).join("\n").trim()
+      if (trace) {
+        parts.push(trace)
+      }
+    }
+
+    if (error.cause) {
+      const causeResult = formatErrorChain(error.cause, depth + 1, error.message)
+      if (causeResult) {
+        parts.push(causeResult)
+      }
+    }
+
+    return parts.join("\n\n")
+  }
+
+  if (typeof error === "string") {
+    if (depth > 0 && parentMessage === error) return ""
+    const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
+    return indent + error
+  }
+
+  const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
+  return indent + JSON.stringify(error, null, 2)
+}
+
+function formatError(error: unknown): string {
+  return formatErrorChain(error, 0)
 }
 
 interface ErrorPageProps {

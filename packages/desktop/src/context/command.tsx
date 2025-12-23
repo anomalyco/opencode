@@ -119,7 +119,6 @@ function DialogCommand(props: { options: CommandOption[] }) {
   return (
     <Dialog title="Commands">
       <List
-        class="px-2.5"
         search={{ placeholder: "Search commands", autofocus: true }}
         emptyMessage="No commands found"
         items={() => props.options.filter((x) => !x.id.startsWith("suggested.") || !x.disabled)}
@@ -225,6 +224,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
             return
           }
         }
+      },
+      keybind(id: string) {
+        const option = options().find((x) => x.id === id || x.id === "suggested." + id)
+        if (!option?.keybind) return ""
+        return formatKeybind(option.keybind)
       },
       show: showPalette,
       keybinds(enabled: boolean) {
