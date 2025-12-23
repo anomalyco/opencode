@@ -71,14 +71,14 @@ export namespace Config {
       Global.Path.config,
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets: [".opencode", ".claude"],
           start: Instance.directory,
           stop: Instance.worktree,
         }),
       )),
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets: [".opencode", ".claude"],
           start: Global.Path.home,
           stop: Global.Path.home,
         }),
@@ -92,7 +92,9 @@ export namespace Config {
 
     const promises: Promise<void>[] = []
     for (const dir of unique(directories)) {
-      await assertValid(dir)
+      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+        await assertValid(dir)
+      }
 
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
@@ -147,7 +149,7 @@ export namespace Config {
     }
   })
 
-  const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools"].join(",")}}/`)
+  const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools", "skill"].join(",")}}/`)
   async function assertValid(dir: string) {
     const invalid = await Array.fromAsync(
       INVALID_DIRS.scan({

@@ -32,7 +32,7 @@ export namespace Skill {
     }),
   )
 
-  const SKILL_GLOB = new Bun.Glob("skill/**/SKILL.md")
+  const SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
 
   export const state = Instance.state(async () => {
     const directories = await Config.directories()

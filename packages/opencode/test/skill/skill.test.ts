@@ -5,11 +5,11 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 
-test("discovers skills from .opencode/skill/ directory", async () => {
+test("discovers skills from .opencode/skills/ directory", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
-      const skillDir = path.join(dir, ".opencode", "skill", "test-skill")
+      const skillDir = path.join(dir, ".opencode", "skills", "test-skill")
       await Bun.write(
         path.join(skillDir, "SKILL.md"),
         `---
@@ -32,16 +32,16 @@ Instructions here.
       expect(skills.length).toBe(1)
       expect(skills[0].name).toBe("test-skill")
       expect(skills[0].description).toBe("A test skill for verification.")
-      expect(skills[0].location).toContain("skill/test-skill/SKILL.md")
+      expect(skills[0].location).toContain("skills/test-skill/SKILL.md")
     },
   })
 })
 
-test("discovers multiple skills from .opencode/skill/ directory", async () => {
+test("discovers multiple skills from .opencode/skills/ directory", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
-      const skillDir = path.join(dir, ".opencode", "skill", "my-skill")
+      const skillDir = path.join(dir, ".opencode", "skills", "my-skill")
       await Bun.write(
         path.join(skillDir, "SKILL.md"),
         `---
@@ -69,7 +69,7 @@ test("skips skills with missing frontmatter", async () => {
   await using tmp = await tmpdir({
     git: true,
     init: async (dir) => {
-      const skillDir = path.join(dir, ".opencode", "skill", "no-frontmatter")
+      const skillDir = path.join(dir, ".opencode", "skills", "no-frontmatter")
       await Bun.write(
         path.join(skillDir, "SKILL.md"),
         `# No Frontmatter
@@ -101,31 +101,31 @@ test("returns empty array when no skills exist", async () => {
   })
 })
 
-// test("discovers skills from .claude/skills/ directory", async () => {
-//   await using tmp = await tmpdir({
-//     git: true,
-//     init: async (dir) => {
-//       const skillDir = path.join(dir, ".claude", "skills", "claude-skill")
-//       await Bun.write(
-//         path.join(skillDir, "SKILL.md"),
-//         `---
-// name: claude-skill
-// description: A skill in the .claude/skills directory.
-// ---
+test("discovers skills from .claude/skills/ directory", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".claude", "skills", "claude-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: claude-skill
+description: A skill in the .claude/skills directory.
+---
 
-// # Claude Skill
-// `,
-//       )
-//     },
-//   })
+# Claude Skill
+`,
+      )
+    },
+  })
 
-//   await Instance.provide({
-//     directory: tmp.path,
-//     fn: async () => {
-//       const skills = await Skill.all()
-//       expect(skills.length).toBe(1)
-//       expect(skills[0].name).toBe("claude-skill")
-//       expect(skills[0].location).toContain(".claude/skills/claude-skill/SKILL.md")
-//     },
-//   })
-// })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      expect(skills[0].name).toBe("claude-skill")
+      expect(skills[0].location).toContain(".claude/skills/claude-skill/SKILL.md")
+    },
+  })
+})
