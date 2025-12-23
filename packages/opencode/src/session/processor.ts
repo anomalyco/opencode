@@ -248,10 +248,46 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  
+                  // Fallback: If finish_reason is "stop" and we have pending tool calls
+                  // that were never invoked, clean them up. This handles cases where
+                  // providers (like LM Studio) send empty tool_calls arrays that cause
+                  // the AI SDK to create pending tool-call events that never complete.
+                  if (value.finishReason === "stop") {
+                    const parts = await MessageV2.parts(input.assistantMessage.id)
+                    for (const part of parts) {
+                      if (
+                        part.type === "tool" &&
+                        part.state.status === "pending" &&
+                        (!part.state.input || Object.keys(part.state.input).length === 0)
+                      ) {
+                        // This is a pending tool call that was never actually invoked
+                        // (empty input means it was created from an empty tool_calls array)
+                        // Remove it since finish_reason is "stop" and no tools were called
+                        const startTime = Date.now()
+                        await Session.updatePart({
+                          ...part,
+                          state: {
+                            status: "error",
+                            input: part.state.input,
+                            error: "Empty tool_calls array filtered",
+                            time: {
+                              start: startTime,
+                              end: Date.now(),
+                            },
+                          },
+                        })
+                        delete toolcalls[part.callID]
+                        delete toolStartTimes[part.callID]
+                      }
+                    }
+                  }
+                  
+                  const finishSnapshot = await Snapshot.track()
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
-                    snapshot: await Snapshot.track(),
+                    snapshot: finishSnapshot,
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",

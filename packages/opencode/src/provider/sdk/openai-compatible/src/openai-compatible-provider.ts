@@ -2,6 +2,7 @@ import type { LanguageModelV2 } from "@ai-sdk/provider"
 import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible"
 import { type FetchFunction, withoutTrailingSlash, withUserAgentSuffix } from "@ai-sdk/provider-utils"
 import { OpenAIResponsesLanguageModel } from "./responses/openai-responses-language-model"
+import { createFilteredFetch, filterEmptyToolCalls } from "./openai-compatible-middleware"
 
 // Import the version or define it
 const VERSION = "0.1.0"
@@ -66,12 +67,19 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
   const getHeaders = () => withUserAgentSuffix(headers, `ai-sdk/openai-compatible/${VERSION}`)
 
   const createChatModel = (modelId: OpenaiCompatibleModelId) => {
-    return new OpenAICompatibleChatLanguageModel(modelId, {
+    // Wrap the fetch function to filter empty tool_calls arrays
+    const originalFetch = options.fetch ?? fetch
+    const filteredFetch = createFilteredFetch(originalFetch)
+    
+    const baseModel = new OpenAICompatibleChatLanguageModel(modelId, {
       provider: `${options.name ?? "openai-compatible"}.chat`,
       headers: getHeaders,
       url: ({ path }) => `${baseURL}${path}`,
-      fetch: options.fetch,
+      fetch: filteredFetch,
     })
+    
+    // Also wrap the model with middleware as a fallback
+    return filterEmptyToolCalls(baseModel)
   }
 
   const createResponsesModel = (modelId: OpenaiCompatibleModelId) => {
