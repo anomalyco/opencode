@@ -27,6 +27,18 @@ export namespace Clipboard {
       } finally {
         await $`rm -f "${tmpfile}"`.nothrow().quiet()
       }
+
+      try {
+        const filepath = await $`osascript -e 'POSIX path of (the clipboard as "furl")'`.nothrow().text()
+        if (filepath) {
+          const file = Bun.file(filepath.trim())
+          const buffer = await file.arrayBuffer()
+          const mimeType = file.type
+          if (mimeType.startsWith("image/") && buffer.byteLength > 0) {
+            return { data: Buffer.from(buffer).toString("base64"), mime: mimeType }
+          }
+        }
+      } catch {}
     }
 
     if (os === "win32" || release().includes("WSL")) {
