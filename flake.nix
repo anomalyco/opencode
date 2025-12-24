@@ -66,10 +66,10 @@
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = nodeModulesHash;
           };
-          mkPackage = pkgs.callPackage ./nix/opencode.nix { };
+          mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
           mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
           
-          opencodePkg = mkPackage {
+          opencodePkg = mkOpencode {
             version = packageJson.version;
             src = ./.;
             scripts = ./nix/scripts;
