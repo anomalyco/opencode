@@ -1,4 +1,4 @@
-import { batch, createEffect } from "solid-js"
+import { createEffect, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
@@ -9,95 +9,79 @@ export interface AutoScrollOptions {
 
 export function createAutoScroll(options: AutoScrollOptions) {
   let scrollRef: HTMLElement | undefined
+  // We use a store for refs to be compatible with the existing API,
+  // but strictly speaking signals would work too.
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLElement | undefined,
-    lastScrollTop: 0,
-    lastScrollHeight: 0,
-    lastContentWidth: 0,
-    autoScrolled: false,
     userScrolled: false,
-    reflowing: false,
   })
+
+  // Internal state
+  let lastScrollTop = 0
+  let isAutoScrolling = false
+  let autoScrollTimeout: ReturnType<typeof setTimeout> | undefined
+  let isMouseDown = false
+  let cleanupListeners: (() => void) | undefined
 
   function scrollToBottom() {
     if (!scrollRef || store.userScrolled || !options.working()) return
-    setStore("autoScrolled", true)
-    const targetHeight = scrollRef.scrollHeight
-    scrollRef.scrollTo({ top: targetHeight, behavior: "smooth" })
 
-    // Wait for scroll to complete before clearing autoScrolled
-    const checkScrollComplete = () => {
-      if (!scrollRef) {
-        setStore("autoScrolled", false)
-        return
-      }
-      const atBottom = scrollRef.scrollTop + scrollRef.clientHeight >= scrollRef.scrollHeight - 10
-      const reachedTarget = scrollRef.scrollTop >= targetHeight - scrollRef.clientHeight - 10
-      if (atBottom || reachedTarget) {
-        batch(() => {
-          setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
-          setStore("lastScrollHeight", scrollRef?.scrollHeight ?? 0)
-          setStore("autoScrolled", false)
-        })
-      } else {
-        requestAnimationFrame(checkScrollComplete)
-      }
+    isAutoScrolling = true
+    if (autoScrollTimeout) clearTimeout(autoScrollTimeout)
+    // Safety timeout to clear auto-scrolling state
+    autoScrollTimeout = setTimeout(() => {
+      isAutoScrolling = false
+    }, 1000)
+
+    try {
+      scrollRef.scrollTo({
+        top: scrollRef.scrollHeight,
+        behavior: "smooth",
+      })
+    } catch {
+      // Fallback for environments where scrollTo options might fail
+      if (scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight
+      isAutoScrolling = false
     }
-    requestAnimationFrame(checkScrollComplete)
   }
 
   function handleScroll() {
-    if (!scrollRef || store.autoScrolled) return
+    if (!scrollRef) return
 
-    const scrollTop = scrollRef.scrollTop
-    const scrollHeight = scrollRef.scrollHeight
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef
+    // Use a small tolerance for "at bottom" detection
+    const atBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 10
 
-    if (store.reflowing) {
-      batch(() => {
-        setStore("lastScrollTop", scrollTop)
-        setStore("lastScrollHeight", scrollHeight)
-      })
+    if (isAutoScrolling) {
+      if (atBottom) {
+        isAutoScrolling = false
+        if (autoScrollTimeout) clearTimeout(autoScrollTimeout)
+      }
+      lastScrollTop = scrollTop
       return
     }
 
-    const scrollHeightChanged = Math.abs(scrollHeight - store.lastScrollHeight) > 10
-    const scrollTopDelta = scrollTop - store.lastScrollTop
+    if (atBottom) {
+      // We reached the bottom, so we're "locked" again.
+      if (store.userScrolled) {
+        setStore("userScrolled", false)
+      }
+      lastScrollTop = scrollTop
+      return
+    }
 
-    // Handle reflow-caused scroll position changes
-    if (scrollHeightChanged && scrollTopDelta < 0) {
-      const heightRatio = store.lastScrollHeight > 0 ? scrollHeight / store.lastScrollHeight : 1
-      const expectedScrollTop = store.lastScrollTop * heightRatio
-      if (Math.abs(scrollTop - expectedScrollTop) < 100) {
-        batch(() => {
-          setStore("lastScrollTop", scrollTop)
-          setStore("lastScrollHeight", scrollHeight)
-        })
-        return
+    // Check for user intention to scroll up.
+    // We rely on explicit interaction events (wheel, touch, keys) for most cases,
+    // and use mousedown + scroll delta for scrollbar dragging.
+    const delta = scrollTop - lastScrollTop
+    if (delta < 0) {
+      if (isMouseDown && !store.userScrolled && options.working()) {
+        setStore("userScrolled", true)
+        options.onUserInteracted?.()
       }
     }
 
-    // Handle reset to top while working
-    const reset = scrollTop <= 0 && store.lastScrollTop > 0 && options.working() && !store.userScrolled
-    if (reset) {
-      batch(() => {
-        setStore("lastScrollTop", scrollTop)
-        setStore("lastScrollHeight", scrollHeight)
-      })
-      requestAnimationFrame(scrollToBottom)
-      return
-    }
-
-    // Detect intentional scroll up
-    const scrolledUp = scrollTop < store.lastScrollTop - 50 && !scrollHeightChanged
-    if (scrolledUp && options.working()) {
-      setStore("userScrolled", true)
-      options.onUserInteracted?.()
-    }
-
-    batch(() => {
-      setStore("lastScrollTop", scrollTop)
-      setStore("lastScrollHeight", scrollHeight)
-    })
+    lastScrollTop = scrollTop
   }
 
   function handleInteraction() {
@@ -107,36 +91,87 @@ export function createAutoScroll(options: AutoScrollOptions) {
     }
   }
 
+  function handleWheel(e: WheelEvent) {
+    if (e.deltaY < 0 && !store.userScrolled && options.working()) {
+      setStore("userScrolled", true)
+      options.onUserInteracted?.()
+    }
+  }
+
+  function handleTouchStart() {
+    if (!store.userScrolled && options.working()) {
+      setStore("userScrolled", true)
+      options.onUserInteracted?.()
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (["ArrowUp", "PageUp", "Home"].includes(e.key)) {
+      if (!store.userScrolled && options.working()) {
+        setStore("userScrolled", true)
+        options.onUserInteracted?.()
+      }
+    }
+  }
+
+  function handleMouseDown() {
+    isMouseDown = true
+    window.addEventListener("mouseup", handleMouseUp)
+  }
+
+  function handleMouseUp() {
+    isMouseDown = false
+    window.removeEventListener("mouseup", handleMouseUp)
+  }
+
   // Reset userScrolled when work completes
   createEffect(() => {
-    if (!options.working()) setStore("userScrolled", false)
+    if (!options.working()) {
+      setStore("userScrolled", false)
+    }
   })
 
   // Handle content resize
   createResizeObserver(
     () => store.contentRef,
-    ({ width }) => {
-      const widthChanged = Math.abs(width - store.lastContentWidth) > 5
-      if (widthChanged && store.lastContentWidth > 0) {
-        setStore("reflowing", true)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setStore("reflowing", false)
-            if (options.working() && !store.userScrolled) {
-              scrollToBottom()
-            }
-          })
-        })
-      } else if (!store.reflowing) {
+    () => {
+      // When content changes size, if we are sticky, scroll to bottom.
+      if (options.working() && !store.userScrolled) {
         scrollToBottom()
       }
-      setStore("lastContentWidth", width)
     },
   )
 
+  onCleanup(() => {
+    if (autoScrollTimeout) clearTimeout(autoScrollTimeout)
+    if (cleanupListeners) cleanupListeners()
+  })
+
   return {
     scrollRef: (el: HTMLElement | undefined) => {
+      if (cleanupListeners) {
+        cleanupListeners()
+        cleanupListeners = undefined
+      }
+
       scrollRef = el
+      if (el) {
+        lastScrollTop = el.scrollTop
+        el.style.overflowAnchor = "none"
+
+        el.addEventListener("wheel", handleWheel, { passive: true })
+        el.addEventListener("touchstart", handleTouchStart, { passive: true })
+        el.addEventListener("keydown", handleKeyDown)
+        el.addEventListener("mousedown", handleMouseDown)
+
+        cleanupListeners = () => {
+          el.removeEventListener("wheel", handleWheel)
+          el.removeEventListener("touchstart", handleTouchStart)
+          el.removeEventListener("keydown", handleKeyDown)
+          el.removeEventListener("mousedown", handleMouseDown)
+          window.removeEventListener("mouseup", handleMouseUp)
+        }
+      }
     },
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
     handleScroll,
