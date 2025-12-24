@@ -11,6 +11,7 @@ By default, OpenCode allows most operations without approval, except `doom_loop`
   "permission": {
     "edit": "allow",
     "bash": "ask",
+    "skill": "ask",
     "webfetch": "deny",
     "doom_loop": "ask",
     "external_directory": "ask"
@@ -18,7 +19,7 @@ By default, OpenCode allows most operations without approval, except `doom_loop`
 }
 ```
 
-This lets you configure granular controls for the `edit`, `bash`, `webfetch`, `doom_loop`, and `external_directory` tools.
+This lets you configure granular controls for the `edit`, `bash`, `skill`, `webfetch`, `doom_loop`, and `external_directory` tools.
 
 - `"ask"` — Prompt for approval before running the tool
 - `"allow"` — Allow all operations without approval
@@ -28,7 +29,7 @@ This lets you configure granular controls for the `edit`, `bash`, `webfetch`, `d
 
 ## Tools
 
-Currently, the permissions for the `edit`, `bash`, `webfetch`, `doom_loop`, and `external_directory` tools can be configured through the `permission` option.
+Currently, the permissions for the `edit`, `bash`, `skill`, `webfetch`, `doom_loop`, and `external_directory` tools can be configured through the `permission` option.
 
 ---
 
@@ -141,6 +142,38 @@ The "accept always" answer applies for the rest of the current session.
 In addition, command permissions are applied to the first two elements of a command. So, an "accept always" response for a command like `git log` would whitelist `git log *` but not `git commit ...`.
 
 When an agent asks for permission to run a command in a pipeline, we use tree sitter to parse each command in the pipeline. The "accept always" permission thus applies separately to each command in the pipeline.
+
+---
+
+### skill
+
+Use the `permission.skill` key to control whether the model can load skills via the built-in `skill` tool.
+
+You can apply a single rule to all skills:
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "ask"
+  }
+}
+```
+
+Or configure per-skill rules (supports the same wildcard patterns as `permission.bash`):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": {
+      "*": "deny",
+      "git-*": "allow",
+      "frontend/*": "ask"
+    }
+  }
+}
+```
 
 ---
 
