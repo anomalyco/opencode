@@ -415,8 +415,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const part = props.part as TextPart
-  const content = createMemo(() => (part.text ?? "").trim())
-  const displayText = createMemo(() => relativizeProjectPaths(content(), data.directory))
+  const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
 
   return (
     <Show when={displayText()}>
