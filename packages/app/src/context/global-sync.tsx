@@ -136,7 +136,19 @@ function createGlobalSync() {
     })
     const load = {
       project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
-      provider: () => sdk.provider.list().then((x) => setStore("provider", x.data!)),
+      provider: () =>
+        sdk.provider.list().then((x) => {
+          const data = x.data!
+          setStore("provider", {
+            ...data,
+            all: data.all.map((provider) => ({
+              ...provider,
+              models: Object.fromEntries(
+                Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
+              ),
+            })),
+          })
+        }),
       path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
       agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
       command: () => sdk.command.list().then((x) => setStore("command", x.data ?? [])),
@@ -320,7 +332,16 @@ function createGlobalSync() {
       ),
       retry(() =>
         globalSDK.client.provider.list().then((x) => {
-          setGlobalStore("provider", x.data ?? {})
+          const data = x.data!
+          setGlobalStore("provider", {
+            ...data,
+            all: data.all.map((provider) => ({
+              ...provider,
+              models: Object.fromEntries(
+                Object.entries(provider.models).filter(([, info]) => info.status !== "deprecated"),
+              ),
+            })),
+          })
         }),
       ),
       retry(() =>
