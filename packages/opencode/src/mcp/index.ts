@@ -23,8 +23,8 @@ import open from "open"
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
 
-  export const ToolListChanged = BusEvent.define(
-    "mcp.tools.list_changed",
+  export const ToolsChanged = BusEvent.define(
+    "mcp.tools.changed",
     z.object({
       server: z.string(),
     }),
@@ -88,7 +88,7 @@ export namespace MCP {
   function registerNotificationHandlers(client: MCPClient, serverName: string) {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       log.info("tools list changed notification received", { server: serverName })
-      Bus.publish(ToolListChanged, { server: serverName })
+      Bus.publish(ToolsChanged, { server: serverName })
     })
   }
 
