@@ -5336,6 +5336,15 @@
               },
               "responseBody": {
                 "type": "string"
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
               }
             },
             "required": ["message", "isRetryable"]
@@ -6626,6 +6635,25 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.mcp.tools.changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "mcp.tools.changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "type": "string"
+              }
+            },
+            "required": ["server"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.command.executed": {
         "type": "object",
         "properties": {
@@ -7122,6 +7150,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.tui.toast.show"
+          },
+          {
+            "$ref": "#/components/schemas/Event.mcp.tools.changed"
           },
           {
             "$ref": "#/components/schemas/Event.command.executed"
