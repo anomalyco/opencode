@@ -287,14 +287,12 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  // Reset summary wait timeout when session starts working
   createEffect(() => {
     if (working()) {
       setStore("summaryWaitTimedOut", false)
     }
   })
 
-  // Set timeout when waiting for summary body (only when diffs are present)
   createEffect(() => {
     if (working() || !derived().isLastUserMessage) return
 
