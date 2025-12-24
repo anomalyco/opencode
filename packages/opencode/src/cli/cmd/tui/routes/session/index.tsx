@@ -138,7 +138,10 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const sidebarOverlay = createMemo(() => sidebarVisible() && !wide())
+  const sidebarOverlay = createMemo(() => {
+    if (sync.data.config.tui?.sidebar_overlay === false) return false
+    return sidebarVisible() && !wide()
+  })
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() && !sidebarOverlay() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
