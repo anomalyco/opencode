@@ -230,6 +230,23 @@ This tool applies patch files to your codebase. Useful for applying diffs and pa
 
 ---
 
+### skill
+
+Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the conversation.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "skill": true
+  }
+}
+```
+
+You can control approval prompts for loading skills via [permissions](/docs/permissions) using `permission.skill`.
+
+---
+
 ### todowrite
 
 Manage todo lists during coding sessions.
