@@ -121,6 +121,7 @@ import type {
   SessionUnshareResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
+  SkillStatusResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -2334,6 +2335,27 @@ export class Formatter extends HeyApiClient {
   }
 }
 
+export class Skill extends HeyApiClient {
+  /**
+   * Get skill status
+   *
+   * Get all loaded skills
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<SkillStatusResponses, unknown, ThrowOnError>({
+      url: "/skill",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -2700,6 +2722,8 @@ export class OpencodeClient extends HeyApiClient {
   lsp = new Lsp({ client: this.client })
 
   formatter = new Formatter({ client: this.client })
+
+  skill = new Skill({ client: this.client })
 
   tui = new Tui({ client: this.client })
 

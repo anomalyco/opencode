@@ -4000,6 +4000,28 @@ export type FormatterStatusResponses = {
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
 
+export type SkillStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/skill"
+}
+
+export type SkillStatusResponses = {
+  /**
+   * List of loaded skills
+   */
+  200: Array<{
+    name: string
+    description: string
+    location: string
+  }>
+}
+
+export type SkillStatusResponse = SkillStatusResponses[keyof SkillStatusResponses]
+
 export type TuiAppendPromptData = {
   body?: {
     text: string

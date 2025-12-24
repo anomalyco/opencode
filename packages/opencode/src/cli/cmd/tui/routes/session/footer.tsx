@@ -79,6 +79,11 @@ export function Footer() {
                 {mcp()} MCP
               </text>
             </Show>
+            <Show when={sync.data.skill.length > 0}>
+              <text fg={theme.text}>
+                <span style={{ fg: theme.success }}>•</span> {sync.data.skill.length} Skills
+              </text>
+            </Show>
             <text fg={theme.textMuted}>/status</text>
           </Match>
         </Switch>

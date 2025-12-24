@@ -18,6 +18,7 @@ import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
 import { Format } from "../format"
+import { Skill } from "../skill"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Permission } from "../permission"
@@ -2240,6 +2241,27 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await Format.status())
+        },
+      )
+      .get(
+        "/skill",
+        describeRoute({
+          summary: "Get skill status",
+          description: "Get all loaded skills",
+          operationId: "skill.status",
+          responses: {
+            200: {
+              description: "List of loaded skills",
+              content: {
+                "application/json": {
+                  schema: resolver(Skill.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await Skill.status())
         },
       )
       .post(

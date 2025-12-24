@@ -80,4 +80,8 @@ export namespace Skill {
   export async function all() {
     return state().then((x) => Object.values(x))
   }
+
+  export async function status() {
+    return all()
+  }
 }

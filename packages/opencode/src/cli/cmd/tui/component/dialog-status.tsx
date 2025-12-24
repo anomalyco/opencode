@@ -157,6 +157,28 @@ export function DialogStatus() {
           </For>
         </box>
       </Show>
+      <Show when={sync.data.skill.length > 0} fallback={<text fg={theme.text}>No Skills</text>}>
+        <box>
+          <text fg={theme.text}>{sync.data.skill.length} Skills</text>
+          <For each={sync.data.skill}>
+            {(item) => (
+              <box flexDirection="row" gap={1}>
+                <text
+                  flexShrink={0}
+                  style={{
+                    fg: theme.success,
+                  }}
+                >
+                  •
+                </text>
+                <text wrapMode="word" fg={theme.text}>
+                  <b>{item.name}</b>
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
     </box>
   )
 }

@@ -25,6 +25,7 @@ export function Sidebar(props: { sessionID: string }) {
     diff: true,
     todo: true,
     lsp: true,
+    skill: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -200,6 +201,34 @@ export function Sidebar(props: { sessionID: string }) {
                 </For>
               </Show>
             </box>
+            <Show when={sync.data.skill.length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => sync.data.skill.length > 2 && setExpanded("skill", !expanded.skill)}
+                >
+                  <Show when={sync.data.skill.length > 2}>
+                    <text fg={theme.text}>{expanded.skill ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Skills</b>
+                  </text>
+                </box>
+                <Show when={sync.data.skill.length <= 2 || expanded.skill}>
+                  <For each={sync.data.skill}>
+                    {(item) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} style={{ fg: theme.success }}>
+                          •
+                        </text>
+                        <text fg={theme.textMuted}>{item.name}</text>
+                      </box>
+                    )}
+                  </For>
+                </Show>
+              </box>
+            </Show>
             <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
               <box>
                 <box
