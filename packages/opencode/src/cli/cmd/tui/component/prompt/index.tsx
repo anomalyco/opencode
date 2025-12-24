@@ -1,20 +1,8 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
-import {
-  BoxRenderable,
-  TextareaRenderable,
-  MouseEvent,
-  PasteEvent,
-  t,
-  dim,
-  fg,
-  type KeyBinding,
-  RGBA,
-} from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, type KeyBinding } from "@opentui/core"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
-import { useTheme, selectedForeground } from "@tui/context/theme"
+import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -22,6 +10,7 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
+import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
@@ -35,21 +24,18 @@ import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
-import { formatDuration } from "@/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
-import { useTextareaKeybindings } from "../textarea-keybindings"
-import { DialogSkill } from "../dialog-skill"
 import { DialogAgent } from "../dialog-agent"
 import { DialogModel } from "../dialog-model"
+import { HoverableLabel } from "../hoverable-label"
 
 export type PromptProps = {
   sessionID?: string
-  visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
   ref?: (ref: PromptRef) => void
@@ -69,6 +55,61 @@ export type PromptRef = {
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 const SHELL_PLACEHOLDERS = ["ls -la", "git status", "pwd"]
+
+const TEXTAREA_ACTIONS = [
+  "submit",
+  "newline",
+  "move-left",
+  "move-right",
+  "move-up",
+  "move-down",
+  "select-left",
+  "select-right",
+  "select-up",
+  "select-down",
+  "line-home",
+  "line-end",
+  "select-line-home",
+  "select-line-end",
+  "visual-line-home",
+  "visual-line-end",
+  "select-visual-line-home",
+  "select-visual-line-end",
+  "buffer-home",
+  "buffer-end",
+  "select-buffer-home",
+  "select-buffer-end",
+  "delete-line",
+  "delete-to-line-end",
+  "delete-to-line-start",
+  "backspace",
+  "delete",
+  "undo",
+  "redo",
+  "word-forward",
+  "word-backward",
+  "select-word-forward",
+  "select-word-backward",
+  "delete-word-forward",
+  "delete-word-backward",
+] as const
+
+function mapTextareaKeybindings(
+  keybinds: Record<string, Keybind.Info[]>,
+  action: (typeof TEXTAREA_ACTIONS)[number],
+): KeyBinding[] {
+  const configKey = `input_${action.replace(/-/g, "_")}`
+  const bindings = keybinds[configKey]
+  if (!bindings) return []
+  return bindings.map((binding) => ({
+    name: binding.name,
+    ctrl: binding.ctrl || undefined,
+    meta: binding.meta || undefined,
+    shift: binding.shift || undefined,
+    super: binding.super || undefined,
+    action,
+  }))
+}
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -92,7 +133,6 @@ export function Prompt(props: PromptProps) {
   const wide = createMemo(() => dimensions().width > 120)
   const { theme, syntax } = useTheme()
   const kv = useKV()
-  const hoverFg = createMemo(() => selectedForeground(theme))
 
   function promptModelWarning() {
     toast.show({
@@ -105,19 +145,24 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  const textareaKeybindings = useTextareaKeybindings()
+  const textareaKeybindings = createMemo(() => {
+    const keybinds = keybind.all
+
+    return [
+      { name: "return", action: "submit" },
+      { name: "return", meta: true, action: "newline" },
+      ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
+    ] satisfies KeyBinding[]
+  })
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
-  let promptPartTypeId = 0
+  let promptPartTypeId: number
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
     setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
-      if (!input || input.isDestroyed) return
       input.getLayoutNode().markDirty()
       input.gotoBufferEnd()
       renderer.requestRender()
@@ -127,13 +172,6 @@ export function Prompt(props: PromptProps) {
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
     if (!props.disabled) input.cursorColor = theme.text
-  })
-
-  const lastUserMessage = createMemo(() => {
-    if (!props.sessionID) return undefined
-    const messages = sync.data.message[props.sessionID]
-    if (!messages) return undefined
-    return messages.findLast((m) => m.role === "user")
   })
 
   const [store, setStore] = createStore<{
@@ -153,49 +191,17 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
-  createEffect(
-    on(
-      () => props.sessionID,
-      () => {
-        setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
-      },
-      { defer: true },
-    ),
-  )
-
-  // Initialize agent/model/variant from last user message when session changes
-  let syncedSessionID: string | undefined
   createEffect(() => {
-    const sessionID = props.sessionID
-    const msg = lastUserMessage()
-
-    if (sessionID !== syncedSessionID) {
-      if (!sessionID || !msg) return
-
-      syncedSessionID = sessionID
-
-      // Only set agent if it's a primary agent (not a subagent)
-      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
-      if (msg.agent && isPrimaryAgent) {
-        local.agent.set(msg.agent)
-        if (msg.model) local.model.set(msg.model)
-        if (msg.variant) local.model.variant.set(msg.variant)
-      }
-    }
+    props.sessionID
+    setStore("placeholder", Math.floor(Math.random() * PLACEHOLDERS.length))
   })
-
-  const [agentHover, setAgentHover] = createSignal(false)
-  const [modelNameHover, setModelNameHover] = createSignal(false)
-  const [agentCycleHover, setAgentCycleHover] = createSignal(false)
-  const [commandListHover, setCommandListHover] = createSignal(false)
-
   command.register(() => {
     return [
       {
         title: "Clear prompt",
         value: "prompt.clear",
         category: "Prompt",
-        hidden: true,
+        disabled: true,
         onSelect: (dialog) => {
           input.extmarks.clear()
           input.clear()
@@ -205,9 +211,9 @@ export function Prompt(props: PromptProps) {
       {
         title: "Submit prompt",
         value: "prompt.submit",
+        disabled: true,
         keybind: "input_submit",
         category: "Prompt",
-        hidden: true,
         onSelect: (dialog) => {
           if (!input.focused) return
           submit()
@@ -217,9 +223,9 @@ export function Prompt(props: PromptProps) {
       {
         title: "Paste",
         value: "prompt.paste",
+        disabled: true,
         keybind: "input_paste",
         category: "Prompt",
-        hidden: true,
         onSelect: async () => {
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
@@ -235,9 +241,8 @@ export function Prompt(props: PromptProps) {
         title: "Interrupt session",
         value: "session.interrupt",
         keybind: "session_interrupt",
+        disabled: status().type === "idle",
         category: "Session",
-        hidden: true,
-        enabled: status().type !== "idle",
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
@@ -268,10 +273,7 @@ export function Prompt(props: PromptProps) {
         category: "Session",
         keybind: "editor_open",
         value: "prompt.editor",
-        slash: {
-          name: "editor",
-        },
-        onSelect: async (dialog) => {
+        onSelect: async (dialog, trigger) => {
           dialog.clear()
 
           // replace summarized text parts with the actual text
@@ -284,7 +286,7 @@ export function Prompt(props: PromptProps) {
 
           const nonTextParts = store.prompt.parts.filter((p) => p.type !== "text")
 
-          const value = text
+          const value = trigger === "prompt" ? "" : text
           const content = await Editor.open({ value, renderer })
           if (!content) return
 
@@ -350,67 +352,15 @@ export function Prompt(props: PromptProps) {
           input.cursorOffset = Bun.stringWidth(content)
         },
       },
-      {
-        title: "Skills",
-        value: "prompt.skills",
-        category: "Prompt",
-        slash: {
-          name: "skills",
-        },
-        onSelect: () => {
-          dialog.replace(() => (
-            <DialogSkill
-              onSelect={(skill) => {
-                input.setText(`/${skill} `)
-                setStore("prompt", {
-                  input: `/${skill} `,
-                  parts: [],
-                })
-                input.gotoBufferEnd()
-              }}
-            />
-          ))
-        },
-      },
     ]
   })
 
-  const ref: PromptRef = {
-    get focused() {
-      return input.focused
-    },
-    get current() {
-      return store.prompt
-    },
-    focus() {
-      input.focus()
-    },
-    blur() {
-      input.blur()
-    },
-    set(prompt) {
-      input.setText(prompt.input)
-      setStore("prompt", prompt)
-      restoreExtmarksFromParts(prompt.parts)
-      input.gotoBufferEnd()
-    },
-    reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
-    },
-    submit() {
-      submit()
-    },
-  }
-
   createEffect(() => {
-    if (props.visible !== false) input?.focus()
-    if (props.visible === false) input?.blur()
+    input.focus()
+  })
+
+  onMount(() => {
+    promptPartTypeId = input.extmarks.registerType("prompt-part")
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -496,7 +446,7 @@ export function Prompt(props: PromptProps) {
       title: "Stash prompt",
       value: "prompt.stash",
       category: "Prompt",
-      enabled: !!store.prompt.input,
+      disabled: !store.prompt.input,
       onSelect: (dialog) => {
         if (!store.prompt.input) return
         stash.push({
@@ -514,7 +464,7 @@ export function Prompt(props: PromptProps) {
       title: "Stash pop",
       value: "prompt.stash.pop",
       category: "Prompt",
-      enabled: stash.list().length > 0,
+      disabled: stash.list().length === 0,
       onSelect: (dialog) => {
         const entry = stash.pop()
         if (entry) {
@@ -530,7 +480,7 @@ export function Prompt(props: PromptProps) {
       title: "Stash list",
       value: "prompt.stash.list",
       category: "Prompt",
-      enabled: stash.list().length > 0,
+      disabled: stash.list().length === 0,
       onSelect: (dialog) => {
         dialog.replace(() => (
           <DialogStash
@@ -545,6 +495,39 @@ export function Prompt(props: PromptProps) {
       },
     },
   ])
+
+  props.ref?.({
+    get focused() {
+      return input.focused
+    },
+    get current() {
+      return store.prompt
+    },
+    focus() {
+      input.focus()
+    },
+    blur() {
+      input.blur()
+    },
+    set(prompt) {
+      input.setText(prompt.input)
+      setStore("prompt", prompt)
+      restoreExtmarksFromParts(prompt.parts)
+      input.gotoBufferEnd()
+    },
+    reset() {
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+    },
+    submit() {
+      submit()
+    },
+  })
 
   async function submit() {
     if (props.disabled) return
@@ -590,7 +573,6 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -606,55 +588,39 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const firstLine = inputText.split("\n")[0]
-        const command = firstLine.split(" ")[0].slice(1)
+        const command = inputText.split(" ")[0].slice(1)
+        console.log(command)
         return sync.data.command.some((x) => x.name === command)
       })
     ) {
-      // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
-      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
-      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
-
+      let [command, ...args] = inputText.split(" ")
       sdk.client.session.command({
         sessionID,
         command: command.slice(1),
-        arguments: args,
+        arguments: args.join(" "),
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
-        variant,
-        parts: nonTextParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
+      })
+    } else {
+      sdk.client.session.prompt({
+        sessionID,
+        ...selectedModel,
+        messageID,
+        agent: local.agent.current().name,
+        model: selectedModel,
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: inputText,
+          },
+          ...nonTextParts.map((x) => ({
             id: Identifier.ascending("part"),
             ...x,
           })),
+        ],
       })
-    } else {
-      sdk.client.session
-        .prompt({
-          sessionID,
-          ...selectedModel,
-          messageID,
-          agent: local.agent.current().name,
-          model: selectedModel,
-          variant,
-          parts: [
-            {
-              id: Identifier.ascending("part"),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map((x) => ({
-              id: Identifier.ascending("part"),
-              ...x,
-            })),
-          ],
-        })
-        .catch(() => {})
     }
     history.append({
       ...store.prompt,
@@ -763,13 +729,6 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(local.agent.current().name)
   })
 
-  const showVariant = createMemo(() => {
-    const variants = local.model.variant.list()
-    if (variants.length === 0) return false
-    const current = local.model.variant.current()
-    return !!current
-  })
-
   const placeholderText = createMemo(() => {
     if (props.sessionID) return undefined
     if (store.mode === "shell") {
@@ -778,7 +737,6 @@ export function Prompt(props: PromptProps) {
     }
     return `Ask anything... "${PLACEHOLDERS[store.placeholder % PLACEHOLDERS.length]}"`
   })
-
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -821,7 +779,7 @@ export function Prompt(props: PromptProps) {
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
-      <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
+      <box ref={(r) => (anchor = r)}>
         <box
           border={["left"]}
           borderColor={highlight()}
@@ -833,7 +791,7 @@ export function Prompt(props: PromptProps) {
         >
           <box
             paddingLeft={2}
-            paddingRight={2}
+            paddingRight={1}
             paddingTop={1}
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
@@ -994,21 +952,14 @@ export function Prompt(props: PromptProps) {
 
                 // Force layout update and render for the pasted content
                 setTimeout(() => {
-                  // setTimeout is a workaround and needs to be addressed properly
-                  if (!input || input.isDestroyed) return
                   input.getLayoutNode().markDirty()
+                  input.gotoBufferEnd()
                   renderer.requestRender()
                 }, 0)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
-                if (promptPartTypeId === 0) {
-                  promptPartTypeId = input.extmarks.registerType("prompt-part")
-                }
-                props.ref?.(ref)
                 setTimeout(() => {
-                  // setTimeout is a workaround and needs to be addressed properly
-                  if (!input || input.isDestroyed) return
                   input.cursorColor = theme.text
                 }, 0)
               }}
@@ -1019,45 +970,24 @@ export function Prompt(props: PromptProps) {
             />
             <Show when={tall()}>
               <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-                <box
-                  backgroundColor={agentHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                  onMouseOver={() => setAgentHover(true)}
-                  onMouseOut={() => setAgentHover(false)}
-                  onMouseUp={() => {
-                    if (store.mode === "shell") return
-                    dialog.replace(() => <DialogAgent />)
-                  }}
-                >
-                  <text fg={agentHover() ? hoverFg() : highlight()}>
-                    {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-                  </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <Show when={showVariant()}>
-                    <text fg={theme.textMuted}>·</text>
-                    <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                <HoverableLabel disabled={store.mode === "shell"} onClick={() => dialog.replace(() => <DialogAgent />)}>
+                  {(hover, hoverFg) => (
+                    <text fg={hover ? hoverFg() : highlight()}>
+                      {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
                     </text>
-                  </Show>
-                </box>
+                  )}
+                </HoverableLabel>
                 <Show when={store.mode === "normal"}>
-                  <box
-                    flexDirection="row"
-                    gap={1}
-                    backgroundColor={modelNameHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                    onMouseOver={() => setModelNameHover(true)}
-                    onMouseOut={() => setModelNameHover(false)}
-                    onMouseUp={() => {
-                      dialog.replace(() => <DialogModel />)
-                    }}
-                  >
-                    <text
-                      flexShrink={0}
-                      fg={modelNameHover() ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}
-                    >
-                      {local.model.parsed().model}
-                    </text>
-                    <text fg={modelNameHover() ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
-                  </box>
+                  <HoverableLabel onClick={() => dialog.replace(() => <DialogModel />)}>
+                    {(hover, hoverFg) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} fg={hover ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}>
+                          {local.model.parsed().model}
+                        </text>
+                        <text fg={hover ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
+                      </box>
+                    )}
+                  </HoverableLabel>
                 </Show>
               </box>
             </Show>
@@ -1147,8 +1077,7 @@ export function Prompt(props: PromptProps) {
                       if (!r) return ""
                       const baseMessage = message()
                       const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const duration = formatDuration(seconds())
-                      const retryInfo = ` [retrying ${duration ? `in ${duration} ` : ""}attempt #${r.attempt}]`
+                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
                       return baseMessage + truncatedHint + retryInfo
                     }
 
@@ -1173,38 +1102,24 @@ export function Prompt(props: PromptProps) {
           <Switch>
             <Match when={status().type !== "retry" && !tall()}>
               <box flexDirection="row" gap={1}>
-                <box
-                  backgroundColor={agentHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                  onMouseOver={() => setAgentHover(true)}
-                  onMouseOut={() => setAgentHover(false)}
-                  onMouseUp={() => {
-                    if (store.mode === "shell") return
-                    dialog.replace(() => <DialogAgent />)
-                  }}
-                >
-                  <text fg={agentHover() ? hoverFg() : highlight()}>
-                    {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-                  </text>
-                </box>
-                <Show when={store.mode === "normal"}>
-                  <box
-                    flexDirection="row"
-                    gap={1}
-                    backgroundColor={modelNameHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                    onMouseOver={() => setModelNameHover(true)}
-                    onMouseOut={() => setModelNameHover(false)}
-                    onMouseUp={() => {
-                      dialog.replace(() => <DialogModel />)
-                    }}
-                  >
-                    <text
-                      flexShrink={0}
-                      fg={modelNameHover() ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}
-                    >
-                      {local.model.parsed().model}
+                <HoverableLabel disabled={store.mode === "shell"} onClick={() => dialog.replace(() => <DialogAgent />)}>
+                  {(hover, hoverFg) => (
+                    <text fg={hover ? hoverFg() : highlight()}>
+                      {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
                     </text>
-                    <text fg={modelNameHover() ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
-                  </box>
+                  )}
+                </HoverableLabel>
+                <Show when={store.mode === "normal"}>
+                  <HoverableLabel onClick={() => dialog.replace(() => <DialogModel />)}>
+                    {(hover, hoverFg) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} fg={hover ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}>
+                          {local.model.parsed().model}
+                        </text>
+                        <text fg={hover ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
+                      </box>
+                    )}
+                  </HoverableLabel>
                 </Show>
               </box>
             </Match>
@@ -1213,34 +1128,28 @@ export function Prompt(props: PromptProps) {
             <Switch>
               <Match when={store.mode === "normal"}>
                 <Show when={wide()}>
-                  <box
-                    backgroundColor={agentCycleHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                    onMouseOver={() => setAgentCycleHover(true)}
-                    onMouseOut={() => setAgentCycleHover(false)}
-                    onMouseUp={() => dialog.replace(() => <DialogAgent />)}
-                  >
-                    <text fg={agentCycleHover() ? hoverFg() : theme.text}>
-                      {keybind.print("agent_cycle")}{" "}
-                      <span style={{ fg: agentCycleHover() ? hoverFg() : theme.textMuted }}>switch agent</span>
-                    </text>
-                  </box>
+                  <HoverableLabel onClick={() => dialog.replace(() => <DialogAgent />)}>
+                    {(hover, hoverFg) => (
+                      <text fg={hover ? hoverFg() : theme.text}>
+                        {keybind.print("agent_cycle")}{" "}
+                        <span style={{ fg: hover ? hoverFg() : theme.textMuted }}>switch agent</span>
+                      </text>
+                    )}
+                  </HoverableLabel>
                 </Show>
                 <Show when={!wide()}>
                   <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    {keybind.print("sidebar_toggle")} <span style={{ fg: theme.textMuted }}>sidebar</span>
                   </text>
                 </Show>
-                <box
-                  backgroundColor={commandListHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
-                  onMouseOver={() => setCommandListHover(true)}
-                  onMouseOut={() => setCommandListHover(false)}
-                  onMouseUp={() => command.show()}
-                >
-                  <text fg={commandListHover() ? hoverFg() : theme.text}>
-                    {keybind.print("command_list")}{" "}
-                    <span style={{ fg: commandListHover() ? hoverFg() : theme.textMuted }}>commands</span>
-                  </text>
-                </box>
+                <HoverableLabel onClick={() => command.show()}>
+                  {(hover, hoverFg) => (
+                    <text fg={hover ? hoverFg() : theme.text}>
+                      {keybind.print("command_list")}{" "}
+                      <span style={{ fg: hover ? hoverFg() : theme.textMuted }}>commands</span>
+                    </text>
+                  )}
+                </HoverableLabel>
               </Match>
               <Match when={store.mode === "shell"}>
                 <text fg={theme.text}>
