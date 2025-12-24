@@ -22,7 +22,6 @@ import {
   ScrollBoxRenderable,
   addDefaultParsers,
   MacOSScrollAccel,
-  RGBA,
   type ScrollAcceleration,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
@@ -131,15 +130,13 @@ export function Session() {
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
-  const tall = createMemo(() => dimensions().height > 40)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebar() === "show") return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const sidebarOverlay = createMemo(() => sidebarVisible() && !wide())
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() && !sidebarOverlay() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
     const tui = sync.data.config.tui
@@ -965,7 +962,7 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={!sidebarVisible() || sidebarOverlay()}>
+            <Show when={!sidebarVisible()}>
               <Header />
             </Show>
             <scrollbox
@@ -1095,32 +1092,14 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
-            <Show when={(!sidebarVisible() || sidebarOverlay()) && tall()}>
+            <Show when={!sidebarVisible()}>
               <Footer />
             </Show>
           </Show>
           <Toast />
         </box>
-        <Show when={sidebarVisible() && !sidebarOverlay()}>
+        <Show when={sidebarVisible()}>
           <Sidebar sessionID={route.sessionID} />
-        </Show>
-        <Show when={sidebarOverlay()}>
-          <box
-            position="absolute"
-            left={0}
-            top={0}
-            width={dimensions().width}
-            height={dimensions().height}
-            backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
-            zIndex={100}
-            flexDirection="row"
-            justifyContent="flex-end"
-            onMouseUp={() => setSidebar("hide")}
-          >
-            <box onMouseUp={(e) => e.stopPropagation()}>
-              <Sidebar sessionID={route.sessionID} />
-            </box>
-          </box>
         </Show>
       </box>
     </context.Provider>
