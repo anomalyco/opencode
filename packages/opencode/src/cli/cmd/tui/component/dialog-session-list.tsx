@@ -45,7 +45,13 @@ export function DialogSessionList() {
           value: x.id,
           category,
           footer: Locale.time(x.time.updated),
-          gutter: isWorking ? <spinner frames={spinnerFrames} interval={80} color={theme.primary} /> : undefined,
+          gutter: isWorking ? (
+            sync.data.config.tui?.animations !== false ? (
+              <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
+            ) : (
+              <text fg={theme.textMuted}>[⋯]</text>
+            )
+          ) : undefined,
         }
       })
       .slice(0, 150)

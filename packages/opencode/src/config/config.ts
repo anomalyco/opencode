@@ -585,6 +585,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    animations: z.boolean().optional().describe("Enable or disable spinner animations (default: true)"),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
