@@ -22,16 +22,28 @@ export function createAutoScroll(options: AutoScrollOptions) {
   function scrollToBottom() {
     if (!scrollRef || store.userScrolled || !options.working()) return
     setStore("autoScrolled", true)
-    requestAnimationFrame(() => {
-      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
-      requestAnimationFrame(() => {
+    const targetHeight = scrollRef.scrollHeight
+    scrollRef.scrollTo({ top: targetHeight, behavior: "smooth" })
+
+    // Wait for scroll to complete before clearing autoScrolled
+    const checkScrollComplete = () => {
+      if (!scrollRef) {
+        setStore("autoScrolled", false)
+        return
+      }
+      const atBottom = scrollRef.scrollTop + scrollRef.clientHeight >= scrollRef.scrollHeight - 10
+      const reachedTarget = scrollRef.scrollTop >= targetHeight - scrollRef.clientHeight - 10
+      if (atBottom || reachedTarget) {
         batch(() => {
           setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
           setStore("lastScrollHeight", scrollRef?.scrollHeight ?? 0)
           setStore("autoScrolled", false)
         })
-      })
-    })
+      } else {
+        requestAnimationFrame(checkScrollComplete)
+      }
+    }
+    requestAnimationFrame(checkScrollComplete)
   }
 
   function handleScroll() {
