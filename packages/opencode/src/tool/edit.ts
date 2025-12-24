@@ -41,16 +41,20 @@ export const EditTool = Tool.define("edit", {
 
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     if (!Filesystem.contains(Instance.directory, filePath)) {
-      const parentDir = path.dirname(filePath)
-      await ctx.ask({
-        permission: "external_directory",
-        patterns: [parentDir, path.join(parentDir, "*")],
-        always: [parentDir + "/*"],
-        metadata: {
-          filepath: filePath,
-          parentDir,
-        },
-      })
+      // Skip external_directory check for tmpdir paths when tmpdir permission is allowed
+      const skipCheck = ctx.allowed("tmpdir") && Filesystem.isInTmpdir(filePath)
+      if (!skipCheck) {
+        const parentDir = path.dirname(filePath)
+        await ctx.ask({
+          permission: "external_directory",
+          patterns: [parentDir, path.join(parentDir, "*")],
+          always: [parentDir + "/*"],
+          metadata: {
+            filepath: filePath,
+            parentDir,
+          },
+        })
+      }
     }
 
     let diff = ""

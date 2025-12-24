@@ -400,6 +400,10 @@ export namespace SessionPrompt {
               ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
             })
           },
+          allowed(permission: string, pattern = "*") {
+            const ruleset = PermissionNext.merge(taskAgent.permission, session.permission ?? [])
+            return PermissionNext.evaluate(permission, pattern, ruleset).action === "allow"
+          },
         }
         const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
           executionError = error
@@ -673,6 +677,10 @@ export namespace SessionPrompt {
           ruleset: PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
         })
       },
+      allowed(permission: string, pattern = "*") {
+        const ruleset = PermissionNext.merge(input.agent.permission, input.session.permission ?? [])
+        return PermissionNext.evaluate(permission, pattern, ruleset).action === "allow"
+      },
     })
 
     for (const item of await ToolRegistry.tools(input.model.providerID)) {
@@ -911,6 +919,7 @@ export namespace SessionPrompt {
                       extra: { bypassCwdCheck: true, model },
                       metadata: async () => {},
                       ask: async () => {},
+                      allowed: () => true,
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -972,6 +981,7 @@ export namespace SessionPrompt {
                   extra: { bypassCwdCheck: true },
                   metadata: async () => {},
                   ask: async () => {},
+                  allowed: () => true,
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [

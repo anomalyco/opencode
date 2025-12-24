@@ -134,12 +134,18 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       if (directories.size > 0) {
-        await ctx.ask({
-          permission: "external_directory",
-          patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
-          metadata: {},
-        })
+        // Filter out tmpdir paths if tmpdir permission is allowed
+        const filtered = ctx.allowed("tmpdir")
+          ? Array.from(directories).filter((dir) => !Filesystem.isInTmpdir(dir))
+          : Array.from(directories)
+        if (filtered.length > 0) {
+          await ctx.ask({
+            permission: "external_directory",
+            patterns: filtered,
+            always: filtered.map((x) => path.dirname(x) + "*"),
+            metadata: {},
+          })
+        }
       }
 
       if (patterns.size > 0) {

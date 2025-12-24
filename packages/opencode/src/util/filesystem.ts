@@ -1,6 +1,7 @@
 import { realpathSync } from "fs"
 import { exists } from "fs/promises"
 import { dirname, join, relative } from "path"
+import os from "os"
 
 export namespace Filesystem {
   /**
@@ -79,5 +80,56 @@ export namespace Filesystem {
       current = parent
     }
     return result
+  }
+
+  /**
+   * Get the system's temporary directory with symlink resolution.
+   * Handles platform differences:
+   * - Linux: Usually /tmp
+   * - macOS: /var/folders/.../T/ (symlinked from /tmp -> /private/tmp)
+   * - Windows: C:\Users\<user>\AppData\Local\Temp
+   */
+  export function tmpdir(): string {
+    const tmp = os.tmpdir()
+    try {
+      return realpathSync(tmp)
+    } catch {
+      return tmp
+    }
+  }
+
+  /**
+   * Check if child path is within parent, with symlink resolution.
+   * Prevents symlink traversal attacks.
+   */
+  export function containsResolved(parent: string, child: string): boolean {
+    try {
+      const resolvedParent = realpathSync(parent)
+      const resolvedChild = realpathSync(child)
+      return !relative(resolvedParent, resolvedChild).startsWith("..")
+    } catch {
+      // Path doesn't exist yet (e.g., file being created), resolve parent directory
+      try {
+        const resolvedParent = realpathSync(parent)
+        const childDir = dirname(child)
+        try {
+          const resolvedChildDir = realpathSync(childDir)
+          const resolvedChild = join(resolvedChildDir, child.split(/[/\\]/).pop()!)
+          return !relative(resolvedParent, resolvedChild).startsWith("..")
+        } catch {
+          // Parent directory doesn't exist either, use normalized paths
+          return !relative(parent, child).startsWith("..")
+        }
+      } catch {
+        return !relative(parent, child).startsWith("..")
+      }
+    }
+  }
+
+  /**
+   * Check if path is within the system tmpdir
+   */
+  export function isInTmpdir(filepath: string): boolean {
+    return containsResolved(tmpdir(), filepath)
   }
 }

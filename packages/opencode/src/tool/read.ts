@@ -28,16 +28,20 @@ export const ReadTool = Tool.define("read", {
     const title = path.relative(Instance.worktree, filepath)
 
     if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      const parentDir = path.dirname(filepath)
-      await ctx.ask({
-        permission: "external_directory",
-        patterns: [parentDir],
-        always: [parentDir + "/*"],
-        metadata: {
-          filepath,
-          parentDir,
-        },
-      })
+      // Skip external_directory check for tmpdir paths when tmpdir permission is allowed
+      const skipCheck = ctx.allowed("tmpdir") && Filesystem.isInTmpdir(filepath)
+      if (!skipCheck) {
+        const parentDir = path.dirname(filepath)
+        await ctx.ask({
+          permission: "external_directory",
+          patterns: [parentDir],
+          always: [parentDir + "/*"],
+          metadata: {
+            filepath,
+            parentDir,
+          },
+        })
+      }
     }
 
     await ctx.ask({

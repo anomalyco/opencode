@@ -226,6 +226,34 @@ This provides an additional safety layer to prevent unintended modifications to 
 
 ---
 
+### allow_tmpdir
+
+Use the `permission.allow_tmpdir` key to allow file operations in the system's temporary directory without requiring `external_directory` approval.
+
+This is useful for:
+
+- CI/CD environments where permission prompts cause hangs
+- Tools that need to write temporary files
+- Scoped access without allowing all external directories
+
+```json title="opencode.json" {4-5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "allow_tmpdir": true,
+    "external_directory": "ask"
+  }
+}
+```
+
+When `allow_tmpdir` is `true`, file operations in the OS tmpdir (e.g., `/tmp` on Linux, `/var/folders/.../T/` on macOS, `%TEMP%` on Windows) are permitted without triggering `external_directory` prompts.
+
+:::note
+This only affects the tmpdir. Access to other external directories still follows `external_directory` settings.
+:::
+
+---
+
 ## Agents
 
 You can also configure permissions per agent. Where the agent specific config

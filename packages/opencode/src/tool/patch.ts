@@ -51,16 +51,20 @@ export const PatchTool = Tool.define("patch", {
       const filePath = path.resolve(Instance.directory, hunk.path)
 
       if (!Filesystem.contains(Instance.directory, filePath)) {
-        const parentDir = path.dirname(filePath)
-        await ctx.ask({
-          permission: "external_directory",
-          patterns: [parentDir, path.join(parentDir, "*")],
-          always: [parentDir + "/*"],
-          metadata: {
-            filepath: filePath,
-            parentDir,
-          },
-        })
+        // Skip external_directory check for tmpdir paths when tmpdir permission is allowed
+        const skipCheck = ctx.allowed("tmpdir") && Filesystem.isInTmpdir(filePath)
+        if (!skipCheck) {
+          const parentDir = path.dirname(filePath)
+          await ctx.ask({
+            permission: "external_directory",
+            patterns: [parentDir, path.join(parentDir, "*")],
+            always: [parentDir + "/*"],
+            metadata: {
+              filepath: filePath,
+              parentDir,
+            },
+          })
+        }
       }
 
       switch (hunk.type) {

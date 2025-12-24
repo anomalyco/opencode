@@ -14,6 +14,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   metadata: () => {},
   ask: async () => {},
+  allowed: () => false,
 }
 
 const patchTool = await PatchTool.init()

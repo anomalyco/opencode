@@ -21,6 +21,8 @@ export namespace Tool {
     extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
     ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
+    /** Check if a permission is allowed for the given pattern */
+    allowed(permission: string, pattern?: string): boolean
   }
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
