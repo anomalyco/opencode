@@ -9,14 +9,11 @@ export interface AutoScrollOptions {
 
 export function createAutoScroll(options: AutoScrollOptions) {
   let scrollRef: HTMLElement | undefined
-  // We use a store for refs to be compatible with the existing API,
-  // but strictly speaking signals would work too.
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLElement | undefined,
     userScrolled: false,
   })
 
-  // Internal state
   let lastScrollTop = 0
   let isAutoScrolling = false
   let autoScrollTimeout: ReturnType<typeof setTimeout> | undefined
@@ -28,28 +25,20 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     isAutoScrolling = true
     if (autoScrollTimeout) clearTimeout(autoScrollTimeout)
-    // Safety timeout to clear auto-scrolling state
     autoScrollTimeout = setTimeout(() => {
       isAutoScrolling = false
     }, 1000)
 
-    try {
-      scrollRef.scrollTo({
-        top: scrollRef.scrollHeight,
-        behavior: "smooth",
-      })
-    } catch {
-      // Fallback for environments where scrollTo options might fail
-      if (scrollRef) scrollRef.scrollTop = scrollRef.scrollHeight
-      isAutoScrolling = false
-    }
+    scrollRef.scrollTo({
+      top: scrollRef.scrollHeight,
+      behavior: "smooth",
+    })
   }
 
   function handleScroll() {
     if (!scrollRef) return
 
     const { scrollTop, scrollHeight, clientHeight } = scrollRef
-    // Use a small tolerance for "at bottom" detection
     const atBottom = Math.abs(scrollHeight - clientHeight - scrollTop) < 10
 
     if (isAutoScrolling) {
@@ -62,7 +51,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
     }
 
     if (atBottom) {
-      // We reached the bottom, so we're "locked" again.
       if (store.userScrolled) {
         setStore("userScrolled", false)
       }
@@ -70,9 +58,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
       return
     }
 
-    // Check for user intention to scroll up.
-    // We rely on explicit interaction events (wheel, touch, keys) for most cases,
-    // and use mousedown + scroll delta for scrollbar dragging.
     const delta = scrollTop - lastScrollTop
     if (delta < 0) {
       if (isMouseDown && !store.userScrolled && options.working()) {
@@ -135,7 +120,6 @@ export function createAutoScroll(options: AutoScrollOptions) {
   createResizeObserver(
     () => store.contentRef,
     () => {
-      // When content changes size, if we are sticky, scroll to bottom.
       if (options.working() && !store.userScrolled) {
         scrollToBottom()
       }
