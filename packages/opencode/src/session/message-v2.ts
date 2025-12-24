@@ -611,8 +611,7 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case (e as SystemError)?.code === "ECONNRESET" &&
-        (e as SystemError)?.message.includes("The socket connection was closed unexpectedly"):
+      case (e as SystemError)?.code === "ECONNRESET":
         return new MessageV2.APIError(
           {
             message: "Connection reset by server",
