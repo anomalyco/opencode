@@ -226,8 +226,7 @@ export default function Page() {
       title: "Toggle review",
       description: "Show or hide the review panel",
       category: "View",
-      keybind: "mod+b",
-      slash: "review",
+      keybind: "mod+shift+r",
       onSelect: () => layout.review.toggle(),
     },
     {
