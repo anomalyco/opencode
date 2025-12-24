@@ -2,7 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createEffect, createMemo, createSignal, onMount } from "solid-js"
+import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
 import { Locale } from "@/util/locale"
 import { Keybind } from "@/util/keybind"
 import { useTheme } from "../context/theme"
@@ -48,11 +48,9 @@ export function DialogSessionList() {
           category,
           footer: Locale.time(x.time.updated),
           gutter: isWorking ? (
-            kv.get("animations_enabled", true) ? (
+            <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
               <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
-            ) : (
-              <text fg={theme.textMuted}>[⋯]</text>
-            )
+            </Show>
           ) : undefined,
         }
       })
