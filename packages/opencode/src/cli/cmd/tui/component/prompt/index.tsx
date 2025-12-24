@@ -29,6 +29,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
+import { useKV } from "../../context/kv"
 
 export type PromptProps = {
   sessionID?: string
@@ -127,6 +128,7 @@ export function Prompt(props: PromptProps) {
   const tall = createMemo(() => dimensions().height > 40)
   const wide = createMemo(() => dimensions().width > 120)
   const { theme, syntax } = useTheme()
+  const kv = useKV()
 
   function promptModelWarning() {
     toast.show({
@@ -1003,10 +1005,7 @@ export function Prompt(props: PromptProps) {
               >
                 <box flexShrink={0} flexDirection="row" gap={1}>
                   <box marginLeft={1}>
-                    <Show
-                      when={sync.data.config.tui?.animations !== false}
-                      fallback={<text fg={theme.textMuted}>[⋯]</text>}
-                    >
+                    <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
                       <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                     </Show>
                   </box>

@@ -8167,10 +8167,6 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
-              },
-              "animations": {
-                "description": "Enable or disable spinner animations (default: true)",
-                "type": "boolean"
               }
             }
           },

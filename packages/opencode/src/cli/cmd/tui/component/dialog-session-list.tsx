@@ -8,6 +8,7 @@ import { Keybind } from "@/util/keybind"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
+import { useKV } from "../context/kv"
 import "opentui-spinner/solid"
 
 export function DialogSessionList() {
@@ -16,6 +17,7 @@ export function DialogSessionList() {
   const { theme } = useTheme()
   const route = useRoute()
   const sdk = useSDK()
+  const kv = useKV()
 
   const [toDelete, setToDelete] = createSignal<string>()
 
@@ -46,7 +48,7 @@ export function DialogSessionList() {
           category,
           footer: Locale.time(x.time.updated),
           gutter: isWorking ? (
-            sync.data.config.tui?.animations !== false ? (
+            kv.get("animations_enabled", true) ? (
               <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
             ) : (
               <text fg={theme.textMuted}>[⋯]</text>

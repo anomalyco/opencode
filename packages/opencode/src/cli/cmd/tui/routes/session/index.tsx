@@ -91,6 +91,7 @@ const context = createContext<{
   showDetails: () => boolean
   userMessageMarkdown: () => boolean
   diffWrapMode: () => "word" | "none"
+  animationsEnabled: () => boolean
   sync: ReturnType<typeof useSync>
 }>()
 
@@ -129,6 +130,7 @@ export function Session() {
   const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(kv.get("user_message_markdown", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
+  const [animationsEnabled, setAnimationsEnabled] = createSignal(kv.get("animations_enabled", true))
 
   const wide = createMemo(() => dimensions().width > 120)
   const tall = createMemo(() => dimensions().height > 40)
@@ -588,6 +590,19 @@ export function Session() {
       },
     },
     {
+      title: animationsEnabled() ? "Disable animations" : "Enable animations",
+      value: "session.toggle.animations",
+      category: "Session",
+      onSelect: (dialog) => {
+        setAnimationsEnabled((prev) => {
+          const next = !prev
+          kv.set("animations_enabled", next)
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Page up",
       value: "session.page.up",
       keybind: "messages_page_up",
@@ -959,6 +974,7 @@ export function Session() {
         showDetails,
         userMessageMarkdown,
         diffWrapMode,
+        animationsEnabled,
         sync,
       }}
     >
