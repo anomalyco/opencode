@@ -5337,7 +5337,7 @@
               "responseBody": {
                 "type": "string"
               },
-              "details": {
+              "metadata": {
                 "type": "object",
                 "propertyNames": {
                   "type": "string"
