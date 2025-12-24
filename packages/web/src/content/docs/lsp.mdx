@@ -51,6 +51,34 @@ You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_
 
 ---
 
+## LLM Tool (Experimental)
+
+OpenCode includes an experimental built-in tool named `lsp` that lets the LLM query your LSP servers for code navigation and symbol information.
+
+To enable it, set `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true` to enable all experimental features).
+
+Once enabled, you can still disable it via your `tools` config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "lsp": false
+  }
+}
+```
+
+Example prompts:
+
+- "Use the lsp tool to go to definition of `createServer` in `src/server.ts` at line 12, character 5."
+- "Use lsp hover on `User` in `src/models/user.ts` at line 20, character 10."
+
+:::note
+The `lsp` tool only works when an LSP server is available for the file type.
+:::
+
+---
+
 ## How It Works
 
 When opencode opens a file, it:
