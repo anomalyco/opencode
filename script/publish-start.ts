@@ -9,12 +9,12 @@ const notes = [] as string[]
 console.log("=== publishing ===\n")
 
 if (!Script.preview) {
-  const previous = await fetch("https://registry.npmjs.org/opencode-ai/latest")
+  const previous = await fetch("https://api.github.com/repos/sst/opencode/releases/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
     })
-    .then((data: any) => data.version)
+    .then((data: any) => data.tag_name.replace(/^v/, ""))
 
   const log =
     await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/desktop packages/app`.text()
