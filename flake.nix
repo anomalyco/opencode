@@ -67,9 +67,9 @@
             hash = nodeModulesHash;
           };
           mkPackage = pkgs.callPackage ./nix/opencode.nix { };
-        in
-        {
-          default = mkPackage {
+          mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
+          
+          opencodePkg = mkPackage {
             version = packageJson.version;
             src = ./.;
             scripts = ./nix/scripts;
@@ -77,6 +77,18 @@
             modelsDev = "${modelsDev.${system}}/dist/_api.json";
             mkNodeModules = mkNodeModules;
           };
+          
+          desktopPkg = mkDesktop {
+            version = packageJson.version;
+            src = ./.;
+            scripts = ./nix/scripts;
+            mkNodeModules = mkNodeModules;
+            opencode = opencodePkg;
+          };
+        in
+        {
+          default = opencodePkg;
+          desktop = desktopPkg;
         }
       );
 
