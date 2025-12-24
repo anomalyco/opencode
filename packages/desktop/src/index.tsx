@@ -1,6 +1,6 @@
 // @refresh reload
 import { render } from "solid-js/web"
-import { App, PlatformProvider, Platform } from "@opencode-ai/desktop"
+import { App, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
@@ -83,6 +83,7 @@ const platform: Platform = {
 
   update: async () => {
     if (!UPDATER_ENABLED || !update) return
+    if (ostype() === "windows") await invoke("kill_sidecar")
     await update.install()
   },
 
