@@ -246,6 +246,7 @@ export function SessionTurn(
     retrySeconds: 0,
     status: rawStatus(),
     duration: duration(),
+    summaryWaitTimedOut: false,
   })
 
   createEffect(() => {
@@ -284,6 +285,44 @@ export function SessionTurn(
       setStore("duration", duration())
     }, 1000)
     onCleanup(() => clearInterval(timer))
+  })
+
+  // Reset summary wait timeout when session starts working
+  createEffect(() => {
+    if (working()) {
+      setStore("summaryWaitTimedOut", false)
+    }
+  })
+
+  // Set timeout when waiting for summary body (only when diffs are present)
+  createEffect(() => {
+    if (working() || !derived().isLastUserMessage) return
+
+    const diffs = message()?.summary?.diffs
+    if (!diffs?.length) return
+    if (summary()) return
+    if (store.summaryWaitTimedOut) return
+
+    const timer = setTimeout(() => {
+      setStore("summaryWaitTimedOut", true)
+    }, 6000)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const waitingForSummary = createMemo(() => {
+    if (!derived().isLastUserMessage) return false
+    if (working()) return false
+
+    const diffs = message()?.summary?.diffs
+    if (!diffs?.length) return false
+    if (summary()) return false
+
+    return !store.summaryWaitTimedOut
+  })
+
+  const showSummarySection = createMemo(() => {
+    if (working()) return false
+    return !waitingForSummary()
   })
 
   let lastStatusChange = Date.now()
@@ -362,7 +401,7 @@ export function SessionTurn(
                           size="small"
                           onClick={props.onStepsExpandedToggle ?? (() => {})}
                         >
-                          <Show when={working()}>
+                          <Show when={working() || waitingForSummary()}>
                             <Spinner />
                           </Show>
                           <Switch>
@@ -379,6 +418,7 @@ export function SessionTurn(
                               </span>
                               <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                             </Match>
+                            <Match when={waitingForSummary()}>Generating summary</Match>
                             <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                             <Match when={props.stepsExpanded}>Hide steps</Match>
                             <Match when={!props.stepsExpanded}>Show steps</Match>
@@ -425,7 +465,7 @@ export function SessionTurn(
                       </div>
                     </Show>
                     {/* Summary */}
-                    <Show when={!working()}>
+                    <Show when={showSummarySection()}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
                           <Switch>
