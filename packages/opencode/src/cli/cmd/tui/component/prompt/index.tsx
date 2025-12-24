@@ -930,6 +930,13 @@ export function Prompt(props: PromptProps) {
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
+
+                // Force layout update and render for the pasted content
+                setTimeout(() => {
+                  input.getLayoutNode().markDirty()
+                  input.gotoBufferEnd()
+                  renderer.requestRender()
+                }, 0)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
