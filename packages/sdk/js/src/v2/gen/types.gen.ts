@@ -592,6 +592,13 @@ export type EventTuiToastShow = {
   }
 }
 
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
 export type EventCommandExecuted = {
   type: "command.executed"
   properties: {
@@ -758,6 +765,7 @@ export type Event =
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
+  | EventMcpToolsChanged
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
