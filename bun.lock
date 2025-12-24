@@ -388,7 +388,6 @@
         "typescript": "catalog:",
       },
     },
-
     "packages/ui": {
       "name": "@opencode-ai/ui",
       "version": "1.0.195",
