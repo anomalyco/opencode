@@ -65,6 +65,7 @@ function AssistantMessageItem(props: {
   summary: string | undefined
   response: string | undefined
   lastTextPartId: string | undefined
+  working: boolean
 }) {
   const data = useData()
   const msgParts = createMemo(() => data.store.part[props.message.id] ?? [])
@@ -74,9 +75,8 @@ function AssistantMessageItem(props: {
       .at(-1),
   )
 
-  // Only filter when this message contains the last text part and we're showing response instead of summary
   const filteredParts = createMemo(() => {
-    if (!props.summary && props.response && props.lastTextPartId === lastTextPart()?.id) {
+    if (!props.working && !props.summary && props.response && props.lastTextPartId === lastTextPart()?.id) {
       return msgParts().filter((p) => p?.id !== lastTextPart()?.id)
     }
     return msgParts()
@@ -102,9 +102,7 @@ export function SessionTurn(
   const data = useData()
   const diffComponent = useDiffComponent()
 
-  // Split the derived computation into separate memos to avoid unnecessary recalculations
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? [])
-
   const userMessages = createMemo(() =>
     allMessages()
       .filter((m) => m.role === "user")
@@ -441,6 +439,7 @@ export function SessionTurn(
                               summary={summary()}
                               response={response()}
                               lastTextPartId={lastTextPart()?.id}
+                              working={working()}
                             />
                           )}
                         </For>
