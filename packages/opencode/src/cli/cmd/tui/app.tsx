@@ -24,6 +24,7 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
+import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
@@ -121,15 +122,17 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
                               <KeybindProvider>
-                                <DialogProvider>
-                                  <CommandProvider>
-                                    <PromptHistoryProvider>
-                                      <PromptRefProvider>
-                                        <App />
-                                      </PromptRefProvider>
-                                    </PromptHistoryProvider>
-                                  </CommandProvider>
-                                </DialogProvider>
+                                <PromptStashProvider>
+                                  <DialogProvider>
+                                    <CommandProvider>
+                                      <PromptHistoryProvider>
+                                        <PromptRefProvider>
+                                          <App />
+                                        </PromptRefProvider>
+                                      </PromptHistoryProvider>
+                                    </CommandProvider>
+                                  </DialogProvider>
+                                </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
@@ -170,7 +173,7 @@ function App() {
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
-  const { event } = useSDK()
+  const sdk = useSDK()
   const toast = useToast()
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
@@ -178,6 +181,20 @@ function App() {
   const promptRef = usePromptRef()
   const keybind = useKeybind()
 
+  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
+  renderer.console.onCopySelection = async (text: string) => {
+    if (!text || text.length === 0) return
+
+    const base64 = Buffer.from(text).toString("base64")
+    const osc52 = `\x1b]52;c;${base64}\x07`
+    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+    // @ts-expect-error writeOut is not in type definitions
+    renderer.writeOut(finalOsc52)
+    await Clipboard.copy(text)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+    renderer.clearSelection()
+  }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
@@ -420,6 +437,15 @@ function App() {
       category: "System",
     },
     {
+      title: "Open WebUI",
+      value: "webui.open",
+      onSelect: () => {
+        open(sdk.url).catch(() => {})
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
       title: "Exit the app",
       value: "app.exit",
       onSelect: () => exit(),
@@ -437,7 +463,7 @@ function App() {
     {
       title: "Toggle console",
       category: "System",
-      value: "app.fps",
+      value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
         dialog.clear()
@@ -540,11 +566,11 @@ function App() {
     }
   })
 
-  event.on(TuiEvent.CommandExecute.type, (evt) => {
+  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)
   })
 
-  event.on(TuiEvent.ToastShow.type, (evt) => {
+  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
     toast.show({
       title: evt.properties.title,
       message: evt.properties.message,
@@ -553,7 +579,7 @@ function App() {
     })
   })
 
-  event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
       toast.show({
@@ -563,7 +589,7 @@ function App() {
     }
   })
 
-  event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
     const message = (() => {
       if (!error) return "An error occured"
@@ -584,7 +610,7 @@ function App() {
     })
   })
 
-  event.on(Installation.Event.Updated.type, (evt) => {
+  sdk.event.on(Installation.Event.Updated.type, (evt) => {
     toast.show({
       variant: "success",
       title: "Update Complete",
@@ -593,7 +619,7 @@ function App() {
     })
   })
 
-  event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
       title: "Update Available",

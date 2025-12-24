@@ -25,7 +25,7 @@ import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/
 import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
 import { type IconName } from "@opencode-ai/ui/icons/provider"
-import { Meta } from "@solidjs/meta"
+import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 
 const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
@@ -202,6 +202,9 @@ export default function () {
 
           return (
             <>
+              <Show when={info().title}>
+                <Title>{info().title} | OpenCode</Title>
+              </Show>
               <Meta name="description" content="opencode - The AI coding agent built for the terminal." />
               <Meta property="og:image" content={ogImage()} />
               <Meta name="twitter:image" content={ogImage()} />
@@ -212,6 +215,7 @@ export default function () {
                       {iife(() => {
                         const [store, setStore] = createStore({
                           messageId: undefined as string | undefined,
+                          expandedSteps: {} as Record<string, boolean>,
                         })
                         const messages = createMemo(() =>
                           data().sessionID
@@ -253,20 +257,22 @@ export default function () {
 
                         const title = () => (
                           <div class="flex flex-col gap-4">
-                            <div class="h-8 flex gap-4 items-center justify-start self-stretch">
-                              <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:gap-4 sm:items-center sm:h-8 justify-start self-stretch">
+                              <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base w-fit">
                                 <Mark class="shrink-0 w-3 my-0.5" />
                                 <div class="text-12-mono text-text-base">v{info().version}</div>
                               </div>
-                              <div class="flex gap-2 items-center">
-                                <ProviderIcon
-                                  id={provider() as IconName}
-                                  class="size-3.5 shrink-0 text-icon-strong-base"
-                                />
-                                <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
-                              </div>
-                              <div class="text-12-regular text-text-weaker">
-                                {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
+                              <div class="flex gap-4 items-center">
+                                <div class="flex gap-2 items-center">
+                                  <ProviderIcon
+                                    id={provider() as IconName}
+                                    class="size-3.5 shrink-0 text-icon-strong-base"
+                                  />
+                                  <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
+                                </div>
+                                <div class="text-12-regular text-text-weaker">
+                                  {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
+                                </div>
                               </div>
                             </div>
                             <div class="text-left text-16-medium text-text-strong">{info().title}</div>
@@ -282,6 +288,8 @@ export default function () {
                                   <SessionTurn
                                     sessionID={data().sessionID}
                                     messageID={message.id}
+                                    stepsExpanded={store.expandedSteps[message.id] ?? false}
+                                    onStepsExpandedToggle={() => setStore("expandedSteps", message.id, (v) => !v)}
                                     classes={{
                                       root: "min-w-0 w-full relative",
                                       content:
@@ -359,6 +367,13 @@ export default function () {
                                     <SessionTurn
                                       sessionID={data().sessionID}
                                       messageID={store.messageId ?? firstUserMessage()!.id!}
+                                      stepsExpanded={
+                                        store.expandedSteps[store.messageId ?? firstUserMessage()!.id!] ?? false
+                                      }
+                                      onStepsExpandedToggle={() => {
+                                        const id = store.messageId ?? firstUserMessage()!.id!
+                                        setStore("expandedSteps", id, (v) => !v)
+                                      }}
                                       classes={{
                                         root: "grow",
                                         content: "flex flex-col justify-between",

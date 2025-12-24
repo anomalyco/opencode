@@ -22,6 +22,7 @@ import {
   ScrollBoxRenderable,
   addDefaultParsers,
   MacOSScrollAccel,
+  RGBA,
   type ScrollAcceleration,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
@@ -47,6 +48,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
+import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
@@ -129,13 +131,15 @@ export function Session() {
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
+  const tall = createMemo(() => dimensions().height > 40)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebar() === "show") return true
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const sidebarOverlay = createMemo(() => sidebarVisible() && !wide())
+  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() && !sidebarOverlay() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
     const tui = sync.data.config.tui
@@ -200,6 +204,52 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+
+  // Helper: Find next visible message boundary in direction
+  const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
+    const children = scroll.getChildren()
+    const messagesList = messages()
+    const scrollTop = scroll.y
+
+    // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
+    const visibleMessages = children
+      .filter((c) => {
+        if (!c.id) return false
+        const message = messagesList.find((m) => m.id === c.id)
+        if (!message) return false
+
+        // Check if message has valid non-synthetic, non-ignored text parts
+        const parts = sync.data.part[message.id]
+        if (!parts || !Array.isArray(parts)) return false
+
+        return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
+      })
+      .sort((a, b) => a.y - b.y)
+
+    if (visibleMessages.length === 0) return null
+
+    if (direction === "next") {
+      // Find first message below current position
+      return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
+    }
+    // Find last message above current position
+    return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
+  }
+
+  // Helper: Scroll to message in direction or fallback to page scroll
+  const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
+    const targetID = findNextVisibleMessage(direction)
+
+    if (!targetID) {
+      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
+      dialog.clear()
+      return
+    }
+
+    const child = scroll.getChildren().find((c) => c.id === targetID)
+    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+    dialog.clear()
+  }
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
@@ -635,6 +685,22 @@ export function Session() {
       },
     },
     {
+      title: "Next message",
+      value: "session.message.next",
+      keybind: "messages_next",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => scrollToMessage("next", dialog),
+    },
+    {
+      title: "Previous message",
+      value: "session.message.previous",
+      keybind: "messages_previous",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => scrollToMessage("prev", dialog),
+    },
+    {
       title: "Copy last assistant message",
       value: "messages.copy",
       keybind: "messages_copy",
@@ -808,6 +874,23 @@ export function Session() {
         dialog.clear()
       },
     },
+    {
+      title: "Go to parent session",
+      value: "session.parent",
+      keybind: "session_parent",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        const parentID = session()?.parentID
+        if (parentID) {
+          navigate({
+            type: "session",
+            sessionID: parentID,
+          })
+        }
+        dialog.clear()
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -882,7 +965,7 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={!sidebarVisible()}>
+            <Show when={!sidebarVisible() || sidebarOverlay()}>
               <Header />
             </Show>
             <scrollbox
@@ -1012,14 +1095,32 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
-            <Show when={!sidebarVisible()}>
+            <Show when={(!sidebarVisible() || sidebarOverlay()) && tall()}>
               <Footer />
             </Show>
           </Show>
           <Toast />
         </box>
-        <Show when={sidebarVisible()}>
+        <Show when={sidebarVisible() && !sidebarOverlay()}>
           <Sidebar sessionID={route.sessionID} />
+        </Show>
+        <Show when={sidebarOverlay()}>
+          <box
+            position="absolute"
+            left={0}
+            top={0}
+            width={dimensions().width}
+            height={dimensions().height}
+            backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+            zIndex={100}
+            flexDirection="row"
+            justifyContent="flex-end"
+            onMouseUp={() => setSidebar("hide")}
+          >
+            <box onMouseUp={(e) => e.stopPropagation()}>
+              <Sidebar sessionID={route.sessionID} />
+            </box>
+          </box>
         </Show>
       </box>
     </context.Provider>
@@ -1567,33 +1668,15 @@ ToolRegistry.register<typeof ListTool>({
 
 ToolRegistry.register<typeof TaskTool>({
   name: "task",
-  container: "inline",
+  container: "block",
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
     const dialog = useDialog()
     const renderer = useRenderer()
-    const [hover, setHover] = createSignal(false)
 
     return (
-      <box
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.background}
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        marginTop={1}
-        gap={1}
-        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-        onMouseOver={() => setHover(true)}
-        onMouseOut={() => setHover(false)}
-        onMouseUp={() => {
-          const id = props.metadata.sessionId
-          if (renderer.getSelection()?.getSelectedText() || !id) return
-          dialog.replace(() => <DialogSubagent sessionID={id} />)
-        }}
-      >
+      <>
         <ToolTitle icon="◉" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
           {Locale.titlecase(props.input.subagent_type ?? "unknown")} Task "{props.input.description}"
         </ToolTitle>
@@ -1616,7 +1699,7 @@ ToolRegistry.register<typeof TaskTool>({
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
           <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
         </text>
-      </box>
+      </>
     )
   },
 })
@@ -1767,11 +1850,7 @@ ToolRegistry.register<typeof TodoWriteTool>({
         <Show when={props.metadata.todos?.length}>
           <box>
             <For each={props.input.todos ?? []}>
-              {(todo) => (
-                <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                  [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                </text>
-              )}
+              {(todo) => <TodoItem status={todo.status} content={todo.content} />}
             </For>
           </box>
         </Show>
