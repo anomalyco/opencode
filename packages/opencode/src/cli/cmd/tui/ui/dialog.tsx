@@ -66,6 +66,8 @@ function init() {
     }
   })
 
+  const dimensions = useTerminalDimensions()
+
   const renderer = useRenderer()
   let focus: Renderable | null
   function refocus() {
@@ -116,6 +118,9 @@ function init() {
     },
     get size() {
       return store.size
+    },
+    get width() {
+      return Math.min(store.size === "large" ? 80 : 60, dimensions().width - 2)
     },
     setSize(size: "medium" | "large") {
       setStore("size", size)

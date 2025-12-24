@@ -1581,6 +1581,28 @@ export namespace Server {
           })
         },
       )
+      .post(
+        "/config/refresh_providers",
+        describeRoute({
+          description: "Refresh providers cache",
+          operationId: "config.refresh_providers",
+          responses: {
+            200: {
+              description: "Refreshed providers successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          using _ = log.time("refresh_providers")
+          await ModelsDev.refresh(true)
+          return c.json(true)
+        },
+      )
       .get(
         "/provider",
         describeRoute({

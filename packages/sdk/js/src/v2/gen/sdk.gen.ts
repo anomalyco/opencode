@@ -14,6 +14,7 @@ import type {
   Config as Config2,
   ConfigGetResponses,
   ConfigProvidersResponses,
+  ConfigRefreshProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
   EventSubscribeResponses,
@@ -575,6 +576,23 @@ export class Config extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
     return (options?.client ?? this.client).get<ConfigProvidersResponses, unknown, ThrowOnError>({
       url: "/config/providers",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Refresh providers cache
+   */
+  public refreshProviders<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<ConfigRefreshProvidersResponses, unknown, ThrowOnError>({
+      url: "/config/refresh_providers",
       ...options,
       ...params,
     })

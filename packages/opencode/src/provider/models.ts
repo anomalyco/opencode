@@ -83,7 +83,7 @@ export namespace ModelsDev {
     return JSON.parse(json) as Record<string, Provider>
   }
 
-  export async function refresh() {
+  export async function refresh(throwOnError = false) {
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
     const file = Bun.file(filepath)
     log.info("refreshing", {
@@ -98,8 +98,19 @@ export namespace ModelsDev {
       log.error("Failed to fetch models.dev", {
         error: e,
       })
+
+      if (throwOnError) throw e
     })
-    if (result && result.ok) await Bun.write(file, await result.text())
+
+    if (!result?.ok) {
+      log.error("Failed to fetch models.dev", { status: result?.status })
+      if (throwOnError) {
+        throw new Error(`Failed to refresh models.dev: ${result?.status ?? "no response"}`)
+      }
+      return undefined
+    }
+
+    await Bun.write(file, await result.text())
   }
 }
 

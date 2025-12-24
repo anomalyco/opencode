@@ -116,6 +116,8 @@ import type {
   CommandListResponses,
   ConfigProvidersData,
   ConfigProvidersResponses,
+  ConfigRefreshProvidersData,
+  ConfigRefreshProvidersResponses,
   ProviderListData,
   ProviderListResponses,
   ProviderAuthData,
@@ -365,6 +367,18 @@ class Config extends _HeyApiClient {
   public providers<ThrowOnError extends boolean = false>(options?: Options<ConfigProvidersData, ThrowOnError>) {
     return (options?.client ?? this._client).get<ConfigProvidersResponses, unknown, ThrowOnError>({
       url: "/config/providers",
+      ...options,
+    })
+  }
+
+  /**
+   * Refresh providers cache
+   */
+  public refreshProviders<ThrowOnError extends boolean = false>(
+    options?: Options<ConfigRefreshProvidersData, ThrowOnError>,
+  ) {
+    return (options?.client ?? this._client).post<ConfigRefreshProvidersResponses, unknown, ThrowOnError>({
+      url: "/config/refresh_providers",
       ...options,
     })
   }

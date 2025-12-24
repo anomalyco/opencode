@@ -3362,6 +3362,24 @@ export type ConfigProvidersResponses = {
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
 
+export type ConfigRefreshProvidersData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/config/refresh_providers"
+}
+
+export type ConfigRefreshProvidersResponses = {
+  /**
+   * Refreshed providers successfully
+   */
+  200: boolean
+}
+
+export type ConfigRefreshProvidersResponse = ConfigRefreshProvidersResponses[keyof ConfigRefreshProvidersResponses]
+
 export type ProviderListData = {
   body?: never
   path?: never

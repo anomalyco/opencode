@@ -1,6 +1,9 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
+import { defer } from "@/util/defer"
+import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
+import { useToast } from "@tui/ui/toast"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
@@ -19,8 +22,11 @@ export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
   const sync = useSync()
   const dialog = useDialog()
+  const sdk = useSDK()
+  const toast = useToast()
   const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [query, setQuery] = createSignal("")
+  const [refreshing, setRefreshing] = createSignal(false)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -216,6 +222,28 @@ export function DialogModel(props: { providerID?: string }) {
           disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+          },
+        },
+        {
+          keybind: Keybind.parse("ctrl+r")[0],
+          title: refreshing() ? "Refreshing..." : "Refresh",
+          onTrigger: async () => {
+            if (refreshing()) return
+
+            setRefreshing(true)
+            using _ = defer(() => {
+              setRefreshing(false)
+            })
+            const result = await sdk.client.config.refreshProviders()
+
+            if (result.error) {
+              toast.show({ message: "Failed to refresh providers", variant: "error" })
+              return
+            }
+
+            await sdk.client.instance.dispose()
+            await sync.bootstrap()
+            toast.show({ message: "Refreshed providers", variant: "success" })
           },
         },
       ]}

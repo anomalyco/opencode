@@ -1,6 +1,6 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
-import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
+import { entries, filter, flatMap, groupBy, pipe } from "remeda"
 import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
@@ -10,6 +10,8 @@ import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
+
+const KEYBINDS_ROW_GAP = 2
 
 export interface DialogSelectProps<T> {
   title: string
@@ -184,6 +186,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   props.ref?.(ref)
 
   const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled) ?? [])
+  const keybindsFitInRow = createMemo(() => {
+    const keybindsWidth =
+      keybinds()
+        .map((x) => x.title.length + Keybind.toString(x.keybind).length + 1)
+        .reduce((a, b) => a + b, 0) +
+      (keybinds().length - 1) * KEYBINDS_ROW_GAP
+    return dialog.width >= keybindsWidth + 8
+  })
 
   return (
     <box gap={1} paddingBottom={1}>
@@ -269,7 +279,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         </For>
       </scrollbox>
       <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
-        <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
+        <box
+          paddingRight={2}
+          paddingLeft={4}
+          flexDirection={keybindsFitInRow() ? "row" : "column"}
+          gap={keybindsFitInRow() ? KEYBINDS_ROW_GAP : 0}
+          flexShrink={0}
+          paddingTop={1}
+        >
           <For each={keybinds()}>
             {(item) => (
               <text>
