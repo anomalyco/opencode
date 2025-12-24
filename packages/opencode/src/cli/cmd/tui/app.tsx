@@ -178,10 +178,6 @@ function App() {
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
-    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
-      renderer.clearSelection()
-      return
-    }
     if (!text || text.length === 0) return
 
     const base64 = Buffer.from(text).toString("base64")
