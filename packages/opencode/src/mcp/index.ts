@@ -4,7 +4,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
-import type { Tool as MCPToolDef } from "@modelcontextprotocol/sdk/types.js"
+import { type Tool as MCPToolDef, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
@@ -15,12 +15,20 @@ import { withTimeout } from "@/util/timeout"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
+import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
+
+  export const ToolsChanged = BusEvent.define(
+    "mcp.tools.changed",
+    z.object({
+      server: z.string(),
+    }),
+  )
 
   export const Failed = NamedError.create(
     "MCPFailed",
@@ -75,6 +83,14 @@ export namespace MCP {
       ref: "MCPStatus",
     })
   export type Status = z.infer<typeof Status>
+
+  // Register notification handlers for MCP client
+  function registerNotificationHandlers(client: MCPClient, serverName: string) {
+    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+      log.info("tools list changed notification received", { server: serverName })
+      Bus.publish(ToolsChanged, { server: serverName })
+    })
+  }
 
   // Convert MCP tool definition to AI SDK Tool type
   function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient): Tool {
@@ -236,6 +252,7 @@ export namespace MCP {
             version: Installation.VERSION,
           })
           await client.connect(transport)
+          registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
           status = { status: "connected" }
@@ -308,6 +325,7 @@ export namespace MCP {
           version: Installation.VERSION,
         })
         await client.connect(transport)
+        registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
           status: "connected",
