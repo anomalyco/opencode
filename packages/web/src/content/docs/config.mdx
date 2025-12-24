@@ -28,11 +28,13 @@ OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 You can place your config in a couple of different locations and they have a
 different order of precedence.
 
-:::note[Config Merging]
-Configuration files are **merged together**, not replaced. Settings from all config locations are combined using a deep merge strategy, where later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
+:::note
+Configuration files are **merged together**, not replaced.
+:::
+
+Configuration files are merged together, not replaced. Settings from the following config locations are combined. Where later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
 
 For example, if your global config sets `theme: "opencode"` and `autoupdate: true`, and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include all three settings.
-:::
 
 ---
 
@@ -58,12 +60,14 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ### Custom path
 
-You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. Settings from this config are merged with and can override the global and project configs.
+You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable.
 
 ```bash
 export OPENCODE_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
+
+Settings from this config are merged with and **can override** the global and project configs.
 
 ---
 
@@ -79,7 +83,7 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
-Note: The custom directory is loaded after the global config and `.opencode` directories, so it can override their settings.
+The custom directory is loaded after the global config and `.opencode` directories, so it **can override** their settings.
 
 ---
 
@@ -376,6 +380,10 @@ You can disable providers that are loaded automatically through the `disabled_pr
 }
 ```
 
+:::note
+The `disabled_providers` takes priority over `enabled_providers`.
+:::
+
 The `disabled_providers` option accepts an array of provider IDs. When a provider is disabled:
 
 - It won't be loaded even if environment variables are set.
@@ -398,8 +406,10 @@ You can specify an allowlist of providers through the `enabled_providers` option
 This is useful when you want to restrict OpenCode to only use specific providers rather than disabling them one by one.
 
 :::note
-If a provider appears in both `enabled_providers` and `disabled_providers`, the `disabled_providers` takes priority for backwards compatibility.
+The `disabled_providers` takes priority over `enabled_providers`.
 :::
+
+If a provider appears in both `enabled_providers` and `disabled_providers`, the `disabled_providers` takes priority for backwards compatibility.
 
 ---
 
