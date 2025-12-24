@@ -32,7 +32,7 @@ export namespace MessageV2 {
       isRetryable: z.boolean(),
       responseHeaders: z.record(z.string(), z.string()).optional(),
       responseBody: z.string().optional(),
-      details: z.record(z.string(), z.string()).optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
@@ -617,7 +617,7 @@ export namespace MessageV2 {
           {
             message: "Connection reset by server",
             isRetryable: true,
-            details: {
+            metadata: {
               code: (e as SystemError).code ?? "",
               syscall: (e as SystemError).syscall ?? "",
               message: (e as SystemError).message ?? "",
