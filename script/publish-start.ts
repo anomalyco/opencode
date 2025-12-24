@@ -47,7 +47,7 @@ if (!Script.preview) {
         body: {
           model: {
             providerID: "opencode",
-            modelID: "gemini-3-flash",
+            modelID: "claude-sonnet-4-5",
           },
           parts: [
             {
