@@ -116,6 +116,19 @@ export default function Layout(props: ParentProps) {
     }
   })
 
+  function sortSessions(a: Session, b: Session) {
+    const now = Date.now()
+    const oneMinuteAgo = now - 60 * 1000
+    const aUpdated = a.time.updated ?? a.time.created
+    const bUpdated = b.time.updated ?? b.time.created
+    const aRecent = aUpdated > oneMinuteAgo
+    const bRecent = bUpdated > oneMinuteAgo
+    if (aRecent && bRecent) return a.id.localeCompare(b.id)
+    if (aRecent && !bRecent) return -1
+    if (!aRecent && bRecent) return 1
+    return bUpdated - aUpdated
+  }
+
   function flattenSessions(sessions: Session[]): Session[] {
     const childrenMap = new Map<string, Session[]>()
     for (const session of sessions) {
@@ -148,9 +161,7 @@ export default function Layout(props: ParentProps) {
 
   function projectSessions(directory: string) {
     if (!directory) return []
-    const sessions = globalSync
-      .child(directory)[0]
-      .session.toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+    const sessions = globalSync.child(directory)[0].session.toSorted(sortSessions)
     return flattenSessions(sessions ?? [])
   }
 
@@ -552,9 +563,7 @@ export default function Layout(props: ParentProps) {
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => getFilename(props.project.worktree))
     const [store, setProjectStore] = globalSync.child(props.project.worktree)
-    const sessions = createMemo(() =>
-      store.session.toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)),
-    )
+    const sessions = createMemo(() => store.session.toSorted(sortSessions))
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const childSessionsByParent = createMemo(() => {
       const map = new Map<string, Session[]>()
