@@ -123,15 +123,9 @@ export default function Layout(props: ParentProps) {
     const bUpdated = b.time.updated ?? b.time.created
     const aRecent = aUpdated > oneMinuteAgo
     const bRecent = bUpdated > oneMinuteAgo
-
-    // If both are recent (within last minute), sort by ID to prevent jumping
     if (aRecent && bRecent) return a.id.localeCompare(b.id)
-
-    // Recent sessions come before non-recent
     if (aRecent && !bRecent) return -1
     if (!aRecent && bRecent) return 1
-
-    // Neither is recent, sort by update time descending
     return bUpdated - aUpdated
   }
 
