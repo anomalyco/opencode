@@ -57,10 +57,6 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "username": string
     }
-    "Desktop": {
-      "type": "sst.cloudflare.StaticSite"
-      "url": string
-    }
     "EMAILOCTOPUS_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -122,6 +118,10 @@ declare module "sst" {
     }
     "Web": {
       "type": "sst.cloudflare.Astro"
+      "url": string
+    }
+    "WebApp": {
+      "type": "sst.cloudflare.StaticSite"
       "url": string
     }
     "ZEN_MODELS1": {
