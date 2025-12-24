@@ -441,6 +441,9 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 ToolRegistry.register({
   name: "read",
   render(props) {
+    const args: string[] = []
+    if (props.input.offset) args.push("offset=" + props.input.offset)
+    if (props.input.limit) args.push("limit=" + props.input.limit)
     return (
       <BasicTool
         {...props}
@@ -448,6 +451,7 @@ ToolRegistry.register({
         trigger={{
           title: "Read",
           subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
+          args,
         }}
       />
     )
