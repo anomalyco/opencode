@@ -128,6 +128,7 @@ export function Session() {
   const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
   const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(kv.get("user_message_markdown", true))
+  const [sidebarOverlayEnabled, setSidebarOverlayEnabled] = createSignal(kv.get("sidebar_overlay", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -138,7 +139,10 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const sidebarOverlay = createMemo(() => sidebarVisible() && !wide())
+  const sidebarOverlay = createMemo(() => {
+    if (!sidebarOverlayEnabled()) return false
+    return sidebarVisible() && !wide()
+  })
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() && !sidebarOverlay() ? 42 : 0) - 4)
 
   const scrollAcceleration = createMemo(() => {
@@ -486,6 +490,20 @@ export function Session() {
         })
         if (sidebar() === "show") kv.set("sidebar", "auto")
         if (sidebar() === "hide") kv.set("sidebar", "hide")
+        dialog.clear()
+      },
+    },
+    {
+      title: sidebarOverlayEnabled() ? "Disable sidebar overlay" : "Enable sidebar overlay",
+      value: "sidebar_overlay",
+      keybind: "sidebar_overlay_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setSidebarOverlayEnabled((prev) => {
+          const next = !prev
+          kv.set("sidebar_overlay", next)
+          return next
+        })
         dialog.clear()
       },
     },
