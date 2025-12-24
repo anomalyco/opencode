@@ -230,4 +230,90 @@ describe("tool.bash permissions", () => {
       },
     })
   })
+
+  test("allows tmpdir access when allow_tmpdir is true", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Create context that allows tmpdir
+        const ctxWithTmpdir = {
+          ...ctx,
+          allowed: (permission: string) => permission === "tmpdir",
+        }
+        // Should allow workdir in system tmpdir when allow_tmpdir is true
+        const result = await bash.execute(
+          {
+            command: "pwd",
+            workdir: require("os").tmpdir(),
+            description: "Print working directory in tmpdir",
+          },
+          ctxWithTmpdir,
+        )
+        expect(result.metadata.exit).toBe(0)
+      },
+    })
+  })
+
+  test("denies tmpdir access when allow_tmpdir is false", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Create context that denies tmpdir but asks for external_directory
+        const ctxDenyTmpdir = {
+          ...ctx,
+          allowed: () => false,
+          ask: async (req: { permission: string }) => {
+            if (req.permission === "external_directory") {
+              throw new Error("external_directory denied")
+            }
+          },
+        }
+        // Should deny workdir in system tmpdir when allow_tmpdir is false
+        await expect(
+          bash.execute(
+            {
+              command: "pwd",
+              workdir: require("os").tmpdir(),
+              description: "Print working directory in tmpdir",
+            },
+            ctxDenyTmpdir,
+          ),
+        ).rejects.toThrow()
+      },
+    })
+  })
+
+  test("allow_tmpdir does not affect non-tmpdir external paths", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Create context that allows tmpdir but denies other external dirs
+        const ctxWithTmpdir = {
+          ...ctx,
+          allowed: (permission: string) => permission === "tmpdir",
+          ask: async (req: { permission: string }) => {
+            if (req.permission === "external_directory") {
+              throw new Error("external_directory denied")
+            }
+          },
+        }
+        // Should still deny access to non-tmpdir external paths
+        await expect(
+          bash.execute(
+            {
+              command: "cd /usr",
+              description: "Change to /usr directory",
+            },
+            ctxWithTmpdir,
+          ),
+        ).rejects.toThrow()
+      },
+    })
+  })
 })
