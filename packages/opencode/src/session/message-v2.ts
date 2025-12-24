@@ -12,6 +12,7 @@ import { Storage } from "@/storage/storage"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
+import { type SystemError } from "bun"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -31,6 +32,7 @@ export namespace MessageV2 {
       isRetryable: z.boolean(),
       responseHeaders: z.record(z.string(), z.string()).optional(),
       responseBody: z.string().optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
@@ -606,6 +608,20 @@ export namespace MessageV2 {
           {
             providerID: ctx.providerID,
             message: e.message,
+          },
+          { cause: e },
+        ).toObject()
+      case (e as SystemError)?.code === "ECONNRESET" &&
+        (e as SystemError)?.message.includes("The socket connection was closed unexpectedly"):
+        return new MessageV2.APIError(
+          {
+            message: "Connection reset by server",
+            isRetryable: true,
+            metadata: {
+              code: (e as SystemError).code ?? "",
+              syscall: (e as SystemError).syscall ?? "",
+              message: (e as SystemError).message ?? "",
+            },
           },
           { cause: e },
         ).toObject()
