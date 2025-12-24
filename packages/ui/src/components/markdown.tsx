@@ -2,9 +2,18 @@ import { useMarked } from "../context/marked"
 import { ComponentProps, createResource, splitProps } from "solid-js"
 
 function strip(text: string): string {
-  const wrappedRe = /^\s*<([A-Za-z]\w*)>\s*([\s\S]*?)\s*<\/\1>\s*$/
-  const match = text.match(wrappedRe)
-  return match ? match[2] : text
+  const trimmed = text.trim()
+  const match = trimmed.match(/^<([A-Za-z]\w*)>/)
+  if (!match) return text
+
+  const tagName = match[1]
+  const closingTag = `</${tagName}>`
+  if (trimmed.endsWith(closingTag)) {
+    const content = trimmed.slice(match[0].length, -closingTag.length)
+    return content.trim()
+  }
+
+  return text
 }
 
 export function Markdown(
