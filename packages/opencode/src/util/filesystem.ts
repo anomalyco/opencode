@@ -108,18 +108,26 @@ export namespace Filesystem {
       const resolvedChild = realpathSync(child)
       return !relative(resolvedParent, resolvedChild).startsWith("..")
     } catch {
-      // Path doesn't exist yet (e.g., file being created), resolve parent directory
+      // Path doesn't exist yet (e.g., file being created)
+      // Walk up the child path to find the first existing ancestor and resolve from there
       try {
         const resolvedParent = realpathSync(parent)
-        const childDir = dirname(child)
-        try {
-          const resolvedChildDir = realpathSync(childDir)
-          const resolvedChild = join(resolvedChildDir, child.split(/[/\\]/).pop()!)
-          return !relative(resolvedParent, resolvedChild).startsWith("..")
-        } catch {
-          // Parent directory doesn't exist either, use normalized paths
-          return !relative(parent, child).startsWith("..")
+        let current = child
+        let suffix = ""
+        while (current !== dirname(current)) {
+          try {
+            const resolvedCurrent = realpathSync(current)
+            const resolvedChild = suffix ? join(resolvedCurrent, suffix) : resolvedCurrent
+            return !relative(resolvedParent, resolvedChild).startsWith("..")
+          } catch {
+            // This level doesn't exist, move up
+            const base = current.split(/[/\\]/).pop()!
+            suffix = suffix ? join(base, suffix) : base
+            current = dirname(current)
+          }
         }
+        // No ancestor exists, fall back to unresolved comparison
+        return !relative(parent, child).startsWith("..")
       } catch {
         return !relative(parent, child).startsWith("..")
       }
