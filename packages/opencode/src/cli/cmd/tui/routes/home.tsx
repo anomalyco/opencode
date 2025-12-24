@@ -36,6 +36,7 @@ export function Home() {
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
+    return false
     // Don't show tips for first-time users
     if (isFirstTimeUser()) return false
     return !tipsHidden()
