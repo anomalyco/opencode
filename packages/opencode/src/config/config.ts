@@ -588,7 +588,9 @@ export namespace Config {
     sidebar_overlay: z
       .boolean()
       .optional()
-      .describe("Enable sidebar overlay mode on narrow screens (default: true). Set to false to always show sidebar side-by-side with content"),
+      .describe(
+        "Enable sidebar overlay mode on narrow screens (default: true). Set to false to always show sidebar side-by-side with content",
+      ),
   })
 
   export const Layout = z.enum(["auto", "stretch"]).meta({

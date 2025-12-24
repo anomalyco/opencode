@@ -8167,6 +8167,10 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
+              },
+              "sidebar_overlay": {
+                "description": "Enable sidebar overlay mode on narrow screens (default: true). Set to false to always show sidebar side-by-side with content",
+                "type": "boolean"
               }
             }
           },
