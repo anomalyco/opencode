@@ -1,8 +1,20 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import {
+  BoxRenderable,
+  TextareaRenderable,
+  MouseEvent,
+  PasteEvent,
+  t,
+  dim,
+  fg,
+  type KeyBinding,
+  RGBA,
+} from "@opentui/core"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
-import { useTheme } from "@tui/context/theme"
+import { useTheme, selectedForeground } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -15,7 +27,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -32,6 +44,8 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogAgent } from "../dialog-agent"
+import { DialogModel } from "../dialog-model"
 
 export type PromptProps = {
   sessionID?: string
@@ -73,8 +87,12 @@ export function Prompt(props: PromptProps) {
   const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
+  const dimensions = useTerminalDimensions()
+  const tall = createMemo(() => dimensions().height > 40)
+  const wide = createMemo(() => dimensions().width > 120)
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const hoverFg = createMemo(() => selectedForeground(theme))
 
   function promptModelWarning() {
     toast.show({
@@ -165,6 +183,11 @@ export function Prompt(props: PromptProps) {
       }
     }
   })
+
+  const [agentHover, setAgentHover] = createSignal(false)
+  const [modelNameHover, setModelNameHover] = createSignal(false)
+  const [agentCycleHover, setAgentCycleHover] = createSignal(false)
+  const [commandListHover, setCommandListHover] = createSignal(false)
 
   command.register(() => {
     return [
@@ -994,14 +1017,19 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
-              <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                    {local.model.parsed().model}
+            <Show when={tall()}>
+              <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+                <box
+                  backgroundColor={agentHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                  onMouseOver={() => setAgentHover(true)}
+                  onMouseOut={() => setAgentHover(false)}
+                  onMouseUp={() => {
+                    if (store.mode === "shell") return
+                    dialog.replace(() => <DialogAgent />)
+                  }}
+                >
+                  <text fg={agentHover() ? hoverFg() : highlight()}>
+                    {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
                   <Show when={showVariant()}>
@@ -1011,8 +1039,28 @@ export function Prompt(props: PromptProps) {
                     </text>
                   </Show>
                 </box>
-              </Show>
-            </box>
+                <Show when={store.mode === "normal"}>
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    backgroundColor={modelNameHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                    onMouseOver={() => setModelNameHover(true)}
+                    onMouseOut={() => setModelNameHover(false)}
+                    onMouseUp={() => {
+                      dialog.replace(() => <DialogModel />)
+                    }}
+                  >
+                    <text
+                      flexShrink={0}
+                      fg={modelNameHover() ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}
+                    >
+                      {local.model.parsed().model}
+                    </text>
+                    <text fg={modelNameHover() ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
+                  </box>
+                </Show>
+              </box>
+            </Show>
           </box>
         </box>
         <box
@@ -1122,30 +1170,85 @@ export function Prompt(props: PromptProps) {
               </text>
             </box>
           </Show>
-          <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
-              <Switch>
-                <Match when={store.mode === "normal"}>
-                  <Show when={local.model.variant.list().length > 0}>
-                    <text fg={theme.text}>
-                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
-                    </text>
-                  </Show>
-                  <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
+          <Switch>
+            <Match when={status().type !== "retry" && !tall()}>
+              <box flexDirection="row" gap={1}>
+                <box
+                  backgroundColor={agentHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                  onMouseOver={() => setAgentHover(true)}
+                  onMouseOut={() => setAgentHover(false)}
+                  onMouseUp={() => {
+                    if (store.mode === "shell") return
+                    dialog.replace(() => <DialogAgent />)
+                  }}
+                >
+                  <text fg={agentHover() ? hoverFg() : highlight()}>
+                    {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
                   </text>
+                </box>
+                <Show when={store.mode === "normal"}>
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    backgroundColor={modelNameHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                    onMouseOver={() => setModelNameHover(true)}
+                    onMouseOut={() => setModelNameHover(false)}
+                    onMouseUp={() => {
+                      dialog.replace(() => <DialogModel />)
+                    }}
+                  >
+                    <text
+                      flexShrink={0}
+                      fg={modelNameHover() ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}
+                    >
+                      {local.model.parsed().model}
+                    </text>
+                    <text fg={modelNameHover() ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
+                  </box>
+                </Show>
+              </box>
+            </Match>
+          </Switch>
+          <box gap={2} flexDirection="row" marginLeft="auto">
+            <Switch>
+              <Match when={store.mode === "normal"}>
+                <Show when={wide()}>
+                  <box
+                    backgroundColor={agentCycleHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                    onMouseOver={() => setAgentCycleHover(true)}
+                    onMouseOut={() => setAgentCycleHover(false)}
+                    onMouseUp={() => dialog.replace(() => <DialogAgent />)}
+                  >
+                    <text fg={agentCycleHover() ? hoverFg() : theme.text}>
+                      {keybind.print("agent_cycle")}{" "}
+                      <span style={{ fg: agentCycleHover() ? hoverFg() : theme.textMuted }}>switch agent</span>
+                    </text>
+                  </box>
+                </Show>
+                <Show when={!wide()}>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
-                </Match>
-                <Match when={store.mode === "shell"}>
-                  <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                </Show>
+                <box
+                  backgroundColor={commandListHover() ? theme.primary : RGBA.fromInts(0, 0, 0, 0)}
+                  onMouseOver={() => setCommandListHover(true)}
+                  onMouseOut={() => setCommandListHover(false)}
+                  onMouseUp={() => command.show()}
+                >
+                  <text fg={commandListHover() ? hoverFg() : theme.text}>
+                    {keybind.print("command_list")}{" "}
+                    <span style={{ fg: commandListHover() ? hoverFg() : theme.textMuted }}>commands</span>
                   </text>
-                </Match>
-              </Switch>
-            </box>
-          </Show>
+                </box>
+              </Match>
+              <Match when={store.mode === "shell"}>
+                <text fg={theme.text}>
+                  esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                </text>
+              </Match>
+            </Switch>
+          </box>
         </box>
       </box>
     </>
