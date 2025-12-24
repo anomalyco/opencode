@@ -213,6 +213,29 @@ This tool lists directory contents. It accepts glob patterns to filter results.
 
 ---
 
+### lsp (experimental)
+
+Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
+
+:::note
+This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "lsp": true
+  }
+}
+```
+
+Supported operations include `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, and `outgoingCalls`.
+
+To configure which LSP servers are available for your project, see [LSP Servers](/docs/lsp).
+
+---
+
 ### patch
 
 Apply patches to files.
@@ -227,6 +250,23 @@ Apply patches to files.
 ```
 
 This tool applies patch files to your codebase. Useful for applying diffs and patches from various sources.
+
+---
+
+### skill
+
+Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the conversation.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "skill": true
+  }
+}
+```
+
+You can control approval prompts for loading skills via [permissions](/docs/permissions) using `permission.skill`.
 
 ---
 
