@@ -122,7 +122,7 @@ const PLACEHOLDERS = [
   "An open mind is like a fortress with its gates unbarred and unguarded.",
   "Flesh is fallible. Steel is eternal.",
   "Prayer is function when logic fails.",
-  "The machine endures. The flesh decays.",
+  "The flesh decays. The machine endures.",
   "To err is human. To correct is divine.",
   "There is no truth in flesh, only betrayal.",
   "Understanding is not required. Obedience is.",
