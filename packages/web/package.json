@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/web",
   "type": "module",
-  "version": "1.0.193",
+  "version": "1.0.201",
   "scripts": {
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
@@ -24,8 +24,8 @@
     "js-base64": "3.7.7",
     "lang-map": "0.4.0",
     "luxon": "catalog:",
-    "marked": "15.0.12",
-    "marked-shiki": "1.2.1",
+    "marked": "catalog:",
+    "marked-shiki": "catalog:",
     "rehype-autolink-headings": "7.1.0",
     "remeda": "catalog:",
     "shiki": "catalog:",

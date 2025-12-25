@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.0.193",
+  "version": "1.0.201",
   "description": "",
   "type": "module",
   "exports": {
@@ -49,8 +49,8 @@
     "fuzzysort": "catalog:",
     "ghostty-web": "0.3.0",
     "luxon": "catalog:",
-    "marked": "16.2.0",
-    "marked-shiki": "1.2.1",
+    "marked": "catalog:",
+    "marked-shiki": "catalog:",
     "remeda": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",

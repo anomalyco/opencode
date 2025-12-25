@@ -29,7 +29,7 @@
     },
     "packages/app": {
       "name": "@opencode-ai/app",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -51,8 +51,8 @@
         "fuzzysort": "catalog:",
         "ghostty-web": "0.3.0",
         "luxon": "catalog:",
-        "marked": "16.2.0",
-        "marked-shiki": "1.2.1",
+        "marked": "catalog:",
+        "marked-shiki": "catalog:",
         "remeda": "catalog:",
         "shiki": "catalog:",
         "solid-js": "catalog:",
@@ -77,7 +77,7 @@
     },
     "packages/console/app": {
       "name": "@opencode-ai/console-app",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@cloudflare/vite-plugin": "1.15.2",
         "@ibm/plex": "6.4.1",
@@ -105,7 +105,7 @@
     },
     "packages/console/core": {
       "name": "@opencode-ai/console-core",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@aws-sdk/client-sts": "3.782.0",
         "@jsx-email/render": "1.1.1",
@@ -132,7 +132,7 @@
     },
     "packages/console/function": {
       "name": "@opencode-ai/console-function",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@ai-sdk/anthropic": "2.0.0",
         "@ai-sdk/openai": "2.0.2",
@@ -156,7 +156,7 @@
     },
     "packages/console/mail": {
       "name": "@opencode-ai/console-mail",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@jsx-email/all": "2.2.3",
         "@jsx-email/cli": "1.4.3",
@@ -180,7 +180,7 @@
     },
     "packages/desktop": {
       "name": "@opencode-ai/desktop",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@opencode-ai/app": "workspace:*",
         "@solid-primitives/storage": "catalog:",
@@ -207,7 +207,7 @@
     },
     "packages/enterprise": {
       "name": "@opencode-ai/enterprise",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@opencode-ai/ui": "workspace:*",
         "@opencode-ai/util": "workspace:*",
@@ -236,7 +236,7 @@
     },
     "packages/function": {
       "name": "@opencode-ai/function",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@octokit/auth-app": "8.0.1",
         "@octokit/rest": "catalog:",
@@ -252,7 +252,7 @@
     },
     "packages/opencode": {
       "name": "opencode",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "bin": {
         "opencode": "./bin/opencode",
       },
@@ -346,7 +346,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "zod": "catalog:",
@@ -366,7 +366,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "devDependencies": {
         "@hey-api/openapi-ts": "0.88.1",
         "@tsconfig/node22": "catalog:",
@@ -377,7 +377,7 @@
     },
     "packages/slack": {
       "name": "@opencode-ai/slack",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "@slack/bolt": "^3.17.1",
@@ -390,7 +390,7 @@
     },
     "packages/ui": {
       "name": "@opencode-ai/ui",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -403,8 +403,8 @@
         "@typescript/native-preview": "catalog:",
         "fuzzysort": "catalog:",
         "luxon": "catalog:",
-        "marked": "16.2.0",
-        "marked-shiki": "1.2.1",
+        "marked": "catalog:",
+        "marked-shiki": "catalog:",
         "remeda": "catalog:",
         "shiki": "catalog:",
         "solid-js": "catalog:",
@@ -425,7 +425,7 @@
     },
     "packages/util": {
       "name": "@opencode-ai/util",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "zod": "catalog:",
       },
@@ -436,7 +436,7 @@
     },
     "packages/web": {
       "name": "@opencode-ai/web",
-      "version": "1.0.193",
+      "version": "1.0.201",
       "dependencies": {
         "@astrojs/cloudflare": "12.6.3",
         "@astrojs/markdown-remark": "6.3.1",
@@ -451,8 +451,8 @@
         "js-base64": "3.7.7",
         "lang-map": "0.4.0",
         "luxon": "catalog:",
-        "marked": "15.0.12",
-        "marked-shiki": "1.2.1",
+        "marked": "catalog:",
+        "marked-shiki": "catalog:",
         "rehype-autolink-headings": "7.1.0",
         "remeda": "catalog:",
         "shiki": "catalog:",
@@ -502,6 +502,8 @@
     "hono": "4.10.7",
     "hono-openapi": "1.1.2",
     "luxon": "3.6.1",
+    "marked": "17.0.1",
+    "marked-shiki": "1.2.1",
     "remeda": "2.26.0",
     "shiki": "3.20.0",
     "solid-js": "1.9.10",
@@ -2865,7 +2867,7 @@
 
     "markdown-table": ["markdown-table@3.0.4", "", {}, "sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw=="],
 
-    "marked": ["marked@16.2.0", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-LbbTuye+0dWRz2TS9KJ7wsnD4KAtpj0MVkWc90XvBa6AslXsT0hTBVH5k32pcSyHH1fst9XEFJunXHktVy0zlg=="],
+    "marked": ["marked@17.0.1", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg=="],
 
     "marked-shiki": ["marked-shiki@1.2.1", "", { "peerDependencies": { "marked": ">=7.0.0", "shiki": ">=1.0.0" } }, "sha512-yHxYQhPY5oYaIRnROn98foKhuClark7M373/VpLxiy5TrDu9Jd/LsMwo8w+U91Up4oDb9IXFrP0N1MFRz8W/DQ=="],
 
@@ -4112,8 +4114,6 @@
     "@opencode-ai/desktop/typescript": ["typescript@5.6.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-hjcS1mhfuyi4WW8IWtjP7brDrG2cuDZukyrYrSauoXGNgx0S7zceP07adYkJycEr56BOUTNPzbInooiN3fn1qw=="],
 
     "@opencode-ai/web/@shikijs/transformers": ["@shikijs/transformers@3.4.2", "", { "dependencies": { "@shikijs/core": "3.4.2", "@shikijs/types": "3.4.2" } }, "sha512-I5baLVi/ynLEOZoWSAMlACHNnG+yw5HDmse0oe+GW6U1u+ULdEB3UHiVWaHoJSSONV7tlcVxuaMy74sREDkSvg=="],
-
-    "@opencode-ai/web/marked": ["marked@15.0.12", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA=="],
 
     "@opentui/solid/@babel/core": ["@babel/core@7.28.0", "", { "dependencies": { "@ampproject/remapping": "^2.2.0", "@babel/code-frame": "^7.27.1", "@babel/generator": "^7.28.0", "@babel/helper-compilation-targets": "^7.27.2", "@babel/helper-module-transforms": "^7.27.3", "@babel/helpers": "^7.27.6", "@babel/parser": "^7.28.0", "@babel/template": "^7.27.2", "@babel/traverse": "^7.28.0", "@babel/types": "^7.28.0", "convert-source-map": "^2.0.0", "debug": "^4.1.0", "gensync": "^1.0.0-beta.2", "json5": "^2.2.3", "semver": "^6.3.1" } }, "sha512-UlLAnTPrFdNGoFtbSXwcGFQBtQZJCNjaN6hQNP3UPvuNXT1i82N26KL3dZeIpNalWywr9IuQuncaAfUaS1g6sQ=="],
 

@@ -31,15 +31,15 @@ export const ImportCommand = cmd({
       const isUrl = args.file.startsWith("http://") || args.file.startsWith("https://")
 
       if (isUrl) {
-        const urlMatch = args.file.match(/https?:\/\/opencode\.ai\/s\/([a-zA-Z0-9_-]+)/)
+        const urlMatch = args.file.match(/https?:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
         if (!urlMatch) {
-          process.stdout.write(`Invalid URL format. Expected: https://opencode.ai/s/<slug>`)
+          process.stdout.write(`Invalid URL format. Expected: https://opncd.ai/s/<slug>`)
           process.stdout.write(EOL)
           return
         }
 
         const slug = urlMatch[1]
-        const response = await fetch(`https://api.opencode.ai/share_data?id=${slug}`)
+        const response = await fetch(`https://opncd.ai/api/share/${slug}`)
 
         if (!response.ok) {
           process.stdout.write(`Failed to fetch share data: ${response.statusText}`)

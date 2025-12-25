@@ -6,8 +6,6 @@ export interface Args {
   prompt?: string
   continue?: boolean
   sessionID?: string
-  title?: string
-  command?: string
 }
 
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({

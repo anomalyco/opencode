@@ -39,14 +39,6 @@ export const AttachCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
-      })
-      .option("title", {
-        type: "string",
-        describe: "title for the session (uses truncated prompt if no value provided)",
-      })
-      .option("command", {
-        type: "string",
-        describe: "the command to run, use prompt for args",
       }),
   handler: async (args) => {
     if (args.dir) process.chdir(args.dir)
@@ -65,8 +57,6 @@ export const AttachCommand = cmd({
         agent: args.agent,
         model: args.model,
         prompt,
-        title: args.title,
-        command: args.command,
       },
     })
   },

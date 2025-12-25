@@ -103,6 +103,7 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS3"),
   new sst.Secret("ZEN_MODELS4"),
   new sst.Secret("ZEN_MODELS5"),
+  new sst.Secret("ZEN_MODELS6"),
 ]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {

@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.193",
+  "version": "1.0.201",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
@@ -44,8 +44,8 @@
     "@typescript/native-preview": "catalog:",
     "fuzzysort": "catalog:",
     "luxon": "catalog:",
-    "marked": "16.2.0",
-    "marked-shiki": "1.2.1",
+    "marked": "catalog:",
+    "marked-shiki": "catalog:",
     "remeda": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
