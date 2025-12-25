@@ -204,7 +204,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
+      contents: write
+      pull-requests: write
       issues: write
     steps:
       - name: Check account age

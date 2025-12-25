@@ -416,8 +416,8 @@ export const GithubRunCommand = cmd({
       const isRepoEvent = REPO_EVENTS.includes(context.eventName as RepoEvent)
       const isCommentEvent = ["issue_comment", "pull_request_review_comment"].includes(context.eventName)
       const isIssuesEvent = context.eventName === "issues"
-      // Legacy alias for backward compatibility in existing code
-      const isScheduleEvent = isRepoEvent
+      const isScheduleEvent = context.eventName === "schedule"
+      const isWorkflowDispatchEvent = context.eventName === "workflow_dispatch"
 
       const { providerID, modelID } = normalizeModel()
       const runId = normalizeRunId()
@@ -433,6 +433,7 @@ export const GithubRunCommand = cmd({
         | WorkflowRunEvent
         | PullRequestEvent
       const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
+      // workflow_dispatch has an actor (the user who triggered it), schedule does not
       const actor = isScheduleEvent ? undefined : context.actor
 
       const issueId = isRepoEvent
@@ -507,14 +508,19 @@ export const GithubRunCommand = cmd({
         // USER_EVENTS on Issue (issue_comment on issue, issues): create new branch, may create PR
         if (isRepoEvent) {
           // Repo event - no issue/PR context, output goes to logs
-          const branch = await checkoutNewBranch("schedule")
+          if (isWorkflowDispatchEvent && actor) {
+            console.log(`Triggered by: ${actor}`)
+          }
+          const branchPrefix = isWorkflowDispatchEvent ? "dispatch" : "schedule"
+          const branch = await checkoutNewBranch(branchPrefix)
           const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
           const response = await chat(userPrompt, promptFiles)
           const { dirty, uncommittedChanges } = await branchIsDirty(head)
           if (dirty) {
             const summary = await summarize(response)
-            await pushToNewBranch(summary, branch, uncommittedChanges, true)
-            const triggerType = context.eventName === "workflow_dispatch" ? "workflow_dispatch" : "scheduled workflow"
+            // workflow_dispatch has an actor for co-author attribution, schedule does not
+            await pushToNewBranch(summary, branch, uncommittedChanges, isScheduleEvent)
+            const triggerType = isWorkflowDispatchEvent ? "workflow_dispatch" : "scheduled workflow"
             const pr = await createPR(
               repoData.data.default_branch,
               branch,
@@ -679,19 +685,11 @@ export const GithubRunCommand = cmd({
 
       async function getUserPrompt() {
         const customPrompt = process.env["PROMPT"]
-        // For repo events (schedule, workflow_dispatch), PROMPT is required since there's no comment/issue to extract from
-        if (isRepoEvent) {
+        // For repo events and issues events, PROMPT is required since there's no comment to extract from
+        if (isRepoEvent || isIssuesEvent) {
           if (!customPrompt) {
-            throw new Error("PROMPT input is required for scheduled and workflow_dispatch events")
-          }
-          return { userPrompt: customPrompt, promptFiles: [] }
-        }
-
-        // For issues events, PROMPT is required since there's no comment to extract from
-        // The workflow defines the prompt (e.g., "triage this issue")
-        if (isIssuesEvent) {
-          if (!customPrompt) {
-            throw new Error("PROMPT input is required for issues events")
+            const eventType = isRepoEvent ? "scheduled and workflow_dispatch" : "issues"
+            throw new Error(`PROMPT input is required for ${eventType} events`)
           }
           return { userPrompt: customPrompt, promptFiles: [] }
         }
@@ -959,7 +957,7 @@ export const GithubRunCommand = cmd({
         await $`git config --local ${config} "${gitConfig}"`
       }
 
-      async function checkoutNewBranch(type: "issue" | "schedule") {
+      async function checkoutNewBranch(type: "issue" | "schedule" | "dispatch") {
         console.log("Checking out new branch...")
         const branch = generateBranchName(type)
         await $`git checkout -b ${branch}`
@@ -988,16 +986,16 @@ export const GithubRunCommand = cmd({
         await $`git checkout -b ${localBranch} fork/${remoteBranch}`
       }
 
-      function generateBranchName(type: "issue" | "pr" | "schedule") {
+      function generateBranchName(type: "issue" | "pr" | "schedule" | "dispatch") {
         const timestamp = new Date()
           .toISOString()
           .replace(/[:-]/g, "")
           .replace(/\.\d{3}Z/, "")
           .split("T")
           .join("")
-        if (type === "schedule") {
+        if (type === "schedule" || type === "dispatch") {
           const hex = crypto.randomUUID().slice(0, 6)
-          return `opencode/scheduled-${hex}-${timestamp}`
+          return `opencode/${type}-${hex}-${timestamp}`
         }
         return `opencode/${type}${issueId}-${timestamp}`
       }
