@@ -9,7 +9,9 @@ import * as github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
 import type {
   IssueCommentEvent,
+  IssuesEvent,
   PullRequestReviewCommentEvent,
+  WorkflowDispatchEvent,
   WorkflowRunEvent,
   PullRequestEvent,
 } from "@octokit/webhooks-types"
@@ -132,7 +134,16 @@ type IssueQueryResponse = {
 const AGENT_USERNAME = "opencode-agent[bot]"
 const AGENT_REACTION = "eyes"
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
-const SUPPORTED_EVENTS = ["issue_comment", "pull_request_review_comment", "schedule", "pull_request"] as const
+
+// Event categories for routing
+// USER_EVENTS: triggered by user actions, have actor/issueId, support reactions/comments
+// REPO_EVENTS: triggered by automation, no actor/issueId, output to logs/PR only
+const USER_EVENTS = ["issue_comment", "pull_request_review_comment", "issues", "pull_request"] as const
+const REPO_EVENTS = ["schedule", "workflow_dispatch"] as const
+const SUPPORTED_EVENTS = [...USER_EVENTS, ...REPO_EVENTS] as const
+
+type UserEvent = (typeof USER_EVENTS)[number]
+type RepoEvent = (typeof REPO_EVENTS)[number]
 
 // Parses GitHub remote URLs in various formats:
 // - https://github.com/owner/repo.git
@@ -397,27 +408,37 @@ export const GithubRunCommand = cmd({
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
+
+      // Determine event category for routing
+      // USER_EVENTS: have actor, issueId, support reactions/comments
+      // REPO_EVENTS: no actor/issueId, output to logs/PR only
+      const isUserEvent = USER_EVENTS.includes(context.eventName as UserEvent)
+      const isRepoEvent = REPO_EVENTS.includes(context.eventName as RepoEvent)
       const isCommentEvent = ["issue_comment", "pull_request_review_comment"].includes(context.eventName)
-      const isScheduleEvent = context.eventName === "schedule"
+      const isIssuesEvent = context.eventName === "issues"
+      // Legacy alias for backward compatibility in existing code
+      const isScheduleEvent = isRepoEvent
 
       const { providerID, modelID } = normalizeModel()
       const runId = normalizeRunId()
       const share = normalizeShare()
       const oidcBaseUrl = normalizeOidcBaseUrl()
       const { owner, repo } = context.repo
-      // For schedule events, payload has no issue/comment data
+      // For repo events (schedule, workflow_dispatch), payload has no issue/comment data
       const payload = context.payload as
         | IssueCommentEvent
+        | IssuesEvent
         | PullRequestReviewCommentEvent
+        | WorkflowDispatchEvent
         | WorkflowRunEvent
         | PullRequestEvent
       const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
       const actor = isScheduleEvent ? undefined : context.actor
 
-      const issueId = isScheduleEvent
+      const issueId = isRepoEvent
         ? undefined
-        : context.eventName === "issue_comment"
-          ? (payload as IssueCommentEvent).issue.number
+        : context.eventName === "issue_comment" || context.eventName === "issues"
+          ? (payload as IssueCommentEvent | IssuesEvent).issue.number
           : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
@@ -462,8 +483,8 @@ export const GithubRunCommand = cmd({
         if (!useGithubToken) {
           await configureGit(appToken)
         }
-        // Skip permission check for schedule events (no actor to check)
-        if (!isScheduleEvent) {
+        // Skip permission check and reactions for repo events (no actor to check, no issue to react to)
+        if (isUserEvent) {
           await assertPermissions()
           await addReaction(commentType)
         }
@@ -480,13 +501,12 @@ export const GithubRunCommand = cmd({
         })()
         console.log("opencode session", session.id)
 
-        // Handle 4 cases
-        // 1. Schedule (no issue/PR context)
-        // 2. Issue
-        // 3. Local PR
-        // 4. Fork PR
-        if (isScheduleEvent) {
-          // Schedule event - no issue/PR context, output goes to logs
+        // Handle event types:
+        // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
+        // USER_EVENTS on PR (pull_request, pull_request_review_comment, issue_comment on PR): work on PR branch
+        // USER_EVENTS on Issue (issue_comment on issue, issues): create new branch, may create PR
+        if (isRepoEvent) {
+          // Repo event - no issue/PR context, output goes to logs
           const branch = await checkoutNewBranch("schedule")
           const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
           const response = await chat(userPrompt, promptFiles)
@@ -494,11 +514,12 @@ export const GithubRunCommand = cmd({
           if (dirty) {
             const summary = await summarize(response)
             await pushToNewBranch(summary, branch, uncommittedChanges, true)
+            const triggerType = context.eventName === "workflow_dispatch" ? "workflow_dispatch" : "scheduled workflow"
             const pr = await createPR(
               repoData.data.default_branch,
               branch,
               summary,
-              `${response}\n\nTriggered by scheduled workflow${footer({ image: true })}`,
+              `${response}\n\nTriggered by ${triggerType}${footer({ image: true })}`,
             )
             console.log(`Created PR #${pr}`)
           } else {
@@ -573,7 +594,7 @@ export const GithubRunCommand = cmd({
         } else if (e instanceof Error) {
           msg = e.message
         }
-        if (!isScheduleEvent) {
+        if (isUserEvent) {
           await createComment(`${msg}${footer()}`)
           await removeReaction(commentType)
         }
@@ -628,9 +649,15 @@ export const GithubRunCommand = cmd({
       }
 
       function isIssueCommentEvent(
-        event: IssueCommentEvent | PullRequestReviewCommentEvent | WorkflowRunEvent | PullRequestEvent,
+        event:
+          | IssueCommentEvent
+          | IssuesEvent
+          | PullRequestReviewCommentEvent
+          | WorkflowDispatchEvent
+          | WorkflowRunEvent
+          | PullRequestEvent,
       ): event is IssueCommentEvent {
-        return "issue" in event
+        return "issue" in event && "comment" in event
       }
 
       function getReviewCommentContext() {
@@ -652,10 +679,19 @@ export const GithubRunCommand = cmd({
 
       async function getUserPrompt() {
         const customPrompt = process.env["PROMPT"]
-        // For schedule events, PROMPT is required since there's no comment to extract from
-        if (isScheduleEvent) {
+        // For repo events (schedule, workflow_dispatch), PROMPT is required since there's no comment/issue to extract from
+        if (isRepoEvent) {
           if (!customPrompt) {
-            throw new Error("PROMPT input is required for scheduled events")
+            throw new Error("PROMPT input is required for scheduled and workflow_dispatch events")
+          }
+          return { userPrompt: customPrompt, promptFiles: [] }
+        }
+
+        // For issues events, PROMPT is required since there's no comment to extract from
+        // The workflow defines the prompt (e.g., "triage this issue")
+        if (isIssuesEvent) {
+          if (!customPrompt) {
+            throw new Error("PROMPT input is required for issues events")
           }
           return { userPrompt: customPrompt, promptFiles: [] }
         }
