@@ -177,15 +177,18 @@ export function Session() {
     }
   })
 
-  // On session change, set model to last used model
+  // On session change, set model/agent to last used
   createEffect(
     on(
       () => session()?.id,
       (sessionId) => {
         const lastUserMessage = sync.data.message[sessionId]?.findLast((x) => x.role === "user")
         if (!lastUserMessage) return
-
         local.model.set(lastUserMessage.model)
+
+        const agent = sync.data.agent.find((x) => x.name === lastUserMessage.agent)
+        if (agent?.mode === "subagent" || agent?.hidden) return
+        local.agent.set(lastUserMessage.agent)
       },
     ),
   )
