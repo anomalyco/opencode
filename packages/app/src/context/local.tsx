@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createMemo } from "solid-js"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -61,24 +61,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (isModelValid(model)) return model
       }
     }
-
-    // Automatically update model when agent changes
-    createEffect(() => {
-      const value = agent.current()
-      if (value.model) {
-        if (isModelValid(value.model))
-          model.set({
-            providerID: value.model.providerID,
-            modelID: value.model.modelID,
-          })
-        // else
-        //   toast.show({
-        //     type: "warning",
-        //     message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
-        //     duration: 3000,
-        //   })
-      }
-    })
 
     const agent = (() => {
       const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
