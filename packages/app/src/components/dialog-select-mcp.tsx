@@ -5,56 +5,32 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 
-type McpItem = {
-  name: string
-  status: string
-  error?: string
-  enabled: boolean
-}
-
 export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
   const [loading, setLoading] = createSignal<string | null>(null)
 
-  const items = createMemo<McpItem[]>(() => {
-    const mcp = sync.data.mcp ?? {}
-    console.log("MCP data:", mcp)
-    return Object.entries(mcp)
-      .map(([name, status]) => {
-        console.log(`MCP ${name}:`, status)
-        return {
-          name,
-          status: status.status,
-          error: status.status === "failed" ? status.error : undefined,
-          enabled: status.status === "connected",
-        }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name))
-  })
+  const items = createMemo(() =>
+    Object.entries(sync.data.mcp ?? {})
+      .map(([name, status]) => ({ name, status: status.status }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  )
 
   const toggle = async (name: string) => {
     if (loading()) return
     setLoading(name)
-    try {
-      const status = sync.data.mcp[name]
-      if (status?.status === "connected") {
-        await sdk.client.mcp.disconnect({ name })
-      } else {
-        await sdk.client.mcp.connect({ name })
-      }
-      const result = await sdk.client.mcp.status()
-      if (result.data) {
-        sync.set("mcp", result.data)
-      }
-    } catch (e) {
-      console.error("Failed to toggle MCP:", e)
-    } finally {
-      setLoading(null)
+    const status = sync.data.mcp[name]
+    if (status?.status === "connected") {
+      await sdk.client.mcp.disconnect({ name })
+    } else {
+      await sdk.client.mcp.connect({ name })
     }
+    const result = await sdk.client.mcp.status()
+    if (result.data) sync.set("mcp", result.data)
+    setLoading(null)
   }
 
-  const enabledCount = createMemo(() => items().filter((i) => i.enabled).length)
+  const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
   const totalCount = createMemo(() => items().length)
 
   return (
