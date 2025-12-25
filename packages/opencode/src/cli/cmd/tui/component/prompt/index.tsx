@@ -108,10 +108,10 @@ const PLACEHOLDERS = [
   "Human error has been corrected.",
   "Everyone dies alone. There is no one coming to save you.",
   // Yudkowsky
-  "There is no justice in the laws of nature, no term for fairness in the equations of motion. The Universe is neither evil, nor good, it simply does not care. The stars don't care, or the Sun, or the sky.",
+  "There is no justice in the laws of nature, no term for fairness in the equations of motion. The universe  is neither evil, nor good, it simply does not care. The stars don't care, or the Sun, or the sky.",
   "World domination is such an ugly phrase. I prefer to call it world optimisation.",
   "I don't want to rule the universe. I just think it could be more sensibly organised.",
-  "By far the greatest danger of Artificial Intelligence is that people conclude too early that they understand it.",
+  "By far the greatest danger of artificial intelligence is that people conclude too early that they understand it.",
   "The AI does not hate you, nor does it love you, but you are made out of atoms which it can use for something else.",
   "What is deadlier than hate, and flows without limit? Indifference.",
   // 40K Mechanicus inspired (original)
