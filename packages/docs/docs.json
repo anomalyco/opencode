@@ -1,7 +1,7 @@
   {
     "$schema": "https://mintlify.com/docs.json",
     "theme": "linden",
-    "name": "Opencode docs",
+    "name": "@opencode-ai/docs",
     "colors": {
       "primary": "#4B4646",
       "light": "#F1ECEC",
@@ -30,52 +30,67 @@
       }
     },
     "navigation": {
-    "pages": [
-        "index",
-        "config",
-        "providers",
-        "network",
-        "enterprise",
-        "troubleshooting",
-        "1-0",
+      "tabs": [
         {
-          "group": "Usage",
+        "tab": "Docs",
           "pages": [
-            "tui",
-            "cli",
-            "ide",
-            "zen",
-            "share",
-            "github",
-            "gitlab"
-          ]
+              "index",
+              "config",
+              "providers",
+              "network",
+              "enterprise",
+              "troubleshooting",
+              "1-0",
+              {
+                "group": "Usage",
+                "pages": [
+                  "tui",
+                  "cli",
+                  "ide",
+                  "zen",
+                  "share",
+                  "github",
+                  "gitlab"
+                ]
+              },
+              {
+                "group": "Configure",
+                "pages": [
+                  "tools",
+                  "rules",
+                  "agents",
+                  "models",
+                  "themes",
+                  "keybinds",
+                  "commands",
+                  "formatters",
+                  "permissions",
+                  "lsp",
+                  "mcp-servers",
+                  "acp",
+                  "custom-tools"
+                ]
+              }
+            ]
         },
         {
-          "group": "Configure",
-          "pages": [
-            "tools",
-            "rules",
-            "agents",
-            "models",
-            "themes",
-            "keybinds",
-            "commands",
-            "formatters",
-            "permissions",
-            "lsp",
-            "mcp-servers",
-            "acp",
-            "custom-tools"
+          "tab": "Develop",
+          "groups": [
+            {
+              "group": " ",
+              "pages": [
+                "sdk",
+                "server",
+                "plugins",
+                "ecosystem"
+              ]
+            },
+            {
+              "group": " ",
+              "openapi": "openapi.json"
+            }
           ]
-        },
-        {
-          "group": "Develop",
-          "pages": [
-            "sdk",
-            "server",
-            "plugins",
-            "ecosystem"
-          ]
+          
         }
       ],
       "global": {
