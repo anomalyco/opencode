@@ -27,7 +27,7 @@ if (envPath) {
 }
 
 const scriptPath = fs.realpathSync(__filename)
-const scriptDir = __dirname
+const scriptDir = path.dirname(scriptPath)
 
 const platformMap = {
   darwin: "darwin",
