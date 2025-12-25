@@ -2,7 +2,7 @@ import { useLocal, type LocalFile } from "@/context/local"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { For, Match, Switch, Show, type ComponentProps, type ParentProps } from "solid-js"
+import { For, Match, Switch, type ComponentProps, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 
 export default function FileTree(props: {
@@ -57,14 +57,14 @@ export default function FileTree(props: {
           "text-text-muted/40": p.node.ignored,
           "text-text-muted/80": !p.node.ignored,
           // "!text-text": local.file.active()?.path === p.node.path,
-          "!text-primary": local.file.changed(p.node.path),
+          // "!text-primary": local.file.changed(p.node.path),
         }}
       >
         {p.node.name}
       </span>
-      <Show when={local.file.changed(p.node.path)}>
-        <span class="ml-auto mr-1 w-1.5 h-1.5 rounded-full bg-primary/50 shrink-0" />
-      </Show>
+      {/* <Show when={local.file.changed(p.node.path)}> */}
+      {/*   <span class="ml-auto mr-1 w-1.5 h-1.5 rounded-full bg-primary/50 shrink-0" /> */}
+      {/* </Show> */}
     </Dynamic>
   )
 

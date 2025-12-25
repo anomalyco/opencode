@@ -5,8 +5,6 @@ import {
   type Part,
   type Config,
   type Path,
-  type File,
-  type FileNode,
   type Project,
   type FileDiff,
   type Todo,
@@ -50,8 +48,6 @@ type State = {
   part: {
     [messageID: string]: Part[]
   }
-  node: FileNode[]
-  changes: File[]
 }
 
 function createGlobalSync() {
@@ -92,8 +88,6 @@ function createGlobalSync() {
         limit: 5,
         message: {},
         part: {},
-        node: [],
-        changes: [],
       })
       children[directory] = createStore(globalStore.children[directory])
       bootstrapInstance(directory)
@@ -155,8 +149,6 @@ function createGlobalSync() {
       session: () => loadSessions(directory),
       status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
       config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
-      changes: () => sdk.file.status().then((x) => setStore("changes", x.data!)),
-      node: () => sdk.file.list({ path: "/" }).then((x) => setStore("node", x.data!)),
     }
     await Promise.all(Object.values(load).map((p) => retry(p).catch((e) => setGlobalStore("error", e))))
       .then(() => setStore("ready", true))
