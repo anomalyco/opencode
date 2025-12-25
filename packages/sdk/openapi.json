@@ -8168,7 +8168,27 @@
           },
           "session_rename": {
             "description": "Rename session",
-            "default": "none",
+            "default": "ctrl+r",
+            "type": "string"
+          },
+          "session_delete": {
+            "description": "Delete session",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "stash_delete": {
+            "description": "Delete stash entry",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "model_provider_list": {
+            "description": "Open provider list from model dialog",
+            "default": "ctrl+a",
+            "type": "string"
+          },
+          "model_favorite_toggle": {
+            "description": "Toggle model favorite status",
+            "default": "ctrl+f",
             "type": "string"
           },
           "session_share": {
