@@ -82,6 +82,9 @@ export function Header() {
                 <b>Subagent session</b>
               </text>
               <text fg={theme.text}>
+                Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
+              </text>
+              <text fg={theme.text}>
                 Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
               </text>
               <text fg={theme.text}>

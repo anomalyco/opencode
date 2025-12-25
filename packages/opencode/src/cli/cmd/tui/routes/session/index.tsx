@@ -47,6 +47,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { Header } from "./header"
 import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
+import { TodoItem } from "../../component/todo-item"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
@@ -870,6 +871,23 @@ export function Session() {
         dialog.clear()
       },
     },
+    {
+      title: "Go to parent session",
+      value: "session.parent",
+      keybind: "session_parent",
+      category: "Session",
+      disabled: true,
+      onSelect: (dialog) => {
+        const parentID = session()?.parentID
+        if (parentID) {
+          navigate({
+            type: "session",
+            sessionID: parentID,
+          })
+        }
+        dialog.clear()
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1629,33 +1647,15 @@ ToolRegistry.register<typeof ListTool>({
 
 ToolRegistry.register<typeof TaskTool>({
   name: "task",
-  container: "inline",
+  container: "block",
   render(props) {
     const { theme } = useTheme()
     const keybind = useKeybind()
     const dialog = useDialog()
     const renderer = useRenderer()
-    const [hover, setHover] = createSignal(false)
 
     return (
-      <box
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.background}
-        paddingTop={1}
-        paddingBottom={1}
-        paddingLeft={2}
-        marginTop={1}
-        gap={1}
-        backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
-        onMouseOver={() => setHover(true)}
-        onMouseOut={() => setHover(false)}
-        onMouseUp={() => {
-          const id = props.metadata.sessionId
-          if (renderer.getSelection()?.getSelectedText() || !id) return
-          dialog.replace(() => <DialogSubagent sessionID={id} />)
-        }}
-      >
+      <>
         <ToolTitle icon="◉" fallback="Delegating..." when={props.input.subagent_type ?? props.input.description}>
           {Locale.titlecase(props.input.subagent_type ?? "unknown")} Task "{props.input.description}"
         </ToolTitle>
@@ -1678,7 +1678,7 @@ ToolRegistry.register<typeof TaskTool>({
           {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
           <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
         </text>
-      </box>
+      </>
     )
   },
 })
@@ -1829,11 +1829,7 @@ ToolRegistry.register<typeof TodoWriteTool>({
         <Show when={props.metadata.todos?.length}>
           <box>
             <For each={props.input.todos ?? []}>
-              {(todo) => (
-                <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                  [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                </text>
-              )}
+              {(todo) => <TodoItem status={todo.status} content={todo.content} />}
             </For>
           </box>
         </Show>

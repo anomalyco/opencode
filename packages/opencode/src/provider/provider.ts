@@ -25,6 +25,15 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createXai } from "@ai-sdk/xai"
+import { createMistral } from "@ai-sdk/mistral"
+import { createGroq } from "@ai-sdk/groq"
+import { createDeepInfra } from "@ai-sdk/deepinfra"
+import { createCerebras } from "@ai-sdk/cerebras"
+import { createCohere } from "@ai-sdk/cohere"
+import { createGateway } from "@ai-sdk/gateway"
+import { createTogetherAI } from "@ai-sdk/togetherai"
+import { createPerplexity } from "@ai-sdk/perplexity"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -39,6 +48,15 @@ export namespace Provider {
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
+    "@ai-sdk/xai": createXai,
+    "@ai-sdk/mistral": createMistral,
+    "@ai-sdk/groq": createGroq,
+    "@ai-sdk/deepinfra": createDeepInfra,
+    "@ai-sdk/cerebras": createCerebras,
+    "@ai-sdk/cohere": createCohere,
+    "@ai-sdk/gateway": createGateway,
+    "@ai-sdk/togetherai": createTogetherAI,
+    "@ai-sdk/perplexity": createPerplexity,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
@@ -67,6 +85,8 @@ export namespace Provider {
         const env = Env.all()
         if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
+        const config = await Config.get()
+        if (config.provider?.["opencode"]?.options?.apiKey) return true
         return false
       })()
 
@@ -314,6 +334,45 @@ export namespace Provider {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
+          },
+        },
+      }
+    },
+    "cloudflare-ai-gateway": async (input) => {
+      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+      const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
+
+      if (!accountId || !gateway) return { autoload: false }
+
+      // Get API token from env or auth prompt
+      const apiToken = await (async () => {
+        const envToken = Env.get("CLOUDFLARE_API_TOKEN")
+        if (envToken) return envToken
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      return {
+        autoload: true,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.chat(modelID)
+        },
+        options: {
+          baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/compat`,
+          headers: {
+            // Cloudflare AI Gateway uses cf-aig-authorization for authenticated gateways
+            // This enables Unified Billing where Cloudflare handles upstream provider auth
+            ...(apiToken ? { "cf-aig-authorization": `Bearer ${apiToken}` } : {}),
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+          // Custom fetch to strip Authorization header - AI Gateway uses cf-aig-authorization instead
+          // Sending Authorization header with invalid value causes auth errors
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const headers = new Headers(init?.headers)
+            headers.delete("Authorization")
+            return fetch(input, { ...init, headers })
           },
         },
       }

@@ -216,6 +216,7 @@ export namespace ProviderTransform {
     if (id.includes("claude")) return undefined
     if (id.includes("gemini-3-pro")) return 1.0
     if (id.includes("glm-4.6")) return 1.0
+    if (id.includes("glm-4.7")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
     if (id.includes("kimi-k2")) {
       if (id.includes("thinking")) return 1.0
