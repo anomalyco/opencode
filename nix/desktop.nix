@@ -12,7 +12,6 @@
   webkitgtk_4_1 ? null,
   librsvg ? null,
   libappindicator-gtk3 ? null,
-  darwin ? null,
   cargo,
   rustc,
   makeBinaryWrapper,
@@ -75,14 +74,7 @@ rustPlatform.buildRustPackage rec {
     webkitgtk_4_1
     librsvg
     libappindicator-gtk3
-  ]
-  ++ lib.optionals stdenv.isDarwin (
-    with darwin.apple_sdk.frameworks;
-    [
-      AppKit
-      WebKit
-    ]
-  );
+  ];
 
   preBuild = ''
     # Restore node_modules
