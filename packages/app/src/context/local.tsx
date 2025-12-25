@@ -9,6 +9,7 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { DateTime } from "luxon"
 import { persisted } from "@/utils/persist"
+import { showToast } from "@opencode-ai/ui/toast"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -276,11 +277,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [store, setStore] = createStore<{
         node: Record<string, LocalFile>
       }>({
-        node: Object.fromEntries(sync.data.node.map((x) => [x.path, x])),
+        node: {}, //  Object.fromEntries(sync.data.node.map((x) => [x.path, x])),
       })
 
-      const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
-      const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
+      // const changeset = createMemo(() => new Set(sync.data.changes.map((f) => f.path)))
+      // const changes = createMemo(() => Array.from(changeset()).sort((a, b) => a.localeCompare(b)))
 
       // createEffect((prev: FileStatus[]) => {
       //   const removed = prev.filter((p) => !sync.data.changes.find((c) => c.path === p.path))
@@ -308,16 +309,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       //   return sync.data.changes
       // }, sync.data.changes)
 
-      const changed = (path: string) => {
-        const node = store.node[path]
-        if (node?.status) return true
-        const set = changeset()
-        if (set.has(path)) return true
-        for (const p of set) {
-          if (p.startsWith(path ? path + "/" : "")) return true
-        }
-        return false
-      }
+      // const changed = (path: string) => {
+      //   const node = store.node[path]
+      //   if (node?.status) return true
+      //   const set = changeset()
+      //   if (set.has(path)) return true
+      //   for (const p of set) {
+      //     if (p.startsWith(path ? path + "/" : "")) return true
+      //   }
+      //   return false
+      // }
 
       // const resetNode = (path: string) => {
       //   setStore("node", path, {
@@ -336,17 +337,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const load = async (path: string) => {
         const relativePath = relative(path)
-        await sdk.client.file.read({ path: relativePath }).then((x) => {
-          if (!store.node[relativePath]) return
-          setStore(
-            "node",
-            relativePath,
-            produce((draft) => {
-              draft.loaded = true
-              draft.content = x.data
-            }),
-          )
-        })
+        await sdk.client.file
+          .read({ path: relativePath })
+          .then((x) => {
+            if (!store.node[relativePath]) return
+            setStore(
+              "node",
+              relativePath,
+              produce((draft) => {
+                draft.loaded = true
+                draft.content = x.data
+              }),
+            )
+          })
+          .catch((e) => {
+            showToast({
+              variant: "error",
+              title: "Failed to load file",
+              description: e.message,
+            })
+          })
       }
 
       const fetch = async (path: string) => {
@@ -466,8 +476,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         setChangeIndex(path: string, index: number | undefined) {
           setStore("node", path, "selectedChange", index)
         },
-        changes,
-        changed,
+        // changes,
+        // changed,
         children(path: string) {
           return Object.values(store.node).filter(
             (x) =>
