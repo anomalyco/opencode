@@ -472,7 +472,12 @@ export default function Layout(props: ParentProps) {
               class="flex flex-col min-w-0 text-left w-full focus:outline-none"
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
-                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                <span
+                  classList={{
+                    "text-14-regular text-text-strong overflow-hidden text-ellipsis truncate": true,
+                    "animate-pulse": isWorking(),
+                  }}
+                >
                   {props.session.title}
                 </span>
                 <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
