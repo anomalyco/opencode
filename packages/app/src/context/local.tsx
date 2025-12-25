@@ -9,6 +9,7 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { DateTime } from "luxon"
 import { persisted } from "@/utils/persist"
+import { showToast } from "@opencode-ai/ui/toast"
 
 export type LocalFile = FileNode &
   Partial<{
@@ -336,17 +337,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const load = async (path: string) => {
         const relativePath = relative(path)
-        await sdk.client.file.read({ path: relativePath }).then((x) => {
-          if (!store.node[relativePath]) return
-          setStore(
-            "node",
-            relativePath,
-            produce((draft) => {
-              draft.loaded = true
-              draft.content = x.data
-            }),
-          )
-        })
+        await sdk.client.file
+          .read({ path: relativePath })
+          .then((x) => {
+            if (!store.node[relativePath]) return
+            setStore(
+              "node",
+              relativePath,
+              produce((draft) => {
+                draft.loaded = true
+                draft.content = x.data
+              }),
+            )
+          })
+          .catch((e) => {
+            showToast({
+              variant: "error",
+              title: "Failed to load file",
+              description: e.message,
+            })
+          })
       }
 
       const fetch = async (path: string) => {
