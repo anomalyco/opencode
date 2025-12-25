@@ -1,7 +1,7 @@
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
-import { Component } from "solid-js"
+import { Component, Show } from "solid-js"
 import { usePlatform } from "@/context/platform"
 import { Icon } from "@opencode-ai/ui/icon"
 
@@ -138,16 +138,21 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         <Button size="large" onClick={platform.restart}>
           Restart
         </Button>
-        <div class="flex items-center justify-center gap-1">
-          Please report this error to the OpenCode team
-          <button
-            type="button"
-            class="flex items-center text-text-interactive-base gap-1"
-            onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
-          >
-            <div>on Discord</div>
-            <Icon name="discord" class="text-text-interactive-base" />
-          </button>
+        <div class="flex flex-col items-center gap-2">
+          <div class="flex items-center justify-center gap-1">
+            Please report this error to the OpenCode team
+            <button
+              type="button"
+              class="flex items-center text-text-interactive-base gap-1"
+              onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+            >
+              <div>on Discord</div>
+              <Icon name="discord" class="text-text-interactive-base" />
+            </button>
+          </div>
+          <Show when={platform.version}>
+            <p class="text-xs text-text-weak">Version: {platform.version}</p>
+          </Show>
         </div>
       </div>
     </div>

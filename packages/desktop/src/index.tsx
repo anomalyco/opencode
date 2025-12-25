@@ -13,6 +13,7 @@ import { createMenu } from "./menu"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { invoke } from "@tauri-apps/api/core"
 import { relaunch } from "@tauri-apps/plugin-process"
+import pkg from "../package.json"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -25,6 +26,7 @@ let update: Update | null = null
 
 const platform: Platform = {
   platform: "tauri",
+  version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
     const result = await open({

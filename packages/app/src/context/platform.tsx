@@ -5,6 +5,9 @@ export type Platform = {
   /** Platform discriminator */
   platform: "web" | "tauri"
 
+  /** App version */
+  version?: string
+
   /** Open a URL in the default browser */
   openLink(url: string): void
 

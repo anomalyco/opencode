@@ -2,6 +2,7 @@
 import { render } from "solid-js/web"
 import { App } from "@/app"
 import { Platform, PlatformProvider } from "@/context/platform"
+import pkg from "../package.json"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -12,6 +13,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 
 const platform: Platform = {
   platform: "web",
+  version: pkg.version,
   openLink(url: string) {
     window.open(url, "_blank")
   },
