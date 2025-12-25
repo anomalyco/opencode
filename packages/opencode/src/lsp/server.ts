@@ -1157,6 +1157,16 @@ export namespace LSPServer {
         await $`tar -xzf ${archivePath}`.cwd(distPath).quiet().nothrow()
         await fs.rm(archivePath, { force: true })
       }
+
+      const lombokJarPath = path.join(Global.Path.bin, "lombok.jar")
+      const lombokInstalled = await fs.exists(lombokJarPath)
+      if (!lombokInstalled) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("Downloading Lombok for JDTLS.")
+        const lombokURL = "https://projectlombok.org/downloads/lombok.jar"
+        await $`curl -L -o '${lombokJarPath}' '${lombokURL}'`.quiet().nothrow()
+      }
+
       const jarFileName = await $`ls org.eclipse.equinox.launcher_*.jar`
         .cwd(launcherDir)
         .quiet()
@@ -1187,6 +1197,7 @@ export namespace LSPServer {
         process: spawn(
           java,
           [
+            "-javaagent:" + lombokJarPath,
             "-jar",
             launcherJar,
             "-configuration",
