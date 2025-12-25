@@ -31,6 +31,8 @@ export function Sidebar(props: { sessionID: string }) {
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
 
+  const skillEntries = createMemo(() => sync.data.skill.toSorted((a, b) => a.name.localeCompare(b.name)))
+
   // Count connected and error MCP servers for collapsed header display
   const connectedMcpCount = createMemo(() => mcpEntries().filter(([_, item]) => item.status === "connected").length)
   const errorMcpCount = createMemo(
@@ -201,22 +203,22 @@ export function Sidebar(props: { sessionID: string }) {
                 </For>
               </Show>
             </box>
-            <Show when={sync.data.skill.length > 0}>
+            <Show when={skillEntries().length > 0}>
               <box>
                 <box
                   flexDirection="row"
                   gap={1}
-                  onMouseDown={() => sync.data.skill.length > 2 && setExpanded("skill", !expanded.skill)}
+                  onMouseDown={() => skillEntries().length > 2 && setExpanded("skill", !expanded.skill)}
                 >
-                  <Show when={sync.data.skill.length > 2}>
+                  <Show when={skillEntries().length > 2}>
                     <text fg={theme.text}>{expanded.skill ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
                     <b>Skills</b>
                   </text>
                 </box>
-                <Show when={sync.data.skill.length <= 2 || expanded.skill}>
-                  <For each={sync.data.skill}>
+                <Show when={skillEntries().length <= 2 || expanded.skill}>
+                  <For each={skillEntries()}>
                     {(item) => (
                       <box flexDirection="row" gap={1}>
                         <text flexShrink={0} style={{ fg: theme.success }}>
