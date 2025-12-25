@@ -103,7 +103,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
-    userHasEdited: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -113,7 +112,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
-    userHasEdited: false,
   })
 
   const MAX_HISTORY = 100
@@ -150,7 +148,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
-    setStore("userHasEdited", false)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -279,11 +276,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   createEffect(() => {
-    if (isFocused()) {
-      handleInput()
-    } else {
-      setStore("popover", null)
-    }
+    if (!isFocused()) setStore("popover", null)
   })
 
   const handleFileSelect = (path: string | undefined) => {
@@ -363,7 +356,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (currentParts) => {
         const domParts = parseFromDOM()
-        if (isPromptEqual(currentParts, domParts)) return
+        const normalized = Array.from(editorRef.childNodes).every((node) => {
+          if (node.nodeType === Node.TEXT_NODE) return true
+          if (node.nodeType !== Node.ELEMENT_NODE) return false
+          return (node as HTMLElement).dataset.type === "file"
+        })
+        if (normalized && isPromptEqual(currentParts, domParts)) return
 
         const selection = window.getSelection()
         let cursorPosition: number | null = null
@@ -395,34 +393,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const parseFromDOM = (): Prompt => {
-    const newParts: Prompt = []
+    const parts: Prompt = []
     let position = 0
+    let buffer = ""
 
-    const pushText = (content: string) => {
+    const flushText = () => {
+      const content = buffer.replace(/\r\n?/g, "\n")
+      buffer = ""
       if (!content) return
-      newParts.push({ type: "text", content, start: position, end: position + content.length })
+      parts.push({ type: "text", content, start: position, end: position + content.length })
       position += content.length
     }
 
-    const rangeText = (range: Range) => {
-      const fragment = range.cloneContents()
-      const container = document.createElement("div")
-      container.append(fragment)
-      return container.innerText
-    }
-
-    const files = Array.from(editorRef.querySelectorAll<HTMLElement>("[data-type=file]"))
-    let last: HTMLElement | undefined
-
-    files.forEach((file) => {
-      const before = document.createRange()
-      before.selectNodeContents(editorRef)
-      if (last) before.setStartAfter(last)
-      before.setEndBefore(file)
-      pushText(rangeText(before))
-
+    const pushFile = (file: HTMLElement) => {
       const content = file.textContent ?? ""
-      newParts.push({
+      parts.push({
         type: "file",
         path: file.dataset.path!,
         content,
@@ -430,16 +415,44 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         end: position + content.length,
       })
       position += content.length
-      last = file
+    }
+
+    const visit = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        buffer += node.textContent ?? ""
+        return
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return
+
+      const el = node as HTMLElement
+      if (el.dataset.type === "file") {
+        flushText()
+        pushFile(el)
+        return
+      }
+      if (el.tagName === "BR") {
+        buffer += "\n"
+        return
+      }
+
+      for (const child of Array.from(el.childNodes)) {
+        visit(child)
+      }
+    }
+
+    const children = Array.from(editorRef.childNodes)
+    children.forEach((child, index) => {
+      const isBlock = child.nodeType === Node.ELEMENT_NODE && ["DIV", "P"].includes((child as HTMLElement).tagName)
+      visit(child)
+      if (isBlock && index < children.length - 1) {
+        buffer += "\n"
+      }
     })
 
-    const after = document.createRange()
-    after.selectNodeContents(editorRef)
-    if (last) after.setStartAfter(last)
-    pushText(rangeText(after))
+    flushText()
 
-    if (newParts.length === 0) newParts.push(...DEFAULT_PROMPT)
-    return newParts
+    if (parts.length === 0) parts.push(...DEFAULT_PROMPT)
+    return parts
   }
 
   const handleInput = () => {
@@ -452,7 +465,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (shouldReset) {
       setStore("popover", null)
-      setStore("userHasEdited", false)
       if (store.historyIndex >= 0 && !store.applyingHistory) {
         setStore("historyIndex", -1)
         setStore("savedPrompt", null)
@@ -487,10 +499,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
-    if (!store.applyingHistory) {
-      setStore("userHasEdited", true)
-    }
-
     prompt.set(rawParts, cursorPosition)
   }
 
@@ -516,25 +524,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const gap = document.createTextNode(" ")
       const range = selection.getRangeAt(0)
 
-      if (atMatch) {
-        let runningLength = 0
+      const setEdge = (edge: "start" | "end", offset: number) => {
+        let remaining = offset
+        const nodes = Array.from(editorRef.childNodes)
 
-        const walker = document.createTreeWalker(editorRef, NodeFilter.SHOW_TEXT, null)
-        let currentNode = walker.nextNode()
-        while (currentNode) {
-          const textContent = currentNode.textContent || ""
-          if (runningLength + textContent.length >= atMatch.index!) {
-            const localStart = atMatch.index! - runningLength
-            const localEnd = cursorPosition - runningLength
-            if (currentNode === range.startContainer || runningLength + textContent.length >= cursorPosition) {
-              range.setStart(currentNode, localStart)
-              range.setEnd(currentNode, Math.min(localEnd, textContent.length))
-              break
-            }
+        for (const node of nodes) {
+          const length = node.textContent?.length ?? 0
+          const isText = node.nodeType === Node.TEXT_NODE
+          const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+
+          if (isText && remaining <= length) {
+            if (edge === "start") range.setStart(node, remaining)
+            if (edge === "end") range.setEnd(node, remaining)
+            return
           }
-          runningLength += textContent.length
-          currentNode = walker.nextNode()
+
+          if (isFile && remaining <= length) {
+            if (edge === "start" && remaining === 0) range.setStartBefore(node)
+            if (edge === "start" && remaining > 0) range.setStartAfter(node)
+            if (edge === "end" && remaining === 0) range.setEndBefore(node)
+            if (edge === "end" && remaining > 0) range.setEndAfter(node)
+            return
+          }
+
+          remaining -= length
         }
+      }
+
+      if (atMatch) {
+        const start = atMatch.index ?? cursorPosition - atMatch[0].length
+        setEdge("start", start)
+        setEdge("end", cursorPosition)
       }
 
       range.deleteContents()
@@ -584,8 +604,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const navigateHistory = (direction: "up" | "down") => {
-    if (store.userHasEdited) return false
-
     const entries = store.mode === "shell" ? shellHistory.entries : history.entries
     const current = store.historyIndex
 
@@ -692,6 +710,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    if (event.key === "Enter" && event.shiftKey) {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
+      return
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -717,7 +740,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addToHistory(currentPrompt, store.mode)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
-    setStore("userHasEdited", false)
 
     let existing = info()
     if (!existing) {
@@ -968,7 +990,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-              "[&>[data-type=file]]:text-icon-info-active": true,
+              "[&_[data-type=file]]:text-icon-info-active": true,
               "font-mono!": store.mode === "shell",
             }}
           />
