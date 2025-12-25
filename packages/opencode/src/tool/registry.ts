@@ -95,7 +95,6 @@ export namespace ToolRegistry {
       ReadTool,
       GlobTool,
       GrepTool,
-      ListTool,
       EditTool,
       WriteTool,
       TaskTool,
