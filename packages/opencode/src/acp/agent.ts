@@ -675,6 +675,62 @@ export namespace ACP {
                 log.error("failed to send reasoning to ACP", { error: err })
               })
           }
+        } else if (part.type === "file") {
+          // Replay file attachments as ACP image or resource blocks
+          const url = part.url as string
+          const filename = part.filename as string
+          const mime = (part.mime || "application/octet-stream") as string
+          const isImage = mime.startsWith("image/")
+
+          if (url.startsWith("data:")) {
+            // Extract base64 data from data URI
+            const base64Match = url.match(/^data:[^;]+;base64,(.*)$/)
+            const base64Data = base64Match ? base64Match[1] : ""
+
+            if (isImage) {
+              // Send as ACP image block
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "user_message_chunk",
+                    content: {
+                      type: "image",
+                      mimeType: mime,
+                      data: base64Data,
+                      uri: `file://${filename}`,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send image to ACP", { error: err })
+                })
+            } else {
+              // Send as ACP resource block
+              // Decode base64 to text for text-based content
+              const text = typeof atob !== "undefined"
+                ? decodeURIComponent(escape(atob(base64Data)))
+                : Buffer.from(base64Data, "base64").toString("utf-8")
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: "user_message_chunk",
+                    content: {
+                      type: "resource",
+                      resource: {
+                        uri: `file://${filename}`,
+                        mimeType: mime,
+                        text,
+                      },
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send resource to ACP", { error: err })
+                })
+            }
+          }
         }
       }
     }
@@ -854,18 +910,21 @@ export namespace ACP {
             })
             break
           case "image":
+            // Preserve original filename from URI if provided
+            const imageFilename = part.uri?.replace(/^file:\/\//, "").split("/").pop() ||
+              `image.${part.mimeType.split("/")[1] || "png"}`
             if (part.data) {
               parts.push({
                 type: "file",
                 url: `data:${part.mimeType};base64,${part.data}`,
-                filename: "image",
+                filename: imageFilename,
                 mime: part.mimeType,
               })
             } else if (part.uri && part.uri.startsWith("http:")) {
               parts.push({
                 type: "file",
                 url: part.uri,
-                filename: "image",
+                filename: imageFilename,
                 mime: part.mimeType,
               })
             }
@@ -878,11 +937,30 @@ export namespace ACP {
             break
 
           case "resource":
+            // Handle resources the same way as images - store as file parts
+            // This preserves metadata (filename, mimeType) for proper replay
             const resource = part.resource
+            const resourceFilename = resource.uri?.replace(/^file:\/\//, "").split("/").pop() || "file"
+            const resourceMime = resource.mimeType || "text/plain"
+            
             if ("text" in resource) {
+              // Convert text content to base64 data URL (same pattern as images)
+              const base64Text = typeof btoa !== "undefined"
+                ? btoa(unescape(encodeURIComponent(resource.text)))
+                : Buffer.from(resource.text, "utf-8").toString("base64")
               parts.push({
-                type: "text",
-                text: resource.text,
+                type: "file",
+                url: `data:${resourceMime};base64,${base64Text}`,
+                filename: resourceFilename,
+                mime: resourceMime,
+              })
+            } else if ("blob" in resource) {
+              // Binary blob - already base64
+              parts.push({
+                type: "file",
+                url: `data:${resourceMime};base64,${resource.blob}`,
+                filename: resourceFilename,
+                mime: resourceMime,
               })
             }
             break

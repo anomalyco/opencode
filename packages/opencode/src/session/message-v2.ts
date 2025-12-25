@@ -436,14 +436,39 @@ export namespace MessageV2 {
               type: "text",
               text: part.text,
             })
-          // text/plain and directory files are converted into text parts, ignore them
-          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
+          // Text-based files are converted into text parts for LLM compatibility
+          // Only send images and other binary formats as file parts
+          const isTextBasedMime = 
+            part.type === "file" && (
+              part.mime.startsWith("text/") ||
+              part.mime === "application/json" ||
+              part.mime === "application/xml" ||
+              part.mime === "application/javascript" ||
+              part.mime === "application/typescript" ||
+              part.mime === "application/x-directory"
+            )
+          if (part.type === "file" && !isTextBasedMime)
             userMessage.parts.push({
               type: "file",
               url: part.url,
               mediaType: part.mime,
               filename: part.filename,
             })
+          // For text-based file parts, decode and send as text with filename header
+          if (part.type === "file" && isTextBasedMime && part.mime !== "application/x-directory") {
+            const url = part.url
+            if (url.startsWith("data:")) {
+              const base64Match = url.match(/^data:[^;]+;base64,(.*)$/)
+              if (base64Match) {
+                const base64Data = base64Match[1]
+                const text = Buffer.from(base64Data, "base64").toString("utf-8")
+                userMessage.parts.push({
+                  type: "text",
+                  text: `[File: ${part.filename || "file"}]\n${text}`,
+                })
+              }
+            }
+          }
 
           if (part.type === "compaction") {
             userMessage.parts.push({
