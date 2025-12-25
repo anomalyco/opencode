@@ -215,7 +215,7 @@ function createGlobalSync() {
         break
       }
       case "session.diff":
-        setStore("session_diff", event.properties.sessionID, reconcile(event.properties.diff))
+        setStore("session_diff", event.properties.sessionID, reconcile(event.properties.diff, { key: "file" }))
         break
       case "todo.updated":
         setStore("todo", event.properties.sessionID, reconcile(event.properties.todos))
