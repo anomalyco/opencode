@@ -49,6 +49,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
+import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -273,6 +274,15 @@ export default function Page() {
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
+    },
+    {
+      id: "mcp.toggle",
+      title: "Toggle MCPs",
+      description: "Toggle MCPs",
+      category: "MCP",
+      keybind: "mod+;",
+      slash: "mcp",
+      onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",

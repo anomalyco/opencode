@@ -18,6 +18,7 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
+import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { persisted } from "@/utils/persist"
@@ -1057,6 +1058,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Tooltip>
               </Match>
             </Switch>
+            <SessionMcpIndicator />
             <SessionContextUsage />
           </div>
           <div class="flex items-center gap-1 absolute right-2 bottom-2">
