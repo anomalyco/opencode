@@ -4,14 +4,15 @@
   rustPlatform,
   bun,
   pkg-config,
-  dbus,
+  dbus ? null,
   openssl,
-  glib,
-  gtk3,
-  libsoup_3,
-  webkitgtk_4_1,
-  librsvg,
-  libappindicator-gtk3,
+  glib ? null,
+  gtk3 ? null,
+  libsoup_3 ? null,
+  webkitgtk_4_1 ? null,
+  librsvg ? null,
+  libappindicator-gtk3 ? null,
+  darwin ? null,
   cargo,
   rustc,
   makeBinaryWrapper,
@@ -64,28 +65,39 @@ rustPlatform.buildRustPackage rec {
   ];
 
   buildInputs = [
-    dbus
     openssl
+  ]
+  ++ lib.optionals stdenv.isLinux [
+    dbus
     glib
     gtk3
     libsoup_3
     webkitgtk_4_1
     librsvg
     libappindicator-gtk3
-  ];
+  ]
+  ++ lib.optionals stdenv.isDarwin (
+    with darwin.apple_sdk.frameworks;
+    [
+      AppKit
+      WebKit
+    ]
+  );
 
   preBuild = ''
     # Restore node_modules
     pushd ../../..
 
     # Copy node_modules from the fixed-output derivation
-    # We use cp -r --no-preserve=mode to ensure we can write to them if needed, 
+    # We use cp -r --no-preserve=mode to ensure we can write to them if needed,
     # though we usually just read.
     cp -r ${node_modules}/node_modules .
     cp -r ${node_modules}/packages .
 
-    # Fix permissions just in case
-    chmod -R u+w node_modules packages
+    # Ensure node_modules is writable so patchShebangs can update script headers
+    chmod -R u+w node_modules
+    # Ensure workspace packages are writable for tsgo incremental outputs (.tsbuildinfo)
+    chmod -R u+w packages
     # Patch shebangs so scripts can run
     patchShebangs node_modules
 
@@ -93,8 +105,15 @@ rustPlatform.buildRustPackage rec {
     mkdir -p packages/desktop/src-tauri/sidecars
     targetTriple=${stdenv.hostPlatform.rust.rustcTarget}
     cp ${args.opencode}/bin/opencode packages/desktop/src-tauri/sidecars/opencode-cli-$targetTriple
+
     # Merge prod config into tauri.conf.json
-    jq -s '.[0] * .[1]' packages/desktop/src-tauri/tauri.conf.json packages/desktop/src-tauri/tauri.prod.conf.json > packages/desktop/src-tauri/tauri.conf.json.tmp
+    if ! jq -s '.[0] * .[1]' \
+      packages/desktop/src-tauri/tauri.conf.json \
+      packages/desktop/src-tauri/tauri.prod.conf.json \
+      > packages/desktop/src-tauri/tauri.conf.json.tmp; then
+      echo "Error: failed to merge tauri.conf.json with tauri.prod.conf.json" >&2
+      exit 1
+    fi
     mv packages/desktop/src-tauri/tauri.conf.json.tmp packages/desktop/src-tauri/tauri.conf.json
 
     # Build the frontend
@@ -109,7 +128,7 @@ rustPlatform.buildRustPackage rec {
   # Tauri bundles the assets during the rust build phase (which happens after preBuild).
   # It looks for them in the location specified in tauri.conf.json.
 
-  postInstall = ''
+  postInstall = lib.optionalString stdenv.isLinux ''
     # Wrap the binary to ensure it finds the libraries
     wrapProgram $out/bin/opencode-desktop \
       --prefix LD_LIBRARY_PATH : ${
@@ -129,5 +148,6 @@ rustPlatform.buildRustPackage rec {
     license = licenses.mit;
     maintainers = with maintainers; [ ];
     mainProgram = "opencode-desktop";
+    platforms = platforms.linux ++ platforms.darwin;
   };
 }

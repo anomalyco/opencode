@@ -68,7 +68,7 @@
           };
           mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
           mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
-          
+
           opencodePkg = mkOpencode {
             version = packageJson.version;
             src = ./.;
@@ -77,7 +77,7 @@
             modelsDev = "${modelsDev.${system}}/dist/_api.json";
             mkNodeModules = mkNodeModules;
           };
-          
+
           desktopPkg = mkDesktop {
             version = packageJson.version;
             src = ./.;
