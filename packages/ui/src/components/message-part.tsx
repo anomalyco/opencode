@@ -415,8 +415,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const part = props.part as TextPart
-  const content = createMemo(() => (part.text ?? "").trim())
-  const displayText = createMemo(() => relativizeProjectPaths(content(), data.directory))
+  const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
 
   return (
     <Show when={displayText()}>
@@ -441,6 +440,9 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 ToolRegistry.register({
   name: "read",
   render(props) {
+    const args: string[] = []
+    if (props.input.offset) args.push("offset=" + props.input.offset)
+    if (props.input.limit) args.push("limit=" + props.input.limit)
     return (
       <BasicTool
         {...props}
@@ -448,6 +450,7 @@ ToolRegistry.register({
         trigger={{
           title: "Read",
           subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
+          args,
         }}
       />
     )
