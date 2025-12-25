@@ -20,3 +20,7 @@ opencode.json
 a.out
 target
 .scripts
+
+# Local dev files
+opencode-dev
+logs/
