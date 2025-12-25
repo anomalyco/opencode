@@ -40,14 +40,20 @@ export const WebCommand = cmd({
         type: "string",
         describe: "hostname to listen on",
         default: "127.0.0.1",
+      })
+      .option("app-dir", {
+        type: "string",
+        describe: "serve local app assets from this directory instead of proxying",
       }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
     const hostname = args.hostname
     const port = args.port
+    const appDir = args.appDir
     const server = Server.listen({
       port,
       hostname,
+      appDir,
     })
     UI.empty()
     UI.println(UI.logo("  "))
