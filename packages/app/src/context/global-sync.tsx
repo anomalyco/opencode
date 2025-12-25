@@ -307,7 +307,10 @@ function createGlobalSync() {
   })
 
   async function bootstrap() {
-    const health = await globalSDK.client.global.health().then((x) => x.data)
+    const health = await globalSDK.client.global
+      .health()
+      .then((x) => x.data)
+      .catch(() => undefined)
     if (!health?.healthy) {
       setGlobalStore(
         "error",
