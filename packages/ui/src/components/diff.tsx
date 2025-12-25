@@ -1,7 +1,9 @@
 import { FileDiff } from "@pierre/diffs"
-import { createEffect, createMemo, onCleanup, splitProps } from "solid-js"
+import { createEffect, createMemo, onCleanup, splitProps, createSignal } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
 import { workerPool } from "../pierre/worker"
+import { Spinner } from "./spinner"
+import { Show } from "solid-js"
 
 // interface ThreadMetadata {
 //   threadId: string
@@ -12,6 +14,7 @@ import { workerPool } from "../pierre/worker"
 export function Diff<T>(props: DiffProps<T>) {
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["before", "after", "class", "classList", "annotations"])
+  const [isRendering, setIsRendering] = createSignal(false)
 
   const fileDiff = createMemo(
     () =>
@@ -27,13 +30,19 @@ export function Diff<T>(props: DiffProps<T>) {
   const cleanupFunctions: Array<() => void> = []
 
   createEffect(() => {
-    container.innerHTML = ""
-    fileDiff().render({
-      oldFile: local.before,
-      newFile: local.after,
-      lineAnnotations: local.annotations,
-      containerWrapper: container,
-    })
+    setIsRendering(true)
+
+    try {
+      container.innerHTML = ""
+      fileDiff().render({
+        oldFile: local.before,
+        newFile: local.after,
+        lineAnnotations: local.annotations,
+        containerWrapper: container,
+      })
+    } finally {
+      setIsRendering(false)
+    }
   })
 
   onCleanup(() => {
@@ -42,5 +51,15 @@ export function Diff<T>(props: DiffProps<T>) {
     cleanupFunctions.forEach((dispose) => dispose())
   })
 
-  return <div data-component="diff" style={styleVariables} ref={container} />
+  return (
+    <div data-component="diff" style={styleVariables}>
+      <Show when={isRendering()}>
+        <div class="flex items-center justify-center py-8 text-text-weaker">
+          <Spinner class="mr-2" />
+          Rendering diff...
+        </div>
+      </Show>
+      <div ref={container} />
+    </div>
+  )
 }
