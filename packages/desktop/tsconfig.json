@@ -9,6 +9,7 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "allowJs": true,
+    "resolveJsonModule": true,
     "strict": true,
     "isolatedModules": true,
     "noEmit": true,
@@ -16,5 +17,5 @@
     "outDir": "node_modules/.ts-dist"
   },
   "references": [{ "path": "../app" }],
-  "include": ["src"]
+  "include": ["src", "package.json"]
 }

@@ -11,6 +11,7 @@
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
     "allowJs": true,
+    "resolveJsonModule": true,
     "strict": true,
     "noEmit": false,
     "emitDeclarationOnly": true,
@@ -20,5 +21,6 @@
       "@/*": ["./src/*"]
     }
   },
+  "include": ["src", "package.json"],
   "exclude": ["dist", "ts-dist"]
 }
