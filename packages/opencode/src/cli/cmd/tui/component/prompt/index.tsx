@@ -47,6 +47,7 @@ export type PromptRef = {
   blur(): void
   focus(): void
   submit(): void
+  pasteFromClipboard(): Promise<void>
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
@@ -514,6 +515,7 @@ export function Prompt(props: PromptProps) {
     submit() {
       submit()
     },
+    pasteFromClipboard,
   })
 
   async function submit() {
@@ -710,6 +712,84 @@ export function Prompt(props: PromptProps) {
     return
   }
 
+  async function pasteFromClipboard() {
+    if (props.disabled) return
+    input.focus()
+
+    const content = await Clipboard.read()
+    if (!content) return
+    if (content.mime.startsWith("image/")) {
+      await pasteImage({
+        filename: "clipboard",
+        mime: content.mime,
+        content: content.data,
+      })
+      return
+    }
+    if (content.mime.startsWith("text/")) {
+      await handleTextPaste(content.data, { insertText: true })
+    }
+  }
+
+  async function handleTextPaste(rawText: string, options: { insertText: boolean; preventDefault?: () => void }) {
+    const normalizedText = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    const trimmedText = normalizedText.trim()
+    if (!trimmedText) {
+      command.trigger("prompt.paste")
+      return
+    }
+
+    const filepath = trimmedText.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+    const isUrl = /^(https?):\/\//.test(filepath)
+    if (!isUrl) {
+      try {
+        const file = Bun.file(filepath)
+        // Handle SVG as raw text content, not as base64 image
+        if (file.type === "image/svg+xml") {
+          options.preventDefault?.()
+          const content = await file.text().catch(() => {})
+          if (content) {
+            pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+            return
+          }
+        }
+        if (file.type.startsWith("image/")) {
+          options.preventDefault?.()
+          const content = await file
+            .arrayBuffer()
+            .then((buffer) => Buffer.from(buffer).toString("base64"))
+            .catch(() => {})
+          if (content) {
+            await pasteImage({
+              filename: file.name,
+              mime: file.type,
+              content,
+            })
+            return
+          }
+        }
+      } catch {}
+    }
+
+    const lineCount = (trimmedText.match(/\n/g)?.length ?? 0) + 1
+    if ((lineCount >= 3 || trimmedText.length > 150) && !sync.data.config.experimental?.disable_paste_summary) {
+      options.preventDefault?.()
+      pasteText(trimmedText, `[Pasted ~${lineCount} lines]`)
+      return
+    }
+
+    if (options.insertText) {
+      input.insertText(normalizedText)
+    }
+
+    // Force layout update and render for the pasted content
+    setTimeout(() => {
+      input.getLayoutNode().markDirty()
+      input.gotoBufferEnd()
+      renderer.requestRender()
+    }, 0)
+  }
+
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
@@ -874,66 +954,10 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // Normalize line endings at the boundary
-                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                // Replace CRLF first, then any remaining CR
-                const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-                const pastedContent = normalizedText.trim()
-                if (!pastedContent) {
-                  command.trigger("prompt.paste")
-                  return
-                }
-
-                // trim ' from the beginning and end of the pasted content. just
-                // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                const isUrl = /^(https?):\/\//.test(filepath)
-                if (!isUrl) {
-                  try {
-                    const file = Bun.file(filepath)
-                    // Handle SVG as raw text content, not as base64 image
-                    if (file.type === "image/svg+xml") {
-                      event.preventDefault()
-                      const content = await file.text().catch(() => {})
-                      if (content) {
-                        pasteText(content, `[SVG: ${file.name ?? "image"}]`)
-                        return
-                      }
-                    }
-                    if (file.type.startsWith("image/")) {
-                      event.preventDefault()
-                      const content = await file
-                        .arrayBuffer()
-                        .then((buffer) => Buffer.from(buffer).toString("base64"))
-                        .catch(() => {})
-                      if (content) {
-                        await pasteImage({
-                          filename: file.name,
-                          mime: file.type,
-                          content,
-                        })
-                        return
-                      }
-                    }
-                  } catch {}
-                }
-
-                const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-                if (
-                  (lineCount >= 3 || pastedContent.length > 150) &&
-                  !sync.data.config.experimental?.disable_paste_summary
-                ) {
-                  event.preventDefault()
-                  pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
-                  return
-                }
-
-                // Force layout update and render for the pasted content
-                setTimeout(() => {
-                  input.getLayoutNode().markDirty()
-                  input.gotoBufferEnd()
-                  renderer.requestRender()
-                }, 0)
+                await handleTextPaste(event.text, {
+                  insertText: false,
+                  preventDefault: () => event.preventDefault(),
+                })
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
