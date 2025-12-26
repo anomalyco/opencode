@@ -1,3 +1,4 @@
+import { Config } from "../../config/config"
 import { Server } from "../../server/server"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
@@ -32,7 +33,8 @@ export const WebCommand = cmd({
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const opts = resolveNetworkOptions(args)
+    const config = await Config.get()
+    const opts = resolveNetworkOptions(args, config)
     const server = Server.listen(opts)
     UI.empty()
     UI.println(UI.logo("  "))

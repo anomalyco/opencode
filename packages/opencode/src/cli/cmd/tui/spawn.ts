@@ -1,4 +1,5 @@
 import { cmd } from "@/cli/cmd/cmd"
+import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import path from "path"
 import { Server } from "@/server/server"
@@ -14,7 +15,8 @@ export const TuiSpawnCommand = cmd({
     }),
   handler: async (args) => {
     upgrade()
-    const opts = resolveNetworkOptions(args)
+    const config = await Config.get()
+    const opts = resolveNetworkOptions(args, config)
     const server = Server.listen(opts)
     const bin = process.execPath
     const cmd = []

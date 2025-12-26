@@ -1,4 +1,5 @@
 import type { Argv, InferredOptionTypes } from "yargs"
+import type { Config } from "../config/config"
 
 const options = {
   port: {
@@ -24,10 +25,18 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
 
-export function resolveNetworkOptions(args: NetworkOptions) {
-  const mdns = args.mdns
+export function resolveNetworkOptions(args: NetworkOptions, config?: Config.Info) {
+  const portExplicitlySet = process.argv.includes("--port")
   const hostnameExplicitlySet = process.argv.includes("--hostname")
-  const hostname = mdns && !hostnameExplicitlySet ? "0.0.0.0" : args.hostname
-  const port = args.port
+  const mdnsExplicitlySet = process.argv.includes("--mdns")
+
+  const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
+  const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)
+  const hostname = hostnameExplicitlySet
+    ? args.hostname
+    : mdns && !config?.server?.hostname
+      ? "0.0.0.0"
+      : (config?.server?.hostname ?? args.hostname)
+
   return { hostname, port, mdns }
 }

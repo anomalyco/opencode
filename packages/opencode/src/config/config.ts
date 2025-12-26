@@ -587,6 +587,17 @@ export namespace Config {
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
+  export const Server = z
+    .object({
+      port: z.number().int().positive().optional().describe("Port to listen on"),
+      hostname: z.string().optional().describe("Hostname to listen on"),
+      mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
+    })
+    .strict()
+    .meta({
+      ref: "ServerConfig",
+    })
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -634,6 +645,7 @@ export namespace Config {
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       tui: TUI.optional().describe("TUI specific settings"),
+      server: Server.optional().describe("Server configuration for opencode serve and web commands"),
       command: z
         .record(z.string(), Command)
         .optional()
