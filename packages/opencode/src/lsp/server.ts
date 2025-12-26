@@ -89,7 +89,7 @@ export namespace LSPServer {
     ),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
     async spawn(root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => { })
       log.info("typescript server", { tsserver })
       if (!tsserver) return
       const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
@@ -164,7 +164,7 @@ export namespace LSPServer {
     root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue"],
     async spawn(root) {
-      const eslint = await Bun.resolve("eslint", Instance.directory).catch(() => {})
+      const eslint = await Bun.resolve("eslint", Instance.directory).catch(() => { })
       if (!eslint) return
       log.info("spawning eslint server")
       const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
@@ -1017,8 +1017,8 @@ export namespace LSPServer {
         await $`chmod +x ${bin}`.quiet().nothrow()
       }
 
-      await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
-      await fs.symlink(bin, path.join(Global.Path.bin, "clangd")).catch(() => {})
+      await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => { })
+      await fs.symlink(bin, path.join(Global.Path.bin, "clangd")).catch(() => { })
 
       log.info(`installed clangd`, { bin })
 
@@ -1075,7 +1075,7 @@ export namespace LSPServer {
     extensions: [".astro"],
     root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
     async spawn(root) {
-      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
+      const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => { })
       if (!tsserver) {
         log.info("typescript not found, required for Astro language server")
         return
@@ -1795,6 +1795,53 @@ export namespace LSPServer {
             ...process.env,
           },
         }),
+      }
+    },
+  }
+
+  export const Dot: Info = {
+    id: "dot",
+    extensions: [".dot", ".gv"],
+    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    async spawn(root) {
+      let binary = Bun.which("dot-language-server")
+      const args: string[] = []
+
+      if (!binary) {
+        // Try to find it in node_modules
+        const js = path.join(Global.Path.bin, "node_modules", "dot-language-server", "out", "server.js")
+        if (!(await Bun.file(js).exists())) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+
+          log.info("installing dot-language-server")
+          await Bun.spawn([BunProc.which(), "install", "dot-language-server"], {
+            cwd: Global.Path.bin,
+            env: {
+              ...process.env,
+              BUN_BE_BUN: "1",
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+            stdin: "pipe",
+          }).exited
+        }
+        binary = BunProc.which()
+        args.push("run", js)
+      }
+
+      args.push("--stdio")
+
+      const proc = spawn(binary, args, {
+        cwd: root,
+        env: {
+          ...process.env,
+          BUN_BE_BUN: "1",
+        },
+      })
+
+      return {
+        process: proc,
+        initialization: {},
       }
     },
   }
