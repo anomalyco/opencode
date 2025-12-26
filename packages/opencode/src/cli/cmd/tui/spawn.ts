@@ -1,33 +1,23 @@
 import { cmd } from "@/cli/cmd/cmd"
+import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
 import path from "path"
 import { Server } from "@/server/server"
 import { upgrade } from "@/cli/upgrade"
+import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 
 export const TuiSpawnCommand = cmd({
   command: "spawn [project]",
   builder: (yargs) =>
-    yargs
-      .positional("project", {
-        type: "string",
-        describe: "path to start opencode in",
-      })
-      .option("port", {
-        type: "number",
-        describe: "port to listen on",
-        default: 0,
-      })
-      .option("hostname", {
-        type: "string",
-        describe: "hostname to listen on",
-        default: "127.0.0.1",
-      }),
+    withNetworkOptions(yargs).positional("project", {
+      type: "string",
+      describe: "path to start opencode in",
+    }),
   handler: async (args) => {
     upgrade()
-    const server = Server.listen({
-      port: args.port,
-      hostname: "127.0.0.1",
-    })
+    const config = await Config.get()
+    const opts = resolveNetworkOptions(args, config)
+    const server = Server.listen(opts)
     const bin = process.execPath
     const cmd = []
     let cwd = process.cwd()
