@@ -7666,7 +7666,7 @@
           },
           "session_child_list": {
             "description": "List subagent sessions",
-            "default": "<leader>j",
+            "default": "none",
             "type": "string"
           },
           "session_parent": {
