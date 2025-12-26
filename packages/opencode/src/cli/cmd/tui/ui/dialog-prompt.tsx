@@ -1,8 +1,8 @@
 import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
-import { onMount, type JSX } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { onMount, type JSX, createSignal } from "solid-js"
+
 
 export type DialogPromptProps = {
   title: string
@@ -16,18 +16,24 @@ export type DialogPromptProps = {
 export function DialogPrompt(props: DialogPromptProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+
+  const MIN_HEIGHT = 3
+  const MAX_HEIGHT = 8
+  const [inputHeight, setInputHeight] = createSignal(MIN_HEIGHT)
+
   let textarea: TextareaRenderable
 
-  useKeyboard((evt) => {
-    if (evt.name === "return") {
-      props.onConfirm?.(textarea.plainText)
-    }
-  })
+  const syncHeight = () => {
+    if (!textarea) return
+    const lines = textarea.virtualLineCount ?? textarea.lineCount
+    setInputHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, lines)))
+  }
 
   onMount(() => {
     dialog.setSize("medium")
     setTimeout(() => {
       textarea.focus()
+      syncHeight()
     }, 1)
     textarea.gotoLineEnd()
   })
@@ -46,9 +52,15 @@ export function DialogPrompt(props: DialogPromptProps) {
           onSubmit={() => {
             props.onConfirm?.(textarea.plainText)
           }}
-          height={3}
+          height={inputHeight()}
+          minHeight={MIN_HEIGHT}
+          maxHeight={MAX_HEIGHT}
+          onContentChange={syncHeight}
           keyBindings={[{ name: "return", action: "submit" }]}
-          ref={(val: TextareaRenderable) => (textarea = val)}
+          ref={(val: TextareaRenderable) => {
+            textarea = val
+            syncHeight()
+          }}
           initialValue={props.value}
           placeholder={props.placeholder ?? "Enter text"}
           textColor={theme.text}
