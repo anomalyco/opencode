@@ -52,7 +52,10 @@ app
     async (c) => {
       const body = c.req.valid("json")
       const share = await Share.create({ sessionID: body.sessionID })
-      const protocol = c.req.header("x-forwarded-proto") ?? c.req.header("x-forwarded-protocol") ?? "https"
+      const protocol =
+        c.req.header("x-forwarded-proto") ??
+        c.req.header("x-forwarded-protocol") ??
+        new URL(c.req.url).protocol.replace(":", "")
       const host = c.req.header("x-forwarded-host") ?? c.req.header("host")
       return c.json({
         id: share.id,
