@@ -1407,6 +1407,10 @@ export type Config = {
   theme?: string
   keybinds?: KeybindsConfig
   /**
+   * Log level
+   */
+  logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
+  /**
    * TUI specific settings
    */
   tui?: {
