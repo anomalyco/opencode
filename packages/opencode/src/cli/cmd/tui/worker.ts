@@ -30,7 +30,7 @@ process.on("uncaughtException", (e) => {
 
 let server: Bun.Server<BunWebSocketData>
 export const rpc = {
-  async server(input: { port: number; hostname: string }) {
+  async server(input: { port: number; hostname: string; mdns?: boolean }) {
     if (server) await server.stop(true)
     try {
       server = Server.listen(input)
