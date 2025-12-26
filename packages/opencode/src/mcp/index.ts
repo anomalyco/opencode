@@ -444,28 +444,6 @@ export namespace MCP {
     s.status[name] = { status: "disabled" }
   }
 
-  export async function restartAll() {
-    log.info("restarting all mcp servers")
-    const s = await state()
-    const serversToRestart = Object.entries(s.status)
-      .filter(([, status]) => status.status === "connected" || status.status === "failed")
-      .map(([name]) => name)
-
-    if (serversToRestart.length === 0) {
-      log.info("no mcp servers to restart")
-      return await status()
-    }
-
-    log.info("disconnecting mcp servers", { servers: serversToRestart })
-    await Promise.all(serversToRestart.map((name) => disconnect(name)))
-
-    log.info("reconnecting mcp servers", { servers: serversToRestart })
-    await Promise.all(serversToRestart.map((name) => connect(name)))
-
-    log.info("mcp servers restarted", { servers: serversToRestart })
-    return await status()
-  }
-
   export async function tools() {
     const result: Record<string, Tool> = {}
     const s = await state()

@@ -3942,46 +3942,6 @@
         ]
       }
     },
-    "/mcp/restart": {
-      "post": {
-        "operationId": "mcp.restartAll",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "summary": "Restart all MCP servers",
-        "description": "Restart all connected MCP servers by disconnecting and reconnecting them.",
-        "responses": {
-          "200": {
-            "description": "MCP servers restarted successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {
-                    "$ref": "#/components/schemas/MCPStatus"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.restartAll({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/mcp/{name}/auth": {
       "post": {
         "operationId": "mcp.auth.start",

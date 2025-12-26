@@ -373,9 +373,27 @@ function App() {
           variant: "info",
         })
         try {
-          const result = await sdk.client.mcp.restartAll()
-          if (result.data) {
-            sync.set("mcp", result.data)
+          const mcpData = sync.data.mcp ?? {}
+          const serversToRestart = Object.entries(mcpData)
+            .filter(([, status]) => status.status === "connected" || status.status === "failed")
+            .map(([name]) => name)
+
+          if (serversToRestart.length === 0) {
+            toast.show({
+              message: "No MCP servers to restart",
+              variant: "info",
+            })
+            return
+          }
+
+          // Disconnect all servers
+          await Promise.all(serversToRestart.map((name) => sdk.client.mcp.disconnect({ name })))
+          // Reconnect all servers
+          await Promise.all(serversToRestart.map((name) => sdk.client.mcp.connect({ name })))
+          // Refresh status
+          const status = await sdk.client.mcp.status()
+          if (status.data) {
+            sync.set("mcp", status.data)
             toast.show({
               message: "MCP servers restarted",
               variant: "success",

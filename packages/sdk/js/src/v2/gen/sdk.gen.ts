@@ -47,7 +47,6 @@ import type {
   McpDisconnectResponses,
   McpLocalConfig,
   McpRemoteConfig,
-  McpRestartAllResponses,
   McpStatusResponses,
   Part as Part2,
   PartDeleteErrors,
@@ -2231,25 +2230,6 @@ export class Mcp extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
-    })
-  }
-
-  /**
-   * Restart all MCP servers
-   *
-   * Restart all connected MCP servers by disconnecting and reconnecting them.
-   */
-  public restartAll<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
-    return (options?.client ?? this.client).post<McpRestartAllResponses, unknown, ThrowOnError>({
-      url: "/mcp/restart",
-      ...options,
-      ...params,
     })
   }
 

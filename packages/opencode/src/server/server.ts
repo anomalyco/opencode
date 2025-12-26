@@ -2039,28 +2039,6 @@ export namespace Server {
         },
       )
       .post(
-        "/mcp/restart",
-        describeRoute({
-          summary: "Restart all MCP servers",
-          description: "Restart all connected MCP servers by disconnecting and reconnecting them.",
-          operationId: "mcp.restartAll",
-          responses: {
-            200: {
-              description: "MCP servers restarted successfully",
-              content: {
-                "application/json": {
-                  schema: resolver(z.record(z.string(), MCP.Status)),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          const status = await MCP.restartAll()
-          return c.json(status)
-        },
-      )
-      .post(
         "/mcp/:name/auth",
         describeRoute({
           summary: "Start MCP OAuth",

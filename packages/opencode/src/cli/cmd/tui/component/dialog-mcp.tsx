@@ -88,13 +88,23 @@ export function DialogMcp() {
         // Prevent restarting while an operation is already in progress
         if (loading() !== null || restarting()) return
 
+        const mcpData = sync.data.mcp ?? {}
+        const serversToRestart = Object.entries(mcpData)
+          .filter(([, status]) => status.status === "connected" || status.status === "failed")
+          .map(([name]) => name)
+
+        if (serversToRestart.length === 0) return
+
         setRestarting(true)
         try {
-          const result = await sdk.client.mcp.restartAll()
-          if (result.data) {
-            sync.set("mcp", result.data)
-          } else {
-            console.error("Failed to restart MCP servers: no data returned")
+          // Disconnect all servers
+          await Promise.all(serversToRestart.map((name) => sdk.client.mcp.disconnect({ name })))
+          // Reconnect all servers
+          await Promise.all(serversToRestart.map((name) => sdk.client.mcp.connect({ name })))
+          // Refresh status
+          const status = await sdk.client.mcp.status()
+          if (status.data) {
+            sync.set("mcp", status.data)
           }
         } catch (error) {
           console.error("Failed to restart MCP servers:", error)
