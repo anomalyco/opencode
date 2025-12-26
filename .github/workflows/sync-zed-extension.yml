@@ -31,4 +31,4 @@ jobs:
         run: |
           ./script/sync-zed.ts ${{ steps.get_tag.outputs.tag }}
         env:
-          GITHUB_TOKEN: ${{ secrets.ZED_EXTENSIONS_PAT }}
+          ZED_EXTENSIONS_PAT: ${{ secrets.ZED_EXTENSIONS_PAT }}
