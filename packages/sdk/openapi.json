@@ -7687,6 +7687,11 @@
         },
         "additionalProperties": false
       },
+      "LogLevel": {
+        "description": "Log level",
+        "type": "string",
+        "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
+      },
       "ServerConfig": {
         "description": "Server configuration for opencode serve and web commands",
         "type": "object",
@@ -8163,6 +8168,9 @@
           },
           "keybinds": {
             "$ref": "#/components/schemas/KeybindsConfig"
+          },
+          "logLevel": {
+            "$ref": "#/components/schemas/LogLevel"
           },
           "tui": {
             "description": "TUI specific settings",
