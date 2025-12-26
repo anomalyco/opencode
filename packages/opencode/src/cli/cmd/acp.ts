@@ -3,7 +3,6 @@ import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
-import { Config } from "@/config/config"
 import { Server } from "@/server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
@@ -29,8 +28,7 @@ export const AcpCommand = cmd({
   },
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
-      const config = await Config.get()
-      const opts = resolveNetworkOptions(args, config)
+      const opts = await resolveNetworkOptions(args)
       const server = Server.listen(opts)
 
       const sdk = createOpencodeClient({

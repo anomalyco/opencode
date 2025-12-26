@@ -7,7 +7,6 @@ import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
-import { Config } from "@/config/config"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -78,9 +77,8 @@ export const TuiThreadCommand = cmd({
     process.on("unhandledRejection", (e) => {
       Log.Default.error(e)
     })
-    const config = await Config.get()
-    const networkOpts = resolveNetworkOptions(args, config)
-    const server = await client.call("server", networkOpts)
+    const opts = await resolveNetworkOptions(args)
+    const server = await client.call("server", opts)
     const prompt = await iife(async () => {
       const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
       if (!args.prompt) return piped
