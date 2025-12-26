@@ -633,6 +633,7 @@ export namespace Config {
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      logLevel: z.enum(["DEBUG", "INFO", "WARN", "ERROR"]).optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
       command: z
         .record(z.string(), Command)
