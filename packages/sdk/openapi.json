@@ -7692,6 +7692,27 @@
         "type": "string",
         "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
       },
+      "ServerConfig": {
+        "description": "Server configuration for opencode serve and web commands",
+        "type": "object",
+        "properties": {
+          "port": {
+            "description": "Port to listen on",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "hostname": {
+            "description": "Hostname to listen on",
+            "type": "string"
+          },
+          "mdns": {
+            "description": "Enable mDNS service discovery",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "AgentConfig": {
         "type": "object",
         "properties": {
@@ -8177,6 +8198,9 @@
                 "enum": ["auto", "stacked"]
               }
             }
+          },
+          "server": {
+            "$ref": "#/components/schemas/ServerConfig"
           },
           "command": {
             "description": "Command configuration, see https://opencode.ai/docs/commands",
