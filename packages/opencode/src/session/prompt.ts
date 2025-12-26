@@ -43,6 +43,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { UserDiff } from "./user-diff"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -716,6 +717,22 @@ export namespace SessionPrompt {
 
   async function createUserMessage(input: PromptInput) {
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+    const session = await Session.get(input.sessionID)
+
+    // Compute user diff if we have a previous generation snapshot
+    let userDiffPart: MessageV2.UserDiffPart | undefined
+    if (session.lastGenerationSnapshot) {
+      const diff = await UserDiff.compute(session.lastGenerationSnapshot).catch((e) => {
+        log.warn("failed to compute user diff", { error: e })
+        return undefined
+      })
+      if (diff) {
+        const partID = Identifier.ascending("part")
+        const messageID = input.messageID ?? Identifier.ascending("message")
+        userDiffPart = UserDiff.toPart(diff, messageID, input.sessionID, partID)
+      }
+    }
+
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -975,6 +992,29 @@ export namespace SessionPrompt {
         ]
       }),
     ).then((x) => x.flat())
+
+    // Inject user diff at the beginning of the message if we have one
+    if (userDiffPart) {
+      // Update messageID since info.id is now finalized
+      userDiffPart.messageID = info.id
+      parts.unshift(userDiffPart)
+
+      // Add a synthetic text part with the diff context for the model
+      const diffContext = UserDiff.formatForContext({
+        files: userDiffPart.files,
+        truncated: userDiffPart.truncated,
+        summary: userDiffPart.summary,
+        snapshot: userDiffPart.snapshot,
+      })
+      parts.unshift({
+        id: Identifier.ascending("part"),
+        messageID: info.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: diffContext,
+        synthetic: true,
+      })
+    }
 
     await Plugin.trigger(
       "chat.message",

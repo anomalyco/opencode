@@ -157,6 +157,33 @@ export namespace MessageV2 {
   })
   export type CompactionPart = z.infer<typeof CompactionPart>
 
+  export const UserDiffPart = PartBase.extend({
+    type: z.literal("user-diff"),
+    files: z
+      .object({
+        file: z.string(),
+        status: z.enum(["added", "modified", "deleted"]),
+        additions: z.number(),
+        deletions: z.number(),
+      })
+      .array(),
+    truncated: z.boolean(),
+    summary: z
+      .object({
+        added: z.number(),
+        modified: z.number(),
+        deleted: z.number(),
+        skipped: z.number(),
+        totalAdditions: z.number(),
+        totalDeletions: z.number(),
+      })
+      .optional(),
+    snapshot: z.string(),
+  }).meta({
+    ref: "UserDiffPart",
+  })
+  export type UserDiffPart = z.infer<typeof UserDiffPart>
+
   export const SubtaskPart = PartBase.extend({
     type: z.literal("subtask"),
     prompt: z.string(),
@@ -327,6 +354,7 @@ export namespace MessageV2 {
       AgentPart,
       RetryPart,
       CompactionPart,
+      UserDiffPart,
     ])
     .meta({
       ref: "Part",

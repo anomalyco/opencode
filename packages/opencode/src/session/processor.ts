@@ -13,6 +13,7 @@ import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
+import { UserDiff } from "./user-diff"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -398,6 +399,14 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+
+          // Capture snapshot at end of generation for user diff tracking
+          if (!input.assistantMessage.error && !blocked) {
+            UserDiff.captureSnapshot(input.sessionID).catch((e) => {
+              log.warn("failed to capture generation snapshot", { error: e })
+            })
+          }
+
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
           return "continue"

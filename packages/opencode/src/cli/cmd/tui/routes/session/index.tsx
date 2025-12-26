@@ -25,7 +25,15 @@ import {
   type ScrollAcceleration,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Part,
+  ToolPart,
+  UserMessage,
+  TextPart,
+  ReasoningPart,
+  UserDiffPart,
+} from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -1127,6 +1135,7 @@ function UserMessage(props: {
   const local = useLocal()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
+  const userDiff = createMemo(() => props.parts.find((x) => x.type === "user-diff") as UserDiffPart | undefined)
   const sync = useSync()
   const { theme, syntax } = useTheme()
   const [hover, setHover] = createSignal(false)
@@ -1211,6 +1220,54 @@ function UserMessage(props: {
                 <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
               </Show>
             </text>
+          </box>
+        </box>
+      </Show>
+      <Show when={userDiff()}>
+        <box
+          marginTop={props.index === 0 ? 0 : 1}
+          marginBottom={1}
+          border={["left"]}
+          borderColor={theme.warning}
+          customBorderChars={SplitBorder.customBorderChars}
+          paddingLeft={2}
+          paddingTop={1}
+          paddingBottom={1}
+          backgroundColor={theme.backgroundPanel}
+        >
+          <text>
+            <span style={{ fg: theme.warning, bold: true }}>External changes since last response</span>
+          </text>
+          <box marginTop={1} flexDirection="column">
+            <For each={userDiff()!.files.slice(0, 10)}>
+              {(file) => {
+                const prefix = file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"
+                const prefixColor =
+                  file.status === "added" ? theme.success : file.status === "deleted" ? theme.error : theme.warning
+                return (
+                  <text>
+                    <span style={{ fg: prefixColor, bold: true }}>{prefix}</span>
+                    <span style={{ fg: theme.text }}> {file.file}</span>
+                    <span style={{ fg: theme.textMuted }}>
+                      {" "}
+                      (+{file.additions}, -{file.deletions})
+                    </span>
+                  </text>
+                )
+              }}
+            </For>
+            <Show when={userDiff()!.files.length > 10}>
+              <text fg={theme.textMuted}>...and {userDiff()!.files.length - 10} more files</text>
+            </Show>
+            <Show when={userDiff()!.summary}>
+              <text fg={theme.textMuted} marginTop={1}>
+                Total: +{userDiff()!.summary!.totalAdditions}, -{userDiff()!.summary!.totalDeletions}
+                {userDiff()!.truncated
+                  ? ` (${userDiff()!.summary!.added + userDiff()!.summary!.modified + userDiff()!.summary!.deleted} files total)`
+                  : ""}
+                {userDiff()!.summary!.skipped > 0 ? ` (${userDiff()!.summary!.skipped} ignored)` : ""}
+              </text>
+            </Show>
           </box>
         </box>
       </Show>

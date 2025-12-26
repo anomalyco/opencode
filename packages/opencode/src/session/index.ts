@@ -70,6 +70,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      lastGenerationSnapshot: z.string().optional(),
     })
     .meta({
       ref: "Session",

@@ -410,6 +410,29 @@ export type CompactionPart = {
   auto: boolean
 }
 
+export type UserDiffPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "user-diff"
+  files: Array<{
+    file: string
+    status: "added" | "modified" | "deleted"
+    additions: number
+    deletions: number
+  }>
+  truncated: boolean
+  summary?: {
+    added: number
+    modified: number
+    deleted: number
+    skipped: number
+    totalAdditions: number
+    totalDeletions: number
+  }
+  snapshot: string
+}
+
 export type Part =
   | TextPart
   | {
@@ -432,6 +455,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | UserDiffPart
 
 export type EventMessagePartUpdated = {
   type: "message.part.updated"
@@ -637,6 +661,7 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  lastGenerationSnapshot?: string
 }
 
 export type EventSessionCreated = {
