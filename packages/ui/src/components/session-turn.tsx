@@ -60,6 +60,31 @@ function computeStatusFromPart(part: PartType | undefined): string | undefined {
   return undefined
 }
 
+function AssistantMessageItem(props: {
+  message: AssistantMessage
+  summary: string | undefined
+  response: string | undefined
+  lastTextPartId: string | undefined
+  working: boolean
+}) {
+  const data = useData()
+  const msgParts = createMemo(() => data.store.part[props.message.id] ?? [])
+  const lastTextPart = createMemo(() =>
+    msgParts()
+      .filter((p) => p?.type === "text")
+      .at(-1),
+  )
+
+  const filteredParts = createMemo(() => {
+    if (!props.working && !props.summary && props.response && props.lastTextPartId === lastTextPart()?.id) {
+      return msgParts().filter((p) => p?.id !== lastTextPart()?.id)
+    }
+    return msgParts()
+  })
+
+  return <Message message={props.message} parts={filteredParts()} />
+}
+
 export function SessionTurn(
   props: ParentProps<{
     sessionID: string
@@ -77,125 +102,119 @@ export function SessionTurn(
   const data = useData()
   const diffComponent = useDiffComponent()
 
-  const derived = createMemo(() => {
-    const allMessages = data.store.message[props.sessionID] ?? []
-    const userMessages = allMessages.filter((m) => m.role === "user").sort((a, b) => a.id.localeCompare(b.id))
-    const lastUserMessage = userMessages.at(-1)
-    const message = userMessages.find((m) => m.id === props.messageID)
+  const allMessages = createMemo(() => data.store.message[props.sessionID] ?? [])
+  const userMessages = createMemo(() =>
+    allMessages()
+      .filter((m) => m.role === "user")
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  )
 
-    if (!message) {
-      return {
-        message: undefined,
-        parts: [] as PartType[],
-        assistantMessages: [] as AssistantMessage[],
-        assistantParts: [] as PartType[],
-        lastAssistantMessage: undefined as AssistantMessage | undefined,
-        lastTextPart: undefined as PartType | undefined,
-        error: undefined,
-        hasSteps: false,
-        isShellMode: false,
-        rawStatus: undefined as string | undefined,
-        isLastUserMessage: false,
-      }
-    }
+  const message = createMemo(() => userMessages().find((m) => m.id === props.messageID))
+  const isLastUserMessage = createMemo(() => message()?.id === userMessages().at(-1)?.id)
 
-    const parts = data.store.part[message.id] ?? []
-    const assistantMessages = allMessages.filter(
-      (m) => m.role === "assistant" && m.parentID === message.id,
-    ) as AssistantMessage[]
-
-    const assistantParts: PartType[] = []
-    for (const m of assistantMessages) {
-      const msgParts = data.store.part[m.id]
-      if (msgParts) {
-        for (const p of msgParts) {
-          if (p) assistantParts.push(p)
-        }
-      }
-    }
-
-    const lastAssistantMessage = assistantMessages.at(-1)
-    const error = assistantMessages.find((m) => m.error)?.error
-
-    let lastTextPart: PartType | undefined
-    for (let i = assistantParts.length - 1; i >= 0; i--) {
-      if (assistantParts[i]?.type === "text") {
-        lastTextPart = assistantParts[i]
-        break
-      }
-    }
-
-    const hasSteps = assistantParts.some((p) => p?.type === "tool")
-
-    let isShellMode = false
-    if (parts.every((p) => p?.type === "text" && p?.synthetic) && assistantParts.length === 1) {
-      const assistantPart = assistantParts[0]
-      if (assistantPart?.type === "tool" && assistantPart?.tool === "bash") {
-        isShellMode = true
-      }
-    }
-
-    let resolvedParts = assistantParts
-    const currentTask = assistantParts.findLast(
-      (p) =>
-        p &&
-        p.type === "tool" &&
-        p.tool === "task" &&
-        p.state &&
-        "metadata" in p.state &&
-        p.state.metadata &&
-        p.state.metadata.sessionId &&
-        p.state.status === "running",
-    ) as ToolPart | undefined
-
-    if (currentTask?.state && "metadata" in currentTask.state && currentTask.state.metadata?.sessionId) {
-      const taskMessages = data.store.message[currentTask.state.metadata.sessionId as string]?.filter(
-        (m) => m.role === "assistant",
-      )
-      if (taskMessages) {
-        const taskParts: PartType[] = []
-        for (const m of taskMessages) {
-          const msgParts = data.store.part[m.id]
-          if (msgParts) {
-            for (const p of msgParts) {
-              if (p) taskParts.push(p)
-            }
-          }
-        }
-        if (taskParts.length > 0) {
-          resolvedParts = taskParts
-        }
-      }
-    }
-
-    const lastPart = resolvedParts.at(-1)
-    const rawStatus = computeStatusFromPart(lastPart)
-
-    return {
-      message,
-      parts,
-      assistantMessages,
-      assistantParts,
-      lastAssistantMessage,
-      lastTextPart,
-      error,
-      hasSteps,
-      isShellMode,
-      rawStatus,
-      isLastUserMessage: message.id === lastUserMessage?.id,
-    }
+  const parts = createMemo(() => {
+    const msg = message()
+    if (!msg) return []
+    return data.store.part[msg.id] ?? []
   })
 
-  const message = () => derived().message
-  const parts = () => derived().parts
-  const assistantMessages = () => derived().assistantMessages
-  const assistantParts = () => derived().assistantParts
-  const lastAssistantMessage = () => derived().lastAssistantMessage
-  const lastTextPart = () => derived().lastTextPart
-  const error = () => derived().error
-  const hasSteps = () => derived().hasSteps
-  const isShellMode = () => derived().isShellMode
-  const rawStatus = () => derived().rawStatus
+  const assistantMessages = createMemo(() => {
+    const msg = message()
+    if (!msg) return [] as AssistantMessage[]
+    return allMessages().filter((m) => m.role === "assistant" && m.parentID === msg.id) as AssistantMessage[]
+  })
+
+  const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
+
+  const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+
+  const lastTextPart = createMemo(() => {
+    const msgs = assistantMessages()
+    for (let mi = msgs.length - 1; mi >= 0; mi--) {
+      const msgParts = data.store.part[msgs[mi].id] ?? []
+      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+        const part = msgParts[pi]
+        if (part?.type === "text") return part as TextPart
+      }
+    }
+    return undefined
+  })
+
+  const hasSteps = createMemo(() => {
+    for (const m of assistantMessages()) {
+      const msgParts = data.store.part[m.id]
+      if (!msgParts) continue
+      for (const p of msgParts) {
+        if (p?.type === "tool") return true
+      }
+    }
+    return false
+  })
+
+  const shellModePart = createMemo(() => {
+    const p = parts()
+    if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
+
+    const msgs = assistantMessages()
+    if (msgs.length !== 1) return
+
+    const msgParts = data.store.part[msgs[0].id] ?? []
+    if (msgParts.length !== 1) return
+
+    const assistantPart = msgParts[0]
+    if (assistantPart?.type === "tool" && assistantPart.tool === "bash") return assistantPart
+  })
+
+  const isShellMode = createMemo(() => !!shellModePart())
+
+  const rawStatus = createMemo(() => {
+    const msgs = assistantMessages()
+    let last: PartType | undefined
+    let currentTask: ToolPart | undefined
+
+    for (let mi = msgs.length - 1; mi >= 0; mi--) {
+      const msgParts = data.store.part[msgs[mi].id] ?? []
+      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+        const part = msgParts[pi]
+        if (!part) continue
+        if (!last) last = part
+
+        if (
+          part.type === "tool" &&
+          part.tool === "task" &&
+          part.state &&
+          "metadata" in part.state &&
+          part.state.metadata?.sessionId &&
+          part.state.status === "running"
+        ) {
+          currentTask = part as ToolPart
+          break
+        }
+      }
+      if (currentTask) break
+    }
+
+    const taskSessionId =
+      currentTask?.state && "metadata" in currentTask.state
+        ? (currentTask.state.metadata?.sessionId as string | undefined)
+        : undefined
+
+    if (taskSessionId) {
+      const taskMessages = data.store.message[taskSessionId] ?? []
+      for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
+        const msg = taskMessages[mi]
+        if (!msg || msg.role !== "assistant") continue
+
+        const msgParts = data.store.part[msg.id] ?? []
+        for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+          const part = msgParts[pi]
+          if (part) return computeStatusFromPart(part)
+        }
+      }
+    }
+
+    return computeStatusFromPart(last)
+  })
 
   const status = createMemo(
     () =>
@@ -203,7 +222,7 @@ export function SessionTurn(
         type: "idle",
       },
   )
-  const working = createMemo(() => status().type !== "idle" && derived().isLastUserMessage)
+  const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
   const retry = createMemo(() => {
     const s = status()
     if (s.type !== "retry") return
@@ -246,6 +265,7 @@ export function SessionTurn(
     retrySeconds: 0,
     status: rawStatus(),
     duration: duration(),
+    summaryWaitTimedOut: false,
   })
 
   createEffect(() => {
@@ -284,6 +304,42 @@ export function SessionTurn(
       setStore("duration", duration())
     }, 1000)
     onCleanup(() => clearInterval(timer))
+  })
+
+  createEffect(() => {
+    if (working()) {
+      setStore("summaryWaitTimedOut", false)
+    }
+  })
+
+  createEffect(() => {
+    if (working() || !isLastUserMessage()) return
+
+    const diffs = message()?.summary?.diffs
+    if (!diffs?.length) return
+    if (summary()) return
+    if (store.summaryWaitTimedOut) return
+
+    const timer = setTimeout(() => {
+      setStore("summaryWaitTimedOut", true)
+    }, 6000)
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const waitingForSummary = createMemo(() => {
+    if (!isLastUserMessage()) return false
+    if (working()) return false
+
+    const diffs = message()?.summary?.diffs
+    if (!diffs?.length) return false
+    if (summary()) return false
+
+    return !store.summaryWaitTimedOut
+  })
+
+  const showSummarySection = createMemo(() => {
+    if (working()) return false
+    return !waitingForSummary()
   })
 
   let lastStatusChange = Date.now()
@@ -330,7 +386,7 @@ export function SessionTurn(
               >
                 <Switch>
                   <Match when={isShellMode()}>
-                    <Part part={assistantParts()[0]} message={msg()} defaultOpen />
+                    <Part part={shellModePart()!} message={msg()} defaultOpen />
                   </Match>
                   <Match when={true}>
                     {/* Title (sticky) */}
@@ -362,7 +418,7 @@ export function SessionTurn(
                           size="small"
                           onClick={props.onStepsExpandedToggle ?? (() => {})}
                         >
-                          <Show when={working()}>
+                          <Show when={working() || waitingForSummary()}>
                             <Spinner />
                           </Show>
                           <Switch>
@@ -379,6 +435,7 @@ export function SessionTurn(
                               </span>
                               <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                             </Match>
+                            <Match when={waitingForSummary()}>Generating summary</Match>
                             <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                             <Match when={props.stepsExpanded}>Hide steps</Match>
                             <Match when={!props.stepsExpanded}>Show steps</Match>
@@ -395,27 +452,15 @@ export function SessionTurn(
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
                       <div data-slot="session-turn-collapsible-content-inner">
                         <For each={assistantMessages()}>
-                          {(assistantMessage) => {
-                            const parts = createMemo(() => data.store.part[assistantMessage.id] ?? [])
-                            const last = createMemo(() =>
-                              parts()
-                                .filter((p) => p?.type === "text")
-                                .at(-1),
-                            )
-                            return (
-                              <Switch>
-                                <Match when={!summary() && response() && lastTextPart()?.id === last()?.id}>
-                                  <Message
-                                    message={assistantMessage}
-                                    parts={parts().filter((p) => p?.id !== last()?.id)}
-                                  />
-                                </Match>
-                                <Match when={true}>
-                                  <Message message={assistantMessage} parts={parts()} />
-                                </Match>
-                              </Switch>
-                            )
-                          }}
+                          {(assistantMessage) => (
+                            <AssistantMessageItem
+                              message={assistantMessage}
+                              summary={summary()}
+                              response={response()}
+                              lastTextPartId={lastTextPart()?.id}
+                              working={working()}
+                            />
+                          )}
                         </For>
                         <Show when={error()}>
                           <Card variant="error" class="error-card">
@@ -425,7 +470,7 @@ export function SessionTurn(
                       </div>
                     </Show>
                     {/* Summary */}
-                    <Show when={!working()}>
+                    <Show when={showSummarySection()}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
                           <Switch>

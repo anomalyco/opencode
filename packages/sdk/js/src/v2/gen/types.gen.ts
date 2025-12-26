@@ -1151,6 +1151,11 @@ export type KeybindsConfig = {
   tips_toggle?: string
 }
 
+/**
+ * Log level
+ */
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
+
 export type AgentConfig = {
   model?: string
   temperature?: number
@@ -1388,6 +1393,7 @@ export type Config = {
    */
   theme?: string
   keybinds?: KeybindsConfig
+  logLevel?: LogLevel
   /**
    * TUI specific settings
    */
