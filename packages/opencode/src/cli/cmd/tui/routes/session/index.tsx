@@ -888,6 +888,25 @@ export function Session() {
         dialog.clear()
       },
     },
+    {
+      title: "Switch subagent session",
+      value: "session.child.list",
+      keybind: "session_child_list",
+      category: "Session",
+      suggested: (() => {
+        const parentID = session()?.parentID ?? session()?.id
+        const siblings = sync.data.session.filter((x) => x.parentID === parentID || x.id === parentID)
+        return siblings.length > 1
+      })(),
+      disabled: (() => {
+        const parentID = session()?.parentID ?? session()?.id
+        const siblings = sync.data.session.filter((x) => x.parentID === parentID || x.id === parentID)
+        return siblings.length <= 1
+      })(),
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogSubagent sessionID={route.sessionID} />)
+      },
+    },
   ])
 
   const revertInfo = createMemo(() => session()?.revert)
@@ -1675,8 +1694,12 @@ ToolRegistry.register<typeof TaskTool>({
           </box>
         </Show>
         <text fg={theme.text}>
-          {keybind.print("session_child_cycle")}, {keybind.print("session_child_cycle_reverse")}
-          <span style={{ fg: theme.textMuted }}> to navigate between subagent sessions</span>
+          {keybind.print("session_child_list")}
+          <span style={{ fg: theme.textMuted }}> to switch, </span>
+          {keybind.print("session_child_cycle")}
+          <span style={{ fg: theme.textMuted }}>/</span>
+          {keybind.print("session_child_cycle_reverse")}
+          <span style={{ fg: theme.textMuted }}> to cycle</span>
         </text>
       </>
     )
