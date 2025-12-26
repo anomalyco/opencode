@@ -539,7 +539,7 @@ function App() {
   sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
     const message = (() => {
-      if (!error) return "An error occured"
+      if (!error) return "An error occurred"
 
       if (typeof error === "object") {
         const data = error.data
