@@ -313,3 +313,12 @@ export const gleam: Info = {
     return Bun.which("gleam") !== null
   },
 }
+
+export const shfmt: Info = {
+  name: "shfmt",
+  command: ["shfmt", "-w", "$FILE"],
+  extensions: [".sh", ".bash"],
+  async enabled() {
+    return Bun.which("shfmt") !== null
+  },
+}
