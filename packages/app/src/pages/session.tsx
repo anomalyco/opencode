@@ -57,6 +57,8 @@ import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
+import { StatusBar } from "@/components/status-bar"
+import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
 
 export default function Page() {
   const layout = useLayout()
@@ -931,6 +933,9 @@ export default function Page() {
           </DragDropProvider>
         </div>
       </Show>
+      <StatusBar>
+        <SessionMcpIndicator />
+      </StatusBar>
     </div>
   )
 }
