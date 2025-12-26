@@ -23,8 +23,7 @@ The tool returns the current output and whether the job has finished.`,
         .describe("The ID of the background job to check output for (e.g., 'A1B2', 'C3D4')"),
       max_wait_time: z
         .number()
-        .optional()
-        .describe("Maximum time in seconds to wait for job completion (max 300 seconds). If not set or set to 0, will return immediately without waiting."),
+        .describe("Maximum time in seconds to wait for job completion (max 300 seconds)."),
     }),
 
     async execute(params, ctx) {
