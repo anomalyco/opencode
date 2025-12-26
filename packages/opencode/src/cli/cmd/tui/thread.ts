@@ -6,6 +6,7 @@ import path from "path"
 import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
+import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -15,7 +16,7 @@ export const TuiThreadCommand = cmd({
   command: "$0 [project]",
   describe: "start opencode tui",
   builder: (yargs) =>
-    yargs
+    withNetworkOptions(yargs)
       .positional("project", {
         type: "string",
         describe: "path to start opencode in",
@@ -36,23 +37,12 @@ export const TuiThreadCommand = cmd({
         describe: "session id to continue",
       })
       .option("prompt", {
-        alias: ["p"],
         type: "string",
         describe: "prompt to use",
       })
       .option("agent", {
         type: "string",
         describe: "agent to use",
-      })
-      .option("port", {
-        type: "number",
-        describe: "port to listen on",
-        default: 0,
-      })
-      .option("hostname", {
-        type: "string",
-        describe: "hostname to listen on",
-        default: "127.0.0.1",
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
@@ -87,10 +77,8 @@ export const TuiThreadCommand = cmd({
     process.on("unhandledRejection", (e) => {
       Log.Default.error(e)
     })
-    const server = await client.call("server", {
-      port: args.port,
-      hostname: args.hostname,
-    })
+    const opts = await resolveNetworkOptions(args)
+    const server = await client.call("server", opts)
     const prompt = await iife(async () => {
       const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
       if (!args.prompt) return piped

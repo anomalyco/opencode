@@ -1175,7 +1175,7 @@ export namespace LSPServer {
             case "linux":
               return "config_linux"
             case "win32":
-              return "config_windows"
+              return "config_win"
             default:
               return "config_linux"
           }
@@ -1889,6 +1889,24 @@ export namespace LSPServer {
 
       return {
         process: spawn(bin, { cwd: root }),
+      }
+    },
+  }
+
+  export const HLS: Info = {
+    id: "haskell-language-server",
+    extensions: [".hs", ".lhs"],
+    root: NearestRoot(["stack.yaml", "cabal.project", "hie.yaml", "*.cabal"]),
+    async spawn(root) {
+      const bin = Bun.which("haskell-language-server-wrapper")
+      if (!bin) {
+        log.info("haskell-language-server-wrapper not found, please install haskell-language-server")
+        return
+      }
+      return {
+        process: spawn(bin, ["--lsp"], {
+          cwd: root,
+        }),
       }
     },
   }
