@@ -995,7 +995,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
           />
           <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
-            <div class="absolute top-0 inset-x-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? "Enter shell command..."
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
