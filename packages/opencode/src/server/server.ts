@@ -7,6 +7,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { stream, streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
+import path from "path"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
@@ -54,10 +55,20 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+  const startTime = Date.now()
 
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
     Disposed: BusEvent.define("global.disposed", z.object({})),
+  }
+
+  // Local SPA serving (opt-in via OPENCODE_APP_DIST=/path)
+  function findAppDist(): string | undefined {
+    const dist = process.env.OPENCODE_APP_DIST
+    if (!dist) return undefined
+    try {
+      if (Bun.file(path.join(dist, "index.html")).size > 0) return dist
+    } catch {}
   }
 
   const app = new Hono()
@@ -80,7 +91,7 @@ export namespace Server {
         })
       })
       .use(async (c, next) => {
-        const skipLogging = c.req.path === "/log"
+        const skipLogging = c.req.path === "/log" || c.req.path === "/health"
         if (!skipLogging) {
           log.info("request", {
             method: c.req.method,
@@ -97,6 +108,91 @@ export namespace Server {
         }
       })
       .use(cors())
+      .get(
+        "/health",
+        describeRoute({
+          summary: "Fast health check",
+          description:
+            "Lightweight health check endpoint for load balancers and monitoring systems. Returns quickly without middleware overhead.",
+          operationId: "health",
+          responses: {
+            200: {
+              description: "Server is healthy",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      status: z.literal("ok"),
+                      uptime: z.number(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json({
+            status: "ok",
+            uptime: Date.now() - startTime,
+          })
+        },
+      )
+      .get(
+        "/status",
+        describeRoute({
+          summary: "Server status and diagnostics",
+          description:
+            "Detailed server diagnostics including memory usage, uptime, and connection information for debugging.",
+          operationId: "status",
+          responses: {
+            200: {
+              description: "Server status",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      healthy: z.boolean(),
+                      version: z.string(),
+                      uptime: z.number(),
+                      memory: z.object({
+                        heapUsed: z.number(),
+                        heapTotal: z.number(),
+                        rss: z.number(),
+                        external: z.number(),
+                      }),
+                      process: z.object({
+                        pid: z.number(),
+                        platform: z.string(),
+                        arch: z.string(),
+                      }),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const mem = process.memoryUsage()
+          return c.json({
+            healthy: true,
+            version: Installation.VERSION,
+            uptime: Date.now() - startTime,
+            memory: {
+              heapUsed: mem.heapUsed,
+              heapTotal: mem.heapTotal,
+              rss: mem.rss,
+              external: mem.external,
+            },
+            process: {
+              pid: process.pid,
+              platform: process.platform,
+              arch: process.arch,
+            },
+          })
+        },
+      )
       .get(
         "/global/health",
         describeRoute({
@@ -2600,12 +2696,72 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://app.opencode.ai${c.req.path}`, {
-          ...c.req,
-          headers: {
-            host: "app.opencode.ai",
-          },
-        })
+        // Serve from local app dist if enabled (for offline/remote access)
+        const appDist = findAppDist()
+        if (appDist) {
+          const reqPath = c.req.path === "/" ? "/index.html" : c.req.path
+          const file = Bun.file(path.join(appDist, reqPath))
+          if (await file.exists()) return c.body(file.stream(), { headers: { "Content-Type": file.type } })
+          // SPA fallback for client-side routes
+          if (!reqPath.includes(".")) {
+            const index = Bun.file(path.join(appDist, "index.html"))
+            if (await index.exists()) return c.html(await index.text())
+          }
+        }
+
+        // Proxy to app.opencode.ai
+        const targetUrl = `https://app.opencode.ai${c.req.path}`
+        try {
+          return await proxy(targetUrl, {
+            headers: {
+              ...c.req.header(),
+              host: "app.opencode.ai",
+            },
+          })
+        } catch (err) {
+          // Extract useful error context for debugging
+          const errorType = err instanceof Error ? err.name : typeof err
+          const errorMessage = err instanceof Error ? err.message : String(err)
+
+          // Log proxy failure with full context
+          log.error("proxy failed", {
+            url: targetUrl,
+            method: c.req.method,
+            errorType,
+            errorMessage,
+            // Include relevant headers for debugging (exclude auth tokens)
+            headers: {
+              "user-agent": c.req.header("user-agent"),
+              accept: c.req.header("accept"),
+              "content-type": c.req.header("content-type"),
+            },
+          })
+
+          // Return user-friendly error messages for common failures
+          let userMessage = "Failed to connect to OpenCode web app"
+          let details = errorMessage
+
+          if (errorMessage.includes("ECONNREFUSED")) {
+            userMessage = "OpenCode web app is not responding"
+            details = "The service at app.opencode.ai refused the connection. It may be down for maintenance."
+          } else if (errorMessage.includes("ENOTFOUND") || errorMessage.includes("getaddrinfo")) {
+            userMessage = "Cannot resolve app.opencode.ai"
+            details = "DNS lookup failed. Check your internet connection or DNS settings."
+          } else if (errorMessage.includes("ETIMEDOUT") || errorMessage.includes("timeout")) {
+            userMessage = "Connection to OpenCode web app timed out"
+            details = "The request took too long. This may be a network issue or the service is slow to respond."
+          } else if (errorMessage.includes("ECONNRESET") || errorMessage.includes("socket hang up")) {
+            userMessage = "Connection to OpenCode web app was reset"
+            details = "The network connection was interrupted. This is usually a transient issue - try refreshing."
+          } else if (errorMessage.includes("redirected too many times")) {
+            userMessage = "Too many redirects when connecting to OpenCode web app"
+            details = "This may indicate a configuration issue. Check that headers are being forwarded correctly."
+          }
+
+          throw new NamedError.Unknown({
+            message: `${userMessage}: ${details}`,
+          })
+        }
       }),
   )
 
