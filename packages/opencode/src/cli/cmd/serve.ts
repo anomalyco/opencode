@@ -1,16 +1,29 @@
-import { Config } from "../../config/config"
 import { Server } from "../../server/server"
 import { cmd } from "./cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
 
 export const ServeCommand = cmd({
   command: "serve",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) =>
+    yargs
+      .option("port", {
+        alias: ["p"],
+        type: "number",
+        describe: "port to listen on",
+        default: 0,
+      })
+      .option("hostname", {
+        type: "string",
+        describe: "hostname to listen on",
+        default: "127.0.0.1",
+      }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const config = await Config.get()
-    const opts = resolveNetworkOptions(args, config)
-    const server = Server.listen(opts)
+    const hostname = args.hostname
+    const port = args.port
+    const server = Server.listen({
+      port,
+      hostname,
+    })
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
     await new Promise(() => {})
     await server.stop()

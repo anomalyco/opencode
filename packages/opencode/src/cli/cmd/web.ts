@@ -1,8 +1,6 @@
-import { Config } from "../../config/config"
 import { Server } from "../../server/server"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import open from "open"
 import { networkInterfaces } from "os"
 
@@ -30,17 +28,32 @@ function getNetworkIPs() {
 
 export const WebCommand = cmd({
   command: "web",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) =>
+    yargs
+      .option("port", {
+        alias: ["p"],
+        type: "number",
+        describe: "port to listen on",
+        default: 0,
+      })
+      .option("hostname", {
+        type: "string",
+        describe: "hostname to listen on",
+        default: "127.0.0.1",
+      }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    const config = await Config.get()
-    const opts = resolveNetworkOptions(args, config)
-    const server = Server.listen(opts)
+    const hostname = args.hostname
+    const port = args.port
+    const server = Server.listen({
+      port,
+      hostname,
+    })
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
 
-    if (opts.hostname === "0.0.0.0") {
+    if (hostname === "0.0.0.0") {
       // Show localhost for local access
       const localhostUrl = `http://localhost:${server.port}`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
@@ -55,10 +68,6 @@ export const WebCommand = cmd({
             `http://${ip}:${server.port}`,
           )
         }
-      }
-
-      if (opts.mdns) {
-        UI.println(UI.Style.TEXT_INFO_BOLD + "  mDNS:              ", UI.Style.TEXT_NORMAL, "opencode.local")
       }
 
       // Open localhost in browser
