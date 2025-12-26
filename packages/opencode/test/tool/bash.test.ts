@@ -26,6 +26,7 @@ describe("tool.bash", () => {
           {
             command: "echo 'test'",
             description: "Echo test message",
+            background: false,
           },
           ctx,
         )
@@ -61,6 +62,7 @@ describe("tool.bash permissions", () => {
           {
             command: "echo hello",
             description: "Echo hello",
+            background: false,
           },
           ctx,
         )
@@ -95,6 +97,7 @@ describe("tool.bash permissions", () => {
             {
               command: "curl https://example.com",
               description: "Fetch URL",
+              background: false,
             },
             ctx,
           ),
@@ -127,6 +130,7 @@ describe("tool.bash permissions", () => {
             {
               command: "ls",
               description: "List files",
+              background: false,
             },
             ctx,
           ),
@@ -161,6 +165,7 @@ describe("tool.bash permissions", () => {
           {
             command: "ls -la",
             description: "List files",
+            background: false,
           },
           ctx,
         )
@@ -171,6 +176,7 @@ describe("tool.bash permissions", () => {
           {
             command: "pwd",
             description: "Print working directory",
+            background: false,
           },
           ctx,
         )
@@ -182,6 +188,7 @@ describe("tool.bash permissions", () => {
             {
               command: "cat /etc/passwd",
               description: "Read file",
+              background: false,
             },
             ctx,
           ),
@@ -217,6 +224,7 @@ describe("tool.bash permissions", () => {
           {
             command: "find . -name '*.ts'",
             description: "Find typescript files",
+            background: false,
           },
           ctx,
         )
@@ -228,6 +236,7 @@ describe("tool.bash permissions", () => {
             {
               command: "find . -name '*.tmp' -delete",
               description: "Delete temp files",
+              background: false,
             },
             ctx,
           ),
@@ -239,6 +248,7 @@ describe("tool.bash permissions", () => {
             {
               command: "find . -name '*.ts' -exec cat {} \\;",
               description: "Find and cat files",
+              background: false,
             },
             ctx,
           ),
@@ -278,6 +288,7 @@ describe("tool.bash permissions", () => {
           {
             command: "git status",
             description: "Git status",
+            background: false,
           },
           ctx,
         )
@@ -288,6 +299,7 @@ describe("tool.bash permissions", () => {
           {
             command: "git log --oneline -5",
             description: "Git log",
+            background: false,
           },
           ctx,
         )
@@ -299,6 +311,7 @@ describe("tool.bash permissions", () => {
             {
               command: "git commit -m 'test'",
               description: "Git commit",
+              background: false,
             },
             ctx,
           ),
@@ -310,6 +323,7 @@ describe("tool.bash permissions", () => {
             {
               command: "git push origin main",
               description: "Git push",
+              background: false,
             },
             ctx,
           ),
@@ -344,6 +358,7 @@ describe("tool.bash permissions", () => {
             {
               command: "cd ../",
               description: "Change to parent directory",
+              background: false,
             },
             ctx,
           ),
@@ -378,6 +393,7 @@ describe("tool.bash permissions", () => {
               command: "ls",
               workdir: "/tmp",
               description: "List /tmp",
+              background: false,
             },
             ctx,
           ),
@@ -412,6 +428,7 @@ describe("tool.bash permissions", () => {
           {
             command: "echo foo && echo bar",
             description: "Echo twice",
+            background: false,
           },
           ctx,
         )
@@ -424,6 +441,7 @@ describe("tool.bash permissions", () => {
             {
               command: "echo hi && curl https://example.com",
               description: "Echo then curl",
+              background: false,
             },
             ctx,
           ),

@@ -754,3 +754,136 @@ ToolRegistry.register({
     )
   },
 })
+
+ToolRegistry.register({
+  name: "job_output",
+  render(props) {
+    const metadata = props.metadata as any
+    const isRunning = !metadata.completed
+
+    return (
+      <BasicTool
+        {...props}
+        icon={isRunning ? "circle-ban-sign" : "console"}
+        trigger={{
+          title: `Job Output: ${metadata.job_id}`,
+          subtitle: metadata.command,
+          args: [
+            `status=${metadata.status}`,
+            `runtime=${metadata.runtime_seconds}s`
+          ],
+        }}
+      >
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="job-output">
+              <div data-slot="job-metadata">
+                <div data-slot="job-metadata-grid">
+                  <div data-slot="job-metadata-item">
+                    <span data-slot="job-metadata-label">Job ID:</span> {metadata.job_id}
+                  </div>
+                  <div data-slot="job-metadata-item">
+                    <span data-slot="job-metadata-label">Status:</span> 
+                    <span data-slot={`job-status-${metadata.status}`}> {metadata.status}</span>
+                  </div>
+                  <div data-slot="job-metadata-item">
+                    <span data-slot="job-metadata-label">Runtime:</span> {metadata.runtime_seconds}s
+                  </div>
+                  <div data-slot="job-metadata-item">
+                    <span data-slot="job-metadata-label">PID:</span> {metadata.pid}
+                  </div>
+                </div>
+                <Show when={metadata.description}>
+                  <div data-slot="job-metadata-description">
+                    <span data-slot="job-metadata-label">Description:</span> {metadata.description}
+                  </div>
+                </Show>
+              </div>
+              <div data-component="tool-output" data-scrollable>
+                <Markdown text={output()} />
+              </div>
+            </div>
+          )}
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "job_list",
+  render(props) {
+    const metadata = props.metadata as any
+    
+    return (
+      <BasicTool
+        {...props}
+        icon="bullet-list"
+        trigger={{
+          title: "Background Jobs",
+          subtitle: `${metadata.displayed_jobs} of ${metadata.total_jobs} jobs`,
+          args: metadata.status_filter !== "all" ? [`status=${metadata.status_filter}`] : [],
+        }}
+      >
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="job-list">
+              <div data-slot="job-summary">
+                <div data-slot="job-summary-grid">
+                  <div data-slot="job-summary-item">
+                    <span data-slot="job-summary-label">Total Jobs:</span> {metadata.total_jobs}
+                  </div>
+                  <div data-slot="job-summary-item">
+                    <span data-slot="job-summary-label">Displayed:</span> {metadata.displayed_jobs}
+                  </div>
+                  <div data-slot="job-summary-item">
+                    <span data-slot="job-summary-label">Running:</span> {metadata.running_jobs}
+                  </div>
+                </div>
+              </div>
+              <div data-component="tool-output" data-scrollable>
+                <Markdown text={output()} />
+              </div>
+            </div>
+          )}
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "job_kill",
+  render(props) {
+    const metadata = props.metadata as any
+    const wasTerminated = metadata.terminated
+    const alreadyCompleted = metadata.already_completed
+    
+    return (
+      <BasicTool
+        {...props}
+        icon={alreadyCompleted ? "circle-check" : "circle-ban-sign"}
+        trigger={{
+          title: alreadyCompleted ? `Job ${metadata.job_id} Status` : `Terminated Job ${metadata.job_id}`,
+          subtitle: metadata.command,
+          args: metadata.force ? ["force=true"] : [],
+        }}
+      >
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="job-kill">
+              <div data-slot={`kill-status-${alreadyCompleted ? 'completed' : 'terminated'}`}>
+                <div data-slot="kill-status-text">
+                  {alreadyCompleted ? "Job Already Completed" : "Job Terminated"}
+                </div>
+              </div>
+              <div data-component="tool-output" data-scrollable>
+                <Markdown text={output()} />
+              </div>
+            </div>
+          )}
+        </Show>
+      </BasicTool>
+    )
+  },
+})

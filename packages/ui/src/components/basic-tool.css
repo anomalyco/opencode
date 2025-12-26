@@ -75,3 +75,107 @@
     color: var(--text-weak);
   }
 }
+
+/* Job Output Component Styles */
+[data-component="job-output"] {
+  [data-slot="job-metadata"] {
+    margin-bottom: 12px;
+    padding: 8px;
+    background-color: var(--background-weak);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-small);
+  }
+
+  [data-slot="job-metadata-grid"] {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  [data-slot="job-metadata-item"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  [data-slot="job-metadata-description"] {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  [data-slot="job-metadata-label"] {
+    font-weight: var(--font-weight-medium);
+    color: var(--text-base);
+  }
+
+  [data-slot="job-status-running"] {
+    color: var(--text-interactive-base);
+  }
+
+  [data-slot="job-status-completed"] {
+    color: var(--text-on-success-base);
+  }
+
+  [data-slot="job-status-failed"] {
+    color: var(--text-on-critical-base);
+  }
+
+  [data-slot="job-status-killed"] {
+    color: var(--text-on-warning-base);
+  }
+}
+
+/* Job List Component Styles */
+[data-component="job-list"] {
+  [data-slot="job-summary"] {
+    margin-bottom: 12px;
+    padding: 8px;
+    background-color: var(--background-weak);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-small);
+  }
+
+  [data-slot="job-summary-grid"] {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  [data-slot="job-summary-item"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  [data-slot="job-summary-label"] {
+    font-weight: var(--font-weight-medium);
+    color: var(--text-base);
+  }
+}
+
+/* Job Kill Component Styles */
+[data-component="job-kill"] {
+  [data-slot="kill-status-terminated"] {
+    margin-bottom: 12px;
+    padding: 8px;
+    background-color: var(--surface-warning-base);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-small);
+    color: var(--text-on-warning-base);
+  }
+
+  [data-slot="kill-status-completed"] {
+    margin-bottom: 12px;
+    padding: 8px;
+    background-color: var(--surface-info-base);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-small);
+    color: var(--text-on-info-base);
+  }
+
+  [data-slot="kill-status-text"] {
+    font-weight: var(--font-weight-medium);
+  }
+}
