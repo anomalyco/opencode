@@ -2,8 +2,8 @@ name: "sync-zed-extension"
 
 on:
   workflow_dispatch:
-  # release:
-  #   types: [published]
+  release:
+    types: [published]
 
 jobs:
   zed:
