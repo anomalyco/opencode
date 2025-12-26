@@ -89,8 +89,27 @@ export default function Layout(props: ParentProps) {
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
+  const [themeMode, setThemeMode] = createSignal<"light" | "dark">(() => {
+    const stored = localStorage.getItem("theme-mode")
+    if (stored === "light" || stored === "dark") return stored
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  })
+
+  const applyThemeMode = (mode: "light" | "dark") => {
+    setThemeMode(mode)
+    localStorage.setItem("theme-mode", mode)
+    document.documentElement.setAttribute("data-theme-mode", mode)
+  }
+
+  const toggleThemeMode = () => {
+    applyThemeMode(themeMode() === "dark" ? "light" : "dark")
+  }
 
   onMount(async () => {
+    const storedThemeMode = localStorage.getItem("theme-mode")
+    if (storedThemeMode === "light" || storedThemeMode === "dark") {
+      document.documentElement.setAttribute("data-theme-mode", storedThemeMode)
+    }
     if (platform.checkUpdate && platform.update && platform.restart) {
       const { updateAvailable, version } = await platform.checkUpdate()
       if (updateAvailable) {
@@ -748,6 +767,17 @@ export default function Layout(props: ParentProps) {
           </DragDropProvider>
         </div>
         <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
+          <Tooltip placement="right" value={`Theme: ${themeMode() === "dark" ? "Dark" : "Light"}`} inactive={expanded()}>
+            <Button
+              class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
+              variant="ghost"
+              size="large"
+              icon="settings-gear"
+              onClick={toggleThemeMode}
+            >
+              <Show when={expanded()}>Theme: {themeMode() === "dark" ? "Dark" : "Light"}</Show>
+            </Button>
+          </Tooltip>
           <Switch>
             <Match when={!providers.paid().length && expanded()}>
               <div class="rounded-md bg-background-stronger shadow-xs-border-base">

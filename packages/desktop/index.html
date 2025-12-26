@@ -19,6 +19,10 @@
       ;(function () {
         const savedTheme = localStorage.getItem("theme") || "oc-1"
         document.documentElement.setAttribute("data-theme", savedTheme)
+        const savedThemeMode = localStorage.getItem("theme-mode")
+        if (savedThemeMode === "light" || savedThemeMode === "dark") {
+          document.documentElement.setAttribute("data-theme-mode", savedThemeMode)
+        }
       })()
     </script>
     <noscript>You need to enable JavaScript to run this app.</noscript>
