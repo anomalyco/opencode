@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import { spawnSync } from "child_process"
+import { realpathSync, existsSync, readdirSync } from "fs"
+import { dirname, join } from "path"
+import { platform, arch } from "os"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
 
 function run(target) {
-  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+  const result = spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
   })
   if (result.error) {
@@ -21,9 +24,8 @@ const envPath = process.env.OPENCODE_BIN_PATH
 if (envPath) {
   run(envPath)
 }
-
-const scriptPath = fs.realpathSync(__filename)
-const scriptDir = path.dirname(scriptPath)
+const scriptPath = realpathSync(__filename)
+const scriptDir = dirname(scriptPath)
 
 const platformMap = {
   darwin: "darwin",
@@ -36,34 +38,34 @@ const archMap = {
   arm: "arm",
 }
 
-let platform = platformMap[os.platform()]
-if (!platform) {
-  platform = os.platform()
+let platformName = platformMap[platform()]
+if (!platformName) {
+  platformName = platform()
 }
-let arch = archMap[os.arch()]
-if (!arch) {
-  arch = os.arch()
+let archName = archMap[arch()]
+if (!archName) {
+  archName = arch()
 }
-const base = "opencode-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const base = "opencode-" + platformName + "-" + archName
+const binary = platformName === "windows" ? "opencode.exe" : "opencode"
 
 function findBinary(startDir) {
   let current = startDir
   for (;;) {
-    const modules = path.join(current, "node_modules")
-    if (fs.existsSync(modules)) {
-      const entries = fs.readdirSync(modules)
+    const modules = join(current, "node_modules")
+    if (existsSync(modules)) {
+      const entries = readdirSync(modules)
       for (const entry of entries) {
         if (!entry.startsWith(base)) {
           continue
         }
-        const candidate = path.join(modules, entry, "bin", binary)
-        if (fs.existsSync(candidate)) {
+        const candidate = join(modules, entry, "bin", binary)
+        if (existsSync(candidate)) {
           return candidate
         }
       }
     }
-    const parent = path.dirname(current)
+    const parent = dirname(current)
     if (parent === current) {
       return
     }

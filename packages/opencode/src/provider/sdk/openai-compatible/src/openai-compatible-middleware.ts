@@ -58,21 +58,8 @@ export function createFilteredFetch(originalFetch: typeof fetch): typeof fetch {
                       // Process choices in the stream chunk
                       if (json.choices && Array.isArray(json.choices)) {
                         const modifiedChoices = json.choices.map((choice: any) => {
-                          // Check delta for empty tool_calls
-                          if (
-                            choice.delta &&
-                            Array.isArray(choice.delta.tool_calls) &&
-                            choice.delta.tool_calls.length === 0
-                          ) {
-                            modified = true
-                            const { tool_calls, ...rest } = choice.delta
-                            return {
-                              ...choice,
-                              delta: rest,
-                            }
-                          }
-                          
-                          // Check message for empty tool_calls with stop finish_reason
+                          // Only filter empty tool_calls from the final message when finish_reason is "stop"
+                          // Don't filter from deltas during streaming as they might be part of valid tool call streams
                           if (
                             choice.message &&
                             Array.isArray(choice.message.tool_calls) &&
