@@ -18,6 +18,8 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 
   [data-slot="user-message-attachments"] {
     display: flex;
@@ -74,6 +76,8 @@
   [data-slot="user-message-text"] {
     white-space: pre-wrap;
     overflow: hidden;
+    overflow-wrap: break-word;
+    word-break: break-word;
     background: var(--surface-inset-base);
     padding: 6px 12px;
     border-radius: 4px;
