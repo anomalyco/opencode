@@ -45,9 +45,11 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
+import type { BunWebSocketData } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
+import { MDNS } from "./mdns"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -2623,20 +2625,41 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean }) {
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
     } as const
-    if (opts.port === 0) {
+    const tryServe = (port: number) => {
       try {
-        return Bun.serve({ ...args, port: 4096 })
+        return Bun.serve({ ...args, port })
       } catch {
-        // port 4096 not available, fall through to use port 0
+        return undefined
       }
     }
-    return Bun.serve({ ...args, port: opts.port })
+    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+    if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+    const shouldPublishMDNS =
+      opts.mdns &&
+      server.port &&
+      opts.hostname !== "127.0.0.1" &&
+      opts.hostname !== "localhost" &&
+      opts.hostname !== "::1"
+    if (shouldPublishMDNS) {
+      MDNS.publish(server.port!)
+    } else if (opts.mdns) {
+      log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
+    }
+
+    const originalStop = server.stop.bind(server)
+    server.stop = async (closeActiveConnections?: boolean) => {
+      if (shouldPublishMDNS) MDNS.unpublish()
+      return originalStop(closeActiveConnections)
+    }
+
+    return server
   }
 }
