@@ -989,7 +989,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             classList={{
-              "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-icon-info-active": true,
               "font-mono!": store.mode === "shell",
             }}
@@ -1001,6 +1001,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
             </div>
           </Show>
+          <div class="absolute top-4.5 right-4">
+            <SessionContextUsage />
+          </div>
         </div>
         <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
@@ -1057,7 +1060,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Tooltip>
               </Match>
             </Switch>
-            <SessionContextUsage />
           </div>
           <div class="flex items-center gap-1 absolute right-2 bottom-2">
             <input
