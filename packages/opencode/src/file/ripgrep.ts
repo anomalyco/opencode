@@ -3,7 +3,7 @@ import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
 import z from "zod"
-import { NamedError } from "../util/error"
+import { NamedError } from "@opencode-ai/util/error"
 import { lazy } from "../util/lazy"
 import { $ } from "bun"
 
@@ -240,7 +240,8 @@ export namespace Ripgrep {
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split("\n")
+        // Handle both Unix (\n) and Windows (\r\n) line endings
+        const lines = buffer.split(/\r?\n/)
         buffer = lines.pop() || ""
 
         for (const line of lines) {
@@ -379,7 +380,8 @@ export namespace Ripgrep {
       return []
     }
 
-    const lines = result.text().trim().split("\n").filter(Boolean)
+    // Handle both Unix (\n) and Windows (\r\n) line endings
+    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
     // Parse JSON lines from ripgrep output
 
     return lines

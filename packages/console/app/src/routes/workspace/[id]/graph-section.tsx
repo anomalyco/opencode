@@ -3,7 +3,7 @@ import { UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
-import { createAsync, query, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, Show, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
@@ -94,8 +94,6 @@ async function getCosts(workspaceID: string, year: number, month: number) {
   }, workspaceID)
 }
 
-const queryCosts = query(getCosts, "costs.get")
-
 const MODEL_COLORS: Record<string, string> = {
   "claude-sonnet-4-5": "#D4745C",
   "claude-sonnet-4": "#E8B4A4",
@@ -158,32 +156,27 @@ export function GraphSection() {
     model: null as string | null,
     modelDropdownOpen: false,
     keyDropdownOpen: false,
+    colorScheme: "light" as "light" | "dark",
   })
-  const initialData = createAsync(() => queryCosts(params.id!, store.year, store.month))
-
   const onPreviousMonth = async () => {
     const month = store.month === 0 ? 11 : store.month - 1
     const year = store.month === 0 ? store.year - 1 : store.year
-    const data = await getCosts(params.id!, year, month)
-    setStore({ month, year, data })
+    setStore({ month, year })
   }
 
   const onNextMonth = async () => {
     const month = store.month === 11 ? 0 : store.month + 1
     const year = store.month === 11 ? store.year + 1 : store.year
-    setStore({ month, year, data: await getCosts(params.id!, year, month) })
+    setStore({ month, year })
   }
 
   const onSelectModel = (model: string | null) => setStore({ model, modelDropdownOpen: false })
 
   const onSelectKey = (keyID: string | null) => setStore({ key: keyID, keyDropdownOpen: false })
 
-  const getData = createMemo(() => store.data ?? initialData())
-
   const getModels = createMemo(() => {
-    const data = getData()
-    if (!data?.usage) return []
-    return Array.from(new Set(data.usage.map((row) => row.model))).sort()
+    if (!store.data?.usage) return []
+    return Array.from(new Set(store.data.usage.map((row) => row.model))).sort()
   })
 
   const getDates = createMemo(() => {
@@ -206,9 +199,18 @@ export function GraphSection() {
   const isCurrentMonth = () => store.year === now.getFullYear() && store.month === now.getMonth()
 
   const chartConfig = createMemo((): ChartConfiguration | null => {
-    const data = getData()
+    const data = store.data
     const dates = getDates()
     if (!data?.usage?.length) return null
+
+    store.colorScheme
+    const styles = getComputedStyle(document.documentElement)
+    const colorTextMuted = styles.getPropertyValue("--color-text-muted").trim()
+    const colorBorderMuted = styles.getPropertyValue("--color-border-muted").trim()
+    const colorBgElevated = styles.getPropertyValue("--color-bg-elevated").trim()
+    const colorText = styles.getPropertyValue("--color-text").trim()
+    const colorTextSecondary = styles.getPropertyValue("--color-text-secondary").trim()
+    const colorBorder = styles.getPropertyValue("--color-border").trim()
 
     const dailyData = new Map<string, Map<string, number>>()
     for (const dateKey of dates) dailyData.set(dateKey, new Map())
@@ -252,7 +254,7 @@ export function GraphSection() {
             ticks: {
               maxRotation: 0,
               autoSkipPadding: 20,
-              color: "rgba(255, 255, 255, 0.5)",
+              color: colorTextMuted,
               font: {
                 family: "monospace",
                 size: 11,
@@ -263,10 +265,10 @@ export function GraphSection() {
             stacked: true,
             beginAtZero: true,
             grid: {
-              color: "rgba(255, 255, 255, 0.1)",
+              color: colorBorderMuted,
             },
             ticks: {
-              color: "rgba(255, 255, 255, 0.5)",
+              color: colorTextMuted,
               font: {
                 family: "monospace",
                 size: 11,
@@ -282,10 +284,10 @@ export function GraphSection() {
           tooltip: {
             mode: "index",
             intersect: false,
-            backgroundColor: "rgba(0, 0, 0, 0.9)",
-            titleColor: "rgba(255, 255, 255, 0.9)",
-            bodyColor: "rgba(255, 255, 255, 0.8)",
-            borderColor: "rgba(255, 255, 255, 0.1)",
+            backgroundColor: colorBgElevated,
+            titleColor: colorText,
+            bodyColor: colorTextSecondary,
+            borderColor: colorBorder,
             borderWidth: 1,
             padding: 12,
             displayColors: true,
@@ -301,7 +303,7 @@ export function GraphSection() {
             display: true,
             position: "bottom",
             labels: {
-              color: "rgba(255, 255, 255, 0.7)",
+              color: colorTextSecondary,
               font: {
                 size: 12,
               },
@@ -339,15 +341,32 @@ export function GraphSection() {
     }
   })
 
+  createEffect(async () => {
+    const data = await getCosts(params.id!, store.year, store.month)
+    setStore({ data })
+  })
+
   createEffect(() => {
     const config = chartConfig()
     if (!config || !canvasRef) return
 
     if (chartInstance) chartInstance.destroy()
     chartInstance = new Chart(canvasRef, config)
+
+    onCleanup(() => chartInstance?.destroy())
   })
 
-  onCleanup(() => chartInstance?.destroy())
+  createEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
+    setStore({ colorScheme: mediaQuery.matches ? "dark" : "light" })
+
+    const handleColorSchemeChange = (e: MediaQueryListEvent) => {
+      setStore({ colorScheme: e.matches ? "dark" : "light" })
+    }
+
+    mediaQuery.addEventListener("change", handleColorSchemeChange)
+    onCleanup(() => mediaQuery.removeEventListener("change", handleColorSchemeChange))
+  })
 
   return (
     <section class={styles.root}>
@@ -356,55 +375,53 @@ export function GraphSection() {
         <p>Usage costs broken down by model.</p>
       </div>
 
-      <Show when={getData()}>
-        <div data-slot="filter-container">
-          <div data-slot="month-picker">
-            <button data-slot="month-button" onClick={onPreviousMonth}>
-              <IconChevronLeft />
-            </button>
-            <span data-slot="month-label">{formatMonthYear()}</span>
-            <button data-slot="month-button" onClick={onNextMonth} disabled={isCurrentMonth()}>
-              <IconChevronRight />
-            </button>
-          </div>
-          <Dropdown
-            trigger={store.model === null ? "All Models" : store.model}
-            open={store.modelDropdownOpen}
-            onOpenChange={(open) => setStore({ modelDropdownOpen: open })}
-          >
-            <>
-              <button data-slot="model-item" onClick={() => onSelectModel(null)}>
-                <span>All Models</span>
-              </button>
-              <For each={getModels()}>
-                {(model) => (
-                  <button data-slot="model-item" onClick={() => onSelectModel(model)}>
-                    <span>{model}</span>
-                  </button>
-                )}
-              </For>
-            </>
-          </Dropdown>
-          <Dropdown
-            trigger={getKeyName(store.key)}
-            open={store.keyDropdownOpen}
-            onOpenChange={(open) => setStore({ keyDropdownOpen: open })}
-          >
-            <>
-              <button data-slot="model-item" onClick={() => onSelectKey(null)}>
-                <span>All Keys</span>
-              </button>
-              <For each={getData()?.keys || []}>
-                {(key) => (
-                  <button data-slot="model-item" onClick={() => onSelectKey(key.id)}>
-                    <span>{key.displayName}</span>
-                  </button>
-                )}
-              </For>
-            </>
-          </Dropdown>
+      <div data-slot="filter-container">
+        <div data-slot="month-picker">
+          <button data-slot="month-button" onClick={onPreviousMonth}>
+            <IconChevronLeft />
+          </button>
+          <span data-slot="month-label">{formatMonthYear()}</span>
+          <button data-slot="month-button" onClick={onNextMonth} disabled={isCurrentMonth()}>
+            <IconChevronRight />
+          </button>
         </div>
-      </Show>
+        <Dropdown
+          trigger={store.model === null ? "All Models" : store.model}
+          open={store.modelDropdownOpen}
+          onOpenChange={(open) => setStore({ modelDropdownOpen: open })}
+        >
+          <>
+            <button data-slot="model-item" onClick={() => onSelectModel(null)}>
+              <span>All Models</span>
+            </button>
+            <For each={getModels()}>
+              {(model) => (
+                <button data-slot="model-item" onClick={() => onSelectModel(model)}>
+                  <span>{model}</span>
+                </button>
+              )}
+            </For>
+          </>
+        </Dropdown>
+        <Dropdown
+          trigger={getKeyName(store.key)}
+          open={store.keyDropdownOpen}
+          onOpenChange={(open) => setStore({ keyDropdownOpen: open })}
+        >
+          <>
+            <button data-slot="model-item" onClick={() => onSelectKey(null)}>
+              <span>All Keys</span>
+            </button>
+            <For each={store.data?.keys || []}>
+              {(key) => (
+                <button data-slot="model-item" onClick={() => onSelectKey(key.id)}>
+                  <span>{key.displayName}</span>
+                </button>
+              )}
+            </For>
+          </>
+        </Dropdown>
+      </div>
 
       <Show
         when={chartConfig()}

@@ -31,21 +31,12 @@ export default defineConfig({
     configSchema(),
     solidJs(),
     starlight({
-      title: "opencode",
+      title: "OpenCode",
       lastUpdated: true,
       expressiveCode: { themes: ["github-light", "github-dark"] },
       social: [
         { icon: "github", label: "GitHub", href: config.github },
         { icon: "discord", label: "Dscord", href: config.discord },
-      ],
-      head: [
-        {
-          tag: "link",
-          attrs: {
-            rel: "icon",
-            href: "/docs/favicon.svg",
-          },
-        },
       ],
       editLink: {
         baseUrl: `${config.github}/edit/dev/packages/web/`,
@@ -63,6 +54,7 @@ export default defineConfig({
         "",
         "config",
         "providers",
+        "network",
         "enterprise",
         "troubleshooting",
         "1-0",
@@ -86,13 +78,14 @@ export default defineConfig({
             "lsp",
             "mcp-servers",
             "acp",
+            "skills",
             "custom-tools",
           ],
         },
 
         {
           label: "Develop",
-          items: ["sdk", "server", "plugins"],
+          items: ["sdk", "server", "plugins", "ecosystem"],
         },
       ],
       components: {

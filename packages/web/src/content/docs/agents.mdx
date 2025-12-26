@@ -36,13 +36,13 @@ look at these below.
 
 Subagents are specialized assistants that primary agents can invoke for specific tasks. You can also manually invoke them by **@ mentioning** them in your messages.
 
-OpenCode comes with one built-in subagent, **General**. We'll look at this below.
+OpenCode comes with two built-in subagents, **General** and **Explore**. We'll look at this below.
 
 ---
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and one built-in subagent.
+OpenCode comes with two built-in primary agents and two built-in subagents.
 
 ---
 
@@ -73,6 +73,14 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 _Mode_: `subagent`
 
 A general-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. Use when searching for keywords or files and you're not confident you'll find the right match in the first few tries.
+
+---
+
+### Explore
+
+_Mode_: `subagent`
+
+A fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
 
 ---
 
@@ -249,6 +257,28 @@ If no temperature is specified, OpenCode uses model-specific defaults; typically
 
 ---
 
+### Max steps
+
+Control the maximum number of agentic iterations an agent can perform before being forced to respond with text only. This allows users who wish to control costs to set a limit on agentic actions.
+
+If this is not set, the agent will continue to iterate until the model chooses to stop or the user interrupts the session.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "quick-thinker": {
+      "description": "Fast reasoning with limited iterations",
+      "prompt": "You are a quick thinker. Solve problems with minimal steps.",
+      "maxSteps": 5
+    }
+  }
+}
+```
+
+When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
+
+---
+
 ### Disable
 
 Set to `true` to disable the agent.
@@ -285,7 +315,11 @@ This path is relative to where the config file is located. So this works for bot
 
 ### Model
 
-Use the `model` config to override the default model for this agent. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
+Use the `model` config to override the model for this agent. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
+
+:::tip
+If you don’t specify a model, primary agents use the [model globally configured](/docs/config#models) while subagents will use the model of the primary agent that invoked the subagent.
+:::
 
 ```json title="opencode.json"
 {
@@ -296,6 +330,8 @@ Use the `model` config to override the default model for this agent. Useful for 
   }
 }
 ```
+
+The model ID in your OpenCode config uses the format `provider/model-id`. For example, if you're using [OpenCode Zen](/docs/zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
 
 ---
 

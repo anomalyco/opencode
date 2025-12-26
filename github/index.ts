@@ -5,7 +5,7 @@ import { graphql } from "@octokit/graphql"
 import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context as GitHubContext } from "@actions/github/lib/context"
-import type { IssueCommentEvent } from "@octokit/webhooks-types"
+import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { spawn } from "node:child_process"
 
@@ -124,7 +124,7 @@ let exitCode = 0
 type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
 
 try {
-  assertContextEvent("issue_comment")
+  assertContextEvent("issue_comment", "pull_request_review_comment")
   assertPayloadKeyword()
   await assertOpencodeConnected()
 
@@ -241,10 +241,28 @@ function createOpencode() {
 }
 
 function assertPayloadKeyword() {
-  const payload = useContext().payload as IssueCommentEvent
+  const payload = useContext().payload as IssueCommentEvent | PullRequestReviewCommentEvent
   const body = payload.comment.body.trim()
   if (!body.match(/(?:^|\s)(?:\/opencode|\/oc)(?=$|\s)/)) {
     throw new Error("Comments must mention `/opencode` or `/oc`")
+  }
+}
+
+function getReviewCommentContext() {
+  const context = useContext()
+  if (context.eventName !== "pull_request_review_comment") {
+    return null
+  }
+
+  const payload = context.payload as PullRequestReviewCommentEvent
+  return {
+    file: payload.comment.path,
+    diffHunk: payload.comment.diff_hunk,
+    line: payload.comment.line,
+    originalLine: payload.comment.original_line,
+    position: payload.comment.position,
+    commitId: payload.comment.commit_id,
+    originalCommitId: payload.comment.original_commit_id,
   }
 }
 
@@ -253,7 +271,13 @@ async function assertOpencodeConnected() {
   let connected = false
   do {
     try {
-      await client.app.get<true>()
+      await client.app.log<true>({
+        body: {
+          service: "github-workflow",
+          level: "info",
+          message: "Prepare to react to Github Workflow event",
+        },
+      })
       connected = true
       break
     } catch (e) {}
@@ -292,6 +316,10 @@ function useEnvRunUrl() {
   if (!runId) throw new Error(`Environment variable "GITHUB_RUN_ID" is not set`)
 
   return `/${repo.owner}/${repo.repo}/actions/runs/${runId}`
+}
+
+function useEnvAgent() {
+  return process.env["AGENT"] || undefined
 }
 
 function useEnvShare() {
@@ -383,11 +411,24 @@ async function createComment() {
 }
 
 async function getUserPrompt() {
+  const context = useContext()
+  const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
+  const reviewContext = getReviewCommentContext()
+
   let prompt = (() => {
-    const payload = useContext().payload as IssueCommentEvent
     const body = payload.comment.body.trim()
-    if (body === "/opencode" || body === "/oc") return "Summarize this thread"
-    if (body.includes("/opencode") || body.includes("/oc")) return body
+    if (body === "/opencode" || body === "/oc") {
+      if (reviewContext) {
+        return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
+      }
+      return "Summarize this thread"
+    }
+    if (body.includes("/opencode") || body.includes("/oc")) {
+      if (reviewContext) {
+        return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
+      }
+      return body
+    }
     throw new Error("Comments must mention `/opencode` or `/oc`")
   })()
 
@@ -533,24 +574,49 @@ async function subscribeSessionEvents() {
 }
 
 async function summarize(response: string) {
-  const payload = useContext().payload as IssueCommentEvent
   try {
     return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
   } catch (e) {
+    if (isScheduleEvent()) {
+      return "Scheduled task changes"
+    }
+    const payload = useContext().payload as IssueCommentEvent
     return `Fix issue: ${payload.issue.title}`
   }
+}
+
+async function resolveAgent(): Promise<string | undefined> {
+  const envAgent = useEnvAgent()
+  if (!envAgent) return undefined
+
+  // Validate the agent exists and is a primary agent
+  const agents = await client.agent.list<true>()
+  const agent = agents.data?.find((a) => a.name === envAgent)
+
+  if (!agent) {
+    console.warn(`agent "${envAgent}" not found. Falling back to default agent`)
+    return undefined
+  }
+
+  if (agent.mode === "subagent") {
+    console.warn(`agent "${envAgent}" is a subagent, not a primary agent. Falling back to default agent`)
+    return undefined
+  }
+
+  return envAgent
 }
 
 async function chat(text: string, files: PromptFiles = []) {
   console.log("Sending message to opencode...")
   const { providerID, modelID } = useEnvModel()
+  const agent = await resolveAgent()
 
   const chat = await client.session.chat<true>({
     path: session,
     body: {
       providerID,
       modelID,
-      agent: "build",
+      agent,
       parts: [
         {
           type: "text",

@@ -24,6 +24,15 @@ import {
   toOaCompatibleResponse,
 } from "./openai-compatible"
 
+export type UsageInfo = {
+  inputTokens: number
+  outputTokens: number
+  reasoningTokens?: number
+  cacheReadTokens?: number
+  cacheWrite5mTokens?: number
+  cacheWrite1hTokens?: number
+}
+
 export type ProviderHelper = {
   format: ZenData.Format
   modifyUrl: (providerApi: string, model?: string, isStream?: boolean) => string
@@ -34,14 +43,7 @@ export type ProviderHelper = {
     parse: (chunk: string) => void
     retrieve: () => any
   }
-  normalizeUsage: (usage: any) => {
-    inputTokens: number
-    outputTokens: number
-    reasoningTokens?: number
-    cacheReadTokens?: number
-    cacheWrite5mTokens?: number
-    cacheWrite1hTokens?: number
-  }
+  normalizeUsage: (usage: any) => UsageInfo
 }
 
 export interface CommonMessage {

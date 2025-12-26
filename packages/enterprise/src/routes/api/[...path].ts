@@ -37,6 +37,7 @@ app
               schema: resolver(
                 z
                   .object({
+                    id: z.string(),
                     url: z.string(),
                     secret: z.string(),
                   })
@@ -50,17 +51,18 @@ app
     validator("json", z.object({ sessionID: z.string() })),
     async (c) => {
       const body = c.req.valid("json")
-      const share = await Share.create({ id: body.sessionID })
+      const share = await Share.create({ sessionID: body.sessionID })
       const protocol = c.req.header("x-forwarded-proto") ?? c.req.header("x-forwarded-protocol") ?? "https"
       const host = c.req.header("x-forwarded-host") ?? c.req.header("host")
       return c.json({
+        id: share.id,
         secret: share.secret,
         url: `${protocol}://${host}/share/${share.id}`,
       })
     },
   )
   .post(
-    "/share/:sessionID/sync",
+    "/share/:shareID/sync",
     describeRoute({
       description: "Sync share data",
       operationId: "share.sync",
@@ -75,20 +77,20 @@ app
         },
       },
     }),
-    validator("param", z.object({ sessionID: z.string() })),
+    validator("param", z.object({ shareID: z.string() })),
     validator("json", z.object({ secret: z.string(), data: Share.Data.array() })),
     async (c) => {
-      const { sessionID } = c.req.valid("param")
+      const { shareID } = c.req.valid("param")
       const body = c.req.valid("json")
       await Share.sync({
-        share: { id: sessionID, secret: body.secret },
+        share: { id: shareID, secret: body.secret },
         data: body.data,
       })
       return c.json({})
     },
   )
   .get(
-    "/share/:sessionID/data",
+    "/share/:shareID/data",
     describeRoute({
       description: "Get share data",
       operationId: "share.data",
@@ -103,14 +105,14 @@ app
         },
       },
     }),
-    validator("param", z.object({ sessionID: z.string() })),
+    validator("param", z.object({ shareID: z.string() })),
     async (c) => {
-      const { sessionID } = c.req.valid("param")
-      return c.json(await Share.data(sessionID))
+      const { shareID } = c.req.valid("param")
+      return c.json(await Share.data(shareID))
     },
   )
   .delete(
-    "/share/:sessionID",
+    "/share/:shareID",
     describeRoute({
       description: "Remove a share",
       operationId: "share.remove",
@@ -125,12 +127,12 @@ app
         },
       },
     }),
-    validator("param", z.object({ sessionID: z.string() })),
+    validator("param", z.object({ shareID: z.string() })),
     validator("json", z.object({ secret: z.string() })),
     async (c) => {
-      const { sessionID } = c.req.valid("param")
+      const { shareID } = c.req.valid("param")
       const body = c.req.valid("json")
-      await Share.remove({ id: sessionID, secret: body.secret })
+      await Share.remove({ id: shareID, secret: body.secret })
       return c.json({})
     },
   )

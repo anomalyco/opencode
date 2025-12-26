@@ -194,7 +194,7 @@ export default {
         // Get workspace
         await Actor.provide("account", { accountID, email }, async () => {
           await User.joinInvitedWorkspaces()
-          const workspaces = await Database.transaction(async (tx) =>
+          const workspaces = await Database.use((tx) =>
             tx
               .select({ id: WorkspaceTable.id })
               .from(WorkspaceTable)
