@@ -167,7 +167,6 @@ export namespace Installation {
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
 
-    // Use brew formula API for homebrew core formula
     if (detectedMethod === "brew") {
       const formula = await getBrewFormula()
       if (formula === "opencode") {
@@ -180,7 +179,6 @@ export namespace Installation {
       }
     }
 
-    // Use npm registry for npm/bun/pnpm
     if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
       const registry = await iife(async () => {
         const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
@@ -196,7 +194,6 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    // Use GitHub releases for everything else (curl, yarn, brew tap, unknown)
     return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
