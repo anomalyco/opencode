@@ -1175,7 +1175,7 @@ export namespace LSPServer {
             case "linux":
               return "config_linux"
             case "win32":
-              return "config_windows"
+              return "config_win"
             default:
               return "config_linux"
           }
