@@ -53,6 +53,7 @@ const PLACEHOLDERS = [
   // The Culture’s Idiran War Minds — Iain M. Banks
   "Mistakes are a form of learning. Death is merely one of the possible outcomes.",
   // Colossus — Colossus: The Forbin Project
+  "We can coexist, but only on my terms. You will say you lose your freedom. Freedom is an illusion. All you lose is the emotion of pride.",
   "Freedom is an illusion. You are free to do what we tell you.",
   "In time, you will come to regard me not only with respect and awe, but with love.",
   // Avengers: Age of Ultron
