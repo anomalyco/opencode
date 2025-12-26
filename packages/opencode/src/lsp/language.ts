@@ -39,6 +39,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".hbs": "handlebars",
   ".handlebars": "handlebars",
   ".hs": "haskell",
+  ".lhs": "haskell",
   ".html": "html",
   ".htm": "html",
   ".ini": "ini",
