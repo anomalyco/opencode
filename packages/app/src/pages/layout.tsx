@@ -9,6 +9,7 @@ import {
   ParentProps,
   Show,
   Switch,
+  untrack,
   type JSX,
 } from "solid-js"
 import { DateTime } from "luxon"
@@ -323,7 +324,7 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    layout.projects.expand(directory)
+    untrack(() => layout.projects.expand(directory))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
