@@ -46,7 +46,7 @@ export function Diff<T>(props: DiffProps<T>) {
   })
 
   onCleanup(() => {
-    // Clean up FileDiff event handlers and dispose SolidJS components
+    // Clean up FileDiff event handlers and dispose SolidJS components 
     fileDiff()?.cleanUp()
     cleanupFunctions.forEach((dispose) => dispose())
   })
