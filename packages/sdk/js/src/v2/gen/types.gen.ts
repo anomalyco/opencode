@@ -3790,6 +3790,26 @@ export type McpAddResponses = {
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
 
+export type McpRestartAllData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/restart"
+}
+
+export type McpRestartAllResponses = {
+  /**
+   * MCP servers restarted successfully
+   */
+  200: {
+    [key: string]: McpStatus
+  }
+}
+
+export type McpRestartAllResponse = McpRestartAllResponses[keyof McpRestartAllResponses]
+
 export type McpAuthRemoveData = {
   body?: never
   path: {

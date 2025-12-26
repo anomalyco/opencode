@@ -325,6 +325,11 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("mcp.list"),
       },
       {
+        display: "/restart-mcp",
+        description: "restart all MCP servers",
+        onSelect: () => command.trigger("mcp.restart"),
+      },
+      {
         display: "/theme",
         description: "toggle theme",
         onSelect: () => command.trigger("theme.switch"),

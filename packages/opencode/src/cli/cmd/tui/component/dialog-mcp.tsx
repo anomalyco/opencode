@@ -8,8 +8,11 @@ import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 
-function Status(props: { enabled: boolean; loading: boolean }) {
+function Status(props: { enabled: boolean; loading: boolean; restarting: boolean }) {
   const { theme } = useTheme()
+  if (props.restarting) {
+    return <span style={{ fg: theme.textMuted }}>⋯ Restarting</span>
+  }
   if (props.loading) {
     return <span style={{ fg: theme.textMuted }}>⋯ Loading</span>
   }
@@ -25,11 +28,13 @@ export function DialogMcp() {
   const sdk = useSDK()
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
+  const [restarting, setRestarting] = createSignal(false)
 
   const options = createMemo(() => {
     // Track sync data and loading state to trigger re-render when they change
     const mcpData = sync.data.mcp
     const loadingMcp = loading()
+    const isRestarting = restarting()
 
     return pipe(
       mcpData ?? {},
@@ -39,7 +44,13 @@ export function DialogMcp() {
         value: name,
         title: name,
         description: status.status === "failed" ? "failed" : status.status,
-        footer: <Status enabled={local.mcp.isEnabled(name)} loading={loadingMcp === name} />,
+        footer: (
+          <Status
+            enabled={local.mcp.isEnabled(name)}
+            loading={loadingMcp === name}
+            restarting={isRestarting && (status.status === "connected" || status.status === "failed")}
+          />
+        ),
         category: undefined,
       })),
     )
@@ -51,7 +62,7 @@ export function DialogMcp() {
       title: "toggle",
       onTrigger: async (option: DialogSelectOption<string>) => {
         // Prevent toggling while an operation is already in progress
-        if (loading() !== null) return
+        if (loading() !== null || restarting()) return
 
         setLoading(option.value)
         try {
@@ -70,6 +81,28 @@ export function DialogMcp() {
         }
       },
     },
+    {
+      keybind: Keybind.parse("r")[0],
+      title: "restart all",
+      onTrigger: async () => {
+        // Prevent restarting while an operation is already in progress
+        if (loading() !== null || restarting()) return
+
+        setRestarting(true)
+        try {
+          const result = await sdk.client.mcp.restartAll()
+          if (result.data) {
+            sync.set("mcp", result.data)
+          } else {
+            console.error("Failed to restart MCP servers: no data returned")
+          }
+        } catch (error) {
+          console.error("Failed to restart MCP servers:", error)
+        } finally {
+          setRestarting(false)
+        }
+      },
+    },
   ])
 
   return (
@@ -78,7 +111,7 @@ export function DialogMcp() {
       title="MCPs"
       options={options()}
       keybind={keybinds()}
-      onSelect={(option) => {
+      onSelect={() => {
         // Don't close on select, only on escape
       }}
     />

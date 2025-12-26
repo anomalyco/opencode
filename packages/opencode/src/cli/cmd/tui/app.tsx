@@ -363,6 +363,33 @@ function App() {
       },
     },
     {
+      title: "Restart MCPs",
+      value: "mcp.restart",
+      category: "Agent",
+      onSelect: async () => {
+        dialog.clear()
+        toast.show({
+          message: "Restarting MCP servers...",
+          variant: "info",
+        })
+        try {
+          const result = await sdk.client.mcp.restartAll()
+          if (result.data) {
+            sync.set("mcp", result.data)
+            toast.show({
+              message: "MCP servers restarted",
+              variant: "success",
+            })
+          }
+        } catch (error) {
+          toast.show({
+            message: "Failed to restart MCP servers",
+            variant: "error",
+          })
+        }
+      },
+    },
+    {
       title: "Agent cycle",
       value: "agent.cycle",
       keybind: "agent_cycle",
