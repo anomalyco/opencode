@@ -59,6 +59,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { StatusBar } from "@/components/status-bar"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
+import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 
 export default function Page() {
   const layout = useLayout()
@@ -934,6 +935,7 @@ export default function Page() {
         </div>
       </Show>
       <StatusBar>
+        <SessionLspIndicator />
         <SessionMcpIndicator />
       </StatusBar>
     </div>

@@ -13,6 +13,7 @@ import {
   type ProviderAuthResponse,
   type Command,
   type McpStatus,
+  type LspStatus,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -45,6 +46,7 @@ type State = {
   mcp: {
     [name: string]: McpStatus
   }
+  lsp: LspStatus[]
   limit: number
   message: {
     [sessionID: string]: Message[]
@@ -90,6 +92,7 @@ function createGlobalSync() {
         session_diff: {},
         todo: {},
         mcp: {},
+        lsp: [],
         limit: 5,
         message: {},
         part: {},
@@ -155,6 +158,7 @@ function createGlobalSync() {
       status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
       config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
       mcp: () => sdk.mcp.status().then((x) => setStore("mcp", x.data ?? {})),
+      lsp: () => sdk.lsp.status().then((x) => setStore("lsp", x.data ?? [])),
     }
     await Promise.all(Object.values(load).map((p) => retry(p).catch((e) => setGlobalStore("error", e))))
       .then(() => setStore("ready", true))
