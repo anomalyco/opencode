@@ -72,7 +72,7 @@
     "@ai-sdk/deepinfra": "1.0.30",
     "@ai-sdk/gateway": "2.0.23",
     "@ai-sdk/groq": "2.0.33",
-    "@ai-sdk/perplexity": "2.0.22",
+    "@ai-sdk/perplexity": "2.0.9",
     "@ai-sdk/togetherai": "1.0.30",
     "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/plugin": "workspace:*",
