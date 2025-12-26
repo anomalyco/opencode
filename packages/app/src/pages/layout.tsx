@@ -89,11 +89,12 @@ export default function Layout(props: ParentProps) {
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
-  const [themeMode, setThemeMode] = createSignal<"light" | "dark">(() => {
+  const initialThemeMode = (() => {
     const stored = localStorage.getItem("theme-mode")
     if (stored === "light" || stored === "dark") return stored
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-  })
+  })()
+  const [themeMode, setThemeMode] = createSignal<"light" | "dark">(initialThemeMode)
 
   const applyThemeMode = (mode: "light" | "dark") => {
     setThemeMode(mode)
