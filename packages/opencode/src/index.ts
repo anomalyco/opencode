@@ -27,6 +27,7 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { InitCommand } from "./cli/cmd/init"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -98,6 +99,7 @@ const cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
+  .command(InitCommand)
   .fail((msg) => {
     if (
       msg.startsWith("Unknown argument") ||
