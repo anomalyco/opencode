@@ -199,7 +199,9 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     Object.entries(theme.theme)
       .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
-        return [key, resolveColor(value as ColorValue)]
+        // TODO: Resolve "system" to use `generateSystem`'s output for this key.
+        const v = value === "system" ? "none" : value
+        return [key, resolveColor(v as ColorValue)]
       }),
   ) as Partial<ThemeColors>
 
