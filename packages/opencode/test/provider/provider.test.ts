@@ -447,6 +447,55 @@ test("provider with baseURL from config", async () => {
   })
 })
 
+test("multiple local ollama models with similar names are all loaded", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            ollama: {
+              npm: "@ai-sdk/openai-compatible",
+              name: "Ollama",
+              options: {
+                baseURL: "http://localhost:11434/v1",
+              },
+              models: {
+                "devstral-small-2:24b-cloud": {
+                  name: "Devstral Small 2 (Cloud)",
+                },
+                "devstral-small-2:latest": {
+                  name: "Devstral Small 2 (local)",
+                },
+                "devstral-2:123b-cloud": {
+                  name: "Devstral 2 (Cloud)",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["ollama"]).toBeDefined()
+      expect(providers["ollama"].models).toBeDefined()
+
+      const models = Object.values(providers["ollama"].models)
+      expect(models.length).toBe(3)
+
+      const modelIds = models.map((m) => m.id).sort()
+      expect(modelIds).toContain("devstral-small-2:24b-cloud")
+      expect(modelIds).toContain("devstral-small-2:latest")
+      expect(modelIds).toContain("devstral-2:123b-cloud")
+    },
+  })
+})
+
 test("model cost defaults to zero when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
