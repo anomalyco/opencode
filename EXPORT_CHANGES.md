@@ -7,20 +7,21 @@ The issue #4609 requested that opencode export functionality be enhanced to incl
 1. Thinking/reasoning parts (currently abbreviated/missing)
 2. Detailed tool use information including inputs and outputs (currently only shows tool names)
 
-The export should respect the user's current settings for:
+The export should respect user's current settings for:
 
 - `showThinking` - whether reasoning parts are displayed
 - `showDetails` - whether tool details (inputs/outputs) are displayed
 
 ## Changes Made
 
-### File Modified
+### Files Modified
 
-`packages/opencode/src/cli/cmd/tui/routes/session/index.tsx` (lines 815-831)
+1. `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx` (lines 815-831) - Export command
+2. `packages/opencode/src/cli/cmd/tui/routes/session/index.tsx` (lines 773-789) - Copy command
 
 ### What Changed
 
-The session export function now:
+Both the session export and copy functions now:
 
 1. **Includes reasoning parts when `showThinking()` is true**
    - When `showThinking()` returns true, reasoning parts are exported with the heading "_Thinking:_"
@@ -31,9 +32,19 @@ The session export function now:
    - Tool inputs: Exported as formatted JSON under "**Input:**" heading
    - Tool outputs: Exported as code blocks under "**Output:**" heading (when status is "completed")
    - Tool errors: Exported as code blocks under "**Error:**" heading (when status is "error")
-   - When `showDetails()` is false, only the tool name is exported (original behavior)
+   - When `showDetails()` is false, only the tool name is exported/copied (original behavior)
 
-### Export Format Examples
+## Commands Affected
+
+### 1. `/export` (session.export)
+
+Exports the full session transcript to a markdown file with the same level of detail as the user's current view.
+
+### 2. `/copy` (session.copy)
+
+Copies the full session transcript to the clipboard with the same level of detail as the user's current view.
+
+### Export/Copy Format Examples
 
 #### With both settings enabled (showThinking=true, showDetails=true):
 
@@ -82,14 +93,14 @@ Tool: read
 
 - Created unit tests to verify the logic correctly handles all combinations of settings
 - All type checks pass
-- Export respects user's current view settings
+- Both export and copy commands respect user's current view settings
 
 ## User Impact
 
-Users will now see exports that match exactly what they see in their current session view:
+Users will now see exports and clipboard copies that match exactly what they see in their current session view:
 
-- If they have thinking visible, exports include reasoning
-- If they have tool details visible, exports include tool inputs/outputs
-- If they have both hidden, exports remain minimal (original behavior)
+- If they have thinking visible, exported/copied content includes reasoning
+- If they have tool details visible, exported/copied content includes tool inputs/outputs
+- If they have both hidden, exported/copied content remains minimal (original behavior)
 
-This gives users full control over how detailed their exports are, addressing the feature request in issue #4609.
+This gives users full control over how detailed their exports and clipboard copies are, addressing the feature request in issue #4609.
