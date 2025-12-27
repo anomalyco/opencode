@@ -7,6 +7,7 @@ import path from "path"
 import fs from "fs"
 import ignore from "ignore"
 import { Log } from "../util/log"
+import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
@@ -235,6 +236,13 @@ export namespace File {
     using _ = log.time("read", { file })
     const project = Instance.project
     const full = path.join(Instance.directory, file)
+
+    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
+    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
+    if (!Filesystem.contains(Instance.directory, full)) {
+      throw new Error(`Access denied: path escapes project directory`)
+    }
+
     const bunFile = Bun.file(full)
 
     if (!(await bunFile.exists())) {
@@ -288,6 +296,13 @@ export namespace File {
       ignored = ig.ignores.bind(ig)
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
+
+    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
+    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
+    if (!Filesystem.contains(Instance.directory, resolved)) {
+      throw new Error(`Access denied: path escapes project directory`)
+    }
+
     const nodes: Node[] = []
     for (const entry of await fs.promises
       .readdir(resolved, {
