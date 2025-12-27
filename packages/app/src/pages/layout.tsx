@@ -117,6 +117,39 @@ export default function Layout(props: ParentProps) {
     }
   })
 
+  onMount(() => {
+    const unsub = globalSync.permission.onUpdated(({ directory, permission }) => {
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      if (directory === currentDir && permission.sessionID === currentSession) return
+      const [store] = globalSync.child(directory)
+      const session = store.session.find((s) => s.id === permission.sessionID)
+      if (directory === currentDir && session?.parentID === currentSession) return
+      const sessionTitle = session?.title ?? "New session"
+      const projectName = getFilename(directory)
+      showToast({
+        persistent: true,
+        icon: "checklist",
+        title: "Permission required",
+        description: `${sessionTitle} in ${projectName} needs permission`,
+        actions: [
+          {
+            label: "Go to session",
+            onClick: () => {
+              navigate(`/${base64Encode(directory)}/session/${permission.sessionID}`)
+            },
+            dismissAfter: true,
+          },
+          {
+            label: "Dismiss",
+            onClick: "dismiss",
+          },
+        ],
+      })
+    })
+    onCleanup(unsub)
+  })
+
   function sortSessions(a: Session, b: Session) {
     const now = Date.now()
     const oneMinuteAgo = now - 60 * 1000
@@ -454,8 +487,20 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const hasPermissions = createMemo(() => {
+      const store = globalSync.child(props.project.worktree)[0]
+      const permissions = store.permission?.[props.session.id] ?? []
+      if (permissions.length > 0) return true
+      const childSessions = store.session.filter((s) => s.parentID === props.session.id)
+      for (const child of childSessions) {
+        const childPermissions = store.permission?.[child.id] ?? []
+        if (childPermissions.length > 0) return true
+      }
+      return false
+    })
     const isWorking = createMemo(() => {
       if (props.session.id === params.id) return false
+      if (hasPermissions()) return false
       const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
@@ -485,6 +530,9 @@ export default function Layout(props: ParentProps) {
                   <Switch>
                     <Match when={isWorking()}>
                       <Spinner class="size-2.5 mr-0.5" />
+                    </Match>
+                    <Match when={hasPermissions()}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-surface-warning-strong" />
                     </Match>
                     <Match when={hasError()}>
                       <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
@@ -587,7 +635,7 @@ export default function Layout(props: ParentProps) {
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content>
                         <DropdownMenu.Item onSelect={() => closeProject(props.project.worktree)}>
-                          <DropdownMenu.ItemLabel>Close Project</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>

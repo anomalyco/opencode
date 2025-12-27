@@ -377,17 +377,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       const list = async (path: string) => {
-        return sdk.client.file.list({ path: path + "/" }).then((x) => {
-          setStore(
-            "node",
-            produce((draft) => {
-              x.data!.forEach((node) => {
-                if (node.path in draft) return
-                draft[node.path] = node
-              })
-            }),
-          )
-        })
+        return sdk.client.file
+          .list({ path: path + "/" })
+          .then((x) => {
+            setStore(
+              "node",
+              produce((draft) => {
+                x.data!.forEach((node) => {
+                  if (node.path in draft) return
+                  draft[node.path] = node
+                })
+              }),
+            )
+          })
+          .catch(() => {})
       }
 
       const searchFiles = (query: string) => sdk.client.find.files({ query, dirs: "false" }).then((x) => x.data!)
