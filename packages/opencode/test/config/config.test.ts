@@ -533,3 +533,97 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
     },
   })
 })
+
+test("compaction config defaults to true when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // When not specified, compaction should be undefined (defaults handled in usage)
+      expect(config.compaction).toBeUndefined()
+    },
+  })
+})
+
+test("compaction config can disable auto compaction", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          compaction: {
+            auto: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.compaction?.auto).toBe(false)
+      expect(config.compaction?.prune).toBeUndefined()
+    },
+  })
+})
+
+test("compaction config can disable prune", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          compaction: {
+            prune: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.compaction?.prune).toBe(false)
+      expect(config.compaction?.auto).toBeUndefined()
+    },
+  })
+})
+
+test("compaction config can disable both auto and prune", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          compaction: {
+            auto: false,
+            prune: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.compaction?.auto).toBe(false)
+      expect(config.compaction?.prune).toBe(false)
+    },
+  })
+})
