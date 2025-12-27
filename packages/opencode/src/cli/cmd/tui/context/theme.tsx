@@ -1,6 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -291,24 +291,22 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (theme) setStore("active", theme)
     })
 
-    createEffect(() => {
-      getCustomThemes()
-        .then((custom) => {
-          setStore(
-            produce((draft) => {
-              Object.assign(draft.themes, custom)
-            }),
-          )
-        })
-        .catch(() => {
-          setStore("active", "opencode")
-        })
-        .finally(() => {
-          if (store.active !== "system") {
-            setStore("ready", true)
-          }
-        })
-    })
+    getCustomThemes()
+      .then((custom) => {
+        setStore(
+          produce((draft) => {
+            Object.assign(draft.themes, custom)
+          }),
+        )
+      })
+      .catch(() => {
+        setStore("active", "opencode")
+      })
+      .finally(() => {
+        if (store.active !== "system") {
+          setStore("ready", true)
+        }
+      })
 
     const renderer = useRenderer()
     renderer
