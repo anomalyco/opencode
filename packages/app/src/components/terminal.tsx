@@ -82,13 +82,15 @@ export const Terminal = (props: TerminalProps) => {
     window.addEventListener("resize", handleResize)
     term.onResize(async (size) => {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        await sdk.client.pty.update({
-          ptyID: local.pty.id,
-          size: {
-            cols: size.cols,
-            rows: size.rows,
-          },
-        })
+        await sdk.client.pty
+          .update({
+            ptyID: local.pty.id,
+            size: {
+              cols: size.cols,
+              rows: size.rows,
+            },
+          })
+          .catch(() => {})
       }
     })
     term.onData((data) => {
@@ -106,13 +108,15 @@ export const Terminal = (props: TerminalProps) => {
     // })
     ws.addEventListener("open", () => {
       console.log("WebSocket connected")
-      sdk.client.pty.update({
-        ptyID: local.pty.id,
-        size: {
-          cols: term.cols,
-          rows: term.rows,
-        },
-      })
+      sdk.client.pty
+        .update({
+          ptyID: local.pty.id,
+          size: {
+            cols: term.cols,
+            rows: term.rows,
+          },
+        })
+        .catch(() => {})
     })
     ws.addEventListener("message", (event) => {
       term.write(event.data)
