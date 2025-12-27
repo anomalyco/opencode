@@ -1084,6 +1084,8 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          const session = await Session.get(sessionID)
+          await SessionRevert.cleanup(session)
           const msgs = await Session.messages({ sessionID })
           let currentAgent = await Agent.defaultAgent()
           for (let i = msgs.length - 1; i >= 0; i--) {
