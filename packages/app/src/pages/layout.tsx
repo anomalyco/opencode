@@ -9,6 +9,7 @@ import {
   ParentProps,
   Show,
   Switch,
+  untrack,
   type JSX,
 } from "solid-js"
 import { DateTime } from "luxon"
@@ -323,7 +324,7 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    layout.projects.expand(directory)
+    untrack(() => layout.projects.expand(directory))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
@@ -472,7 +473,12 @@ export default function Layout(props: ParentProps) {
               class="flex flex-col min-w-0 text-left w-full focus:outline-none"
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
-                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
+                <span
+                  classList={{
+                    "text-14-regular text-text-strong overflow-hidden text-ellipsis truncate": true,
+                    "animate-pulse": isWorking(),
+                  }}
+                >
                   {props.session.title}
                 </span>
                 <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
@@ -513,7 +519,15 @@ export default function Layout(props: ParentProps) {
             </A>
           </Tooltip>
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
-            <Tooltip placement={props.mobile ? "bottom" : "right"} value="Archive session">
+            <Tooltip
+              placement={props.mobile ? "bottom" : "right"}
+              value={
+                <div class="flex items-center gap-2">
+                  <span>Archive session</span>
+                  <span class="text-icon-base text-12-medium">{command.keybind("session.archive")}</span>
+                </div>
+              }
+            >
               <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
             </Tooltip>
           </div>
@@ -578,7 +592,15 @@ export default function Layout(props: ParentProps) {
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <Tooltip placement="top" value="New session">
+                  <Tooltip
+                    placement="top"
+                    value={
+                      <div class="flex items-center gap-2">
+                        <span>New session</span>
+                        <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
+                      </div>
+                    }
+                  >
                     <IconButton as={A} href={`${slug()}/session`} icon="plus-small" variant="ghost" />
                   </Tooltip>
                 </div>
