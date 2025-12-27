@@ -49,6 +49,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
+import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -56,6 +57,9 @@ import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
+import { StatusBar } from "@/components/status-bar"
+import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
+import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 
 export default function Page() {
   const layout = useLayout()
@@ -273,6 +277,15 @@ export default function Page() {
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
+    },
+    {
+      id: "mcp.toggle",
+      title: "Toggle MCPs",
+      description: "Toggle MCPs",
+      category: "MCP",
+      keybind: "mod+;",
+      slash: "mcp",
+      onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",
@@ -921,6 +934,10 @@ export default function Page() {
           </DragDropProvider>
         </div>
       </Show>
+      <StatusBar>
+        <SessionLspIndicator />
+        <SessionMcpIndicator />
+      </StatusBar>
     </div>
   )
 }
