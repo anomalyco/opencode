@@ -52,7 +52,6 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { iife } from "@/util/iife"
 import { DialogConfirm } from "@tui/ui/dialog-confirm"
-import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
@@ -68,6 +67,7 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
 import { DialogSubagent } from "./dialog-subagent.tsx"
+import { DialogExportOptions } from "../../ui/dialog-export-options"
 
 addDefaultParsers(parsers.parsers)
 
@@ -826,6 +826,14 @@ export function Session() {
           const sessionData = session()
           const sessionMessages = messages()
 
+          const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
+
+          const options = await DialogExportOptions.show(dialog, defaultFilename, showThinking(), showDetails())
+
+          if (options === null) return
+
+          const { filename: customFilename, thinking: includeThinking, toolDetails: includeToolDetails } = options
+
           let transcript = `# ${sessionData.title}\n\n`
           transcript += `**Session ID:** ${sessionData.id}\n`
           transcript += `**Created:** ${new Date(sessionData.time.created).toLocaleString()}\n`
@@ -841,18 +849,18 @@ export function Session() {
               if (part.type === "text" && !part.synthetic) {
                 transcript += `${part.text}\n\n`
               } else if (part.type === "reasoning") {
-                if (showThinking()) {
+                if (includeThinking) {
                   transcript += `_Thinking:_\n\n${part.text}\n\n`
                 }
               } else if (part.type === "tool") {
                 transcript += `\`\`\`\nTool: ${part.tool}\n`
-                if (showDetails() && part.state.input) {
+                if (includeToolDetails && part.state.input) {
                   transcript += `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\``
                 }
-                if (showDetails() && part.state.status === "completed" && part.state.output) {
+                if (includeToolDetails && part.state.status === "completed" && part.state.output) {
                   transcript += `\n**Output:**\n\`\`\`\n${part.state.output}\n\`\`\``
                 }
-                if (showDetails() && part.state.status === "error" && part.state.error) {
+                if (includeToolDetails && part.state.status === "error" && part.state.error) {
                   transcript += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\``
                 }
                 transcript += `\n\`\`\`\n\n`
@@ -861,14 +869,6 @@ export function Session() {
 
             transcript += `---\n\n`
           }
-
-          // Prompt for optional filename
-          const customFilename = await DialogPrompt.show(dialog, "Export filename", {
-            value: `session-${sessionData.id.slice(0, 8)}.md`,
-          })
-
-          // Cancel if user pressed escape
-          if (customFilename === null) return
 
           // Save to file in current working directory
           const exportDir = process.cwd()
