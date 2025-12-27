@@ -120,11 +120,13 @@ export function selectedForeground(theme: Theme): RGBA {
 
 type HexColor = `#${string}`
 type RefName = string
+type AnsiCode = number
+type PrimitiveColor = HexColor | RefName | AnsiCode | RGBA
 type Variant = {
-  dark: HexColor | RefName
-  light: HexColor | RefName
+  dark: PrimitiveColor
+  light: PrimitiveColor
 }
-type ColorValue = HexColor | RefName | Variant | RGBA
+type ColorValue = PrimitiveColor | Variant
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
@@ -327,7 +329,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         }
         setStore(
           produce((draft) => {
-            draft.themes.system = generateSystem(colors, store.mode)
+            draft.themes.system = generateSystem(colors)
             if (store.active === "system") {
               draft.ready = true
             }
@@ -402,10 +404,9 @@ async function getCustomThemes() {
   return result
 }
 
-function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
+function generateSystem(colors: TerminalColors): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const isDark = mode == "dark"
 
   const col = (i: number) => {
     const value = colors.palette[i]
@@ -421,8 +422,25 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
   }
 
   // Generate gray scale based on terminal background
-  const grays = generateGrayScale(bg, isDark)
-  const textMuted = generateMutedTextColor(bg, isDark)
+  const graysLight = generateGrayScale(bg, false)
+  const graysDark = generateGrayScale(bg, true)
+  const grays = Object.keys(graysDark).reduce(
+    (acc, index) => {
+      const i = Number(index)
+      acc[i] = {
+        dark: graysDark[i],
+        light: graysLight[i],
+      }
+
+      return acc
+    },
+    {} as Record<number, Variant>,
+  )
+
+  const textMuted = {
+    dark: generateMutedTextColor(bg, true),
+    light: generateMutedTextColor(bg, false),
+  }
 
   // ANSI color references
   const ansiColors = {
