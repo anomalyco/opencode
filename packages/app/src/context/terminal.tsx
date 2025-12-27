@@ -36,35 +36,49 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       all: createMemo(() => Object.values(store.all)),
       active: createMemo(() => store.active),
       new() {
-        sdk.client.pty.create({ title: `Terminal ${store.all.length + 1}` }).then((pty) => {
-          const id = pty.data?.id
-          if (!id) return
-          setStore("all", [
-            ...store.all,
-            {
-              id,
-              title: pty.data?.title ?? "Terminal",
-            },
-          ])
-          setStore("active", id)
-        })
+        sdk.client.pty
+          .create({ title: `Terminal ${store.all.length + 1}` })
+          .then((pty) => {
+            const id = pty.data?.id
+            if (!id) return
+            setStore("all", [
+              ...store.all,
+              {
+                id,
+                title: pty.data?.title ?? "Terminal",
+              },
+            ])
+            setStore("active", id)
+          })
+          .catch((e) => {
+            console.error("Failed to create terminal", e)
+          })
       },
       update(pty: Partial<LocalPTY> & { id: string }) {
         setStore("all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
-        sdk.client.pty.update({
-          ptyID: pty.id,
-          title: pty.title,
-          size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
-        })
+        sdk.client.pty
+          .update({
+            ptyID: pty.id,
+            title: pty.title,
+            size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
+          })
+          .catch((e) => {
+            console.error("Failed to update terminal", e)
+          })
       },
       async clone(id: string) {
         const index = store.all.findIndex((x) => x.id === id)
         const pty = store.all[index]
         if (!pty) return
-        const clone = await sdk.client.pty.create({
-          title: pty.title,
-        })
-        if (!clone.data) return
+        const clone = await sdk.client.pty
+          .create({
+            title: pty.title,
+          })
+          .catch((e) => {
+            console.error("Failed to clone terminal", e)
+            return undefined
+          })
+        if (!clone?.data) return
         setStore("all", index, {
           ...pty,
           ...clone.data,
@@ -88,7 +102,9 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
             setStore("active", previous?.id)
           }
         })
-        await sdk.client.pty.remove({ ptyID: id })
+        await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
+          console.error("Failed to close terminal", e)
+        })
       },
       move(id: string, to: number) {
         const index = store.all.findIndex((f) => f.id === id)
