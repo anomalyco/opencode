@@ -770,8 +770,22 @@ export function Session() {
             for (const part of parts) {
               if (part.type === "text" && !part.synthetic) {
                 transcript += `${part.text}\n\n`
+              } else if (part.type === "reasoning") {
+                if (showThinking()) {
+                  transcript += `_Thinking:_\n\n${part.text}\n\n`
+                }
               } else if (part.type === "tool") {
-                transcript += `\`\`\`\nTool: ${part.tool}\n\`\`\`\n\n`
+                transcript += `\`\`\`\nTool: ${part.tool}\n`
+                if (showDetails() && part.state.input) {
+                  transcript += `\n**Input:**\n\`\`\`json\n${JSON.stringify(part.state.input, null, 2)}\n\`\`\``
+                }
+                if (showDetails() && part.state.status === "completed" && part.state.output) {
+                  transcript += `\n**Output:**\n\`\`\`\n${part.state.output}\n\`\`\``
+                }
+                if (showDetails() && part.state.status === "error" && part.state.error) {
+                  transcript += `\n**Error:**\n\`\`\`\n${part.state.error}\n\`\`\``
+                }
+                transcript += `\n\`\`\`\n\n`
               }
             }
 
