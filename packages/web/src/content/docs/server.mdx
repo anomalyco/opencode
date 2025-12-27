@@ -18,10 +18,11 @@ opencode serve [--port <number>] [--hostname <string>]
 
 #### Options
 
-| Flag         | Short | Description           | Default     |
-| ------------ | ----- | --------------------- | ----------- |
-| `--port`     | `-p`  | Port to listen on     | `4096`      |
-| `--hostname` | `-h`  | Hostname to listen on | `127.0.0.1` |
+| Flag         | Description           | Default     |
+| ------------ | --------------------- | ----------- |
+| `--port`     | Port to listen on     | `4096`      |
+| `--hostname` | Hostname to listen on | `127.0.0.1` |
+| `--mdns`     | Enable mDNS discovery | `false`     |
 
 ---
 
@@ -68,11 +69,12 @@ The opencode server exposes the following APIs.
 
 ---
 
-### Global Events
+### Global
 
-| Method | Path            | Description                    | Response     |
-| ------ | --------------- | ------------------------------ | ------------ |
-| `GET`  | `/global/event` | Get global events (SSE stream) | Event stream |
+| Method | Path             | Description                    | Response                             |
+| ------ | ---------------- | ------------------------------ | ------------------------------------ |
+| `GET`  | `/global/health` | Get server health and version  | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | Get global events (SSE stream) | Event stream                         |
 
 ---
 

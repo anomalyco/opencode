@@ -40,7 +40,7 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
 > [!NOTE]
-> After touching `packages/opencode/src/server/server.ts`, run "./packages/sdk/js/script/build.ts" to regenerate the JS sdk.
+> If you make changes to the API or SDK (e.g. `packages/opencode/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
 
 Please try to follow the [style guide](./STYLE_GUIDE.md)
 
@@ -53,12 +53,12 @@ your debugger via that URL. Other methods can result in breakpoints being mapped
 
 Caveats:
 
-- `*.tsx` files won't have their breakpoints correctly mapped. This seems due to Bun currently not supporting source maps on code transformed
-  via `BunPlugin`s (currently necessary due to our dependency on `@opentui/solid`). Currently, the best you can do in terms of debugging `*.tsx`
-  files is writing a `debugger;` statement. Debugging facilities like stepping won't work, but at least you will be informed if a specific code
-  is triggered.
 - If you want to run the OpenCode TUI and have breakpoints triggered in the server code, you might need to run `bun dev spawn` instead of
   the usual `bun dev`. This is because `bun dev` runs the server in a worker thread and breakpoints might not work there.
+- If `spawn` does not work for you, you can debug the server separately:
+  - Debug server: `bun run --inspect=ws://localhost:6499/ ./src/index.ts serve --port 4096`,
+    then attach TUI with `opencode attach http://localhost:4096`
+  - Debug TUI: `bun run --inspect=ws://localhost:6499/ --conditions=browser ./src/index.ts`
 
 Other tips and tricks:
 

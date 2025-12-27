@@ -12,6 +12,7 @@ import { Storage } from "@/storage/storage"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
+import { type SystemError } from "bun"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -31,6 +32,7 @@ export namespace MessageV2 {
       isRetryable: z.boolean(),
       responseHeaders: z.record(z.string(), z.string()).optional(),
       responseBody: z.string().optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
@@ -160,6 +162,7 @@ export namespace MessageV2 {
     prompt: z.string(),
     description: z.string(),
     agent: z.string(),
+    command: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
 
@@ -348,7 +351,11 @@ export namespace MessageV2 {
     parentID: z.string(),
     modelID: z.string(),
     providerID: z.string(),
+    /**
+     * @deprecated
+     */
     mode: z.string(),
+    agent: z.string(),
     path: z.object({
       cwd: z.string(),
       root: z.string(),
@@ -412,12 +419,7 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessage(
-    input: {
-      info: Info
-      parts: Part[]
-    }[],
-  ): ModelMessage[] {
+  export function toModelMessage(input: WithParts[]): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
@@ -461,6 +463,15 @@ export namespace MessageV2 {
       }
 
       if (msg.info.role === "assistant") {
+        if (
+          msg.info.error &&
+          !(
+            MessageV2.AbortedError.isInstance(msg.info.error) &&
+            msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
+          )
+        ) {
+          continue
+        }
         const assistantMessage: UIMessage = {
           id: msg.info.id,
           role: "assistant",
@@ -600,9 +611,30 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      case (e as SystemError)?.code === "ECONNRESET":
+        return new MessageV2.APIError(
+          {
+            message: "Connection reset by server",
+            isRetryable: true,
+            metadata: {
+              code: (e as SystemError).code ?? "",
+              syscall: (e as SystemError).syscall ?? "",
+              message: (e as SystemError).message ?? "",
+            },
+          },
+          { cause: e },
+        ).toObject()
       case APICallError.isInstance(e):
         const message = iife(() => {
           let msg = e.message
+          if (msg === "") {
+            if (e.responseBody) return e.responseBody
+            if (e.statusCode) {
+              const err = STATUS_CODES[e.statusCode]
+              if (err) return err
+            }
+            return "Unknown error"
+          }
           const transformed = ProviderTransform.error(ctx.providerID, e)
           if (transformed !== msg) {
             return transformed
@@ -621,7 +653,7 @@ export namespace MessageV2 {
           } catch {}
 
           return `${msg}: ${e.responseBody}`
-        })
+        }).trim()
 
         return new MessageV2.APIError(
           {

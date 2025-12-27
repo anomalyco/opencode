@@ -1,7 +1,14 @@
-import { createEffect, Show, For, type JSX, createSignal } from "solid-js"
+import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { createEffect, createSignal, For, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
-import { Icon, IconProps } from "./icon"
+import { Icon, type IconProps } from "./icon"
+import { IconButton } from "./icon-button"
+import { TextField } from "./text-field"
+
+export interface ListSearchProps {
+  placeholder?: string
+  autofocus?: boolean
+}
 
 export interface ListProps<T> extends FilteredListProps<T> {
   class?: string
@@ -10,6 +17,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
   activeIcon?: IconProps["name"]
   filter?: string
+  search?: ListSearchProps | boolean
 }
 
 export interface ListRef {
@@ -19,30 +27,39 @@ export interface ListRef {
 
 export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) {
   const [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
+  const [internalFilter, setInternalFilter] = createSignal("")
   const [store, setStore] = createStore({
     mouseActive: false,
   })
 
-  const { filter, grouped, flat, reset, active, setActive, onKeyDown, onInput } = useFilteredList<T>({
-    items: props.items,
-    key: props.key,
-    filterKeys: props.filterKeys,
-    current: props.current,
-    groupBy: props.groupBy,
-    sortBy: props.sortBy,
-    sortGroupsBy: props.sortGroupsBy,
-  })
+  const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
+
+  const searchProps = () => (typeof props.search === "object" ? props.search : {})
 
   createEffect(() => {
-    if (props.filter === undefined) return
-    onInput(props.filter)
+    if (props.filter !== undefined) {
+      onInput(props.filter)
+    }
   })
 
-  createEffect(() => {
-    filter()
-    scrollRef()?.scrollTo(0, 0)
-    reset()
-  })
+  createEffect((prev) => {
+    if (!props.search) return
+    const current = internalFilter()
+    if (prev !== current) {
+      onInput(current)
+    }
+    return current
+  }, "")
+
+  createEffect(
+    on(
+      filter,
+      () => {
+        scrollRef()?.scrollTo(0, 0)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     if (!scrollRef()) return
@@ -62,7 +79,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
       return
     }
     const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
-    element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    element?.scrollIntoView({ block: "center", behavior: "smooth" })
   })
 
   const handleSelect = (item: T | undefined, index: number) => {
@@ -92,52 +109,106 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   })
 
   return (
-    <div ref={setScrollRef} data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
-      <Show
-        when={flat().length > 0}
-        fallback={
-          <div data-slot="list-empty-state">
-            <div data-slot="list-message">
-              {props.emptyMessage ?? "No results"} for <span data-slot="list-filter">&quot;{filter()}&quot;</span>
-            </div>
+    <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
+      <Show when={!!props.search}>
+        <div data-slot="list-search">
+          <div data-slot="list-search-container">
+            <Icon name="magnifying-glass" />
+            <TextField
+              autofocus={searchProps().autofocus}
+              variant="ghost"
+              data-slot="list-search-input"
+              type="text"
+              value={internalFilter()}
+              onChange={setInternalFilter}
+              onKeyDown={handleKey}
+              placeholder={searchProps().placeholder}
+              spellcheck={false}
+              autocorrect="off"
+              autocomplete="off"
+              autocapitalize="off"
+            />
           </div>
-        }
-      >
-        <For each={grouped()}>
-          {(group) => (
-            <div data-slot="list-group">
-              <Show when={group.category}>
-                <div data-slot="list-header">{group.category}</div>
-              </Show>
-              <div data-slot="list-items">
-                <For each={group.items}>
-                  {(item, i) => (
-                    <button
-                      data-slot="list-item"
-                      data-key={props.key(item)}
-                      data-active={props.key(item) === active()}
-                      data-selected={item === props.current}
-                      onClick={() => handleSelect(item, i())}
-                      onMouseMove={() => {
-                        setStore("mouseActive", true)
-                        setActive(props.key(item))
-                      }}
-                    >
-                      {props.children(item)}
-                      <Show when={item === props.current}>
-                        <Icon data-slot="list-item-selected-icon" name="check-small" />
-                      </Show>
-                      <Show when={props.activeIcon}>
-                        {(icon) => <Icon data-slot="list-item-active-icon" name={icon()} />}
-                      </Show>
-                    </button>
-                  )}
-                </For>
+          <Show when={internalFilter()}>
+            <IconButton icon="circle-x" variant="ghost" onClick={() => setInternalFilter("")} />
+          </Show>
+        </div>
+      </Show>
+      <div ref={setScrollRef} data-slot="list-scroll">
+        <Show
+          when={flat().length > 0}
+          fallback={
+            <div data-slot="list-empty-state">
+              <div data-slot="list-message">
+                {props.emptyMessage ?? "No results"} for <span data-slot="list-filter">&quot;{filter()}&quot;</span>
               </div>
             </div>
-          )}
-        </For>
-      </Show>
+          }
+        >
+          <For each={grouped()}>
+            {(group) => (
+              <div data-slot="list-group">
+                <Show when={group.category}>
+                  {(() => {
+                    const [stuck, setStuck] = createSignal(false)
+                    return (
+                      <div
+                        data-slot="list-header"
+                        data-stuck={stuck()}
+                        ref={(el) => {
+                          createEffect(() => {
+                            const scroll = scrollRef()
+                            if (!scroll) return
+                            const handler = () => {
+                              const rect = el.getBoundingClientRect()
+                              const scrollRect = scroll.getBoundingClientRect()
+                              setStuck(rect.top <= scrollRect.top + 1 && scroll.scrollTop > 0)
+                            }
+                            scroll.addEventListener("scroll", handler, { passive: true })
+                            handler()
+                            return () => scroll.removeEventListener("scroll", handler)
+                          })
+                        }}
+                      >
+                        {group.category}
+                      </div>
+                    )
+                  })()}
+                </Show>
+                <div data-slot="list-items">
+                  <For each={group.items}>
+                    {(item, i) => (
+                      <button
+                        data-slot="list-item"
+                        data-key={props.key(item)}
+                        data-active={props.key(item) === active()}
+                        data-selected={item === props.current}
+                        onClick={() => handleSelect(item, i())}
+                        type="button"
+                        onMouseMove={() => {
+                          setStore("mouseActive", true)
+                          setActive(props.key(item))
+                        }}
+                        onMouseLeave={() => {
+                          setActive(null)
+                        }}
+                      >
+                        {props.children(item)}
+                        <Show when={item === props.current}>
+                          <Icon data-slot="list-item-selected-icon" name="check-small" />
+                        </Show>
+                        <Show when={props.activeIcon}>
+                          {(icon) => <Icon data-slot="list-item-active-icon" name={icon()} />}
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            )}
+          </For>
+        </Show>
+      </div>
     </div>
   )
 }

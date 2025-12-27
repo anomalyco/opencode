@@ -1,4 +1,5 @@
 [data-component="assistant-message"] {
+  content-visibility: auto;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -8,17 +9,84 @@
 
 [data-component="user-message"] {
   font-family: var(--font-family-sans);
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-base);
   font-style: normal;
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-large);
   letter-spacing: var(--letter-spacing-normal);
   color: var(--text-base);
-  display: -webkit-box;
-  line-clamp: 3;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  [data-slot="user-message-attachments"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  [data-slot="user-message-attachment"] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface-base);
+    border: 1px solid var(--border-base);
+    transition: border-color 0.15s ease;
+
+    &:hover {
+      border-color: var(--border-strong-base);
+    }
+
+    &[data-type="image"] {
+      width: 48px;
+      height: 48px;
+    }
+
+    &[data-type="file"] {
+      width: 48px;
+      height: 48px;
+    }
+  }
+
+  [data-slot="user-message-attachment-image"] {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  [data-slot="user-message-attachment-icon"] {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-weak);
+
+    [data-component="icon"] {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
+  [data-slot="user-message-text"] {
+    white-space: pre-wrap;
+    overflow: hidden;
+    background: var(--surface-inset-base);
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 0.5px solid var(--border-weak-base);
+  }
+
+  .text-text-strong {
+    color: var(--text-strong);
+  }
+
+  .font-medium {
+    font-weight: var(--font-weight-medium);
+  }
 }
 
 [data-component="text-part"] {
@@ -26,6 +94,7 @@
 
   [data-component="markdown"] {
     margin-top: 32px;
+    font-size: var(--font-size-base);
   }
 }
 
@@ -57,7 +126,7 @@
 
   [data-slot="message-part-tool-error-title"] {
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -80,9 +149,22 @@
   align-items: flex-start;
   justify-content: flex-start;
 
+  [data-component="markdown"] {
+    width: 100%;
+    min-width: 0;
+
+    pre {
+      margin: 0;
+      padding: 0;
+      background-color: transparent !important;
+      border: none !important;
+    }
+  }
+
   pre {
     margin: 0;
     padding: 0;
+    background: none;
   }
 
   &[data-scrollable] {
@@ -107,17 +189,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   width: 100%;
 
   [data-slot="message-part-title-area"] {
+    flex-grow: 1;
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
   }
 
   [data-slot="message-part-title"] {
+    flex-shrink: 0;
     font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
+    font-size: var(--font-size-base);
     font-style: normal;
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-large);
@@ -128,14 +214,22 @@
 
   [data-slot="message-part-path"] {
     display: flex;
+    flex-grow: 1;
+    min-width: 0;
   }
 
   [data-slot="message-part-directory"] {
     color: var(--text-weak);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
   }
 
   [data-slot="message-part-filename"] {
     color: var(--text-strong);
+    flex-shrink: 0;
   }
 
   [data-slot="message-part-actions"] {
@@ -148,6 +242,23 @@
 
 [data-component="edit-content"] {
   border-top: 1px solid var(--border-weaker-base);
+}
+
+[data-component="write-content"] {
+  border-top: 1px solid var(--border-weaker-base);
+  max-height: 240px;
+  overflow-y: auto;
+
+  [data-component="code"] {
+    padding-bottom: 0px !important;
+  }
+
+  /* Hide scrollbar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 [data-component="tool-action"] {
@@ -169,5 +280,179 @@
       text-decoration: line-through;
       color: var(--text-weaker);
     }
+  }
+}
+
+[data-component="task-tools"] {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  [data-slot="task-tool-item"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-weak);
+
+    [data-slot="icon-svg"] {
+      flex-shrink: 0;
+      color: var(--icon-weak);
+    }
+  }
+
+  [data-slot="task-tool-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-weak);
+  }
+
+  [data-slot="task-tool-subtitle"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    color: var(--text-weaker);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+[data-component="diagnostics"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background-color: var(--surface-critical-weak);
+  border-top: 1px solid var(--border-critical-base);
+
+  [data-slot="diagnostic"] {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+  }
+
+  [data-slot="diagnostic-label"] {
+    color: var(--text-on-critical-base);
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: -0.5px;
+    flex-shrink: 0;
+  }
+
+  [data-slot="diagnostic-location"] {
+    color: var(--text-on-critical-weak);
+    flex-shrink: 0;
+  }
+
+  [data-slot="diagnostic-message"] {
+    color: var(--text-on-critical-base);
+    word-break: break-word;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+  }
+}
+
+[data-component="tool-part-wrapper"] {
+  width: 100%;
+
+  &[data-permission="true"] {
+    position: sticky;
+    top: var(--sticky-header-height, 80px);
+    bottom: 0px;
+    z-index: 10;
+    border-radius: 6px;
+    border: none;
+    box-shadow: var(--shadow-xs-border-base);
+    background-color: var(--surface-raised-base);
+    overflow: visible;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -1.5px;
+      border-radius: 7.5px;
+      border: 1.5px solid transparent;
+      background:
+        linear-gradient(var(--background-base) 0 0) padding-box,
+        conic-gradient(
+            from var(--border-angle),
+            transparent 0deg,
+            transparent 270deg,
+            var(--border-warning-strong, var(--border-warning-selected)) 300deg,
+            var(--border-warning-base) 360deg
+          )
+          border-box;
+      animation: chase-border 1.5s linear infinite;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    & > *:first-child {
+      border-top-left-radius: 6px;
+      border-top-right-radius: 6px;
+      overflow: hidden;
+    }
+
+    & > *:last-child {
+      border-bottom-left-radius: 6px;
+      border-bottom-right-radius: 6px;
+      overflow: hidden;
+    }
+
+    [data-component="collapsible"] {
+      border: none;
+    }
+
+    [data-component="card"] {
+      border: none;
+    }
+  }
+}
+
+@property --border-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes chase-border {
+  from {
+    --border-angle: 0deg;
+  }
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+[data-component="permission-prompt"] {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background-color: var(--surface-raised-strong);
+  border-radius: 0 0 6px 6px;
+
+  [data-slot="permission-message"] {
+    display: none;
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+  }
+
+  [data-slot="permission-actions"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
   }
 }

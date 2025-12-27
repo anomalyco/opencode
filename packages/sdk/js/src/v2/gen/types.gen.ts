@@ -131,6 +131,9 @@ export type ApiError = {
       [key: string]: string
     }
     responseBody?: string
+    metadata?: {
+      [key: string]: string
+    }
   }
 }
 
@@ -147,6 +150,7 @@ export type AssistantMessage = {
   modelID: string
   providerID: string
   mode: string
+  agent: string
   path: {
     cwd: string
     root: string
@@ -416,6 +420,7 @@ export type Part =
       prompt: string
       description: string
       agent: string
+      command?: string
     }
   | ReasoningPart
   | FilePart
@@ -475,6 +480,40 @@ export type EventPermissionReplied = {
   }
 }
 
+export type EventFileEdited = {
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+  /**
+   * Unique identifier for the todo item
+   */
+  id: string
+}
+
+export type EventTodoUpdated = {
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
 export type SessionStatus =
   | {
       type: "idle"
@@ -511,37 +550,52 @@ export type EventSessionCompacted = {
   }
 }
 
-export type EventFileEdited = {
-  type: "file.edited"
+export type EventTuiPromptAppend = {
+  type: "tui.prompt.append"
   properties: {
-    file: string
+    text: string
   }
 }
 
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-  /**
-   * Unique identifier for the todo item
-   */
-  id: string
+export type EventTuiCommandExecute = {
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
 }
 
-export type EventTodoUpdated = {
-  type: "todo.updated"
+export type EventTuiToastShow = {
+  type: "tui.toast.show"
   properties: {
-    sessionID: string
-    todos: Array<Todo>
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    /**
+     * Duration in milliseconds
+     */
+    duration?: number
+  }
+}
+
+export type EventMcpToolsChanged = {
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
   }
 }
 
@@ -637,48 +691,6 @@ export type EventVcsBranchUpdated = {
   }
 }
 
-export type EventTuiPromptAppend = {
-  type: "tui.prompt.append"
-  properties: {
-    text: string
-  }
-}
-
-export type EventTuiCommandExecute = {
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    /**
-     * Duration in milliseconds
-     */
-    duration?: number
-  }
-}
-
 export type Pty = {
   id: string
   title: string
@@ -745,11 +757,15 @@ export type Event =
   | EventMessagePartRemoved
   | EventPermissionUpdated
   | EventPermissionReplied
+  | EventFileEdited
+  | EventTodoUpdated
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
-  | EventFileEdited
-  | EventTodoUpdated
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow
+  | EventMcpToolsChanged
   | EventCommandExecuted
   | EventSessionCreated
   | EventSessionUpdated
@@ -758,9 +774,6 @@ export type Event =
   | EventSessionError
   | EventFileWatcherUpdated
   | EventVcsBranchUpdated
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -841,6 +854,14 @@ export type KeybindsConfig = {
    */
   session_timeline?: string
   /**
+   * Fork session from message
+   */
+  session_fork?: string
+  /**
+   * Rename session
+   */
+  session_rename?: string
+  /**
    * Share current session
    */
   session_share?: string
@@ -881,6 +902,14 @@ export type KeybindsConfig = {
    */
   messages_last?: string
   /**
+   * Navigate to next message
+   */
+  messages_next?: string
+  /**
+   * Navigate to previous message
+   */
+  messages_previous?: string
+  /**
    * Navigate to last user message
    */
   messages_last_user?: string
@@ -916,6 +945,14 @@ export type KeybindsConfig = {
    * Previous recently used model
    */
   model_cycle_recent_reverse?: string
+  /**
+   * Next favorite model
+   */
+  model_cycle_favorite?: string
+  /**
+   * Previous favorite model
+   */
+  model_cycle_favorite_reverse?: string
   /**
    * List available commands
    */
@@ -1097,9 +1134,44 @@ export type KeybindsConfig = {
    */
   session_child_cycle_reverse?: string
   /**
+   * Go to parent session
+   */
+  session_parent?: string
+  /**
    * Suspend terminal
    */
   terminal_suspend?: string
+  /**
+   * Toggle terminal title
+   */
+  terminal_title_toggle?: string
+  /**
+   * Toggle tips on home screen
+   */
+  tips_toggle?: string
+}
+
+/**
+ * Log level
+ */
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
+
+/**
+ * Server configuration for opencode serve and web commands
+ */
+export type ServerConfig = {
+  /**
+   * Port to listen on
+   */
+  port?: number
+  /**
+   * Hostname to listen on
+   */
+  hostname?: string
+  /**
+   * Enable mDNS service discovery
+   */
+  mdns?: boolean
 }
 
 export type AgentConfig = {
@@ -1133,6 +1205,13 @@ export type AgentConfig = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1153,6 +1232,13 @@ export type AgentConfig = {
     | {
         edit?: "ask" | "allow" | "deny"
         bash?:
+          | "ask"
+          | "allow"
+          | "deny"
+          | {
+              [key: string]: "ask" | "allow" | "deny"
+            }
+        skill?:
           | "ask"
           | "allow"
           | "deny"
@@ -1325,6 +1411,7 @@ export type Config = {
    */
   theme?: string
   keybinds?: KeybindsConfig
+  logLevel?: LogLevel
   /**
    * TUI specific settings
    */
@@ -1347,6 +1434,7 @@ export type Config = {
      */
     diff_style?: "auto" | "stacked"
   }
+  server?: ServerConfig
   /**
    * Command configuration, see https://opencode.ai/docs/commands
    */
@@ -1393,6 +1481,10 @@ export type Config = {
    */
   small_model?: string
   /**
+   * Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.
+   */
+  default_agent?: string
+  /**
    * Custom username to display in conversations instead of system username
    */
   username?: string
@@ -1412,6 +1504,9 @@ export type Config = {
     build?: AgentConfig
     general?: AgentConfig
     explore?: AgentConfig
+    title?: AgentConfig
+    summary?: AgentConfig
+    compaction?: AgentConfig
     [key: string]: AgentConfig | undefined
   }
   /**
@@ -1471,6 +1566,13 @@ export type Config = {
       | {
           [key: string]: "ask" | "allow" | "deny"
         }
+    skill?:
+      | "ask"
+      | "allow"
+      | "deny"
+      | {
+          [key: string]: "ask" | "allow" | "deny"
+        }
     webfetch?: "ask" | "allow" | "deny"
     doom_loop?: "ask" | "allow" | "deny"
     external_directory?: "ask" | "allow" | "deny"
@@ -1483,6 +1585,16 @@ export type Config = {
      * Enterprise URL
      */
     url?: string
+  }
+  compaction?: {
+    /**
+     * Enable automatic compaction when context is full (default: true)
+     */
+    auto?: boolean
+    /**
+     * Enable pruning of old tool outputs (default: true)
+     */
+    prune?: boolean
   }
   experimental?: {
     hook?: {
@@ -1518,6 +1630,10 @@ export type Config = {
      * Tools that should only be available to primary agents.
      */
     primary_tools?: Array<string>
+    /**
+     * Continue the agent loop when a tool call is denied
+     */
+    continue_loop_on_deny?: boolean
   }
 }
 
@@ -1584,6 +1700,7 @@ export type SubtaskPartInput = {
   prompt: string
   description: string
   agent: string
+  command?: string
 }
 
 export type Command = {
@@ -1657,6 +1774,7 @@ export type Model = {
   headers: {
     [key: string]: string
   }
+  release_date: string
 }
 
 export type Provider = {
@@ -1734,13 +1852,18 @@ export type Agent = {
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
-  builtIn: boolean
+  native?: boolean
+  hidden?: boolean
+  default?: boolean
   topP?: number
   temperature?: number
   color?: string
   permission: {
     edit: "ask" | "allow" | "deny"
     bash: {
+      [key: string]: "ask" | "allow" | "deny"
+    }
+    skill: {
       [key: string]: "ask" | "allow" | "deny"
     }
     webfetch?: "ask" | "allow" | "deny"
@@ -1823,6 +1946,25 @@ export type WellKnownAuth = {
 }
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
+
+export type GlobalHealthData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/health"
+}
+
+export type GlobalHealthResponses = {
+  /**
+   * Health information
+   */
+  200: {
+    healthy: true
+    version: string
+  }
+}
+
+export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
 
 export type GlobalEventData = {
   body?: never
@@ -2713,6 +2855,7 @@ export type SessionSummarizeData = {
   body?: {
     providerID: string
     modelID: string
+    auto?: boolean
   }
   path: {
     /**
@@ -2797,10 +2940,10 @@ export type SessionPromptData = {
     }
     agent?: string
     noReply?: boolean
-    system?: string
     tools?: {
       [key: string]: boolean
     }
+    system?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -2883,6 +3026,94 @@ export type SessionMessageResponses = {
 
 export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessageResponses]
 
+export type PartDeleteData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Message ID
+     */
+    messageID: string
+    /**
+     * Part ID
+     */
+    partID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
+}
+
+export type PartDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PartDeleteError = PartDeleteErrors[keyof PartDeleteErrors]
+
+export type PartDeleteResponses = {
+  /**
+   * Successfully deleted part
+   */
+  200: boolean
+}
+
+export type PartDeleteResponse = PartDeleteResponses[keyof PartDeleteResponses]
+
+export type PartUpdateData = {
+  body?: Part
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+    /**
+     * Message ID
+     */
+    messageID: string
+    /**
+     * Part ID
+     */
+    partID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/message/{messageID}/part/{partID}"
+}
+
+export type PartUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type PartUpdateError = PartUpdateErrors[keyof PartUpdateErrors]
+
+export type PartUpdateResponses = {
+  /**
+   * Successfully updated part
+   */
+  200: Part
+}
+
+export type PartUpdateResponse = PartUpdateResponses[keyof PartUpdateResponses]
+
 export type SessionPromptAsyncData = {
   body?: {
     messageID?: string
@@ -2892,10 +3123,10 @@ export type SessionPromptAsyncData = {
     }
     agent?: string
     noReply?: boolean
-    system?: string
     tools?: {
       [key: string]: boolean
     }
+    system?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3124,6 +3355,24 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
+
+export type PermissionListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission"
+}
+
+export type PermissionListResponses = {
+  /**
+   * List of pending permissions
+   */
+  200: Array<Permission>
+}
+
+export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
 
 export type CommandListData = {
   body?: never

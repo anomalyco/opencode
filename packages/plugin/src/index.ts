@@ -161,7 +161,7 @@ export interface Hooks {
    */
   "chat.params"?: (
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
-    output: { temperature: number; topP: number; options: Record<string, any> },
+    output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "tool.execute.before"?: (
@@ -184,6 +184,23 @@ export interface Hooks {
         parts: Part[]
       }[]
     },
+  ) => Promise<void>
+  "experimental.chat.system.transform"?: (
+    input: {},
+    output: {
+      system: string[]
+    },
+  ) => Promise<void>
+  /**
+   * Called before session compaction starts. Allows plugins to customize
+   * the compaction prompt.
+   *
+   * - `context`: Additional context strings appended to the default prompt
+   * - `prompt`: If set, replaces the default compaction prompt entirely
+   */
+  "experimental.session.compacting"?: (
+    input: { sessionID: string },
+    output: { context: string[]; prompt?: string },
   ) => Promise<void>
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },
