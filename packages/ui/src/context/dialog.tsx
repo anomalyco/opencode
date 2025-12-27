@@ -33,10 +33,6 @@ function init() {
     },
     close() {
       active()?.onClose?.()
-      if (!active()?.onClose) {
-        const promptInput = document.querySelector("[data-component=prompt-input]") as HTMLElement
-        promptInput?.focus()
-      }
       setActive(undefined)
     },
     show(element: DialogElement, owner: Owner, onClose?: () => void) {
