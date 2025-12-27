@@ -141,6 +141,14 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
+    // Apply flag overrides for compaction settings
+    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
+      result.compaction = { ...result.compaction, auto: false }
+    }
+    if (Flag.OPENCODE_DISABLE_PRUNE) {
+      result.compaction = { ...result.compaction, prune: false }
+    }
+
     return {
       config: result,
       directories,
@@ -789,6 +797,12 @@ export namespace Config {
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
+        })
+        .optional(),
+      compaction: z
+        .object({
+          auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
+          prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
       experimental: z
