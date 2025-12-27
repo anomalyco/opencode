@@ -14,6 +14,7 @@ import {
   type Command,
   type McpStatus,
   type LspStatus,
+  type VcsInfo,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -47,6 +48,7 @@ type State = {
     [name: string]: McpStatus
   }
   lsp: LspStatus[]
+  vcs: VcsInfo | undefined
   limit: number
   message: {
     [sessionID: string]: Message[]
@@ -93,6 +95,7 @@ function createGlobalSync() {
         todo: {},
         mcp: {},
         lsp: [],
+        vcs: undefined,
         limit: 5,
         message: {},
         part: {},
@@ -159,6 +162,7 @@ function createGlobalSync() {
       config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
       mcp: () => sdk.mcp.status().then((x) => setStore("mcp", x.data ?? {})),
       lsp: () => sdk.lsp.status().then((x) => setStore("lsp", x.data ?? [])),
+      vcs: () => sdk.vcs.get().then((x) => setStore("vcs", x.data)),
     }
     await Promise.all(Object.values(load).map((p) => retry(p).catch((e) => setGlobalStore("error", e))))
       .then(() => setStore("ready", true))
@@ -303,6 +307,10 @@ function createGlobalSync() {
             }),
           )
         }
+        break
+      }
+      case "vcs.branch.updated": {
+        setStore("vcs", { branch: event.properties.branch })
         break
       }
     }

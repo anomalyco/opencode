@@ -82,6 +82,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const command = useCommand()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
+  let scrollRef!: HTMLDivElement
+
+  const scrollCursorIntoView = () => {
+    const container = scrollRef
+    const selection = window.getSelection()
+    if (!container || !selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+    if (!editorRef.contains(range.startContainer)) return
+
+    const rect = range.getBoundingClientRect()
+    if (!rect.height) return
+
+    const containerRect = container.getBoundingClientRect()
+    const top = rect.top - containerRect.top + container.scrollTop
+    const bottom = rect.bottom - containerRect.top + container.scrollTop
+    const padding = 12
+
+    if (top < container.scrollTop + padding) {
+      container.scrollTop = Math.max(0, top - padding)
+      return
+    }
+
+    if (bottom > container.scrollTop + container.clientHeight - padding) {
+      container.scrollTop = bottom - container.clientHeight + padding
+    }
+  }
+
+  const queueScroll = () => {
+    requestAnimationFrame(scrollCursorIntoView)
+  }
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
@@ -153,6 +184,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       editorRef.focus()
       setCursorPosition(editorRef, length)
       setStore("applyingHistory", false)
+      queueScroll()
     })
   }
 
@@ -357,9 +389,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       (currentParts) => {
         const domParts = parseFromDOM()
         const normalized = Array.from(editorRef.childNodes).every((node) => {
-          if (node.nodeType === Node.TEXT_NODE) return true
+          if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent ?? ""
+            if (!text.includes("\u200B")) return true
+            if (text !== "\u200B") return false
+
+            const prev = node.previousSibling
+            const next = node.nextSibling
+            const prevIsBr = prev?.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).tagName === "BR"
+            const nextIsBr = next?.nodeType === Node.ELEMENT_NODE && (next as HTMLElement).tagName === "BR"
+            if (!prevIsBr && !nextIsBr) return false
+            if (nextIsBr && !prevIsBr && prev) return false
+            return true
+          }
           if (node.nodeType !== Node.ELEMENT_NODE) return false
-          return (node as HTMLElement).dataset.type === "file"
+          const el = node as HTMLElement
+          if (el.dataset.type === "file") return true
+          return el.tagName === "BR"
         })
         if (normalized && isPromptEqual(currentParts, domParts)) return
 
@@ -372,7 +418,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         editorRef.innerHTML = ""
         currentParts.forEach((part) => {
           if (part.type === "text") {
-            editorRef.appendChild(document.createTextNode(part.content))
+            editorRef.appendChild(createTextFragment(part.content))
           } else if (part.type === "file") {
             const pill = document.createElement("span")
             pill.textContent = part.content
@@ -398,7 +444,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     let buffer = ""
 
     const flushText = () => {
-      const content = buffer.replace(/\r\n?/g, "\n")
+      const content = buffer.replace(/\r\n?/g, "\n").replace(/\u200B/g, "")
       buffer = ""
       if (!content) return
       parts.push({ type: "text", content, start: position, end: position + content.length })
@@ -472,6 +518,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (prompt.dirty()) {
         prompt.set(DEFAULT_PROMPT, 0)
       }
+      queueScroll()
       return
     }
 
@@ -500,6 +547,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     prompt.set(rawParts, cursorPosition)
+    queueScroll()
   }
 
   const addPart = (part: ContentPart) => {
@@ -529,9 +577,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         const nodes = Array.from(editorRef.childNodes)
 
         for (const node of nodes) {
-          const length = node.textContent?.length ?? 0
+          const length = getNodeLength(node)
           const isText = node.nodeType === Node.TEXT_NODE
           const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+          const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
           if (isText && remaining <= length) {
             if (edge === "start") range.setStart(node, remaining)
@@ -539,7 +588,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             return
           }
 
-          if (isFile && remaining <= length) {
+          if ((isFile || isBreak) && remaining <= length) {
             if (edge === "start" && remaining === 0) range.setStartBefore(node)
             if (edge === "start" && remaining > 0) range.setStartAfter(node)
             if (edge === "end" && remaining === 0) range.setEndBefore(node)
@@ -565,11 +614,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       selection.removeAllRanges()
       selection.addRange(range)
     } else if (part.type === "text") {
-      const textNode = document.createTextNode(part.content)
       const range = selection.getRangeAt(0)
+      const fragment = createTextFragment(part.content)
+      const last = fragment.lastChild
       range.deleteContents()
-      range.insertNode(textNode)
-      range.setStartAfter(textNode)
+      range.insertNode(fragment)
+      if (last) {
+        if (last.nodeType === Node.TEXT_NODE) {
+          const text = last.textContent ?? ""
+          if (text === "\u200B") {
+            range.setStart(last, 0)
+          }
+          if (text !== "\u200B") {
+            range.setStart(last, text.length)
+          }
+        }
+        if (last.nodeType !== Node.TEXT_NODE) {
+          range.setStartAfter(last)
+        }
+      }
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)
@@ -646,6 +709,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Backspace") {
+      const selection = window.getSelection()
+      if (selection && selection.isCollapsed) {
+        const node = selection.anchorNode
+        const offset = selection.anchorOffset
+        if (node && node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent ?? ""
+          if (/^\u200B+$/.test(text) && offset > 0) {
+            const range = document.createRange()
+            range.setStart(node, 0)
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }
+        }
+      }
+    }
+
     if (event.key === "!" && store.mode === "normal") {
       const cursorPosition = getCursorPosition(editorRef)
       if (cursorPosition === 0) {
@@ -686,7 +767,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       const cursorPosition = getCursorPosition(editorRef)
       const textLength = promptLength(prompt.current())
-      const textContent = editorRef.textContent ?? ""
+      const textContent = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
       const isEmpty = textContent.trim() === "" || textLength <= 1
       const hasNewlines = textContent.includes("\n")
       const inHistory = store.historyIndex >= 0
@@ -978,7 +1062,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </For>
           </div>
         </Show>
-        <div class="relative max-h-[240px] overflow-y-auto">
+        <div class="relative max-h-[240px] overflow-y-auto" ref={(el) => (scrollRef = el)}>
           <div
             data-component="prompt-input"
             ref={(el) => {
@@ -1119,23 +1203,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 }
 
+function createTextFragment(content: string): DocumentFragment {
+  const fragment = document.createDocumentFragment()
+  const segments = content.split("\n")
+  segments.forEach((segment, index) => {
+    if (segment) {
+      fragment.appendChild(document.createTextNode(segment))
+    } else if (segments.length > 1) {
+      fragment.appendChild(document.createTextNode("\u200B"))
+    }
+    if (index < segments.length - 1) {
+      fragment.appendChild(document.createElement("br"))
+    }
+  })
+  return fragment
+}
+
+function getNodeLength(node: Node): number {
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
+  return (node.textContent ?? "").replace(/\u200B/g, "").length
+}
+
+function getTextLength(node: Node): number {
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
+  let length = 0
+  for (const child of Array.from(node.childNodes)) {
+    length += getTextLength(child)
+  }
+  return length
+}
+
 function getCursorPosition(parent: HTMLElement): number {
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return 0
   const range = selection.getRangeAt(0)
+  if (!parent.contains(range.startContainer)) return 0
   const preCaretRange = range.cloneRange()
   preCaretRange.selectNodeContents(parent)
   preCaretRange.setEnd(range.startContainer, range.startOffset)
-  return preCaretRange.toString().length
+  return getTextLength(preCaretRange.cloneContents())
 }
 
 function setCursorPosition(parent: HTMLElement, position: number) {
   let remaining = position
   let node = parent.firstChild
   while (node) {
-    const length = node.textContent ? node.textContent.length : 0
+    const length = getNodeLength(node)
     const isText = node.nodeType === Node.TEXT_NODE
     const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+    const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
     if (isText && remaining <= length) {
       const range = document.createRange()
@@ -1147,10 +1264,24 @@ function setCursorPosition(parent: HTMLElement, position: number) {
       return
     }
 
-    if (isFile && remaining <= length) {
+    if ((isFile || isBreak) && remaining <= length) {
       const range = document.createRange()
       const selection = window.getSelection()
-      range.setStartAfter(node)
+      if (remaining === 0) {
+        range.setStartBefore(node)
+      }
+      if (remaining > 0 && isFile) {
+        range.setStartAfter(node)
+      }
+      if (remaining > 0 && isBreak) {
+        const next = node.nextSibling
+        if (next && next.nodeType === Node.TEXT_NODE) {
+          range.setStart(next, 0)
+        }
+        if (!next || next.nodeType !== Node.TEXT_NODE) {
+          range.setStartAfter(node)
+        }
+      }
       range.collapse(true)
       selection?.removeAllRanges()
       selection?.addRange(range)
