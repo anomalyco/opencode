@@ -7687,6 +7687,32 @@
         },
         "additionalProperties": false
       },
+      "LogLevel": {
+        "description": "Log level",
+        "type": "string",
+        "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
+      },
+      "ServerConfig": {
+        "description": "Server configuration for opencode serve and web commands",
+        "type": "object",
+        "properties": {
+          "port": {
+            "description": "Port to listen on",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "hostname": {
+            "description": "Hostname to listen on",
+            "type": "string"
+          },
+          "mdns": {
+            "description": "Enable mDNS service discovery",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "AgentConfig": {
         "type": "object",
         "properties": {
@@ -8143,6 +8169,9 @@
           "keybinds": {
             "$ref": "#/components/schemas/KeybindsConfig"
           },
+          "logLevel": {
+            "$ref": "#/components/schemas/LogLevel"
+          },
           "tui": {
             "description": "TUI specific settings",
             "type": "object",
@@ -8169,6 +8198,9 @@
                 "enum": ["auto", "stacked"]
               }
             }
+          },
+          "server": {
+            "$ref": "#/components/schemas/ServerConfig"
           },
           "command": {
             "description": "Command configuration, see https://opencode.ai/docs/commands",
@@ -8531,6 +8563,19 @@
               "url": {
                 "description": "Enterprise URL",
                 "type": "string"
+              }
+            }
+          },
+          "compaction": {
+            "type": "object",
+            "properties": {
+              "auto": {
+                "description": "Enable automatic compaction when context is full (default: true)",
+                "type": "boolean"
+              },
+              "prune": {
+                "description": "Enable pruning of old tool outputs (default: true)",
+                "type": "boolean"
               }
             }
           },
