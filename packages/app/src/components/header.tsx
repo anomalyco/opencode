@@ -188,6 +188,10 @@ export function Header(props: {
                               shareURL = await globalSDK.client.session
                                 .share({ sessionID: session.id, directory: currentDirectory() })
                                 .then((r) => r.data?.share?.url)
+                                .catch((e) => {
+                                  console.error("Failed to share session", e)
+                                  return undefined
+                                })
                             }
                             return shareURL
                           },
