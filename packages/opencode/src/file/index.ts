@@ -321,7 +321,11 @@ export namespace File {
     if (!input.query)
       return input.dirs !== false ? result.dirs.toSorted().slice(0, limit) : result.files.slice(0, limit)
     const items = input.dirs !== false ? [...result.files, ...result.dirs] : result.files
-    const sorted = fuzzysort.go(input.query, items, { limit: limit }).map((r) => r.target)
+    const sorted = fuzzysort
+      .go(input.query, items, { limit: limit })
+      .map((r) => r.target)
+      .sort((a, b) => a.localeCompare(b))
+
     log.info("search", { query: input.query, results: sorted.length })
     return sorted
   }
