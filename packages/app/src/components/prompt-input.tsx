@@ -643,9 +643,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const abort = () =>
-    sdk.client.session.abort({
-      sessionID: params.id!,
-    })
+    sdk.client.session
+      .abort({
+        sessionID: params.id!,
+      })
+      .catch(() => {})
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
@@ -883,12 +885,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const agent = local.agent.current()!.name
 
     if (isShellMode) {
-      sdk.client.session.shell({
-        sessionID: existing.id,
-        agent,
-        model,
-        command: text,
-      })
+      sdk.client.session
+        .shell({
+          sessionID: existing.id,
+          agent,
+          model,
+          command: text,
+        })
+        .catch((e) => {
+          console.error("Failed to send shell command", e)
+        })
       return
     }
 
@@ -897,13 +903,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
-        sdk.client.session.command({
-          sessionID: existing.id,
-          command: commandName,
-          arguments: args.join(" "),
-          agent,
-          model: `${model.providerID}/${model.modelID}`,
-        })
+        sdk.client.session
+          .command({
+            sessionID: existing.id,
+            command: commandName,
+            arguments: args.join(" "),
+            agent,
+            model: `${model.providerID}/${model.modelID}`,
+          })
+          .catch((e) => {
+            console.error("Failed to send command", e)
+          })
         return
       }
     }
@@ -929,13 +939,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       model,
     })
 
-    sdk.client.session.prompt({
-      sessionID: existing.id,
-      agent,
-      model,
-      messageID,
-      parts: requestParts,
-    })
+    sdk.client.session
+      .prompt({
+        sessionID: existing.id,
+        agent,
+        model,
+        messageID,
+        parts: requestParts,
+      })
+      .catch((e) => {
+        console.error("Failed to send prompt", e)
+      })
   }
 
   return (
