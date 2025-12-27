@@ -29,7 +29,7 @@ export namespace SessionCompaction {
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
-    if ((config.compaction?.auto ?? true) === false) return false
+    if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
@@ -48,7 +48,7 @@ export namespace SessionCompaction {
   // tool calls that are no longer relevant.
   export async function prune(input: { sessionID: string }) {
     const config = await Config.get()
-    if ((config.compaction?.prune ?? true) === false) return
+    if (config.compaction?.prune === false) return
     log.info("pruning")
     const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
