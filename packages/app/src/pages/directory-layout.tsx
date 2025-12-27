@@ -1,6 +1,6 @@
 import { createMemo, Show, type ParentProps } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { SDKProvider } from "@/context/sdk"
+import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 import { base64Decode } from "@opencode-ai/util/encode"
@@ -18,8 +18,15 @@ export default function Layout(props: ParentProps) {
         <SyncProvider>
           {iife(() => {
             const sync = useSync()
+            const sdk = useSDK()
             return (
-              <DataProvider data={sync.data} directory={directory()}>
+              <DataProvider
+                data={sync.data}
+                directory={directory()}
+                onPermissionRespond={(input) => {
+                  sdk.client.permission.respond(input)
+                }}
+              >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>
             )

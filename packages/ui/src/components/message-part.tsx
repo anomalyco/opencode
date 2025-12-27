@@ -1,4 +1,4 @@
-import { Component, createMemo, For, Match, Show, Switch, type JSX } from "solid-js"
+import { Component, createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
   AssistantMessage,
@@ -16,6 +16,7 @@ import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
+import { Button } from "./button"
 import { Card } from "./card"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
@@ -188,11 +189,6 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   }
 }
 
-function getToolPartInfo(part: ToolPart): ToolInfo {
-  const input = part.state.input || {}
-  return getToolInfo(part.tool, input)
-}
-
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
@@ -334,6 +330,7 @@ export interface ToolProps {
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
+  forceOpen?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -361,11 +358,35 @@ export const ToolRegistry = {
 }
 
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
+  const data = useData()
   const part = props.part as ToolPart
+
+  const permission = createMemo(() => {
+    const sessionID = props.message.sessionID
+    const permissions = data.store.permission?.[sessionID] ?? []
+    return permissions.find((p) => p.callID === part.callID)
+  })
+
+  const [forceOpen, setForceOpen] = createSignal(false)
+  createEffect(() => {
+    if (permission()) setForceOpen(true)
+  })
+
+  const respond = (response: "once" | "always" | "reject") => {
+    const perm = permission()
+    if (!perm || !data.respondToPermission) return
+    data.respondToPermission({
+      sessionID: perm.sessionID,
+      permissionID: perm.id,
+      response,
+    })
+  }
+
   const component = createMemo(() => {
     const render = ToolRegistry.render(part.tool) ?? GenericTool
-    const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
-    const input = part.state.status === "completed" ? part.state.input : {}
+    // @ts-expect-error
+    const metadata = part.state?.metadata ?? {}
+    const input = part.state?.input ?? {}
 
     return (
       <Switch>
@@ -399,9 +420,11 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             input={input}
             tool={part.tool}
             metadata={metadata}
-            output={part.state.status === "completed" ? part.state.output : undefined}
+            // @ts-expect-error
+            output={part.state.output}
             status={part.state.status}
             hideDetails={props.hideDetails}
+            forceOpen={forceOpen()}
             defaultOpen={props.defaultOpen}
           />
         </Match>
@@ -409,7 +432,29 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     )
   })
 
-  return <Show when={component()}>{component()}</Show>
+  return (
+    <div data-component="tool-part-wrapper" data-permission={!!permission()}>
+      <Show when={component()}>{component()}</Show>
+      <Show when={permission()}>
+        {(perm) => (
+          <div data-component="permission-prompt">
+            <div data-slot="permission-message">{perm().title}</div>
+            <div data-slot="permission-actions">
+              <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+                Deny
+              </Button>
+              <Button variant="secondary" size="small" onClick={() => respond("always")}>
+                Allow always
+              </Button>
+              <Button variant="primary" size="small" onClick={() => respond("once")}>
+                Allow once
+              </Button>
+            </div>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
 }
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
@@ -564,6 +609,7 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "task",
   render(props) {
+    const data = useData()
     const summary = () =>
       (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
 
@@ -571,35 +617,141 @@ ToolRegistry.register({
       working: () => true,
     })
 
+    const childSessionId = () => props.metadata.sessionId as string | undefined
+
+    const childPermission = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return undefined
+      const permissions = data.store.permission?.[sessionId] ?? []
+      return permissions.toSorted((a, b) => a.id.localeCompare(b.id))[0]
+    })
+
+    const childToolPart = createMemo(() => {
+      const perm = childPermission()
+      if (!perm) return undefined
+      const sessionId = childSessionId()
+      if (!sessionId) return undefined
+      // Find the tool part that matches the permission's callID
+      const messages = data.store.message[sessionId] ?? []
+      for (const msg of messages) {
+        const parts = data.store.part[msg.id] ?? []
+        for (const part of parts) {
+          if (part.type === "tool" && (part as ToolPart).callID === perm.callID) {
+            return { part: part as ToolPart, message: msg }
+          }
+        }
+      }
+      return undefined
+    })
+
+    const respond = (response: "once" | "always" | "reject") => {
+      const perm = childPermission()
+      if (!perm || !data.respondToPermission) return
+      data.respondToPermission({
+        sessionID: perm.sessionID,
+        permissionID: perm.id,
+        response,
+      })
+    }
+
+    const renderChildToolPart = () => {
+      const toolData = childToolPart()
+      if (!toolData) return null
+      const { part } = toolData
+      const render = ToolRegistry.render(part.tool) ?? GenericTool
+      // @ts-expect-error
+      const metadata = part.state?.metadata ?? {}
+      const input = part.state?.input ?? {}
+      return (
+        <Dynamic
+          component={render}
+          input={input}
+          tool={part.tool}
+          metadata={metadata}
+          // @ts-expect-error
+          output={part.state.output}
+          status={part.state.status}
+          defaultOpen={true}
+        />
+      )
+    }
+
     return (
-      <BasicTool
-        icon="task"
-        defaultOpen={true}
-        trigger={{
-          title: `${props.input.subagent_type || props.tool} Agent`,
-          titleClass: "capitalize",
-          subtitle: props.input.description,
-        }}
-      >
-        <div ref={autoScroll.scrollRef} onScroll={autoScroll.handleScroll} data-component="tool-output" data-scrollable>
-          <div ref={autoScroll.contentRef} data-component="task-tools">
-            <For each={summary()}>
-              {(item) => {
-                const info = getToolInfo(item.tool)
-                return (
-                  <div data-slot="task-tool-item">
-                    <Icon name={info.icon} size="small" />
-                    <span data-slot="task-tool-title">{info.title}</span>
-                    <Show when={item.state.title}>
-                      <span data-slot="task-tool-subtitle">{item.state.title}</span>
-                    </Show>
+      <div data-component="tool-part-wrapper" data-permission={!!childPermission()}>
+        <Switch>
+          <Match when={childPermission()}>
+            {(perm) => (
+              <>
+                <Show
+                  when={childToolPart()}
+                  fallback={
+                    <BasicTool
+                      icon="task"
+                      defaultOpen={true}
+                      trigger={{
+                        title: `${props.input.subagent_type || props.tool} Agent`,
+                        titleClass: "capitalize",
+                        subtitle: props.input.description,
+                      }}
+                    />
+                  }
+                >
+                  {renderChildToolPart()}
+                </Show>
+                <div data-component="permission-prompt">
+                  <div data-slot="permission-message">{perm().title}</div>
+                  <div data-slot="permission-actions">
+                    <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+                      Deny
+                    </Button>
+                    <Button variant="secondary" size="small" onClick={() => respond("always")}>
+                      Allow always
+                    </Button>
+                    <Button variant="primary" size="small" onClick={() => respond("once")}>
+                      Allow once
+                    </Button>
                   </div>
-                )
+                </div>
+              </>
+            )}
+          </Match>
+          <Match when={true}>
+            <BasicTool
+              icon="task"
+              defaultOpen={true}
+              trigger={{
+                title: `${props.input.subagent_type || props.tool} Agent`,
+                titleClass: "capitalize",
+                subtitle: props.input.description,
               }}
-            </For>
-          </div>
-        </div>
-      </BasicTool>
+            >
+              <div
+                ref={autoScroll.scrollRef}
+                onScroll={autoScroll.handleScroll}
+                data-component="tool-output"
+                data-scrollable
+              >
+                <div ref={autoScroll.contentRef} data-component="task-tools">
+                  <For each={summary()}>
+                    {(item) => {
+                      const info = getToolInfo(item.tool)
+                      return (
+                        <div data-slot="task-tool-item">
+                          <Icon name={info.icon} size="small" />
+                          <span data-slot="task-tool-title">{info.title}</span>
+                          <Show when={item.state.title}>
+                            <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                          </Show>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              </div>
+            </BasicTool>
+          </Match>
+        </Switch>
+      </div>
     )
   },
 })
@@ -618,7 +770,7 @@ ToolRegistry.register({
       >
         <div data-component="tool-output" data-scrollable>
           <Markdown
-            text={`\`\`\`command\n$ ${props.input.command}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
+            text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>

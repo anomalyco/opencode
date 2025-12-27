@@ -86,6 +86,17 @@ export namespace Permission {
     return state().pending
   }
 
+  export function list() {
+    const { pending } = state()
+    const result: Info[] = []
+    for (const items of Object.values(pending)) {
+      for (const item of Object.values(items)) {
+        result.push(item.info)
+      }
+    }
+    return result.sort((a, b) => a.id.localeCompare(b.id))
+  }
+
   export async function ask(input: {
     type: Info["type"]
     title: Info["title"]
