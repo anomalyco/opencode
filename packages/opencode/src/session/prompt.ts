@@ -1282,6 +1282,77 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+    if (!command) {
+      log.warn("command not found", { command: input.command })
+      return
+    }
+
+    if (command.sessionOnly) {
+      try {
+        await Session.get(input.sessionID)
+      } catch (error) {
+        const message = `/${command.name} requires an existing session`
+        log.warn("session-only command blocked", {
+          command: command.name,
+          sessionID: input.sessionID,
+          error,
+        })
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({
+            message,
+          }).toObject(),
+        })
+        throw new Error(message)
+      }
+    }
+
+    // Plugin commands execute directly via hook
+    if (command.type === "plugin") {
+      const plugins = await Plugin.list()
+      for (const plugin of plugins) {
+        const pluginCommands = plugin["plugin.command"]
+        const pluginCommand = pluginCommands?.[command.name]
+        if (!pluginCommand) continue
+
+        const messagesBefore = await Session.messages({ sessionID: input.sessionID, limit: 1 })
+        const lastMessageIDBefore = messagesBefore[0]?.info.id
+
+        try {
+          const client = await Plugin.client()
+          await pluginCommand.execute({
+            sessionID: input.sessionID,
+            arguments: input.arguments,
+            client,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          log.error("plugin command failed", { command: command.name, error: message })
+          Bus.publish(Session.Event.Error, {
+            sessionID: input.sessionID,
+            error: new NamedError.Unknown({
+              message: `/${command.name} failed: ${message}`,
+            }).toObject(),
+          })
+          throw error
+        }
+
+        // Emit event if plugin created a new message
+        const messagesAfter = await Session.messages({ sessionID: input.sessionID, limit: 1 })
+        if (messagesAfter.length > 0 && messagesAfter[0].info.id !== lastMessageIDBefore) {
+          Bus.publish(Command.Event.Executed, {
+            name: command.name,
+            sessionID: input.sessionID,
+            arguments: input.arguments,
+            messageID: messagesAfter[0].info.id,
+          })
+          return messagesAfter[0]
+        }
+        return
+      }
+      return
+    }
+
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []

@@ -1709,7 +1709,10 @@ export type Command = {
   agent?: string
   model?: string
   template: string
+  type?: "template" | "plugin"
   subtask?: boolean
+  sessionOnly?: boolean
+  aliases?: Array<string>
 }
 
 export type Model = {
