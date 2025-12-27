@@ -128,6 +128,7 @@ export function Session() {
   const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(kv.get("user_message_markdown", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
+  const [animationsEnabled, setAnimationsEnabled] = createSignal(kv.get("animations_enabled", true))
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -579,6 +580,19 @@ export function Session() {
         setUserMessageMarkdown((prev) => {
           const next = !prev
           kv.set("user_message_markdown", next)
+          return next
+        })
+        dialog.clear()
+      },
+    },
+    {
+      title: animationsEnabled() ? "Disable animations" : "Enable animations",
+      value: "session.toggle.animations",
+      category: "Session",
+      onSelect: (dialog) => {
+        setAnimationsEnabled((prev) => {
+          const next = !prev
+          kv.set("animations_enabled", next)
           return next
         })
         dialog.clear()

@@ -29,6 +29,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
+import { useKV } from "../../context/kv"
 
 export type PromptProps = {
   sessionID?: string
@@ -124,6 +125,7 @@ export function Prompt(props: PromptProps) {
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const kv = useKV()
 
   function promptModelWarning() {
     toast.show({
@@ -996,8 +998,11 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
-                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                <box marginLeft={1}>
+                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                  </Show>
+                </box>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
