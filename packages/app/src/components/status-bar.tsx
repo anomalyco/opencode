@@ -2,11 +2,14 @@ import { createMemo, Show, type ParentProps } from "solid-js"
 import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSync } from "@/context/global-sync"
+import { useTTS } from "@/context/tts"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 
 export function StatusBar(props: ParentProps) {
   const platform = usePlatform()
   const sync = useSync()
   const globalSync = useGlobalSync()
+  const tts = useTTS()
 
   const directoryDisplay = createMemo(() => {
     const directory = sync.data.path.directory || ""
@@ -26,7 +29,23 @@ export function StatusBar(props: ParentProps) {
           <span class="text-12-regular text-text-weak">{directoryDisplay()}</span>
         </Show>
       </div>
-      <div class="flex items-center">{props.children}</div>
+      <div class="flex items-center gap-2">
+        {props.children}
+        <Show when={tts.isSupported()}>
+          <Tooltip value={tts.isEnabled() ? "Disable text-to-speech" : "Enable text-to-speech"}>
+            <button
+              onClick={() => tts.toggle()}
+              classList={{
+                "flex items-center gap-1 px-2 py-0.5 rounded text-12-regular transition-colors": true,
+                "bg-primary/20 text-primary": tts.isEnabled(),
+                "text-text-weak hover:text-text-strong hover:bg-surface-stronger": !tts.isEnabled(),
+              }}
+            >
+              <span>{tts.isEnabled() ? "TTS On" : "TTS"}</span>
+            </button>
+          </Tooltip>
+        </Show>
+      </div>
     </div>
   )
 }

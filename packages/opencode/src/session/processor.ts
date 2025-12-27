@@ -13,6 +13,7 @@ import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
+import { TTS } from "@/tts"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -326,6 +327,14 @@ export namespace SessionProcessor {
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     await Session.updatePart(currentText)
+
+                    // Speak the completed text via TTS
+                    TTS.speak({
+                      text: currentText.text,
+                      sessionID: input.sessionID,
+                      messageID: input.assistantMessage.id,
+                      partID: currentText.id,
+                    })
                   }
                   currentText = undefined
                   break

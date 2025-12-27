@@ -18,6 +18,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { TTS } from "@/tts"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -655,6 +656,7 @@ export namespace Config {
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
+      tts: TTS.ConfigSchema.optional().describe("Text-to-speech configuration for assistant responses"),
       command: z
         .record(z.string(), Command)
         .optional()

@@ -16,6 +16,7 @@ import { PromptProvider } from "@/context/prompt"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
+import { TTSProvider } from "@/context/tts"
 import Layout from "@/pages/layout"
 import Home from "@/pages/home"
 import DirectoryLayout from "@/pages/directory-layout"
@@ -51,36 +52,38 @@ export function App() {
             <DiffComponentProvider component={Diff}>
               <CodeComponentProvider component={Code}>
                 <GlobalSDKProvider url={url}>
-                  <GlobalSyncProvider>
-                    <LayoutProvider>
-                      <NotificationProvider>
-                        <Router
-                          root={(props) => (
-                            <CommandProvider>
-                              <Layout>{props.children}</Layout>
-                            </CommandProvider>
-                          )}
-                        >
-                          <Route path="/" component={Home} />
-                          <Route path="/:dir" component={DirectoryLayout}>
-                            <Route path="/" component={() => <Navigate href="session" />} />
-                            <Route
-                              path="/session/:id?"
-                              component={(p) => (
-                                <Show when={p.params.id || true} keyed>
-                                  <TerminalProvider>
-                                    <PromptProvider>
-                                      <Session />
-                                    </PromptProvider>
-                                  </TerminalProvider>
-                                </Show>
-                              )}
-                            />
-                          </Route>
-                        </Router>
-                      </NotificationProvider>
-                    </LayoutProvider>
-                  </GlobalSyncProvider>
+                  <TTSProvider>
+                    <GlobalSyncProvider>
+                      <LayoutProvider>
+                        <NotificationProvider>
+                          <Router
+                            root={(props) => (
+                              <CommandProvider>
+                                <Layout>{props.children}</Layout>
+                              </CommandProvider>
+                            )}
+                          >
+                            <Route path="/" component={Home} />
+                            <Route path="/:dir" component={DirectoryLayout}>
+                              <Route path="/" component={() => <Navigate href="session" />} />
+                              <Route
+                                path="/session/:id?"
+                                component={(p) => (
+                                  <Show when={p.params.id || true} keyed>
+                                    <TerminalProvider>
+                                      <PromptProvider>
+                                        <Session />
+                                      </PromptProvider>
+                                    </TerminalProvider>
+                                  </Show>
+                                )}
+                              />
+                            </Route>
+                          </Router>
+                        </NotificationProvider>
+                      </LayoutProvider>
+                    </GlobalSyncProvider>
+                  </TTSProvider>
                 </GlobalSDKProvider>
               </CodeComponentProvider>
             </DiffComponentProvider>
