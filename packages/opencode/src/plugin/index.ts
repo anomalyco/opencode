@@ -11,6 +11,14 @@ import { Flag } from "../flag/flag"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
+  /** Default plugins bundled with OpenCode - these don't need source labels in auth UI */
+  export const DEFAULT_PLUGINS = ["opencode-copilot-auth", "opencode-anthropic-auth"] as const
+
+  export interface LoadedHooks extends Hooks {
+    /** The package name this plugin was loaded from */
+    _source?: string
+  }
+
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
@@ -18,7 +26,7 @@ export namespace Plugin {
       fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
-    const hooks = []
+    const hooks: LoadedHooks[] = []
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -33,15 +41,22 @@ export namespace Plugin {
     }
     for (let plugin of plugins) {
       log.info("loading plugin", { path: plugin })
+      let pkg: string | undefined
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+        pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         plugin = await BunProc.install(pkg, version)
       }
       const mod = await import(plugin)
+      // Track which plugin functions we've already called to avoid duplicates
+      // (some plugins export aliases like `GoogleOAuthPlugin = AntigravityCLIOAuthPlugin`)
+      const calledFns = new Set<PluginInstance>()
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        const init = await fn(input)
+        if (calledFns.has(fn)) continue
+        calledFns.add(fn)
+        const init: LoadedHooks = await fn(input)
+        init._source = pkg
         hooks.push(init)
       }
     }

@@ -13,19 +13,142 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
+type PluginMethod = PluginAuth["methods"][number]
+
+type MergedMethod = PluginMethod & {
+  /** Display label (may include plugin source suffix) */
+  displayLabel: string
+}
+
+interface MergedPluginAuth {
+  provider: string
+  methods: MergedMethod[]
+  loader?: PluginAuth["loader"]
+}
+
+/**
+ * Check if a plugin is a native OpenCode plugin (doesn't need source label)
+ */
+function isNativePlugin(pkg: string | undefined): boolean {
+  if (!pkg) return false
+  return Plugin.DEFAULT_PLUGINS.some((native) => pkg === native || pkg.startsWith(`${native}@`))
+}
+
+/**
+ * Extract a short display name from a package name
+ */
+function getPluginDisplayName(pkg: string | undefined): string | undefined {
+  if (!pkg) return undefined
+  const name = pkg.startsWith("@") ? pkg.split("/")[1] ?? pkg : pkg
+  return name
+    .replace(/^opencode-/, "")
+    .replace(/-auth$/, "")
+    .replace(/-plugin$/, "")
+}
+
+/**
+ * Check if a method label is a generic API key entry (shouldn't be labeled with plugin source)
+ * These are functionally identical to the native fallback mechanism
+ */
+function isGenericApiKeyLabel(label: string): boolean {
+  const normalized = label.toLowerCase().trim()
+  return (
+    normalized === "manually enter api key" ||
+    normalized === "api key" ||
+    normalized === "enter api key"
+  )
+}
+
+/**
+ * Build label for an auth method, adding plugin source for non-native plugins
+ */
+function buildMethodLabel(baseLabel: string, pluginSource: string | undefined, methodType: "oauth" | "api"): string {
+  // Native OpenCode plugins don't need source labels
+  if (isNativePlugin(pluginSource)) {
+    return baseLabel
+  }
+  // Generic API key methods don't need source labels (same as native fallback)
+  if (methodType === "api" && isGenericApiKeyLabel(baseLabel)) {
+    return baseLabel
+  }
+  // Non-native plugins show their source for distinctive methods
+  const displayName = getPluginDisplayName(pluginSource)
+  return displayName ? `${baseLabel} (${displayName})` : baseLabel
+}
+
+/**
+ * Get merged auth methods for a provider from all plugins
+ */
+async function getMergedAuthForProvider(provider: string): Promise<MergedPluginAuth | undefined> {
+  const plugins = await Plugin.list()
+  const matchingPlugins = plugins.filter((x) => x.auth?.provider === provider)
+
+  if (matchingPlugins.length === 0) return undefined
+
+  const merged: MergedPluginAuth = {
+    provider,
+    methods: [],
+    loader: undefined,
+  }
+
+  const seenAuthorizeFns = new Set<Function>()
+  const seenLabels = new Set<string>()
+
+  for (const plugin of matchingPlugins) {
+    if (!plugin.auth) continue
+
+    // Keep the first loader
+    if (!merged.loader && plugin.auth.loader) {
+      merged.loader = plugin.auth.loader
+    }
+
+    for (const method of plugin.auth.methods) {
+      // Deduplicate by authorize function reference (for OAuth) or type+label (for API)
+      if (method.type === "oauth") {
+        if (seenAuthorizeFns.has(method.authorize)) continue
+        seenAuthorizeFns.add(method.authorize)
+      } else {
+        const key = `${method.type}:${method.label}`
+        if (seenLabels.has(key)) continue
+        seenLabels.add(key)
+      }
+
+      // Build display label with plugin source for non-native plugins
+      let displayLabel = buildMethodLabel(method.label, plugin._source, method.type)
+
+      // Handle display label collisions
+      const existingDisplayLabels = new Set(merged.methods.map((m) => m.displayLabel))
+      if (existingDisplayLabels.has(displayLabel)) {
+        let counter = 2
+        const baseLabel = displayLabel
+        while (existingDisplayLabels.has(displayLabel)) {
+          displayLabel = `${baseLabel} ${counter}`
+          counter++
+        }
+      }
+
+      merged.methods.push({
+        ...method,
+        displayLabel,
+      })
+    }
+  }
+
+  return merged.methods.length > 0 ? merged : undefined
+}
 
 /**
  * Handle plugin-based authentication flow.
  * Returns true if auth was handled, false if it should fall through to default handling.
  */
-async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string): Promise<boolean> {
+async function handlePluginAuth(merged: MergedPluginAuth, provider: string): Promise<boolean> {
   let index = 0
-  if (plugin.auth.methods.length > 1) {
+  if (merged.methods.length > 1) {
     const method = await prompts.select({
       message: "Login method",
       options: [
-        ...plugin.auth.methods.map((x, index) => ({
-          label: x.label,
+        ...merged.methods.map((x, index) => ({
+          label: x.displayLabel,
           value: index.toString(),
         })),
       ],
@@ -33,7 +156,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
     if (prompts.isCancel(method)) throw new UI.CancelledError()
     index = parseInt(method)
   }
-  const method = plugin.auth.methods[index]
+  const method = merged.methods[index]
 
   // Handle prompts for all auth types
   await new Promise((resolve) => setTimeout(resolve, 10))
@@ -306,9 +429,9 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+        const mergedAuth = await getMergedAuthForProvider(provider)
+        if (mergedAuth) {
+          const handled = await handlePluginAuth(mergedAuth, provider)
           if (handled) return
         }
 
@@ -322,9 +445,9 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
           // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+          const customMergedAuth = await getMergedAuthForProvider(provider)
+          if (customMergedAuth) {
+            const handled = await handlePluginAuth(customMergedAuth, provider)
             if (handled) return
           }
 
