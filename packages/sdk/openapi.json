@@ -8566,6 +8566,19 @@
               }
             }
           },
+          "compaction": {
+            "type": "object",
+            "properties": {
+              "auto": {
+                "description": "Enable automatic compaction when context is full (default: true)",
+                "type": "boolean"
+              },
+              "prune": {
+                "description": "Enable pruning of old tool outputs (default: true)",
+                "type": "boolean"
+              }
+            }
+          },
           "experimental": {
             "type": "object",
             "properties": {
