@@ -11,9 +11,11 @@ const log = Log.create({ service: "agent" })
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_DOCS from "./prompt/docs.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_TRIAGE from "./prompt/triage.txt"
 
 export namespace Agent {
   export const Info = z
@@ -132,6 +134,36 @@ export namespace Agent {
         },
         mode: "primary",
         native: true,
+      },
+      docs: {
+        name: "docs",
+        description: "Expert technical documentation writer with relaxed, friendly tone",
+        tools: {
+          ...defaultTools,
+        },
+        options: {},
+        permission: agentPermission,
+        mode: "primary",
+        native: true,
+        prompt: PROMPT_DOCS,
+      },
+      triage: {
+        name: "triage",
+        description: "GitHub issue triage with automated labeling and assignment",
+        tools: {
+          "*": false,
+          "github-triage": true,
+        },
+        options: {},
+        permission: agentPermission,
+        mode: "primary",
+        native: true,
+        hidden: true,
+        prompt: PROMPT_TRIAGE,
+        model: {
+          providerID: "opencode",
+          modelID: "claude-haiku-4-5",
+        },
       },
       general: {
         name: "general",
