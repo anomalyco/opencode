@@ -1596,6 +1596,16 @@ export type Config = {
      */
     url?: string
   }
+  compaction?: {
+    /**
+     * Enable automatic compaction when context is full (default: true)
+     */
+    auto?: boolean
+    /**
+     * Enable pruning of old tool outputs (default: true)
+     */
+    prune?: boolean
+  }
   experimental?: {
     hook?: {
       file_edited?: {
