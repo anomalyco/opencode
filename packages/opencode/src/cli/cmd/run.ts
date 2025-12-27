@@ -83,6 +83,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "attach to a running opencode server (e.g., http://localhost:4096)",
       })
+      .option("server-dir", {
+        type: "string",
+        describe: "directory to run in on the server (absolute path)",
+      })
       .option("port", {
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
@@ -270,7 +274,14 @@ export const RunCommand = cmd({
     }
 
     if (args.attach) {
-      const sdk = createOpencodeClient({ baseUrl: args.attach })
+      const input = new URL(args.attach)
+      const queryDir = input.searchParams.get("directory") || undefined
+      input.search = ""
+
+      const sdk = createOpencodeClient({
+        baseUrl: input.toString(),
+        directory: args.serverDir || queryDir,
+      })
 
       const sessionID = await (async () => {
         if (args.continue) {

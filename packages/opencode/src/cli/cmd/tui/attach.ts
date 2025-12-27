@@ -15,6 +15,10 @@ export const AttachCommand = cmd({
         type: "string",
         description: "directory to run in",
       })
+      .option("server-dir", {
+        type: "string",
+        description: "directory to run in on the server (absolute path)",
+      })
       .option("session", {
         alias: ["s"],
         type: "string",
@@ -22,8 +26,14 @@ export const AttachCommand = cmd({
       }),
   handler: async (args) => {
     if (args.dir) process.chdir(args.dir)
+
+    const input = new URL(args.url)
+    const queryDir = input.searchParams.get("directory") || undefined
+    input.search = ""
+
     await tui({
-      url: args.url,
+      url: input.toString(),
+      directory: args.serverDir || queryDir,
       args: { sessionID: args.session },
     })
   },

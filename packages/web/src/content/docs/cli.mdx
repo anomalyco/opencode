@@ -303,23 +303,27 @@ opencode serve
 
 # In another terminal, run commands that attach to it
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
+
+# Attach with a specific server directory
+opencode run --attach http://localhost:4096 --server-dir /path/to/project "Analyze this codebase"
 ```
 
 #### Flags
 
-| Flag         | Short | Description                                                        |
-| ------------ | ----- | ------------------------------------------------------------------ |
-| `--command`  |       | The command to run, use message for args                           |
-| `--continue` | `-c`  | Continue the last session                                          |
-| `--session`  | `-s`  | Session ID to continue                                             |
-| `--share`    |       | Share the session                                                  |
-| `--model`    | `-m`  | Model to use in the form of provider/model                         |
-| `--agent`    |       | Agent to use                                                       |
-| `--file`     | `-f`  | File(s) to attach to message                                       |
-| `--format`   |       | Format: default (formatted) or json (raw JSON events)              |
-| `--title`    |       | Title for the session (uses truncated prompt if no value provided) |
-| `--attach`   |       | Attach to a running opencode server (e.g., http://localhost:4096)  |
-| `--port`     |       | Port for the local server (defaults to random port)                |
+| Flag           | Short | Description                                                        |
+| -------------- | ----- | ------------------------------------------------------------------ |
+| `--command`    |       | The command to run, use message for args                           |
+| `--continue`   | `-c`  | Continue the last session                                          |
+| `--session`    | `-s`  | Session ID to continue                                             |
+| `--share`      |       | Share the session                                                  |
+| `--model`      | `-m`  | Model to use in the form of provider/model                         |
+| `--agent`      |       | Agent to use                                                       |
+| `--file`       | `-f`  | File(s) to attach to message                                       |
+| `--format`     |       | Format: default (formatted) or json (raw JSON events)              |
+| `--title`      |       | Title for the session (uses truncated prompt if no value provided) |
+| `--attach`     |       | Attach to a running opencode server (e.g., http://localhost:4096)  |
+| `--server-dir` |       | Directory to run in on the server (absolute path)                  |
+| `--port`       |       | Port for the local server (defaults to random port)                |
 
 ---
 
@@ -434,6 +438,46 @@ This starts an HTTP server and opens a web browser to access OpenCode through a 
 | `--port`     | Port to listen on     |
 | `--hostname` | Hostname to listen on |
 | `--mdns`     | Enable mDNS discovery |
+
+---
+
+### attach
+
+Attach the TUI to a running OpenCode server.
+
+```bash
+opencode attach <url>
+```
+
+This command allows you to connect your terminal UI to a running OpenCode server instance, enabling remote usage and avoiding cold boot times.
+
+```bash
+# Attach to a local server
+opencode attach http://localhost:4096
+
+# Attach with a specific server directory
+opencode attach http://localhost:4096 --server-dir /path/to/project
+
+# Attach and continue a specific session
+opencode attach http://localhost:4096 --session abc123
+
+# Attach from a specific local directory
+opencode attach http://localhost:4096 --dir ./my-project
+```
+
+#### Flags
+
+| Flag           | Short | Description                                  |
+| -------------- | ----- | -------------------------------------------- |
+| `--dir`        |       | Directory to run in locally                  |
+| `--server-dir` |       | Directory to run in on the server (absolute) |
+| `--session`    | `-s`  | Session ID to continue                       |
+
+#### Positional Arguments
+
+| Argument | Description                              |
+| -------- | ---------------------------------------- |
+| `url`    | Server URL (e.g., http://localhost:4096) |
 
 ---
 
