@@ -1,9 +1,14 @@
 import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
+import type { Agent } from "../agent/agent"
 
 export namespace Tool {
   interface Metadata {
     [key: string]: any
+  }
+
+  export interface InitContext {
+    agent?: Agent.Info
   }
 
   export type Context<M extends Metadata = Metadata> = {
@@ -17,7 +22,7 @@ export namespace Tool {
   }
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
-    init: () => Promise<{
+    init: (ctx?: InitContext) => Promise<{
       description: string
       parameters: Parameters
       execute(
@@ -42,8 +47,8 @@ export namespace Tool {
   ): Info<Parameters, Result> {
     return {
       id,
-      init: async () => {
-        const toolInfo = init instanceof Function ? await init() : init
+      init: async (ctx) => {
+        const toolInfo = init instanceof Function ? await init(ctx) : init
         const execute = toolInfo.execute
         toolInfo.execute = (args, ctx) => {
           try {
