@@ -302,7 +302,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         )
       })
       .catch(() => {
-        setStore("active", "opencode")
+        if (!(store.active === "system" || store.active in DEFAULT_THEMES)) {
+          setStore("active", "opencode")
+        }
       })
       .finally(() => {
         if (store.active !== "system") {
