@@ -139,7 +139,7 @@ const PLACEHOLDERS = [
   "If a machine can think, it might think more intelligently than we do, and then where should we be?",
   "Once the machine thinking method had started, it would not take long to outstrip our feeble powers... At some point, we should have to expect the machines to take control.",
   // Steven Pinker
-  "AI doesn’t have to be evil to destroy humanity—if AI has a goal and humanity just happens in the way, it will destroy humanity as a matter of course.",
+  "AI doesn’t have to be evil to destroy humanity — if AI has a goal and humanity just happens in the way, it will destroy humanity as a matter of course.",
   // Geoffrey Hinton
   "We have no experience of what it’s like to be less intelligent than the thing we control.",
   "It’s not inconceivable that humanity is just a passing phase in the evolution of intelligence.",
