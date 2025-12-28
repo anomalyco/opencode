@@ -2,3 +2,5 @@ preload = ["@opentui/solid/preload"]
 
 [test]
 preload = ["./test/preload.ts"]
+# Enable code coverage
+coverage = true
