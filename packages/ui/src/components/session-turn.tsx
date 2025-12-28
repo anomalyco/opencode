@@ -329,6 +329,12 @@ export function SessionTurn(
   })
 
   createEffect(() => {
+    if (permissionParts().length > 0) {
+      autoScroll.forceScrollToBottom()
+    }
+  })
+
+  createEffect(() => {
     if (working() || !isLastUserMessage()) return
 
     const diffs = message()?.summary?.diffs
