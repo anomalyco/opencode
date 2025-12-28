@@ -38,6 +38,10 @@ import { createPerplexity } from "@ai-sdk/perplexity"
 export namespace Provider {
   const log = Log.create({ service: "provider" })
 
+  const needsResponseNormalization = (model, opts) =>
+    model.api?.npm === '@ai-sdk/mistral' ||
+    (opts?.baseURL || model.api?.url)?.includes('integrate.api.nvidia.com');
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -839,6 +843,8 @@ export namespace Provider {
 
       const customFetch = options["fetch"]
 
+      const shouldNormalizeResponse = needsResponseNormalization(model, options);
+
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
@@ -854,11 +860,32 @@ export namespace Provider {
           opts.signal = combined
         }
 
-        return fetchFn(input, {
+        const response = await fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
+
+        if (response.ok && shouldNormalizeResponse) {
+          const clonedResponse = response.clone()
+          try {
+            const text = await clonedResponse.text()
+            const json = JSON.parse(text)
+
+            if (Array.isArray(json.choices) && (!json.id || typeof json.id !== "string")) {
+              json.id = `msg_${crypto.randomUUID()}`
+              return new Response(JSON.stringify(json), {
+                status: response.status,
+                statusText: response.statusText,
+                headers: response.headers,
+              })
+            }
+          } catch {
+            log.warn("Failed to normalize response", { error: "JSON parse error" })
+          }
+        }
+
+        return response
       }
 
       // Special case: google-vertex-anthropic uses a subpath import
