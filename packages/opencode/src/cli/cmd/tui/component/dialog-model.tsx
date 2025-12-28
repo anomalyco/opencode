@@ -8,6 +8,15 @@ import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { Keybind } from "@/util/keybind"
 import * as fuzzysort from "fuzzysort"
 
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  "google-vertex": "Google Vertex AI",
+  "google-vertex-anthropic": "Google Vertex AI (Anthropic)",
+}
+
+function getProviderDisplayName(provider: { id: string; name: string }): string {
+  return PROVIDER_DISPLAY_NAMES[provider.id] ?? provider.name
+}
+
 export function useConnected() {
   const sync = useSync()
   return createMemo(() =>
@@ -55,7 +64,7 @@ export function DialogModel(props: { providerID?: string }) {
             modelID: model.id,
           },
           title: model.name ?? item.modelID,
-          description: provider.name,
+          description: getProviderDisplayName(provider),
           category: "Favorites",
           disabled: provider.id === "opencode" && model.id.includes("-nano"),
           footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -86,7 +95,7 @@ export function DialogModel(props: { providerID?: string }) {
             modelID: model.id,
           },
           title: model.name ?? item.modelID,
-          description: provider.name,
+          description: getProviderDisplayName(provider),
           category: "Recent",
           disabled: provider.id === "opencode" && model.id.includes("-nano"),
           footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -108,7 +117,7 @@ export function DialogModel(props: { providerID?: string }) {
       sync.data.provider,
       sortBy(
         (provider) => provider.id !== "opencode",
-        (provider) => provider.name,
+        (provider) => getProviderDisplayName(provider),
       ),
       flatMap((provider) =>
         pipe(
@@ -129,7 +138,7 @@ export function DialogModel(props: { providerID?: string }) {
               )
                 ? "(Favorite)"
                 : undefined,
-              category: connected() ? provider.name : undefined,
+              category: connected() ? getProviderDisplayName(provider) : undefined,
               disabled: provider.id === "opencode" && model.includes("-nano"),
               footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
               onSelect() {

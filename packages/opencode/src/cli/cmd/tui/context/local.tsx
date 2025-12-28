@@ -213,6 +213,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return modelStore.favorite
         },
         parsed: createMemo(() => {
+          const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+            "google-vertex": "Google Vertex AI",
+            "google-vertex-anthropic": "Google Vertex AI (Anthropic)",
+          }
           const value = currentModel()
           if (!value) {
             return {
@@ -223,7 +227,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const provider = sync.data.provider.find((x) => x.id === value.providerID)
           const info = provider?.models[value.modelID]
           return {
-            provider: provider?.name ?? value.providerID,
+            provider: PROVIDER_DISPLAY_NAMES[value.providerID] ?? provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
           }
         }),

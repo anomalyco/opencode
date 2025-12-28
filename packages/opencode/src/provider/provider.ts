@@ -66,6 +66,7 @@ export namespace Provider {
     autoload: boolean
     getModel?: CustomModelLoader
     options?: Record<string, any>
+    key?: string
   }>
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
@@ -272,13 +273,48 @@ export namespace Provider {
       }
     },
     "google-vertex": async () => {
+      // Check for stored auth credentials first (service account JSON)
+      const auth = await Auth.get("google-vertex")
+      if (auth?.type === "api") {
+        try {
+          const creds = JSON.parse(auth.key)
+          if (creds.client_email && creds.private_key && creds.project_id) {
+            return {
+              autoload: true,
+              // Set key to undefined to prevent it from being used as apiKey
+              key: undefined,
+              options: {
+                // Explicitly set apiKey to null to prevent fallback to provider.key
+                apiKey: null,
+                project: creds.project_id,
+                location: creds.location || "us-east5",
+                googleAuthOptions: {
+                  credentials: {
+                    client_email: creds.client_email,
+                    private_key: creds.private_key,
+                  },
+                },
+              },
+              async getModel(sdk: any, modelID: string) {
+                const id = String(modelID).trim()
+                return sdk.languageModel(id)
+              },
+            }
+          }
+        } catch {
+          // Fall through to env var check
+        }
+      }
+      // Fall back to environment variables (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
       const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
       const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
         autoload: true,
+        key: undefined,
         options: {
+          apiKey: null,
           project,
           location,
         },
@@ -289,13 +325,48 @@ export namespace Provider {
       }
     },
     "google-vertex-anthropic": async () => {
+      // Check for stored auth credentials first (service account JSON)
+      const auth = await Auth.get("google-vertex-anthropic")
+      if (auth?.type === "api") {
+        try {
+          const creds = JSON.parse(auth.key)
+          if (creds.client_email && creds.private_key && creds.project_id) {
+            return {
+              autoload: true,
+              // Set key to undefined to prevent it from being used as apiKey
+              key: undefined,
+              options: {
+                // Explicitly set apiKey to null to prevent fallback to provider.key
+                apiKey: null,
+                project: creds.project_id,
+                location: creds.location || "global",
+                googleAuthOptions: {
+                  credentials: {
+                    client_email: creds.client_email,
+                    private_key: creds.private_key,
+                  },
+                },
+              },
+              async getModel(sdk: any, modelID: string) {
+                const id = String(modelID).trim()
+                return sdk.languageModel(id)
+              },
+            }
+          }
+        } catch {
+          // Fall through to env var check
+        }
+      }
+      // Fall back to environment variables (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
       const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
       const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
         autoload: true,
+        key: undefined,
         options: {
+          apiKey: null,
           project,
           location,
         },
@@ -749,6 +820,9 @@ export namespace Provider {
         mergeProvider(providerID, {
           source: "custom",
           options: result.options,
+          // Pass key from custom loader if explicitly set (e.g., undefined for google-vertex)
+          // to override any key previously set from Auth storage
+          ...(result.key !== undefined ? { key: result.key } : "key" in result ? { key: undefined } : {}),
         })
       }
     }
