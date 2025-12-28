@@ -248,6 +248,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
+    if (!isFocused()) return
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
