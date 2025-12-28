@@ -14,7 +14,7 @@ but this is not:
 
 We also need to deal with files followed by @commas, ones
 with @file-extensions.md, even @multiple.extensions.bak,
-hidden directorys like @.config/ or files like @.bashrc
+hidden directories like @.config/ or files like @.bashrc
 and ones at the end of a sentence like @foo.md.
 
 Also shouldn't forget @/absolute/paths.txt with and @/without/extensions,

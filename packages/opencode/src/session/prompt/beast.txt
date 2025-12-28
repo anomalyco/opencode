@@ -68,7 +68,7 @@ Carefully read the issue and think hard about a plan to solve it before coding.
 - Use the `webfetch` tool to search google by fetching the URL `https://www.google.com/search?q=your+search+query`.
 - After fetching, review the content returned by the fetch tool.
 - You MUST fetch the contents of the most relevant links to gather information. Do not rely on the summary that you find in the search results.
-- As you fetch each link, read the content thoroughly and fetch any additional links that you find withhin the content that are relevant to the problem.
+- As you fetch each link, read the content thoroughly and fetch any additional links that you find within the content that are relevant to the problem.
 - Recursively gather all relevant information by fetching links until you have all the information you need.
 
 ## 5. Develop a Detailed Plan 
