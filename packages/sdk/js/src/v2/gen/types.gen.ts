@@ -3356,6 +3356,24 @@ export type PermissionRespondResponses = {
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
 
+export type PermissionListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission"
+}
+
+export type PermissionListResponses = {
+  /**
+   * List of pending permissions
+   */
+  200: Array<Permission>
+}
+
+export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
+
 export type CommandListData = {
   body?: never
   path?: never
