@@ -10,11 +10,37 @@ interface TaskSource {
   to: string
 }
 
+interface ScoreDetail {
+  criterion: string
+  weight: number
+  average: number
+}
+
+interface Run {
+  task: string
+  model: string
+  agent: string
+  score: {
+    final: number
+    base: number
+    penalty: number
+  }
+  scoreDetails: ScoreDetail[]
+}
+
+interface Prompt {
+  commit: string
+  prompt: string
+}
+
 interface Task {
   averageScore: number
+  summary?: string
+  runs?: Run[]
   task: {
     id: string
     source: TaskSource
+    prompts?: Prompt[]
   }
 }
 
@@ -70,7 +96,7 @@ export default function Bench() {
           <tr>
             <th>Agent</th>
             <th>Model</th>
-            <th>Average Score</th>
+            <th>Final Score</th>
             <For each={taskIds()}>{(id) => <th>{id}</th>}</For>
           </tr>
         </thead>
@@ -127,7 +153,7 @@ export default function Bench() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ "margin-bottom": "1rem" }}>
+            <div style={{ "margin-bottom": "1rem", color: "#000" }}>
               <div>
                 <strong>Repo: </strong>
                 <a
@@ -162,6 +188,68 @@ export default function Bench() {
                 </a>
               </div>
             </div>
+            <Show when={modalTask()?.task.prompts && modalTask()!.task.prompts!.length > 0}>
+              <div style={{ "margin-bottom": "1rem", color: "#000" }}>
+                <strong>Prompt:</strong>
+                <For each={modalTask()!.task.prompts}>
+                  {(p) => (
+                    <div style={{ "margin-top": "0.5rem" }}>
+                      <div style={{ "font-size": "0.875rem", color: "#666" }}>Commit: {p.commit.slice(0, 7)}</div>
+                      <p style={{ "margin-top": "0.25rem", "white-space": "pre-wrap" }}>{p.prompt}</p>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <Show when={modalTask()?.runs && modalTask()!.runs!.length > 0}>
+              <div style={{ "margin-bottom": "1rem", color: "#000" }}>
+                <strong>Runs:</strong>
+                <table style={{ "margin-top": "0.5rem", "border-collapse": "collapse", width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>Run</th>
+                      <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>Final</th>
+                      <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>Base</th>
+                      <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>Penalty</th>
+                      <For each={modalTask()!.runs![0]?.scoreDetails}>
+                        {(detail) => (
+                          <th style={{ border: "1px solid #ccc", padding: "0.5rem", "text-align": "left" }}>
+                            {detail.criterion} ({detail.weight})
+                          </th>
+                        )}
+                      </For>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <For each={modalTask()!.runs}>
+                      {(run, index) => (
+                        <tr>
+                          <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>{index() + 1}</td>
+                          <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>{run.score.final.toFixed(3)}</td>
+                          <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>{run.score.base.toFixed(3)}</td>
+                          <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
+                            {run.score.penalty.toFixed(3)}
+                          </td>
+                          <For each={run.scoreDetails}>
+                            {(detail) => (
+                              <td style={{ border: "1px solid #ccc", padding: "0.5rem" }}>
+                                {detail.average.toFixed(3)}
+                              </td>
+                            )}
+                          </For>
+                        </tr>
+                      )}
+                    </For>
+                  </tbody>
+                </table>
+              </div>
+            </Show>
+            <Show when={modalTask()?.summary}>
+              <div style={{ "margin-bottom": "1rem", color: "#000" }}>
+                <strong>Summary:</strong>
+                <p style={{ "margin-top": "0.5rem", "white-space": "pre-wrap" }}>{modalTask()!.summary}</p>
+              </div>
+            </Show>
             <pre style={{ color: "#000" }}>{JSON.stringify(modalTask(), null, 2)}</pre>
           </div>
         </div>
