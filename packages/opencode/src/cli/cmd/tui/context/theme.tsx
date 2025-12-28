@@ -298,7 +298,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (theme) setStore("active", theme)
     })
 
-    getCustomThemes()
+    loadCustomThemes()
       .then((custom) => {
         setStore(
           produce((draft) => {
@@ -317,31 +317,26 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         }
       })
 
-    const renderer = useRenderer()
-    renderer
-      .getPalette({
-        size: 16,
-      })
+    detectSystemColors()
       .then((colors) => {
-        if (!colors.palette[0]) {
-          if (store.active === SPECIAL_THEMES.SYSTEM) {
-            setStore(
-              produce((draft) => {
-                draft.active = SPECIAL_THEMES.FALLBACK
-                draft.ready = true
-              }),
-            )
-          }
-          return
-        }
         setStore(
           produce((draft) => {
-            draft.themes[SPECIAL_THEMES.SYSTEM] = generateSystem(colors)
+            draft.themes[SPECIAL_THEMES.SYSTEM] = generateSystemTheme(colors)
             if (store.active === SPECIAL_THEMES.SYSTEM) {
               draft.ready = true
             }
           }),
         )
+      })
+      .catch(() => {
+        if (store.active === SPECIAL_THEMES.SYSTEM) {
+          setStore(
+            produce((draft) => {
+              draft.active = SPECIAL_THEMES.FALLBACK
+              draft.ready = true
+            }),
+          )
+        }
       })
 
     const values = createMemo(() => {
@@ -384,8 +379,15 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   },
 })
 
+async function detectSystemColors() {
+  const colors = await useRenderer().getPalette({ size: 16 })
+  if (colors.palette[0]) return colors
+
+  throw new Error("System color detection failed")
+}
+
 const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
-async function getCustomThemes() {
+async function loadCustomThemes() {
   const directories = [
     Global.Path.config,
     ...(await Array.fromAsync(
@@ -411,7 +413,7 @@ async function getCustomThemes() {
   return result
 }
 
-function generateSystem(colors: TerminalColors): ThemeJson {
+function generateSystemTheme(colors: TerminalColors): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
 
