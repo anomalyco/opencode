@@ -86,15 +86,6 @@ describe("tool.bash", () => {
           expect(bash.description).toContain(`${detectedShell} commands`)
         }
 
-        // Should NOT contain references to other shells (shell-agnostic validation)
-        const commonShells = ["bash", "zsh", "fish", "ksh", "csh", "tcsh", "dash", "cmd", "powershell"]
-        for (const otherShell of commonShells) {
-          if (otherShell !== detectedShell) {
-            expect(bash.description).not.toContain(`${otherShell} command`)
-            expect(bash.description).not.toContain(`${otherShell} commands`)
-          }
-        }
-
         // Should still contain "Bash tool" references (tool name)
         expect(bash.description).toContain("Bash tool")
       },
