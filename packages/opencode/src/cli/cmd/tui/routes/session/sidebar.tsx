@@ -61,6 +61,15 @@ export function Sidebar(props: { sessionID: string }) {
     }
   })
 
+  const sessionTokens = createMemo(() => {
+    const total = messages().reduce((sum, msg) => {
+      if (msg.role !== "assistant") return sum
+      const assistant = msg as AssistantMessage
+      return sum + assistant.tokens.input + assistant.tokens.output
+    }, 0)
+    return total.toLocaleString()
+  })
+
   const directory = useDirectory()
   const kv = useKV()
 
@@ -102,6 +111,7 @@ export function Sidebar(props: { sessionID: string }) {
               <text fg={theme.text}>
                 <b>Session</b>
               </text>
+              <text fg={theme.textMuted}>{sessionTokens()} total tokens</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
             <Show when={mcpEntries().length > 0}>
