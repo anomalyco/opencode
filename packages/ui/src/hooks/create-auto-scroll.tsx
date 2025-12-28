@@ -35,6 +35,22 @@ export function createAutoScroll(options: AutoScrollOptions) {
     })
   }
 
+  function forceScrollToBottom() {
+    if (!scrollRef) return
+
+    setStore("userScrolled", false)
+    isAutoScrolling = true
+    if (autoScrollTimeout) clearTimeout(autoScrollTimeout)
+    autoScrollTimeout = setTimeout(() => {
+      isAutoScrolling = false
+    }, 1000)
+
+    scrollRef.scrollTo({
+      top: scrollRef.scrollHeight,
+      behavior: "smooth",
+    })
+  }
+
   function handleScroll() {
     if (!scrollRef) return
 
@@ -161,6 +177,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     handleScroll,
     handleInteraction,
     scrollToBottom,
+    forceScrollToBottom,
     userScrolled: () => store.userScrolled,
   }
 }

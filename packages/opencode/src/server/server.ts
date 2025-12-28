@@ -1533,6 +1533,28 @@ export namespace Server {
         },
       )
       .get(
+        "/permission",
+        describeRoute({
+          summary: "List pending permissions",
+          description: "Get all pending permission requests across all sessions.",
+          operationId: "permission.list",
+          responses: {
+            200: {
+              description: "List of pending permissions",
+              content: {
+                "application/json": {
+                  schema: resolver(Permission.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const permissions = Permission.list()
+          return c.json(permissions)
+        },
+      )
+      .get(
         "/command",
         describeRoute({
           summary: "List commands",

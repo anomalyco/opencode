@@ -151,6 +151,22 @@ export function SessionTurn(
     return false
   })
 
+  const permissionParts = createMemo(() => {
+    const result: { part: ToolPart; message: AssistantMessage }[] = []
+    const permissions = data.store.permission?.[props.sessionID] ?? []
+    if (!permissions.length) return result
+
+    for (const m of assistantMessages()) {
+      const msgParts = data.store.part[m.id] ?? []
+      for (const p of msgParts) {
+        if (p?.type === "tool" && permissions.some((perm) => perm.callID === (p as ToolPart).callID)) {
+          result.push({ part: p as ToolPart, message: m })
+        }
+      }
+    }
+    return result
+  })
+
   const shellModePart = createMemo(() => {
     const p = parts()
     if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
@@ -313,6 +329,12 @@ export function SessionTurn(
   })
 
   createEffect(() => {
+    if (permissionParts().length > 0) {
+      autoScroll.forceScrollToBottom()
+    }
+  })
+
+  createEffect(() => {
     if (working() || !isLastUserMessage()) return
 
     const diffs = message()?.summary?.diffs
@@ -467,6 +489,13 @@ export function SessionTurn(
                             {error()?.data?.message as string}
                           </Card>
                         </Show>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && permissionParts().length > 0}>
+                      <div data-slot="session-turn-permission-parts">
+                        <For each={permissionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
                       </div>
                     </Show>
                     {/* Summary */}
