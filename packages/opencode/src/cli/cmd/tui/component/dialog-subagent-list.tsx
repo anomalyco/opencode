@@ -5,7 +5,7 @@ import { useSync } from "@tui/context/sync"
 import { createMemo, onMount, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
-import { buildSubagentOptions, findRootSession } from "../util/subagent-tree"
+import { buildSubagentOptions, findRootSession, getStatusIndicator, formatTimeAgo } from "../util/subagent-tree"
 import "opentui-spinner/solid"
 
 function getTreePrefix(depth: number): string {
@@ -25,12 +25,34 @@ export function DialogSubagentList(props: { sessionID: string }) {
   const rootSession = createMemo(() => findRootSession(sync.data.session, props.sessionID))
 
   const options = createMemo(() => {
+    const root = rootSession()
     const subagents = buildSubagentOptions(sync.data.session, sync.data.session_status ?? {}, props.sessionID)
 
-    return subagents.map((sub) => {
+    const rootOption = root
+      ? (() => {
+          const statusInfo = getStatusIndicator(sync.data.session_status?.[root.id])
+          const isRunning = statusInfo.status === "busy"
+          const statusColor =
+            statusInfo.status === "busy" ? theme.primary : statusInfo.status === "retry" ? theme.warning : theme.success
+          return {
+            title: root.title,
+            value: root.id,
+            description: "(main)",
+            gutter: isRunning ? (
+              <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
+              </Show>
+            ) : (
+              <text fg={statusColor}>{statusInfo.icon}</text>
+            ),
+          }
+        })()
+      : null
+
+    const subagentOptions = subagents.map((sub) => {
       const isRunning = sub.status === "busy"
       const statusColor = sub.status === "busy" ? theme.primary : sub.status === "retry" ? theme.warning : theme.success
-      const prefix = getTreePrefix(sub.depth)
+      const prefix = getTreePrefix(sub.depth + 1)
 
       return {
         title: prefix + sub.title,
@@ -45,6 +67,8 @@ export function DialogSubagentList(props: { sessionID: string }) {
         ),
       }
     })
+
+    return rootOption ? [rootOption, ...subagentOptions] : subagentOptions
   })
 
   const hasTree = createMemo(() => options().length > 0)
