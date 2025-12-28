@@ -270,7 +270,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
-  const handleDragOver = (event: DragEvent) => {
+  const handleGlobalDragOver = (event: DragEvent) => {
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
     if (hasFiles) {
@@ -278,15 +278,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const handleDragLeave = (event: DragEvent) => {
-    const related = event.relatedTarget as Node | null
-    const form = event.currentTarget as HTMLElement
-    if (!related || !form.contains(related)) {
+  const handleGlobalDragLeave = (event: DragEvent) => {
+    // relatedTarget is null when leaving the document window
+    if (!event.relatedTarget) {
       setStore("dragging", false)
     }
   }
 
-  const handleDrop = async (event: DragEvent) => {
+  const handleGlobalDrop = async (event: DragEvent) => {
     event.preventDefault()
     setStore("dragging", false)
 
@@ -302,9 +301,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   onMount(() => {
     editorRef.addEventListener("paste", handlePaste)
+    document.addEventListener("dragover", handleGlobalDragOver)
+    document.addEventListener("dragleave", handleGlobalDragLeave)
+    document.addEventListener("drop", handleGlobalDrop)
   })
   onCleanup(() => {
     editorRef.removeEventListener("paste", handlePaste)
+    document.removeEventListener("dragover", handleGlobalDragOver)
+    document.removeEventListener("dragleave", handleGlobalDragLeave)
+    document.removeEventListener("drop", handleGlobalDrop)
   })
 
   createEffect(() => {
@@ -1024,9 +1029,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </Show>
       <form
         onSubmit={handleSubmit}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
         classList={{
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-md overflow-clip focus-within:shadow-xs-border": true,
