@@ -55,6 +55,19 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
+### Load order
+
+Plugins are loaded from all sources and all hooks run in sequence. The load order is:
+
+1. Global config (`~/.config/opencode/opencode.json`)
+2. Project config (`opencode.json`)
+3. Global plugin directory (`~/.config/opencode/plugin/`)
+4. Project plugin directory (`.opencode/plugin/`)
+
+Duplicate npm packages with the same name and version are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
+
+---
+
 ## Create a plugin
 
 A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
