@@ -302,6 +302,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const getCustom = loadCustomThemes().then((themes) => {
       setStore("themes", themes)
+      return themes
     })
 
     const getSystem = detectSystemColors().then((colors) => {
@@ -320,12 +321,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     } else if (store.active === SPECIAL_THEMES.SYSTEM) {
       getTheme = getSystem
     } else {
-      getTheme = getCustom
+      getTheme = getCustom.then((themes) => {
+        const theme = themes[store.active]
+        if (!theme) throw new Error("Missing custom theme")
+        if (referencesSystemTheme(theme)) return getSystem
+      })
     }
 
-    getTheme
-      .catch(() => setStore("active", SPECIAL_THEMES.FALLBACK))
-      .finally(() => setStore("ready", true))
+    getTheme.catch(() => setStore("active", SPECIAL_THEMES.FALLBACK)).finally(() => setStore("ready", true))
 
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes[SPECIAL_THEMES.FALLBACK], store.mode)
@@ -372,6 +375,17 @@ async function detectSystemColors() {
   if (colors.palette[0]) return colors
 
   throw new Error("System color detection failed")
+}
+
+function referencesSystemTheme(value: unknown) {
+  switch (typeof value) {
+    case "object":
+      return Object.values(value || {}).some(referencesSystemTheme)
+    case "string":
+      return value === "system"
+    default:
+      return false
+  }
 }
 
 const CUSTOM_THEME_GLOB = new Bun.Glob("themes/*.json")
