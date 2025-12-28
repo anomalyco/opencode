@@ -275,6 +275,11 @@ function ansiToRgba(code: number): RGBA {
   return RGBA.fromInts(0, 0, 0)
 }
 
+const SPECIAL_THEMES = {
+  FALLBACK: "opencode",
+  SYSTEM: "system",
+} as const
+
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
@@ -283,7 +288,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      active: (sync.data.config.theme ?? kv.get("theme", SPECIAL_THEMES.FALLBACK)) as string,
       ready: false,
     })
 
@@ -302,12 +307,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         )
       })
       .catch(() => {
-        if (!(store.active === "system" || store.active in DEFAULT_THEMES)) {
-          setStore("active", "opencode")
+        if (!(store.active === SPECIAL_THEMES.SYSTEM || store.active in DEFAULT_THEMES)) {
+          setStore("active", SPECIAL_THEMES.FALLBACK)
         }
       })
       .finally(() => {
-        if (store.active !== "system") {
+        if (store.active !== SPECIAL_THEMES.SYSTEM) {
           setStore("ready", true)
         }
       })
@@ -319,10 +324,10 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       })
       .then((colors) => {
         if (!colors.palette[0]) {
-          if (store.active === "system") {
+          if (store.active === SPECIAL_THEMES.SYSTEM) {
             setStore(
               produce((draft) => {
-                draft.active = "opencode"
+                draft.active = SPECIAL_THEMES.FALLBACK
                 draft.ready = true
               }),
             )
@@ -331,8 +336,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         }
         setStore(
           produce((draft) => {
-            draft.themes.system = generateSystem(colors)
-            if (store.active === "system") {
+            draft.themes[SPECIAL_THEMES.SYSTEM] = generateSystem(colors)
+            if (store.active === SPECIAL_THEMES.SYSTEM) {
               draft.ready = true
             }
           }),
@@ -340,7 +345,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       })
 
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
+      return resolveTheme(store.themes[store.active] ?? store.themes[SPECIAL_THEMES.FALLBACK], store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
