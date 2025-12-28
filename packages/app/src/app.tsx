@@ -21,6 +21,7 @@ import Layout from "@/pages/layout"
 import Home from "@/pages/home"
 import DirectoryLayout from "@/pages/directory-layout"
 import Session from "@/pages/session"
+import ServerSettings from "@/pages/server-settings"
 import { ErrorPage } from "./pages/error"
 import { iife } from "@opencode-ai/util/iife"
 
@@ -32,7 +33,14 @@ declare global {
 
 const url = iife(() => {
   const param = new URLSearchParams(document.location.search).get("url")
-  if (param) return param
+
+  if (param) {
+    localStorage.setItem("opencode-server-url", param)
+    return param
+  }
+
+  const stored = localStorage.getItem("opencode-server-url")
+  if (stored) return stored
 
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
@@ -64,6 +72,7 @@ export function App() {
                             )}
                           >
                             <Route path="/" component={Home} />
+                            <Route path="/server-settings" component={ServerSettings} />
                             <Route path="/:dir" component={DirectoryLayout}>
                               <Route path="/" component={() => <Navigate href="session" />} />
                               <Route

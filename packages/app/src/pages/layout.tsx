@@ -959,6 +959,18 @@ export default function Layout(props: ParentProps) {
               </Button>
             </Tooltip>
           </Show>
+          <Tooltip placement="right" value="Server settings" inactive={expanded()}>
+            <Button
+              as={A}
+              href="/server-settings"
+              class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
+              variant="ghost"
+              size="large"
+              icon="code"
+            >
+              <Show when={expanded()}>Server settings</Show>
+            </Button>
+          </Tooltip>
           <Tooltip placement="right" value="Share feedback" inactive={expanded()}>
             <Button
               as={"a"}

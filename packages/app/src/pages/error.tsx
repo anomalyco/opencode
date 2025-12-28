@@ -118,6 +118,14 @@ interface ErrorPageProps {
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
+  const errorMessage = formatError(props.error)
+  const isConnectionError = errorMessage.includes("Could not connect to server") || errorMessage.includes("connection")
+
+  function resetServerUrl() {
+    localStorage.removeItem("opencode-server-url")
+    platform.restart()
+  }
+
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
@@ -127,7 +135,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           <p class="text-sm text-text-weak">An error occurred while loading the application.</p>
         </div>
         <TextField
-          value={formatError(props.error)}
+          value={errorMessage}
           readOnly
           copyable
           multiline
@@ -135,9 +143,24 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           label="Error Details"
           hideLabel
         />
-        <Button size="large" onClick={platform.restart}>
-          Restart
-        </Button>
+        <div class="flex flex-col gap-2">
+          <Button size="large" onClick={platform.restart}>
+            Restart
+          </Button>
+          <Show when={isConnectionError}>
+            <div class="flex flex-col gap-2 w-full">
+              <Button size="large" onClick={resetServerUrl}>
+                Reset local server URL
+              </Button>
+              <div class="text-xs text-text-weak text-center flex flex-col gap-1">
+                <div>
+                  Or add <code class="bg-background-stronger px-1.5 py-0.5 rounded">?url=https://your-server.com</code>{" "}
+                  to address bar
+                </div>
+              </div>
+            </div>
+          </Show>
+        </div>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
             Please report this error to the OpenCode team
