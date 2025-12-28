@@ -308,10 +308,12 @@ export namespace MCP {
 
     if (mcp.type === "local") {
       const [cmd, ...args] = mcp.command
+      const cwd = Instance.directory
       const transport = new StdioClientTransport({
         stderr: "ignore",
         command: cmd,
         args,
+        cwd,
         env: {
           ...process.env,
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
@@ -334,6 +336,7 @@ export namespace MCP {
         log.error("local mcp startup failed", {
           key,
           command: mcp.command,
+          cwd,
           error: error instanceof Error ? error.message : String(error),
         })
         status = {
