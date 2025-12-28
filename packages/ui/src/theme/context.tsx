@@ -19,7 +19,6 @@ import {
 } from "solid-js"
 import type { DesktopTheme } from "./types"
 import { resolveThemeVariant, themeToCss } from "./resolve"
-import { STORAGE_KEYS, getThemeCacheKey } from "./preload"
 import { DEFAULT_THEMES } from "./default-themes"
 
 export type ColorScheme = "light" | "dark" | "system"
@@ -42,6 +41,16 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>()
+
+const STORAGE_KEYS = {
+  THEME_ID: "opencode-theme-id",
+  COLOR_SCHEME: "opencode-color-scheme",
+  THEME_CSS_PREFIX: "opencode-theme-css",
+} as const
+
+function getThemeCacheKey(themeId: string, mode: "light" | "dark"): string {
+  return `${STORAGE_KEYS.THEME_CSS_PREFIX}-${themeId}-${mode}`
+}
 
 /**
  * Static tokens that don't change between themes
