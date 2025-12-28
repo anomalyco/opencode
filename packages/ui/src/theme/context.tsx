@@ -126,11 +126,13 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   const css = themeToCss(tokens)
 
   // Cache to localStorage for preload script
-  const cacheKey = getThemeCacheKey(themeId, mode)
-  try {
-    localStorage.setItem(cacheKey, css)
-  } catch {
-    // localStorage might be full or disabled
+  if (themeId !== "oc-1") {
+    const cacheKey = getThemeCacheKey(themeId, mode)
+    try {
+      localStorage.setItem(cacheKey, css)
+    } catch {
+      // localStorage might be full or disabled
+    }
   }
 
   // Build full CSS
@@ -159,6 +161,8 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
  * Cache both light and dark variants of a theme
  */
 function cacheThemeVariants(theme: DesktopTheme, themeId: string): void {
+  if (themeId === "oc-1") return
+
   for (const mode of ["light", "dark"] as const) {
     const isDark = mode === "dark"
     const variant = isDark ? theme.dark : theme.light
