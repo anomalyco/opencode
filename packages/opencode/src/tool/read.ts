@@ -7,7 +7,6 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
-import { Provider } from "../provider/provider"
 import { Identifier } from "../id/id"
 import { Permission } from "../permission"
 import { Agent } from "@/agent/agent"
@@ -61,10 +60,12 @@ export const ReadTool = Tool.define("read", {
     }
 
     const block = iife(() => {
-      const whitelist = [".env.sample", ".example"]
+      const basename = path.basename(filepath)
+      const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
 
-      if (whitelist.some((w) => filepath.endsWith(w))) return false
-      if (filepath.includes(".env")) return true
+      if (whitelist.some((w) => basename.endsWith(w))) return false
+      // Block .env, .env.local, .env.production, etc. but not .envrc
+      if (/^\.env(\.|$)/.test(basename)) return true
 
       return false
     })
@@ -94,15 +95,11 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const isImage = isImageFile(filepath)
-    const model = ctx.extra?.model as Provider.Model | undefined
-    const supportsImages = model?.capabilities.input.image ?? false
-    if (isImage) {
-      if (!supportsImages) {
-        throw new Error(`Failed to read image: ${filepath}, model may not be able to read images`)
-      }
+    const isImage = file.type.startsWith("image/") && file.type !== "image/svg+xml"
+    const isPdf = file.type === "application/pdf"
+    if (isImage || isPdf) {
       const mime = file.type
-      const msg = "Image read successfully"
+      const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {
         title,
         output: msg,
@@ -163,25 +160,6 @@ export const ReadTool = Tool.define("read", {
     }
   },
 })
-
-function isImageFile(filePath: string): string | false {
-  const ext = path.extname(filePath).toLowerCase()
-  switch (ext) {
-    case ".jpg":
-    case ".jpeg":
-      return "JPEG"
-    case ".png":
-      return "PNG"
-    case ".gif":
-      return "GIF"
-    case ".bmp":
-      return "BMP"
-    case ".webp":
-      return "WebP"
-    default:
-      return false
-  }
-}
 
 async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()

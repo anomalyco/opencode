@@ -57,15 +57,17 @@ export async function handler(
     const sessionId = input.request.headers.get("x-opencode-session") ?? ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
+    const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     logger.metric({
       is_tream: isStream,
       session: sessionId,
       request: requestId,
+      client: ocClient,
     })
     const zenData = ZenData.list()
     const modelInfo = validateModel(zenData, model)
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
-    const trialLimiter = createTrialLimiter(modelInfo.trial?.limit, ip)
+    const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
     const isTrial = await trialLimiter?.isTrial()
     const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
     await rateLimiter?.check()
@@ -110,13 +112,21 @@ export async function handler(
           headers.delete("content-length")
           headers.delete("x-opencode-request")
           headers.delete("x-opencode-session")
+          headers.delete("x-opencode-project")
+          headers.delete("x-opencode-client")
           return headers
         })(),
         body: reqBody,
       })
 
       // Try another provider => stop retrying if using fallback provider
-      if (res.status !== 200 && modelInfo.fallbackProvider && providerInfo.id !== modelInfo.fallbackProvider) {
+      if (
+        res.status !== 200 &&
+        // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
+        res.status !== 404 &&
+        modelInfo.fallbackProvider &&
+        providerInfo.id !== modelInfo.fallbackProvider
+      ) {
         return retriableRequest({
           excludeProviders: [...retry.excludeProviders, providerInfo.id],
           retryCount: retry.retryCount + 1,
@@ -134,6 +144,9 @@ export async function handler(
 
     // Store sticky provider
     await stickyTracker?.set(providerInfo.id)
+
+    // Temporarily change 404 to 400 status code b/c solid start automatically override 404 response
+    const resStatus = res.status === 404 ? 400 : res.status
 
     // Scrub response headers
     const resHeaders = new Headers()
@@ -160,7 +173,7 @@ export async function handler(
       await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
       await reload(authInfo)
       return new Response(body, {
-        status: res.status,
+        status: resStatus,
         statusText: res.statusText,
         headers: resHeaders,
       })
@@ -238,7 +251,7 @@ export async function handler(
     })
 
     return new Response(stream, {
-      status: res.status,
+      status: resStatus,
       statusText: res.statusText,
       headers: resHeaders,
     })
@@ -286,11 +299,14 @@ export async function handler(
   }
 
   function validateModel(zenData: ZenData, reqModel: string) {
-    if (!(reqModel in zenData.models)) {
-      throw new ModelError(`Model ${reqModel} not supported`)
-    }
+    if (!(reqModel in zenData.models)) throw new ModelError(`Model ${reqModel} not supported`)
+
     const modelId = reqModel as keyof typeof zenData.models
-    const modelData = zenData.models[modelId]
+    const modelData = Array.isArray(zenData.models[modelId])
+      ? zenData.models[modelId].find((model) => opts.format === model.formatFilter)
+      : zenData.models[modelId]
+
+    if (!modelData) throw new ModelError(`Model ${reqModel} not supported for format ${opts.format}`)
 
     logger.metric({ model: modelId })
 
@@ -588,7 +604,7 @@ export async function handler(
       tx
         .update(KeyTable)
         .set({ timeUsed: sql`now()` })
-        .where(eq(KeyTable.id, authInfo.apiKeyId)),
+        .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
     )
   }
 

@@ -7,7 +7,7 @@ import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization } from "@opencode-ai/sdk"
+import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
@@ -64,12 +64,8 @@ export function createDialogProviderOptions() {
           const method = methods[index]
           if (method.type === "oauth") {
             const result = await sdk.client.provider.oauth.authorize({
-              path: {
-                id: provider.id,
-              },
-              body: {
-                method: index,
-              },
+              providerID: provider.id,
+              method: index,
             })
             if (result.data?.method === "code") {
               dialog.replace(() => (
@@ -111,12 +107,8 @@ function AutoMethod(props: AutoMethodProps) {
 
   onMount(async () => {
     const result = await sdk.client.provider.oauth.callback({
-      path: {
-        id: props.providerID,
-      },
-      body: {
-        method: props.index,
-      },
+      providerID: props.providerID,
+      method: props.index,
     })
     if (result.error) {
       dialog.clear()
@@ -124,13 +116,15 @@ function AutoMethod(props: AutoMethodProps) {
     }
     await sdk.client.instance.dispose()
     await sync.bootstrap()
-    dialog.replace(() => <DialogModel />)
+    dialog.replace(() => <DialogModel providerID={props.providerID} />)
   })
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD}>{props.title}</text>
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          {props.title}
+        </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
       <box gap={1}>
@@ -161,18 +155,14 @@ function CodeMethod(props: CodeMethodProps) {
       placeholder="Authorization code"
       onConfirm={async (value) => {
         const { error } = await sdk.client.provider.oauth.callback({
-          path: {
-            id: props.providerID,
-          },
-          body: {
-            method: props.index,
-            code: value,
-          },
+          providerID: props.providerID,
+          method: props.index,
+          code: value,
         })
         if (!error) {
           await sdk.client.instance.dispose()
           await sync.bootstrap()
-          dialog.replace(() => <DialogModel />)
+          dialog.replace(() => <DialogModel providerID={props.providerID} />)
           return
         }
         setError(true)
@@ -210,7 +200,7 @@ function ApiMethod(props: ApiMethodProps) {
             <text fg={theme.textMuted}>
               OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
             </text>
-            <text>
+            <text fg={theme.text}>
               Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
             </text>
           </box>
@@ -219,17 +209,15 @@ function ApiMethod(props: ApiMethodProps) {
       onConfirm={async (value) => {
         if (!value) return
         sdk.client.auth.set({
-          path: {
-            id: props.providerID,
-          },
-          body: {
+          providerID: props.providerID,
+          auth: {
             type: "api",
             key: value,
           },
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
-        dialog.replace(() => <DialogModel />)
+        dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />
   )

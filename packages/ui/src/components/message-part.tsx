@@ -1,42 +1,193 @@
-import { Component, createMemo, For, Match, Show, Switch, ValidComponent } from "solid-js"
+import { Component, createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
   AssistantMessage,
+  FilePart,
   Message as MessageType,
   Part as PartType,
+  ReasoningPart,
   TextPart,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk"
+  Todo,
+} from "@opencode-ai/sdk/v2"
+import { useData } from "../context"
+import { useDiffComponent } from "../context/diff"
+import { useCodeComponent } from "../context/code"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
+import { Button } from "./button"
 import { Card } from "./card"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { sanitizePart } from "@opencode-ai/util/sanitize"
-import { unwrap } from "solid-js/store"
+import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
+import { checksum } from "@opencode-ai/util/encode"
+import { createAutoScroll } from "../hooks"
+
+interface Diagnostic {
+  range: {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  }
+  message: string
+  severity?: number
+}
+
+function getDiagnostics(
+  diagnosticsByFile: Record<string, Diagnostic[]> | undefined,
+  filePath: string | undefined,
+): Diagnostic[] {
+  if (!diagnosticsByFile || !filePath) return []
+  const diagnostics = diagnosticsByFile[filePath] ?? []
+  return diagnostics.filter((d) => d.severity === 1).slice(0, 3)
+}
+
+function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
+  return (
+    <Show when={props.diagnostics.length > 0}>
+      <div data-component="diagnostics">
+        <For each={props.diagnostics}>
+          {(diagnostic) => (
+            <div data-slot="diagnostic">
+              <span data-slot="diagnostic-label">Error</span>
+              <span data-slot="diagnostic-location">
+                [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]
+              </span>
+              <span data-slot="diagnostic-message">{diagnostic.message}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  )
+}
 
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
-  diffComponent: ValidComponent
-  sanitize?: RegExp
 }
 
 export interface MessagePartProps {
   part: PartType
   message: MessageType
-  diffComponent: ValidComponent
   hideDetails?: boolean
-  sanitize?: RegExp
+  defaultOpen?: boolean
 }
 
 export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
+
+function relativizeProjectPaths(text: string, directory?: string) {
+  if (!text) return ""
+  if (!directory) return text
+  return text.split(directory).join("")
+}
+
+function getDirectory(path: string | undefined) {
+  const data = useData()
+  return relativizeProjectPaths(_getDirectory(path), data.directory)
+}
+
+export function getSessionToolParts(store: ReturnType<typeof useData>["store"], sessionId: string): ToolPart[] {
+  const messages = store.message[sessionId]?.filter((m) => m.role === "assistant")
+  if (!messages) return []
+
+  const parts: ToolPart[] = []
+  for (const m of messages) {
+    const msgParts = store.part[m.id]
+    if (msgParts) {
+      for (const p of msgParts) {
+        if (p && p.type === "tool") parts.push(p as ToolPart)
+      }
+    }
+  }
+  return parts
+}
+
+import type { IconProps } from "./icon"
+
+export type ToolInfo = {
+  icon: IconProps["name"]
+  title: string
+  subtitle?: string
+}
+
+export function getToolInfo(tool: string, input: any = {}): ToolInfo {
+  switch (tool) {
+    case "read":
+      return {
+        icon: "glasses",
+        title: "Read",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "list":
+      return {
+        icon: "bullet-list",
+        title: "List",
+        subtitle: input.path ? getFilename(input.path) : undefined,
+      }
+    case "glob":
+      return {
+        icon: "magnifying-glass-menu",
+        title: "Glob",
+        subtitle: input.pattern,
+      }
+    case "grep":
+      return {
+        icon: "magnifying-glass-menu",
+        title: "Grep",
+        subtitle: input.pattern,
+      }
+    case "webfetch":
+      return {
+        icon: "window-cursor",
+        title: "Webfetch",
+        subtitle: input.url,
+      }
+    case "task":
+      return {
+        icon: "task",
+        title: `${input.subagent_type || "task"} Agent`,
+        subtitle: input.description,
+      }
+    case "bash":
+      return {
+        icon: "console",
+        title: "Shell",
+        subtitle: input.description,
+      }
+    case "edit":
+      return {
+        icon: "code-lines",
+        title: "Edit",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "write":
+      return {
+        icon: "code-lines",
+        title: "Write",
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "todowrite":
+      return {
+        icon: "checklist",
+        title: "To-dos",
+      }
+    case "todoread":
+      return {
+        icon: "checklist",
+        title: "Read to-dos",
+      }
+    default:
+      return {
+        icon: "mcp",
+        title: tool,
+      }
+  }
+}
 
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
@@ -50,60 +201,122 @@ export function Message(props: MessageProps) {
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
-          <AssistantMessageDisplay
-            message={assistantMessage() as AssistantMessage}
-            parts={props.parts}
-            sanitize={props.sanitize}
-            diffComponent={props.diffComponent}
-          />
+          <AssistantMessageDisplay message={assistantMessage() as AssistantMessage} parts={props.parts} />
         )}
       </Match>
     </Switch>
   )
 }
 
-export function AssistantMessageDisplay(props: {
-  message: AssistantMessage
-  parts: PartType[]
-  sanitize?: RegExp
-  diffComponent: ValidComponent
-}) {
+export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
   const filteredParts = createMemo(() => {
     return props.parts?.filter((x) => {
-      if (x.type === "reasoning") return false
       return x.type !== "tool" || (x as ToolPart).tool !== "todoread"
     })
   })
+  return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
+}
+
+export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+  const textPart = createMemo(
+    () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
+  )
+
+  const text = createMemo(() => textPart()?.text || "")
+
+  const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
+
+  const attachments = createMemo(() =>
+    files()?.filter((f) => {
+      const mime = f.mime
+      return mime.startsWith("image/") || mime === "application/pdf"
+    }),
+  )
+
+  const inlineFiles = createMemo(() =>
+    files().filter((f) => {
+      const mime = f.mime
+      return !mime.startsWith("image/") && mime !== "application/pdf" && f.source?.text?.start !== undefined
+    }),
+  )
+
   return (
-    <For each={filteredParts()}>
-      {(part) => (
-        <Part part={part} message={props.message} sanitize={props.sanitize} diffComponent={props.diffComponent} />
-      )}
+    <div data-component="user-message">
+      <Show when={attachments().length > 0}>
+        <div data-slot="user-message-attachments">
+          <For each={attachments()}>
+            {(file) => (
+              <div data-slot="user-message-attachment" data-type={file.mime.startsWith("image/") ? "image" : "file"}>
+                <Show
+                  when={file.mime.startsWith("image/") && file.url}
+                  fallback={
+                    <div data-slot="user-message-attachment-icon">
+                      <Icon name="folder" />
+                    </div>
+                  }
+                >
+                  <img data-slot="user-message-attachment-image" src={file.url} alt={file.filename ?? "attachment"} />
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show when={text()}>
+        <div data-slot="user-message-text">
+          <HighlightedText text={text()} references={inlineFiles()} />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function HighlightedText(props: { text: string; references: FilePart[] }) {
+  const segments = createMemo(() => {
+    const text = props.text
+    const refs = [...props.references].sort((a, b) => (a.source?.text?.start ?? 0) - (b.source?.text?.start ?? 0))
+
+    const result: { text: string; highlight?: boolean }[] = []
+    let lastIndex = 0
+
+    for (const ref of refs) {
+      const start = ref.source?.text?.start
+      const end = ref.source?.text?.end
+
+      if (start === undefined || end === undefined || start < lastIndex) continue
+
+      if (start > lastIndex) {
+        result.push({ text: text.slice(lastIndex, start) })
+      }
+
+      result.push({ text: text.slice(start, end), highlight: true })
+      lastIndex = end
+    }
+
+    if (lastIndex < text.length) {
+      result.push({ text: text.slice(lastIndex) })
+    }
+
+    return result
+  })
+
+  return (
+    <For each={segments()}>
+      {(segment) => <span classList={{ "text-text-strong font-medium": segment.highlight }}>{segment.text}</span>}
     </For>
   )
 }
 
-export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
-  const text = createMemo(() =>
-    props.parts
-      ?.filter((p) => p.type === "text" && !(p as TextPart).synthetic)
-      ?.map((p) => (p as TextPart).text)
-      ?.join(""),
-  )
-  return <div data-component="user-message">{text()}</div>
-}
-
 export function Part(props: MessagePartProps) {
   const component = createMemo(() => PART_MAPPING[props.part.type])
-  const part = createMemo(() => sanitizePart(unwrap(props.part), props.sanitize))
   return (
     <Show when={component()}>
       <Dynamic
         component={component()}
-        part={part()}
+        part={props.part}
         message={props.message}
-        diffComponent={props.diffComponent}
         hideDetails={props.hideDetails}
+        defaultOpen={props.defaultOpen}
       />
     </Show>
   )
@@ -113,9 +326,11 @@ export interface ToolProps {
   input: Record<string, any>
   metadata: Record<string, any>
   tool: string
-  diffComponent: ValidComponent
   output?: string
+  status?: string
   hideDetails?: boolean
+  defaultOpen?: boolean
+  forceOpen?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -143,11 +358,35 @@ export const ToolRegistry = {
 }
 
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
+  const data = useData()
   const part = props.part as ToolPart
+
+  const permission = createMemo(() => {
+    const sessionID = props.message.sessionID
+    const permissions = data.store.permission?.[sessionID] ?? []
+    return permissions.find((p) => p.callID === part.callID)
+  })
+
+  const [forceOpen, setForceOpen] = createSignal(false)
+  createEffect(() => {
+    if (permission()) setForceOpen(true)
+  })
+
+  const respond = (response: "once" | "always" | "reject") => {
+    const perm = permission()
+    if (!perm || !data.respondToPermission) return
+    data.respondToPermission({
+      sessionID: perm.sessionID,
+      permissionID: perm.id,
+      response,
+    })
+  }
+
   const component = createMemo(() => {
     const render = ToolRegistry.render(part.tool) ?? GenericTool
-    const metadata = part.state.status === "pending" ? {} : (part.state.metadata ?? {})
-    const input = part.state.status === "completed" ? part.state.input : {}
+    // @ts-expect-error
+    const metadata = part.state?.metadata ?? {}
+    const input = part.state?.input ?? {}
 
     return (
       <Switch>
@@ -180,33 +419,60 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             component={render}
             input={input}
             tool={part.tool}
-            diffComponent={props.diffComponent}
             metadata={metadata}
-            output={part.state.status === "completed" ? part.state.output : undefined}
+            // @ts-expect-error
+            output={part.state.output}
+            status={part.state.status}
             hideDetails={props.hideDetails}
+            forceOpen={forceOpen()}
+            defaultOpen={props.defaultOpen}
           />
         </Match>
       </Switch>
     )
   })
 
-  return <Show when={component()}>{component()}</Show>
+  return (
+    <div data-component="tool-part-wrapper" data-permission={!!permission()}>
+      <Show when={component()}>{component()}</Show>
+      <Show when={permission()}>
+        {(perm) => (
+          <div data-component="permission-prompt">
+            <div data-slot="permission-message">{perm().title}</div>
+            <div data-slot="permission-actions">
+              <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+                Deny
+              </Button>
+              <Button variant="secondary" size="small" onClick={() => respond("always")}>
+                Allow always
+              </Button>
+              <Button variant="primary" size="small" onClick={() => respond("once")}>
+                Allow once
+              </Button>
+            </div>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
 }
 
 PART_MAPPING["text"] = function TextPartDisplay(props) {
+  const data = useData()
   const part = props.part as TextPart
-  const sanitized = createMemo(() => (props.sanitize ? (sanitizePart(unwrap(part), props.sanitize) as TextPart) : part))
+  const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
+
   return (
-    <Show when={part.text.trim()}>
+    <Show when={displayText()}>
       <div data-component="text-part">
-        <Markdown text={sanitized().text.trim()} />
+        <Markdown text={displayText()} />
       </div>
     </Show>
   )
 }
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
-  const part = props.part as any
+  const part = props.part as ReasoningPart
   return (
     <Show when={part.text.trim()}>
       <div data-component="reasoning-part">
@@ -219,12 +485,17 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 ToolRegistry.register({
   name: "read",
   render(props) {
+    const args: string[] = []
+    if (props.input.offset) args.push("offset=" + props.input.offset)
+    if (props.input.limit) args.push("limit=" + props.input.limit)
     return (
       <BasicTool
+        {...props}
         icon="glasses"
         trigger={{
           title: "Read",
           subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
+          args,
         }}
       />
     )
@@ -235,9 +506,17 @@ ToolRegistry.register({
   name: "list",
   render(props) {
     return (
-      <BasicTool icon="bullet-list" trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}>
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+      <BasicTool
+        {...props}
+        icon="bullet-list"
+        trigger={{ title: "List", subtitle: getDirectory(props.input.path || "/") }}
+      >
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -249,6 +528,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="magnifying-glass-menu"
         trigger={{
           title: "Glob",
@@ -256,8 +536,12 @@ ToolRegistry.register({
           args: props.input.pattern ? ["pattern=" + props.input.pattern] : [],
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -272,6 +556,7 @@ ToolRegistry.register({
     if (props.input.include) args.push("include=" + props.input.include)
     return (
       <BasicTool
+        {...props}
         icon="magnifying-glass-menu"
         trigger={{
           title: "Grep",
@@ -279,8 +564,12 @@ ToolRegistry.register({
           args,
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -292,6 +581,7 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="window-cursor"
         trigger={{
           title: "Webfetch",
@@ -304,8 +594,12 @@ ToolRegistry.register({
           ),
         }}
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.output}>
+          {(output) => (
+            <div data-component="tool-output" data-scrollable>
+              <Markdown text={output()} />
+            </div>
+          )}
         </Show>
       </BasicTool>
     )
@@ -315,19 +609,149 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "task",
   render(props) {
+    const data = useData()
+    const summary = () =>
+      (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
+
+    const autoScroll = createAutoScroll({
+      working: () => true,
+    })
+
+    const childSessionId = () => props.metadata.sessionId as string | undefined
+
+    const childPermission = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return undefined
+      const permissions = data.store.permission?.[sessionId] ?? []
+      return permissions.toSorted((a, b) => a.id.localeCompare(b.id))[0]
+    })
+
+    const childToolPart = createMemo(() => {
+      const perm = childPermission()
+      if (!perm) return undefined
+      const sessionId = childSessionId()
+      if (!sessionId) return undefined
+      // Find the tool part that matches the permission's callID
+      const messages = data.store.message[sessionId] ?? []
+      for (const msg of messages) {
+        const parts = data.store.part[msg.id] ?? []
+        for (const part of parts) {
+          if (part.type === "tool" && (part as ToolPart).callID === perm.callID) {
+            return { part: part as ToolPart, message: msg }
+          }
+        }
+      }
+      return undefined
+    })
+
+    const respond = (response: "once" | "always" | "reject") => {
+      const perm = childPermission()
+      if (!perm || !data.respondToPermission) return
+      data.respondToPermission({
+        sessionID: perm.sessionID,
+        permissionID: perm.id,
+        response,
+      })
+    }
+
+    const renderChildToolPart = () => {
+      const toolData = childToolPart()
+      if (!toolData) return null
+      const { part } = toolData
+      const render = ToolRegistry.render(part.tool) ?? GenericTool
+      // @ts-expect-error
+      const metadata = part.state?.metadata ?? {}
+      const input = part.state?.input ?? {}
+      return (
+        <Dynamic
+          component={render}
+          input={input}
+          tool={part.tool}
+          metadata={metadata}
+          // @ts-expect-error
+          output={part.state.output}
+          status={part.state.status}
+          defaultOpen={true}
+        />
+      )
+    }
+
     return (
-      <BasicTool
-        icon="task"
-        trigger={{
-          title: `${props.input.subagent_type || props.tool} Agent`,
-          titleClass: "capitalize",
-          subtitle: props.input.description,
-        }}
-      >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
-        </Show>
-      </BasicTool>
+      <div data-component="tool-part-wrapper" data-permission={!!childPermission()}>
+        <Switch>
+          <Match when={childPermission()}>
+            {(perm) => (
+              <>
+                <Show
+                  when={childToolPart()}
+                  fallback={
+                    <BasicTool
+                      icon="task"
+                      defaultOpen={true}
+                      trigger={{
+                        title: `${props.input.subagent_type || props.tool} Agent`,
+                        titleClass: "capitalize",
+                        subtitle: props.input.description,
+                      }}
+                    />
+                  }
+                >
+                  {renderChildToolPart()}
+                </Show>
+                <div data-component="permission-prompt">
+                  <div data-slot="permission-message">{perm().title}</div>
+                  <div data-slot="permission-actions">
+                    <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+                      Deny
+                    </Button>
+                    <Button variant="secondary" size="small" onClick={() => respond("always")}>
+                      Allow always
+                    </Button>
+                    <Button variant="primary" size="small" onClick={() => respond("once")}>
+                      Allow once
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+          </Match>
+          <Match when={true}>
+            <BasicTool
+              icon="task"
+              defaultOpen={true}
+              trigger={{
+                title: `${props.input.subagent_type || props.tool} Agent`,
+                titleClass: "capitalize",
+                subtitle: props.input.description,
+              }}
+            >
+              <div
+                ref={autoScroll.scrollRef}
+                onScroll={autoScroll.handleScroll}
+                data-component="tool-output"
+                data-scrollable
+              >
+                <div ref={autoScroll.contentRef} data-component="task-tools">
+                  <For each={summary()}>
+                    {(item) => {
+                      const info = getToolInfo(item.tool)
+                      return (
+                        <div data-slot="task-tool-item">
+                          <Icon name={info.icon} size="small" />
+                          <span data-slot="task-tool-title">{info.title}</span>
+                          <Show when={item.state.title}>
+                            <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                          </Show>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              </div>
+            </BasicTool>
+          </Match>
+        </Switch>
+      </div>
     )
   },
 })
@@ -337,15 +761,16 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
         icon="console"
         trigger={{
           title: "Shell",
           subtitle: props.input.description,
         }}
       >
-        <div data-component="tool-output">
+        <div data-component="tool-output" data-scrollable>
           <Markdown
-            text={`\`\`\`command\n$ ${props.input.command}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
+            text={`\`\`\`command\n$ ${props.input.command ?? props.metadata.command ?? ""}${props.output ? "\n\n" + props.output : ""}\n\`\`\``}
           />
         </div>
       </BasicTool>
@@ -356,8 +781,12 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "edit",
   render(props) {
+    const diffComponent = useDiffComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
+        {...props}
+        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="edit-trigger">
@@ -381,18 +810,21 @@ ToolRegistry.register({
         <Show when={props.metadata.filediff}>
           <div data-component="edit-content">
             <Dynamic
-              component={props.diffComponent}
+              component={diffComponent}
               before={{
-                name: getFilename(props.metadata.filediff.path),
+                name: props.metadata.filediff.path,
                 contents: props.metadata.filediff.before,
+                cacheKey: checksum(props.metadata.filediff.before),
               }}
               after={{
-                name: getFilename(props.metadata.filediff.path),
+                name: props.metadata.filediff.path,
                 contents: props.metadata.filediff.after,
+                cacheKey: checksum(props.metadata.filediff.after),
               }}
             />
           </div>
         </Show>
+        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </BasicTool>
     )
   },
@@ -401,8 +833,12 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "write",
   render(props) {
+    const codeComponent = useCodeComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     return (
       <BasicTool
+        {...props}
+        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="write-trigger">
@@ -419,9 +855,20 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={false && props.output}>
-          <div data-component="tool-output">{props.output}</div>
+        <Show when={props.input.content}>
+          <div data-component="write-content">
+            <Dynamic
+              component={codeComponent}
+              file={{
+                name: props.input.filePath,
+                contents: props.input.content,
+                cacheKey: checksum(props.input.content),
+              }}
+              overflow="scroll"
+            />
+          </div>
         </Show>
+        <DiagnosticsDisplay diagnostics={diagnostics()} />
       </BasicTool>
     )
   },
@@ -432,16 +879,20 @@ ToolRegistry.register({
   render(props) {
     return (
       <BasicTool
+        {...props}
+        defaultOpen
         icon="checklist"
         trigger={{
           title: "To-dos",
-          subtitle: `${props.input.todos?.filter((t: any) => t.status === "completed").length}/${props.input.todos?.length}`,
+          subtitle: props.input.todos
+            ? `${props.input.todos.filter((t: Todo) => t.status === "completed").length}/${props.input.todos.length}`
+            : "",
         }}
       >
         <Show when={props.input.todos?.length}>
           <div data-component="todos">
             <For each={props.input.todos}>
-              {(todo: any) => (
+              {(todo: Todo) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
                   <div data-slot="message-part-todo-content" data-completed={todo.status === "completed"}>
                     {todo.content}

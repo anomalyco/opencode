@@ -9,6 +9,7 @@ node_modules
 playground
 tmp
 dist
+ts-dist
 .turbo
 **/.serena
 .serena/
@@ -18,3 +19,4 @@ Session.vim
 opencode.json
 a.out
 target
+.scripts

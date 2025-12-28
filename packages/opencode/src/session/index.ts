@@ -1,7 +1,8 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
-import { Bus } from "../bus"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
@@ -59,6 +60,7 @@ export namespace Session {
         created: z.number(),
         updated: z.number(),
         compacting: z.number().optional(),
+        archived: z.number().optional(),
       }),
       revert: z
         .object({
@@ -85,32 +87,32 @@ export namespace Session {
   export type ShareInfo = z.output<typeof ShareInfo>
 
   export const Event = {
-    Created: Bus.event(
+    Created: BusEvent.define(
       "session.created",
       z.object({
         info: Info,
       }),
     ),
-    Updated: Bus.event(
+    Updated: BusEvent.define(
       "session.updated",
       z.object({
         info: Info,
       }),
     ),
-    Deleted: Bus.event(
+    Deleted: BusEvent.define(
       "session.deleted",
       z.object({
         info: Info,
       }),
     ),
-    Diff: Bus.event(
+    Diff: BusEvent.define(
       "session.diff",
       z.object({
         sessionID: z.string(),
         diff: Snapshot.FileDiff.array(),
       }),
     ),
-    Error: Bus.event(
+    Error: BusEvent.define(
       "session.error",
       z.object({
         sessionID: z.string().optional(),
@@ -221,54 +223,23 @@ export namespace Session {
     if (cfg.share === "disabled") {
       throw new Error("Sharing is disabled in configuration")
     }
-
-    if (cfg.enterprise?.url) {
-      const { ShareNext } = await import("@/share/share-next")
-      const share = await ShareNext.create(id)
-      await update(id, (draft) => {
-        draft.share = {
-          url: share.url,
-        }
-      })
-    }
-
-    const session = await get(id)
-    if (session.share) return session.share
-    const { Share } = await import("../share/share")
-    const share = await Share.create(id)
+    const { ShareNext } = await import("@/share/share-next")
+    const share = await ShareNext.create(id)
     await update(id, (draft) => {
       draft.share = {
         url: share.url,
       }
     })
-    await Storage.write(["share", id], share)
-    await Share.sync("session/info/" + id, session)
-    for (const msg of await messages({ sessionID: id })) {
-      await Share.sync("session/message/" + id + "/" + msg.info.id, msg.info)
-      for (const part of msg.parts) {
-        await Share.sync("session/part/" + id + "/" + msg.info.id + "/" + part.id, part)
-      }
-    }
     return share
   })
 
   export const unshare = fn(Identifier.schema("session"), async (id) => {
-    const cfg = await Config.get()
-    if (cfg.enterprise?.url) {
-      const { ShareNext } = await import("@/share/share-next")
-      await ShareNext.remove(id)
-      await update(id, (draft) => {
-        draft.share = undefined
-      })
-    }
-    const share = await getShare(id)
-    if (!share) return
-    await Storage.remove(["share", id])
+    // Use ShareNext to remove the share (same as share function uses ShareNext to create)
+    const { ShareNext } = await import("@/share/share-next")
+    await ShareNext.remove(id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    const { Share } = await import("../share/share")
-    await Share.remove(id, share.secret)
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
@@ -365,6 +336,23 @@ export namespace Session {
         messageID: input.messageID,
       })
       return input.messageID
+    },
+  )
+
+  export const removePart = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+      partID: Identifier.schema("part"),
+    }),
+    async (input) => {
+      await Storage.remove(["part", input.messageID, input.partID])
+      Bus.publish(MessageV2.Event.PartRemoved, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: input.partID,
+      })
+      return input.partID
     },
   )
 

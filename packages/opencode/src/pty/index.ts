@@ -1,14 +1,15 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
 import { type IPty } from "bun-pty"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
-import { Bus } from "../bus"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
-import { shell } from "@opencode-ai/util/shell"
 import { lazy } from "@opencode-ai/util/lazy"
 import {} from "process"
 import { Installation } from "@/installation"
+import { Shell } from "@/shell/shell"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -73,10 +74,10 @@ export namespace Pty {
   export type UpdateInput = z.infer<typeof UpdateInput>
 
   export const Event = {
-    Created: Bus.event("pty.created", z.object({ info: Info })),
-    Updated: Bus.event("pty.updated", z.object({ info: Info })),
-    Exited: Bus.event("pty.exited", z.object({ id: Identifier.schema("pty"), exitCode: z.number() })),
-    Deleted: Bus.event("pty.deleted", z.object({ id: Identifier.schema("pty") })),
+    Created: BusEvent.define("pty.created", z.object({ info: Info })),
+    Updated: BusEvent.define("pty.updated", z.object({ info: Info })),
+    Exited: BusEvent.define("pty.exited", z.object({ id: Identifier.schema("pty"), exitCode: z.number() })),
+    Deleted: BusEvent.define("pty.deleted", z.object({ id: Identifier.schema("pty") })),
   }
 
   interface ActiveSession {
@@ -111,10 +112,14 @@ export namespace Pty {
 
   export async function create(input: CreateInput) {
     const id = Identifier.create("pty", false)
-    const command = input.command || shell()
+    const command = input.command || Shell.preferred()
     const args = input.args || []
+    if (command.endsWith("sh")) {
+      args.push("-l")
+    }
+
     const cwd = input.cwd || Instance.directory
-    const env = { ...process.env, ...input.env } as Record<string, string>
+    const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()
