@@ -2,9 +2,12 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
+import { useSDK } from "../context/sdk"
+import { Keybind } from "@/util/keybind"
+import { DialogSessionRename } from "./dialog-session-rename"
 import { buildSubagentOptions, findRootSession, getStatusIndicator, formatTimeAgo } from "../util/subagent-tree"
 import "opentui-spinner/solid"
 
@@ -19,6 +22,10 @@ export function DialogSubagentList(props: { sessionID: string }) {
   const { theme } = useTheme()
   const route = useRoute()
   const kv = useKV()
+  const sdk = useSDK()
+
+  const [toDelete, setToDelete] = createSignal<string>()
+  const deleteKeybind = "ctrl+d"
 
   const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
@@ -32,12 +39,14 @@ export function DialogSubagentList(props: { sessionID: string }) {
       ? (() => {
           const statusInfo = getStatusIndicator(sync.data.session_status?.[root.id])
           const isRunning = statusInfo.status === "busy"
+          const isDeleting = toDelete() === root.id
           const statusColor =
             statusInfo.status === "busy" ? theme.primary : statusInfo.status === "retry" ? theme.warning : theme.success
           return {
-            title: root.title,
+            title: isDeleting ? `Press ${deleteKeybind} again to confirm` : root.title,
             value: root.id,
             description: "(main)",
+            bg: isDeleting ? theme.error : undefined,
             gutter: isRunning ? (
               <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
                 <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
@@ -51,13 +60,15 @@ export function DialogSubagentList(props: { sessionID: string }) {
 
     const subagentOptions = subagents.map((sub) => {
       const isRunning = sub.status === "busy"
+      const isDeleting = toDelete() === sub.id
       const statusColor = sub.status === "busy" ? theme.primary : sub.status === "retry" ? theme.warning : theme.success
       const prefix = getTreePrefix(sub.depth + 1)
 
       return {
-        title: prefix + sub.title,
+        title: isDeleting ? `Press ${deleteKeybind} again to confirm` : prefix + sub.title,
         value: sub.id,
         description: sub.timeAgo,
+        bg: isDeleting ? theme.error : undefined,
         gutter: isRunning ? (
           <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
             <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
@@ -94,6 +105,9 @@ export function DialogSubagentList(props: { sessionID: string }) {
         title={`Subagent Tree (root: ${rootSession()?.title ?? "Session"})`}
         options={options()}
         current={props.sessionID}
+        onMove={() => {
+          setToDelete(undefined)
+        }}
         onSelect={(option) => {
           route.navigate({
             type: "session",
@@ -101,6 +115,29 @@ export function DialogSubagentList(props: { sessionID: string }) {
           })
           dialog.clear()
         }}
+        keybind={[
+          {
+            keybind: Keybind.parse(deleteKeybind)[0],
+            title: "delete",
+            onTrigger: async (option) => {
+              if (toDelete() === option.value) {
+                sdk.client.session.delete({
+                  sessionID: option.value,
+                })
+                setToDelete(undefined)
+                return
+              }
+              setToDelete(option.value)
+            },
+          },
+          {
+            keybind: Keybind.parse("ctrl+r")[0],
+            title: "rename",
+            onTrigger: async (option) => {
+              dialog.replace(() => <DialogSessionRename session={option.value} />)
+            },
+          },
+        ]}
       />
     </Show>
   )
