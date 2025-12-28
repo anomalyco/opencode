@@ -47,9 +47,9 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ### How plugins are installed
 
-OpenCode uses Bun to install npm plugins at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
+**npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
 
-Local plugins in `.opencode/plugin/` or `~/.config/opencode/plugin/` are loaded directly. If your local plugin has dependencies, add a `package.json` to the plugin directory and run `bun install` manually.
+**Local plugins** are loaded directly from the plugin directory. Dependencies are not installed automatically. If your local plugin requires external packages, publish it to npm instead and add it to your config.
 
 ---
 
