@@ -361,6 +361,15 @@ function createGlobalSync() {
         )
         break
       }
+      case "lsp.updated": {
+        const sdk = createOpencodeClient({
+          baseUrl: globalSDK.url,
+          directory,
+          throwOnError: true,
+        })
+        sdk.lsp.status().then((x) => setStore("lsp", x.data ?? []))
+        break
+      }
     }
   })
 
