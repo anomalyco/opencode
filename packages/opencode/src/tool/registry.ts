@@ -11,6 +11,7 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { ExitPlanModeTool } from "./exitplanmode"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -104,6 +105,7 @@ export namespace ToolRegistry {
       WebSearchTool,
       CodeSearchTool,
       SkillTool,
+      ExitPlanModeTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...custom,
@@ -122,6 +124,10 @@ export namespace ToolRegistry {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
             return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
+          // exitplanmode is only available in plan mode
+          if (t.id === "exitplanmode") {
+            return agent?.name === "plan"
           }
           return true
         })
