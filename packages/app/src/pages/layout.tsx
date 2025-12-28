@@ -118,7 +118,13 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const unsub = globalSync.permission.onUpdated(({ directory, permission }) => {
+    const seenPermissions = new Set<string>()
+    const unsub = globalSDK.event.listen((e) => {
+      if (e.details?.type !== "permission.updated") return
+      const directory = e.name
+      const permission = e.details.properties
+      if (seenPermissions.has(permission.id)) return
+      seenPermissions.add(permission.id)
       const currentDir = params.dir ? base64Decode(params.dir) : undefined
       const currentSession = params.id
       if (directory === currentDir && permission.sessionID === currentSession) return
