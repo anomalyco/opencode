@@ -4,18 +4,16 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
-  "devDependencies": {
-    "@types/bun": "1.3.4"
-  },
+  "devDependencies": {},
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "5.0.0"
   },
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
     "@octokit/graphql": "9.0.1",
     "@octokit/rest": "22.0.0",
-    "@opendeepseek/sdk": "*"
+    "@opendeepseek/sdk": "1.0.181"
   },
   "engines": {
     "node": ">=20.0.0"

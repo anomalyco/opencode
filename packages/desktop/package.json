@@ -18,8 +18,7 @@
   "devDependencies": {
     "@happy-dom/global-registrator": "20.0.11",
     "@tailwindcss/vite": "4.1.11",
-    "@tsconfig/bun": "1.0.9",
-    "@types/bun": "1.3.4",
+    "@tsconfig/node20": "1.0.1",
     "@types/luxon": "3.7.1",
     "@types/node": "22.13.9",
     "@typescript/native-preview": "7.0.0-dev.20251207.1",
@@ -30,9 +29,9 @@
   },
   "dependencies": {
     "@kobalte/core": "0.13.11",
-    "@opendeepseek/sdk": "*",
-    "@opendeepseek/ui": "*",
-    "@opendeepseek/util": "*",
+    "@opendeepseek/sdk": "1.0.181",
+    "@opendeepseek/ui": "1.0.181",
+    "@opendeepseek/util": "1.0.181",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",
     "@solid-primitives/audio": "1.4.2",

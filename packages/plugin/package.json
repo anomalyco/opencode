@@ -15,7 +15,7 @@
     "dist"
   ],
   "dependencies": {
-    "@opendeepseek/sdk": "*",
+    "@opendeepseek/sdk": "1.0.181",
     "zod": "4.1.8"
   },
   "devDependencies": {

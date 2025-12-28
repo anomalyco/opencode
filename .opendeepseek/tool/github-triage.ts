@@ -1,7 +1,7 @@
 /// <reference path="../env.d.ts" />
 // import { Octokit } from "@octokit/rest"
 import { tool } from "@opendeepseek/plugin"
-import DESCRIPTION from "./github-triage.txt"
+import DESCRIPTION from "./github-triage.txt.mjs"
 
 function getIssueNumber(): number {
   const issue = parseInt(process.env.ISSUE_NUMBER ?? "", 10)

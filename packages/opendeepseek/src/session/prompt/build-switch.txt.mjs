@@ -1,0 +1,1 @@
+export default "<system-reminder>\r\nYour operational mode has changed from plan to build.\r\nYou are no longer in read-only mode.\r\nYou are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.\r\n</system-reminder>\r\n";

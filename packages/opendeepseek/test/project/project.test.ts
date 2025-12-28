@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Project } from "../../src/project/project"
 import { Log } from "../../src/util/log"
 import { Storage } from "../../src/storage/storage"
-import "../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import path from "path"
 import { tmpdir } from "../fixture/fixture"

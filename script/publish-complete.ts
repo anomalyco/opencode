@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import "../scripts/bun-shim"
+import '../scripts/bun-shim'
 
 import { Script } from "@opendeepseek/script"
-import "../scripts/bun-shim"
+import '../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 
 if (!Script.preview) {

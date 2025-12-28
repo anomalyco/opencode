@@ -10,7 +10,7 @@ import path from "path"
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
 import type ParcelWatcher from "@parcel/watcher"
-import "../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import { Flag } from "@/flag/flag"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "../../../scripts/bun-shim"
+import '../../../scripts/bun-shim'
 
 import { z } from "zod"
 import { Config } from "../src/config/config"

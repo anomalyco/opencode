@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "../../scripts/bun-shim"
+import '../scripts/bun-shim'
 
 import solidPlugin from "./node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"

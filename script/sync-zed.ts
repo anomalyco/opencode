@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import "../scripts/bun-shim"
+import '../scripts/bun-shim'
 
-import "../scripts/bun-shim"
+import '../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import { tmpdir } from "os"
 import { join } from "path"

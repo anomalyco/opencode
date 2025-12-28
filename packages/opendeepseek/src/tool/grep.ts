@@ -2,7 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import { Ripgrep } from "../file/ripgrep"
 
-import DESCRIPTION from "./grep.txt"
+import DESCRIPTION from "./grep.txt.mjs"
 import { Instance } from "../project/instance"
 
 const MAX_LINE_LENGTH = 2000

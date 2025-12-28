@@ -1,7 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import TurndownService from "turndown"
-import DESCRIPTION from "./webfetch.txt"
+import DESCRIPTION from "./webfetch.txt.mjs"
 import { Config } from "../config/config"
 import { Permission } from "../permission"
 

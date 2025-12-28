@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-import "../../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)
 
-import "../../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import path from "path"
 

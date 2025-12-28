@@ -1,2 +1,0 @@
-[test]
-preload = ["./happydom.ts"]

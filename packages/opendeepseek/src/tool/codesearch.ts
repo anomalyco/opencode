@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION from "./codesearch.txt"
+import DESCRIPTION from "./codesearch.txt.mjs"
 import { Config } from "../config/config"
 import { Permission } from "../permission"
 

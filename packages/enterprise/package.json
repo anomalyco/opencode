@@ -11,9 +11,9 @@
     "start": "vite start"
   },
   "dependencies": {
-    "@opendeepseek/util": "*",
-    "@opendeepseek/ui": "*",
-    "aws4fetch": "^1.0.20",
+    "@opendeepseek/util": "1.0.181",
+    "@opendeepseek/ui": "1.0.181",
+    "aws4fetch": "1.0.20",
     "@pierre/diffs": "1.0.0-beta.3",
     "@solidjs/router": "0.15.4",
     "@solidjs/start": "1.0.11",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "../../scripts/bun-shim"
+import '../../scripts/bun-shim'
 
 import fs from "fs"
 import path from "path"

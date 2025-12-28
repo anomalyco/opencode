@@ -22,7 +22,6 @@
     "generate:tailwind": "npx tsx script/tailwind.ts"
   },
   "devDependencies": {
-    "@types/bun": "1.3.4",
     "@types/luxon": "3.7.1",
     "@tsconfig/node22": "22.0.2",
     "typescript": "5.8.2",
@@ -34,8 +33,8 @@
   },
   "dependencies": {
     "@kobalte/core": "0.13.11",
-    "@opendeepseek/sdk": "*",
-    "@opendeepseek/util": "*",
+    "@opendeepseek/sdk": "1.0.181",
+    "@opendeepseek/util": "1.0.181",
     "@pierre/diffs": "1.0.0-beta.3",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",

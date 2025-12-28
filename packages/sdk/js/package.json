@@ -26,9 +26,7 @@
     "@typescript/native-preview": "7.0.0-dev.20251207.1"
   },
   "dependencies": {},
-  "publishConfig": {
-    "directory": "dist"
-  },
+
   "engines": {
     "node": ">=20.0.0"
   },

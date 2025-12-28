@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test"
-import "../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"

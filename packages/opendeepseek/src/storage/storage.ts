@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import { Global } from "../global"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
-import "../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import { NamedError } from "@opendeepseek/util/error"
 import z from "zod"

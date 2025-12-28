@@ -9,11 +9,11 @@ import { Log } from "../util/log"
 
 const log = Log.create({ service: "agent" })
 
-import PROMPT_GENERATE from "./generate.txt"
-import PROMPT_COMPACTION from "./prompt/compaction.txt"
-import PROMPT_EXPLORE from "./prompt/explore.txt"
-import PROMPT_SUMMARY from "./prompt/summary.txt"
-import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_GENERATE from "./generate.txt.mjs"
+import PROMPT_COMPACTION from "./prompt/compaction.txt.mjs"
+import PROMPT_EXPLORE from "./prompt/explore.txt.mjs"
+import PROMPT_SUMMARY from "./prompt/summary.txt.mjs"
+import PROMPT_TITLE from "./prompt/title.txt.mjs"
 
 export namespace Agent {
   export const Info = z

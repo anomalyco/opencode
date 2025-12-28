@@ -19,7 +19,7 @@ import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
-import "../../../scripts/bun-shim"
+import '../../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 
 type GitHubAuthor = {

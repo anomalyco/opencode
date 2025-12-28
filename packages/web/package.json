@@ -34,7 +34,7 @@
     "toolbeam-docs-theme": "0.4.8"
   },
   "devDependencies": {
-    "opendeepseek": "*",
+    "opendeepseek": "1.0.181",
     "@types/node": "22.13.9",
     "typescript": "5.8.2"
   },

@@ -1,0 +1,1 @@
+export default "Summarize the following conversation into 2 sentences MAX explaining what the\r\nassistant did and why\r\nDo not explain the user's input.\r\nDo not speak in the third person about the assistant.\r\n";

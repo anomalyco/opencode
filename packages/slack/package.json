@@ -7,8 +7,8 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opendeepseek/sdk": "*",
-    "@slack/bolt": "^3.17.1"
+    "@opendeepseek/sdk": "1.0.181",
+    "@slack/bolt": "3.17.1"
   },
   "devDependencies": {
     "@types/node": "22.13.9",

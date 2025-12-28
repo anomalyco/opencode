@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import "../scripts/bun-shim"
+import '../scripts/bun-shim'
 
 async function sendToPostHog(event: string, properties: Record<string, any>) {
   const key = process.env["POSTHOG_KEY"]

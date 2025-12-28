@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import "../../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 
-import "../../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import path from "path"
 import { ZenData } from "../src/model"

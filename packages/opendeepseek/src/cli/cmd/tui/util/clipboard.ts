@@ -1,4 +1,4 @@
-import "../../../../../scripts/bun-shim"
+import '../../../../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import { platform, release } from "os"
 import clipboardy from "clipboardy"

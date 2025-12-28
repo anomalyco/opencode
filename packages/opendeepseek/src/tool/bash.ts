@@ -1,13 +1,13 @@
 import z from "zod"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
-import DESCRIPTION from "./bash.txt"
+import DESCRIPTION from "./bash.txt.mjs"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 import { Agent } from "@/agent/agent"
-import "../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import { Filesystem } from "@/util/filesystem"
 import { Wildcard } from "@/util/wildcard"

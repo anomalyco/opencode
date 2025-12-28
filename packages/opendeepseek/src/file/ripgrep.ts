@@ -5,7 +5,7 @@ import fs from "fs/promises"
 import z from "zod"
 import { NamedError } from "@opendeepseek/util/error"
 import { lazy } from "../util/lazy"
-import "../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"

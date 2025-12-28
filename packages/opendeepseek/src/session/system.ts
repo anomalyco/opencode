@@ -7,15 +7,15 @@ import { Instance } from "../project/instance"
 import path from "path"
 import os from "os"
 
-import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
-import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
-import PROMPT_POLARIS from "./prompt/polaris.txt"
-import PROMPT_BEAST from "./prompt/beast.txt"
-import PROMPT_GEMINI from "./prompt/gemini.txt"
-import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
-import PROMPT_COMPACTION from "../agent/prompt/compaction.txt"
+import PROMPT_ANTHROPIC from "./prompt/anthropic.txt.mjs"
+import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt.mjs"
+import PROMPT_POLARIS from "./prompt/polaris.txt.mjs"
+import PROMPT_BEAST from "./prompt/beast.txt.mjs"
+import PROMPT_GEMINI from "./prompt/gemini.txt.mjs"
+import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt.mjs"
+import PROMPT_COMPACTION from "../agent/prompt/compaction.txt.mjs"
 
-import PROMPT_CODEX from "./prompt/codex.txt"
+import PROMPT_CODEX from "./prompt/codex.txt.mjs"
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {

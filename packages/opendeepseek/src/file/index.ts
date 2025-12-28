@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
-import "../../../scripts/bun-shim"
+import '../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import type { BunFile } from "bun"
 import { formatPatch, structuredPatch } from "diff"

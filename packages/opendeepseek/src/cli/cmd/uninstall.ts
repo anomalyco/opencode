@@ -3,7 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
-import "../../../scripts/bun-shim"
+import '../../../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import fs from "fs/promises"
 import path from "path"

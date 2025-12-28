@@ -1,6 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
-import DESCRIPTION_WRITE from "./todowrite.txt"
+import DESCRIPTION_WRITE from "./todowrite.txt.mjs"
 import { Todo } from "../session/todo"
 
 export const TodoWriteTool = Tool.define("todowrite", {

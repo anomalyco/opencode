@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import "../../../scripts/bun-shim"
-import "../../../scripts/bun-shim"
+import '../../../scripts/bun-shim'
+import '../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import pkg from "../package.json"
 import { Script } from "@opendeepseek/script"

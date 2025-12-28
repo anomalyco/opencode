@@ -1,7 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import { EditTool } from "./edit"
-import DESCRIPTION from "./multiedit.txt"
+import DESCRIPTION from "./multiedit.txt.mjs"
 import path from "path"
 import { Instance } from "../project/instance"
 

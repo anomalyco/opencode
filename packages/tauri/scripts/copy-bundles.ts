@@ -1,4 +1,4 @@
-import "../../../scripts/bun-shim"
+import '../../../scripts/bun-shim'
 const $ = (globalThis as any).Bun.$
 import * as path from "node:path"
 

@@ -94,16 +94,16 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.94.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
-    "@typescript-eslint/eslint-plugin": "^8.31.1",
-    "@typescript-eslint/parser": "^8.31.1",
-    "eslint": "^9.25.1",
-    "esbuild": "^0.25.3",
-    "typescript": "^5.8.3",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2"
+    "@types/vscode": "1.94.0",
+    "@types/mocha": "10.0.10",
+    "@types/node": "22.13.9",
+    "@typescript-eslint/eslint-plugin": "8.31.1",
+    "@typescript-eslint/parser": "8.31.1",
+    "eslint": "9.25.1",
+    "esbuild": "0.25.3",
+    "typescript": "5.8.2",
+    "@vscode/test-cli": "0.0.11",
+    "@vscode/test-electron": "2.5.2"
   },
   "packageManager": "npm@10.8.2"
 }

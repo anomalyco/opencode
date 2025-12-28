@@ -1,7 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import * as path from "path"
-import DESCRIPTION from "./ls.txt"
+import DESCRIPTION from "./ls.txt.mjs"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
 
