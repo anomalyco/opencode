@@ -5,6 +5,7 @@ export namespace Identifier {
   const prefixes = {
     account: "acc",
     auth: "aut",
+    benchmark: "ben",
     billing: "bil",
     key: "key",
     model: "mod",
