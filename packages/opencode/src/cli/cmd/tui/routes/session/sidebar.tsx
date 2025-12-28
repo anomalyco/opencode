@@ -62,7 +62,7 @@ export function Sidebar(props: { sessionID: string }) {
   const sessionTokens = createMemo(() => {
     const total = messages().reduce((sum, x) => {
       if (x.role !== "assistant") return sum
-      return sum + x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
+      return sum + x.tokens.input + x.tokens.output
     }, 0)
     return total.toLocaleString()
   })
