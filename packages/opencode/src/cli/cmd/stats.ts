@@ -54,6 +54,9 @@ export const StatsCommand = cmd({
         describe: "number of tools to show (default: all)",
         type: "number",
       })
+      .option("models", {
+        describe: "show model statistics (default: hidden). Pass a number to show top N, otherwise shows all",
+      })
       .option("project", {
         describe: "filter by project (default: all projects, empty string: current project)",
         type: "string",
@@ -62,7 +65,15 @@ export const StatsCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const stats = await aggregateSessionStats(args.days, args.project)
-      displayStats(stats, args.tools)
+
+      let modelLimit: number | undefined
+      if (args.models === true) {
+        modelLimit = Infinity
+      } else if (typeof args.models === "number") {
+        modelLimit = args.models
+      }
+
+      displayStats(stats, args.tools, modelLimit)
     })
   },
 })
@@ -281,7 +292,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   return stats
 }
 
-export function displayStats(stats: SessionStats, toolLimit?: number) {
+export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
   const width = 56
 
   function renderRow(label: string, value: string): string {
@@ -321,14 +332,15 @@ export function displayStats(stats: SessionStats, toolLimit?: number) {
   console.log()
 
   // Model Usage section
-  if (Object.keys(stats.modelUsage).length > 0) {
+  if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
     const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
+    const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
 
     console.log("┌────────────────────────────────────────────────────────┐")
     console.log("│                      MODEL USAGE                       │")
     console.log("├────────────────────────────────────────────────────────┤")
 
-    for (const [model, usage] of sortedModels) {
+    for (const [model, usage] of modelsToDisplay) {
       console.log(`│ ${model.padEnd(54)} │`)
       console.log(renderRow("  Messages", usage.messages.toLocaleString()))
       console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
