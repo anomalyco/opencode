@@ -1,5 +1,5 @@
-import { realpathSync } from "fs"
-import { exists } from "fs/promises"
+import { realpathSync, promises as fsPromises } from "fs"
+const exists = async (p: string) => { try { await fsPromises.access(p); return true } catch { return false } }
 import { dirname, join, relative } from "path"
 
 export namespace Filesystem {

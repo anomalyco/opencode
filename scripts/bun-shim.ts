@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import toml from "toml"
 import fg from "fast-glob"
-import execa from "execa"
+import { execa } from "execa"
 import { spawn as spawnNative } from "child_process"
 
 function makeFile(pathStr: string) {
@@ -94,6 +94,19 @@ const BunShim: any = {
   },
   Glob,
   $: make$(),
+  color(name: string, _format?: string) {
+    const map: Record<string, string> = {
+      gray: "\x1b[90m",
+      red: "\x1b[91m",
+      green: "\x1b[92m",
+      yellow: "\x1b[93m",
+      blue: "\x1b[94m",
+      magenta: "\x1b[95m",
+      cyan: "\x1b[96m",
+      white: "\x1b[97m",
+    }
+    return map[name] ?? ""
+  },
   spawn(...args: any[]) {
     let cp
     if (Array.isArray(args[0])) {
