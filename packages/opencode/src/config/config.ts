@@ -193,7 +193,7 @@ export namespace Config {
     ).catch(() => {})
 
     // Install any additional dependencies defined in the package.json
-    // This allows local plugins to declare their own dependencies
+    // This allows local plugins and custom tools to use external packages
     await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 

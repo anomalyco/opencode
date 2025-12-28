@@ -27,18 +27,17 @@ Plugins are loaded from:
 
 ### Dependencies
 
-Local plugins can use external npm packages. Add a `package.json` to your config directory with the dependencies you need.
+Local plugins and custom tools can use external npm packages. Add a `package.json` to your config directory with the dependencies you need.
 
 ```json title=".opencode/package.json"
 {
   "dependencies": {
-    "shescape": "^2.1.0",
-    "lodash": "^4.17.21"
+    "shescape": "^2.1.0"
   }
 }
 ```
 
-OpenCode automatically runs `bun install` at startup to install these dependencies. Your plugin can then import them normally.
+OpenCode runs `bun install` at startup to install these. Your plugins and tools can then import them.
 
 ```ts title=".opencode/plugin/my-plugin.ts"
 import { escape } from "shescape"
