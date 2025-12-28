@@ -2,5 +2,9 @@
   "name": "bun",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.js"
+  "main": "index.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
 }

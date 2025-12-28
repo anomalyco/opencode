@@ -5,7 +5,7 @@
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@8.7.0",
+  "packageManager": "npm@10.8.2",
   "scripts": {
     "dev": "npx tsx --cwd packages/opendeepseek --conditions=browser src/index.ts",
     "typecheck": "turbo run typecheck",

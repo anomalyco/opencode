@@ -59,15 +59,49 @@ const platform: Platform = {
   storage: (name = "default.dat") => {
     const api: AsyncStorage = {
       _store: null,
-      _getStore: async () => api._store || (api._store = Store.load(name)),
+      _getStore: async () => {
+        if (api._store) return api._store
+        // Prefer Store.load if available (plugin API), otherwise fall back to a localStorage-backed implementation
+        if (typeof (Store as any).load === 'function') {
+          api._store = await (Store as any).load(name)
+          return api._store
+        }
+        // fallback store using window.localStorage
+        const prefix = `opendeepseek.store:${name}:`
+        const fallback = {
+          async get(k: string) {
+            const raw = localStorage.getItem(prefix + k)
+            return raw ? JSON.parse(raw) : undefined
+          },
+          async set(k: string, v: any) {
+            localStorage.setItem(prefix + k, JSON.stringify(v))
+          },
+          async delete(k: string) {
+            localStorage.removeItem(prefix + k)
+          },
+          async clear() {
+            const keys = Object.keys(localStorage)
+            for (const k of keys) if (k.startsWith(prefix)) localStorage.removeItem(k)
+          },
+          async keys() {
+            return Object.keys(localStorage).filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length))
+          },
+          length() {
+            return Object.keys(localStorage).filter((k) => k.startsWith(prefix)).length
+          },
+        }
+        api._store = fallback as any
+        return api._store
+      },
       getItem: async (key: string) => (await (await api._getStore()).get(key)) ?? null,
       setItem: async (key: string, value: string) => await (await api._getStore()).set(key, value),
       removeItem: async (key: string) => await (await api._getStore()).delete(key),
       clear: async () => await (await api._getStore()).clear(),
       key: async (index: number) => (await (await api._getStore()).keys())[index],
-      getLength: async () => (await api._getStore()).length(),
-      get length() {
-        return api.getLength()
+      getLength: async () => {
+        const s = await api._getStore()
+        if (typeof s.length === 'function') return s.length()
+        return s.length ?? (await s.keys()).length
       },
     }
     return api
@@ -91,8 +125,7 @@ const platform: Platform = {
     await relaunch()
   },
 
-  // @ts-expect-error
-  fetch: tauriFetch,
+  fetch: tauriFetch as any,
 }
 
 createMenu()
