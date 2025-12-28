@@ -44,6 +44,7 @@ export type PromptProps = {
 export type PromptRef = {
   focused: boolean
   current: PromptInfo
+  editingQueuedMessageID: string | undefined
   set(prompt: PromptInfo): void
   reset(): void
   blur(): void
@@ -72,6 +73,16 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+
+  const queuedMessages = createMemo(() => {
+    if (!props.sessionID) return []
+    const messages = sync.data.message[props.sessionID] ?? []
+    if (status().type !== "busy") return []
+    const sorted = [...messages].sort((a, b) => a.id.localeCompare(b.id))
+    const pending = sorted.findLast((m) => m.role === "assistant" && m.time.completed === undefined)
+    if (!pending) return []
+    return sorted.filter((m) => m.role === "user" && m.id > pending.id)
+  })
 
   function promptModelWarning() {
     toast.show({
@@ -118,6 +129,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    editingQueuedMessageID: string | undefined
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -127,6 +139,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    editingQueuedMessageID: undefined,
   })
 
   // Initialize agent/model/variant from last user message when session changes
@@ -160,6 +173,7 @@ export function Prompt(props: PromptProps) {
         onSelect: (dialog) => {
           input.extmarks.clear()
           input.clear()
+          setStore("editingQueuedMessageID", undefined)
           dialog.clear()
         },
       },
@@ -307,12 +321,103 @@ export function Prompt(props: PromptProps) {
           input.cursorOffset = Bun.stringWidth(content)
         },
       },
+      {
+        title: "Edit queued message",
+        category: "Queue",
+        keybind: "queue_edit",
+        value: "queue.edit",
+        disabled: queuedMessages().length === 0 || store.editingQueuedMessageID !== undefined,
+        onSelect: async (dialog) => {
+          dialog.clear()
+          if (!props.sessionID) return
+          const queued = queuedMessages()
+          const last = queued.at(-1)
+          if (!last) return
+          const response = await sdk.client.session.getQueue({
+            sessionID: props.sessionID,
+            messageID: last.id,
+          })
+          if (!response.data) return
+          const textParts = response.data.parts.filter((p) => p.type === "text")
+          const fileParts = response.data.parts.filter((p) => p.type === "file")
+          const text = textParts.map((p) => p.text).join("")
+
+          let fullText = text
+          const parts: typeof store.prompt.parts = []
+
+          for (const file of fileParts) {
+            const start = fullText.length + (fullText.length > 0 ? 1 : 0)
+            const virtualText = file.filename ? `[File: ${file.filename}]` : `[Image ${parts.length + 1}]`
+            const end = start + virtualText.length
+            fullText += (fullText.length > 0 ? " " : "") + virtualText
+            parts.push({
+              type: "file",
+              mime: file.mime,
+              filename: file.filename,
+              url: file.url,
+              source: {
+                type: "file",
+                path: file.filename ?? "",
+                text: { start, end, value: virtualText },
+              },
+            })
+          }
+
+          input.setText(fullText)
+          input.cursorOffset = fullText.length
+          setStore("prompt", { input: fullText, parts })
+          restoreExtmarksFromParts(parts)
+          setStore("editingQueuedMessageID", last.id)
+        },
+      },
+      {
+        title: "Discard queued message",
+        category: "Queue",
+        keybind: "queue_discard",
+        value: "queue.discard",
+        disabled: queuedMessages().length === 0,
+        onSelect: async (dialog) => {
+          dialog.clear()
+          if (!props.sessionID) return
+          const messageID = store.editingQueuedMessageID ?? queuedMessages().at(-1)?.id
+          if (!messageID) return
+          await sdk.client.session.cancelQueue({
+            sessionID: props.sessionID,
+            messageID,
+          })
+          if (store.editingQueuedMessageID) {
+            input.clear()
+            input.extmarks.clear()
+            setStore("prompt", { input: "", parts: [] })
+            setStore("extmarkToPartIndex", new Map())
+            setStore("editingQueuedMessageID", undefined)
+          }
+        },
+      },
     ]
   })
 
   createEffect(() => {
     if (props.visible !== false) input?.focus()
     if (props.visible === false) input?.blur()
+  })
+
+  // Clear editing state if the message being edited is no longer in the queue (was processed)
+  createEffect(() => {
+    if (!store.editingQueuedMessageID) return
+    const stillQueued = queuedMessages().some((m) => m.id === store.editingQueuedMessageID)
+    if (!stillQueued) {
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      setStore("editingQueuedMessageID", undefined)
+      toast.show({
+        variant: "info",
+        message: "Queued message was processed",
+        duration: 3000,
+      })
+    }
   })
 
   onMount(() => {
@@ -459,6 +564,9 @@ export function Prompt(props: PromptProps) {
     get current() {
       return store.prompt
     },
+    get editingQueuedMessageID() {
+      return store.editingQueuedMessageID
+    },
     focus() {
       input.focus()
     },
@@ -479,6 +587,7 @@ export function Prompt(props: PromptProps) {
         parts: [],
       })
       setStore("extmarkToPartIndex", new Map())
+      setStore("editingQueuedMessageID", undefined)
     },
     submit() {
       submit()
@@ -567,6 +676,12 @@ export function Prompt(props: PromptProps) {
           })),
       })
     } else {
+      if (store.editingQueuedMessageID) {
+        await sdk.client.session.cancelQueue({
+          sessionID,
+          messageID: store.editingQueuedMessageID,
+        })
+      }
       sdk.client.session.prompt({
         sessionID,
         ...selectedModel,
@@ -597,6 +712,7 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+    setStore("editingQueuedMessageID", undefined)
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -804,9 +920,19 @@ export function Prompt(props: PromptProps) {
                     parts: [],
                   })
                   setStore("extmarkToPartIndex", new Map())
+                  setStore("editingQueuedMessageID", undefined)
                   return
                 }
                 if (keybind.match("app_exit", e)) {
+                  if (store.editingQueuedMessageID) {
+                    input.clear()
+                    input.extmarks.clear()
+                    setStore("prompt", { input: "", parts: [] })
+                    setStore("extmarkToPartIndex", new Map())
+                    setStore("editingQueuedMessageID", undefined)
+                    e.preventDefault()
+                    return
+                  }
                   if (store.prompt.input === "") {
                     await exit()
                     // Don't preventDefault - let textarea potentially handle the event

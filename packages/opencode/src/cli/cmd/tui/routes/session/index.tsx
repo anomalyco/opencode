@@ -1009,6 +1009,7 @@ export function Session() {
                         message={message as UserMessage}
                         parts={sync.data.part[message.id] ?? []}
                         pending={pending()}
+                        editingMessageID={prompt?.editingQueuedMessageID}
                       />
                     </Match>
                     <Match when={message.role === "assistant"}>
@@ -1076,15 +1077,18 @@ function UserMessage(props: {
   onMouseUp: () => void
   index: number
   pending?: string
+  editingMessageID?: string
 }) {
   const ctx = use()
   const local = useLocal()
+  const keybind = useKeybind()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
+  const editing = createMemo(() => props.editingMessageID === props.message.id)
   const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
@@ -1148,8 +1152,24 @@ function UserMessage(props: {
             >
               <text fg={theme.textMuted}>
                 <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
-              </text>
-            </Show>
+                <Show
+                  when={editing()}
+                  fallback={
+                    <span style={{ fg: theme.textMuted }}>
+                      {" "}
+                      {keybind.print("queue_edit")} edit · {keybind.print("queue_discard")} discard
+                    </span>
+                  }
+                >
+                  <span> </span>
+                  <span style={{ bg: theme.primary, fg: theme.backgroundPanel, bold: true }}> EDITING </span>
+                  <span style={{ fg: theme.textMuted }}>
+                    {" "}
+                    enter submit · ctrl+c cancel · {keybind.print("queue_discard")} discard
+                  </span>
+                </Show>
+              </Show>
+            </text>
           </box>
         </box>
       </Show>

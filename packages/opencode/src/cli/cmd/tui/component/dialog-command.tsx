@@ -47,7 +47,7 @@ function init() {
     if (suspended()) return
     if (dialog.stack.length > 0) return
     for (const option of options()) {
-      if (option.keybind && keybind.match(option.keybind, evt)) {
+      if (option.keybind && !option.disabled && keybind.match(option.keybind, evt)) {
         evt.preventDefault()
         option.onSelect?.(dialog)
         return

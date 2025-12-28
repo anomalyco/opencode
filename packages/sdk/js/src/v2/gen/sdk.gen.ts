@@ -91,6 +91,8 @@ import type {
   QuestionReplyResponses,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionCancelQueueErrors,
+  SessionCancelQueueResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -103,6 +105,8 @@ import type {
   SessionDiffResponses,
   SessionForkResponses,
   SessionGetErrors,
+  SessionGetQueueErrors,
+  SessionGetQueueResponses,
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
@@ -115,6 +119,8 @@ import type {
   SessionPromptAsyncResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionQueueErrors,
+  SessionQueueResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
@@ -1128,6 +1134,102 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionAbortResponses, SessionAbortErrors, ThrowOnError>({
       url: "/session/{sessionID}/abort",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get queued messages
+   *
+   * Get list of message IDs that are queued and waiting to be processed.
+   */
+  public queue<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionQueueResponses, SessionQueueErrors, ThrowOnError>({
+      url: "/session/{sessionID}/queue",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel queued message
+   *
+   * Cancel a queued message that has not yet been processed by the agent.
+   */
+  public cancelQueue<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<SessionCancelQueueResponses, SessionCancelQueueErrors, ThrowOnError>(
+      {
+        url: "/session/{sessionID}/queue/{messageID}",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Get queued message
+   *
+   * Get a queued message without removing it from the queue.
+   */
+  public getQueue<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionGetQueueResponses, SessionGetQueueErrors, ThrowOnError>({
+      url: "/session/{sessionID}/queue/{messageID}",
       ...options,
       ...params,
     })

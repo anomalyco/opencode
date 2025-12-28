@@ -1224,6 +1224,14 @@ export type KeybindsConfig = {
    */
   history_next?: string
   /**
+   * Edit queued message
+   */
+  queue_edit?: string
+  /**
+   * Discard queued message
+   */
+  queue_discard?: string
+  /**
    * Next child session
    */
   session_child_cycle?: string
@@ -2930,6 +2938,113 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionQueueData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/queue"
+}
+
+export type SessionQueueErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionQueueError = SessionQueueErrors[keyof SessionQueueErrors]
+
+export type SessionQueueResponses = {
+  /**
+   * List of queued message IDs
+   */
+  200: Array<string>
+}
+
+export type SessionQueueResponse = SessionQueueResponses[keyof SessionQueueResponses]
+
+export type SessionCancelQueueData = {
+  body?: never
+  path: {
+    sessionID: string
+    messageID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/queue/{messageID}"
+}
+
+export type SessionCancelQueueErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCancelQueueError = SessionCancelQueueErrors[keyof SessionCancelQueueErrors]
+
+export type SessionCancelQueueResponses = {
+  /**
+   * Cancelled message with parts
+   */
+  200: {
+    info: Message
+    parts: Array<Part>
+  } | null
+}
+
+export type SessionCancelQueueResponse = SessionCancelQueueResponses[keyof SessionCancelQueueResponses]
+
+export type SessionGetQueueData = {
+  body?: never
+  path: {
+    sessionID: string
+    messageID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/queue/{messageID}"
+}
+
+export type SessionGetQueueErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionGetQueueError = SessionGetQueueErrors[keyof SessionGetQueueErrors]
+
+export type SessionGetQueueResponses = {
+  /**
+   * Queued message with parts
+   */
+  200: {
+    info: Message
+    parts: Array<Part>
+  } | null
+}
+
+export type SessionGetQueueResponse = SessionGetQueueResponses[keyof SessionGetQueueResponses]
 
 export type SessionUnshareData = {
   body?: never

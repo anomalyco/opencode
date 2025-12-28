@@ -915,6 +915,74 @@ test("permission config preserves key order", async () => {
   })
 })
 
+test("keybinds queue_edit defaults to <leader>i", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.keybinds?.queue_edit).toBe("<leader>i")
+    },
+  })
+})
+
+test("keybinds queue_discard defaults to <leader>d", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.keybinds?.queue_discard).toBe("<leader>d")
+    },
+  })
+})
+
+test("keybinds queue_edit can be customized", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          keybinds: {
+            queue_edit: "ctrl+e",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.keybinds?.queue_edit).toBe("ctrl+e")
+    },
+  })
+})
+
+test("keybinds queue_discard can be customized", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          keybinds: {
+            queue_discard: "ctrl+shift+d",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.keybinds?.queue_discard).toBe("ctrl+shift+d")
+    },
+  })
+})
+
 // MCP config merging tests
 
 test("project config can override MCP server enabled status", async () => {
