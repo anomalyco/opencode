@@ -13,9 +13,20 @@ There are two ways to load plugins.
 
 ---
 
+### From local files
+
+Place JavaScript or TypeScript files in the plugin directory.
+
+- `.opencode/plugin/` - Project-level plugins
+- `~/.config/opencode/plugin/` - Global plugins
+
+Files in these directories are automatically loaded at startup.
+
+---
+
 ### From npm
 
-Specify npm packages in your config file. OpenCode automatically installs them at startup.
+Specify npm packages in your config file.
 
 ```json title="opencode.json"
 {
@@ -28,20 +39,17 @@ Specify npm packages in your config file. OpenCode automatically installs them a
 }
 ```
 
-Packages are cached in `~/.cache/opencode/`. Both regular and scoped npm packages are supported.
+Both regular and scoped npm packages are supported.
 
 Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
-### From local files
+### How plugins are installed
 
-Place JavaScript or TypeScript files in the plugin directory.
+OpenCode uses Bun to install npm plugins at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
 
-- `.opencode/plugin/` - Project-level plugins
-- `~/.config/opencode/plugin/` - Global plugins
-
-Files in these directories are automatically loaded at startup.
+Local plugins in `.opencode/plugin/` or `~/.config/opencode/plugin/` are loaded directly. If your local plugin has dependencies, add a `package.json` to the plugin directory and run `bun install` manually.
 
 ---
 
