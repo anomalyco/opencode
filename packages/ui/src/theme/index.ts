@@ -1,20 +1,3 @@
-/**
- * Desktop Theme System
- *
- * Provides JSON-based theming for the desktop app. Unlike TUI themes,
- * desktop themes use more design tokens and generate full color scales
- * from seed colors.
- *
- * Usage:
- * ```ts
- * import { applyTheme } from "@opencode/ui/theme"
- * import myTheme from "./themes/my-theme.json"
- *
- * applyTheme(myTheme)
- * ```
- */
-
-// Types
 export type {
   DesktopTheme,
   ThemeSeedColors,
@@ -26,7 +9,6 @@ export type {
   CssVarRef,
 } from "./types"
 
-// Color utilities
 export {
   hexToRgb,
   rgbToHex,
@@ -43,16 +25,10 @@ export {
   withAlpha,
 } from "./color"
 
-// Theme resolution
 export { resolveThemeVariant, resolveTheme, themeToCss } from "./resolve"
-
-// Theme loader
 export { applyTheme, loadThemeFromUrl, getActiveTheme, removeTheme, setColorScheme } from "./loader"
-
-// Theme context (SolidJS)
 export { ThemeProvider, useTheme, type ColorScheme } from "./context"
 
-// Default themes
 export {
   DEFAULT_THEMES,
   oc1Theme,
