@@ -7691,6 +7691,11 @@
             "default": "down",
             "type": "string"
           },
+          "history_search": {
+            "description": "Reverse search history",
+            "default": "ctrl+r",
+            "type": "string"
+          },
           "session_child_cycle": {
             "description": "Next child session",
             "default": "<leader>right",

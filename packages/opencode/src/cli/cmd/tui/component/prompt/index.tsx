@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding, type ParsedKey } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -12,6 +12,7 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import { clone } from "remeda"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -173,6 +174,14 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    historySearch: {
+      active: boolean
+      query: string
+      matchIndex: number
+      originalPrompt: PromptInfo
+      originalMode: "normal" | "shell"
+      originalCursorOffset: number
+    }
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -182,6 +191,14 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    historySearch: {
+      active: false,
+      query: "",
+      matchIndex: 0,
+      originalPrompt: { input: "", parts: [] },
+      originalMode: "normal",
+      originalCursorOffset: 0,
+    },
   })
 
   command.register(() => {
@@ -635,6 +652,118 @@ export function Prompt(props: PromptProps) {
   }
   const exit = useExit()
 
+  const historySearchMatches = createMemo(() => {
+    if (!store.historySearch.active) return []
+    const query = store.historySearch.query.toLowerCase()
+    if (!query) return history.items.slice().reverse()
+    return history.items.filter((item) => item.input.toLowerCase().includes(query)).reverse()
+  })
+
+  function enterHistorySearch() {
+    setStore("historySearch", {
+      active: true,
+      query: "",
+      matchIndex: 0,
+      originalPrompt: clone(store.prompt),
+      originalMode: store.mode,
+      originalCursorOffset: input.cursorOffset,
+    })
+  }
+
+  function exitHistorySearch(restore: boolean) {
+    if (restore) {
+      const original = store.historySearch.originalPrompt
+      input.setText(original.input)
+      setStore("prompt", { input: original.input, parts: original.parts })
+      setStore("mode", store.historySearch.originalMode)
+      restoreExtmarksFromParts(original.parts)
+      input.cursorOffset = store.historySearch.originalCursorOffset
+    } else {
+      input.cursorOffset = input.plainText.length
+    }
+    setStore("historySearch", {
+      active: false,
+      query: "",
+      matchIndex: 0,
+      originalPrompt: { input: "", parts: [] },
+      originalMode: "normal",
+      originalCursorOffset: 0,
+    })
+  }
+
+  function selectHistoryMatch(match: PromptInfo) {
+    input.setText(match.input)
+    setStore("prompt", { input: match.input, parts: match.parts })
+    setStore("mode", match.mode ?? "normal")
+    restoreExtmarksFromParts(match.parts)
+    exitHistorySearch(false)
+  }
+
+  function updateHistorySearchPreview() {
+    const matches = historySearchMatches()
+    if (matches.length > 0) {
+      const match = matches[store.historySearch.matchIndex % matches.length]
+      if (match) {
+        input.setText(match.input)
+        setStore("prompt", { input: match.input, parts: match.parts })
+        restoreExtmarksFromParts(match.parts)
+        input.cursorOffset = input.plainText.length
+      }
+    }
+  }
+
+  function handleHistorySearchKey(e: ParsedKey & { preventDefault: () => void }) {
+    e.preventDefault()
+    if (e.name === "escape" || (e.ctrl && e.name === "g")) {
+      exitHistorySearch(true)
+      return true
+    }
+    if (e.name === "return") {
+      const matches = historySearchMatches()
+      if (matches.length > 0) {
+        const match = matches[store.historySearch.matchIndex % matches.length]
+        if (match) selectHistoryMatch(match)
+      } else {
+        exitHistorySearch(true)
+      }
+      return true
+    }
+    if (keybind.match("history_search", e) || (e.ctrl && e.name === "r") || e.name === "up") {
+      const matches = historySearchMatches()
+      if (matches.length > 1) {
+        setStore("historySearch", "matchIndex", (store.historySearch.matchIndex + 1) % matches.length)
+        updateHistorySearchPreview()
+      }
+      return true
+    }
+    if (e.name === "down") {
+      const matches = historySearchMatches()
+      if (store.historySearch.matchIndex === 0) {
+        exitHistorySearch(true)
+      } else if (matches.length > 1) {
+        setStore("historySearch", "matchIndex", store.historySearch.matchIndex - 1)
+        updateHistorySearchPreview()
+      }
+      return true
+    }
+    if (e.name === "backspace") {
+      if (store.historySearch.query.length > 0) {
+        setStore("historySearch", "query", store.historySearch.query.slice(0, -1))
+        setStore("historySearch", "matchIndex", 0)
+        updateHistorySearchPreview()
+      }
+      return true
+    }
+    const char = e.name === "space" ? " " : e.name
+    if (char && char.length === 1 && !e.ctrl && !e.meta) {
+      setStore("historySearch", "query", store.historySearch.query + char)
+      setStore("historySearch", "matchIndex", 0)
+      updateHistorySearchPreview()
+      return true
+    }
+    return true
+  }
+
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
@@ -801,6 +930,10 @@ export function Prompt(props: PromptProps) {
                 // through bracketed paste, so we need to intercept the keypress and
                 // directly read from clipboard before the terminal handles it
                 if (keybind.match("input_paste", e)) {
+                  if (store.historySearch.active) {
+                    e.preventDefault()
+                    return
+                  }
                   const content = await Clipboard.read()
                   if (content?.mime.startsWith("image/")) {
                     e.preventDefault()
@@ -813,7 +946,7 @@ export function Prompt(props: PromptProps) {
                   }
                   // If no image, let the default paste behavior continue
                 }
-                if (keybind.match("input_clear", e) && store.prompt.input !== "") {
+                if (!store.historySearch.active && keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
                   input.extmarks.clear()
                   setStore("prompt", {
@@ -831,9 +964,13 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
-                if (e.name === "!" && input.visualCursor.offset === 0) {
+                if (!store.historySearch.active && e.name === "!" && input.visualCursor.offset === 0) {
                   setStore("mode", "shell")
                   e.preventDefault()
+                  return
+                }
+                if (store.historySearch.active) {
+                  handleHistorySearchKey(e)
                   return
                 }
                 if (store.mode === "shell") {
@@ -845,6 +982,14 @@ export function Prompt(props: PromptProps) {
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
+                  if (keybind.match("history_search", e)) {
+                    e.preventDefault()
+                    if (history.items.length > 0) {
+                      enterHistorySearch()
+                      updateHistorySearchPreview()
+                    }
+                    return
+                  }
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
                     (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
@@ -872,6 +1017,11 @@ export function Prompt(props: PromptProps) {
               onSubmit={submit}
               onPaste={async (event: PasteEvent) => {
                 if (props.disabled) {
+                  event.preventDefault()
+                  return
+                }
+
+                if (store.historySearch.active) {
                   event.preventDefault()
                   return
                 }
@@ -1072,6 +1222,31 @@ export function Prompt(props: PromptProps) {
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
               <Switch>
+                <Match when={store.historySearch.active}>
+                  <text fg={theme.primary}>
+                    (reverse-i-search)`<span style={{ fg: theme.accent }}>{store.historySearch.query}</span>
+                    ':{" "}
+                    {(() => {
+                      const matches = historySearchMatches()
+                      const count = matches.length
+                      if (count === 0) return <span style={{ fg: theme.textMuted }}>no matches</span>
+                      return (
+                        <span style={{ fg: theme.textMuted }}>
+                          {store.historySearch.matchIndex + 1}/{count}
+                        </span>
+                      )
+                    })()}
+                  </text>
+                  <text fg={theme.textMuted}>
+                    {keybind.print("history_search")} <span style={{ fg: theme.textMuted }}>next</span>
+                  </text>
+                  <text fg={theme.textMuted}>
+                    esc <span style={{ fg: theme.textMuted }}>cancel</span>
+                  </text>
+                  <text fg={theme.textMuted}>
+                    enter <span style={{ fg: theme.textMuted }}>select</span>
+                  </text>
+                </Match>
                 <Match when={store.mode === "normal"}>
                   <text fg={theme.text}>
                     {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
