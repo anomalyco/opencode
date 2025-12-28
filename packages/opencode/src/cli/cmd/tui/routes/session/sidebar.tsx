@@ -1,8 +1,9 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, For, Show, Switch, Match, createResource, createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
+import { fetchPlanUsageWithCache, formatResetTime, getPercentage } from "@/provider/plan-usage"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
@@ -48,8 +49,12 @@ export function Sidebar(props: { sessionID: string }) {
     }).format(total)
   })
 
+  const lastAssistantMessage = createMemo(
+    () => messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage | undefined,
+  )
+
   const context = createMemo(() => {
-    const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
+    const last = lastAssistantMessage()
     if (!last) return
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
@@ -57,7 +62,19 @@ export function Sidebar(props: { sessionID: string }) {
     return {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      providerID: last.providerID,
     }
+  })
+
+  const [planUsage, { refetch }] = createResource(
+    () => context()?.providerID,
+    (providerID) => fetchPlanUsageWithCache(providerID, sync.data.provider),
+  )
+
+  // Refetch plan usage when messages are added (user or assistant)
+  createEffect(() => {
+    messages().length
+    refetch()
   })
 
   const directory = useDirectory()
@@ -96,6 +113,17 @@ export function Sidebar(props: { sessionID: string }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={planUsage()?.planUsage}>
+              {(data) => (
+                <box>
+                  <text fg={theme.text}>
+                    <b>Plan Usage</b>
+                  </text>
+                  <text fg={theme.textMuted}>{getPercentage(data())}% used</text>
+                  <text fg={theme.textMuted}>{formatResetTime(data().resetAt)}</text>
+                </box>
+              )}
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
