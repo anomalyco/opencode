@@ -18,7 +18,7 @@ export type TuiOptions = {
   config?: Config
 }
 
-export async function createOpencodeServer(options?: ServerOptions) {
+export async function createOpenDeepSeekServer(options?: ServerOptions) {
   options = Object.assign(
     {
       hostname: "127.0.0.1",
@@ -28,11 +28,11 @@ export async function createOpencodeServer(options?: ServerOptions) {
     options ?? {},
   )
 
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`], {
+  const proc = spawn(`opendeepseek`, [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`], {
     signal: options.signal,
     env: {
       ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
+      OPENDEEPSEEK_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
     },
   })
 
@@ -87,7 +87,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
   }
 }
 
-export function createOpencodeTui(options?: TuiOptions) {
+export function createOpenDeepSeekTui(options?: TuiOptions) {
   const args = []
 
   if (options?.project) {
@@ -103,12 +103,12 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = spawn(`opencode`, args, {
+  const proc = spawn(`opendeepseek`, args, {
     signal: options?.signal,
     stdio: "inherit",
     env: {
       ...process.env,
-      OPENCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
+      OPENDEEPSEEK_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
     },
   })
 

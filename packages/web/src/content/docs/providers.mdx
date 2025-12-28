@@ -33,7 +33,7 @@ config.
 
 You can customize the base URL for any provider by setting the `baseURL` option. This is useful when using proxy services or custom endpoints.
 
-```json title="opencode.json" {6}
+```json title="opendeepseek.json" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -603,7 +603,7 @@ In the event you see a feature or model from Helicone that isn't configured auto
 
 Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need this to grab the IDs of the models you want to add.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/opencode/opendeepseek.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -631,7 +631,7 @@ Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need thi
 
 Helicone supports custom headers for features like caching, user tracking, and session management. Add them to your provider config using `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/opencode/opendeepseek.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -642,7 +642,7 @@ Helicone supports custom headers for features like caching, user tracking, and s
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "opendeepseek",
         },
       },
     },
@@ -660,7 +660,7 @@ npm install -g opencode-helicone-session
 
 Add it to your config.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "plugin": ["opencode-helicone-session"]
 }
@@ -685,7 +685,7 @@ See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/he
 
 You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="opendeepseek.json" "llama.cpp" {5, 6, 8, 10-15}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -752,7 +752,7 @@ IO.NET offers 17 models optimized for various use cases:
 
 You can configure opencode to use local models through LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="opendeepseek.json" "lmstudio" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -842,7 +842,7 @@ To use Kimi K2 from Moonshot AI:
 
 You can configure opencode to use local models through Ollama.
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="opendeepseek.json" "ollama" {5, 6, 8, 10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {
@@ -998,7 +998,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
    You can also add additional models through your opencode config.
 
-   ```json title="opencode.json" {6}
+   ```json title="opendeepseek.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1013,7 +1013,7 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 5. You can also customize them through your opencode config. Here's an example of specifying a provider
 
-   ```json title="opencode.json"
+   ```json title="opendeepseek.json"
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1254,7 +1254,7 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
 
    You can also add additional models through your opencode config.
 
-   ```json title="opencode.json" {6}
+   ```json title="opendeepseek.json" {6}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1313,16 +1313,16 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in opendeepseek.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Create or update your `opencode.json` file in your project directory:
+4. Create or update your `opendeepseek.json` file in your project directory:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="opendeepseek.json" ""myprovider"" {5-15}
    {
      "$schema": "https://opencode.ai/config.json",
      "provider": {
@@ -1360,7 +1360,7 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
 Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="opendeepseek.json" {9,11,17-20}
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {

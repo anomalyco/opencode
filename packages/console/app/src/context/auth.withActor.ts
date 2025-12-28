@@ -1,4 +1,4 @@
-import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Actor } from "@opendeepseek/console-core/actor.js"
 import { getActor } from "./auth"
 
 export async function withActor<T>(fn: () => T, workspace?: string) {

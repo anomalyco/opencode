@@ -3,19 +3,19 @@ import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
-import { Avatar } from "@opencode-ai/ui/avatar"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { getFilename } from "@opencode-ai/util/path"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session } from "@opencode-ai/sdk/v2/client"
+import { base64Decode, base64Encode } from "@opendeepseek/util/encode"
+import { Avatar } from "@opendeepseek/ui/avatar"
+import { ResizeHandle } from "@opendeepseek/ui/resize-handle"
+import { Button } from "@opendeepseek/ui/button"
+import { Icon } from "@opendeepseek/ui/icon"
+import { IconButton } from "@opendeepseek/ui/icon-button"
+import { Tooltip } from "@opendeepseek/ui/tooltip"
+import { Collapsible } from "@opendeepseek/ui/collapsible"
+import { DiffChanges } from "@opendeepseek/ui/diff-changes"
+import { Spinner } from "@opendeepseek/ui/spinner"
+import { getFilename } from "@opendeepseek/util/path"
+import { DropdownMenu } from "@opendeepseek/ui/dropdown-menu"
+import { Session } from "@opendeepseek/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore, produce } from "solid-js/store"
 import {
@@ -28,13 +28,13 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { showToast, Toast } from "@opencode-ai/ui/toast"
+import { showToast, Toast } from "@opendeepseek/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@opendeepseek/util/binary"
 import { Header } from "@/components/header"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectProvider } from "@/components/dialog-select-provider"
+import { useDialog } from "@opendeepseek/ui/context/dialog"
+import { DialogConnectProvider } from "@/components/dialog-connect-provider"
 import { useCommand } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
@@ -65,7 +65,7 @@ export default function Layout(props: ParentProps) {
           persistent: true,
           icon: "download",
           title: "Update available",
-          description: `A new version of OpenCode (${version}) is now available to install.`,
+          description: `A new version of Open DeepSeek (${version}) is now available to install.`,
           actions: [
             {
               label: "Install and restart",
@@ -209,18 +209,18 @@ export default function Layout(props: ParentProps) {
     },
     ...(platform.openDirectoryPickerDialog
       ? [
-          {
-            id: "project.open",
-            title: "Open project",
-            category: "Project",
-            keybind: "mod+o",
-            onSelect: () => chooseProject(),
-          },
-        ]
+        {
+          id: "project.open",
+          title: "Open project",
+          category: "Project",
+          keybind: "mod+o",
+          onSelect: () => chooseProject(),
+        },
+      ]
       : []),
     {
       id: "provider.connect",
-      title: "Connect provider",
+      title: "Connect DeepSeek",
       category: "Provider",
       onSelect: () => connectProvider(),
     },
@@ -252,7 +252,7 @@ export default function Layout(props: ParentProps) {
   ])
 
   function connectProvider() {
-    dialog.show(() => <DialogSelectProvider />)
+    dialog.show(() => <DialogConnectProvider provider="deepseek" />)
   }
 
   function navigateToProject(directory: string | undefined) {
@@ -464,14 +464,14 @@ export default function Layout(props: ParentProps) {
                         {Math.abs(updated().diffNow().as("seconds")) < 60
                           ? "Now"
                           : updated()
-                              .toRelative({
-                                style: "short",
-                                unit: ["days", "hours", "minutes"],
-                              })
-                              ?.replace(" ago", "")
-                              ?.replace(/ days?/, "d")
-                              ?.replace(" min.", "m")
-                              ?.replace(" hr.", "h")}
+                            .toRelative({
+                              style: "short",
+                              unit: ["days", "hours", "minutes"],
+                            })
+                            ?.replace(" ago", "")
+                            ?.replace(/ days?/, "d")
+                            ?.replace(" min.", "m")
+                            ?.replace(" hr.", "h")}
                       </span>
                     </Match>
                   </Switch>
@@ -732,23 +732,23 @@ export default function Layout(props: ParentProps) {
                 <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                   <div class="p-3 flex flex-col gap-2">
                     <div class="text-12-medium text-text-strong">Getting started</div>
-                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
-                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                    <div class="text-text-base">Connect your DeepSeek API key to start using DeepSeek models.</div>
+                    <div class="text-text-base">Get your API key from platform.deepseek.com</div>
                   </div>
-                  <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                  <Tooltip placement="right" value="Connect DeepSeek" inactive={layout.sidebar.opened()}>
                     <Button
                       class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
                       size="large"
                       icon="plus"
                       onClick={connectProvider}
                     >
-                      <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                      <Show when={layout.sidebar.opened()}>Connect DeepSeek</Show>
                     </Button>
                   </Tooltip>
                 </div>
               </Match>
               <Match when={true}>
-                <Tooltip placement="right" value="Connect provider" inactive={layout.sidebar.opened()}>
+                <Tooltip placement="right" value="Connect DeepSeek" inactive={layout.sidebar.opened()}>
                   <Button
                     class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                     variant="ghost"
@@ -756,7 +756,7 @@ export default function Layout(props: ParentProps) {
                     icon="plus"
                     onClick={connectProvider}
                   >
-                    <Show when={layout.sidebar.opened()}>Connect provider</Show>
+                    <Show when={layout.sidebar.opened()}>Connect DeepSeek</Show>
                   </Button>
                 </Tooltip>
               </Match>

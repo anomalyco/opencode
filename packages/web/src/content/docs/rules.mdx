@@ -81,11 +81,11 @@ If you have both global and project-specific rules, opencode will combine them t
 
 ## Custom Instructions
 
-You can specify custom instruction files in your `opencode.json` or the global `~/.config/opencode/opencode.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.
+You can specify custom instruction files in your `opendeepseek.json` or the global `~/.config/opencode/opendeepseek.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.
 
 Example:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -100,11 +100,11 @@ All instruction files are combined with your `AGENTS.md` files.
 
 While opencode doesn't automatically parse file references in `AGENTS.md`, you can achieve similar functionality in two ways:
 
-### Using opencode.json
+### Using opendeepseek.json
 
-The recommended approach is to use the `instructions` field in `opencode.json`:
+The recommended approach is to use the `instructions` field in `opendeepseek.json`:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
@@ -148,5 +148,5 @@ This approach allows you to:
 - Ensure opencode loads files only when needed for the specific task
 
 :::tip
-For monorepos or projects with shared standards, using `opencode.json` with glob patterns (like `packages/*/AGENTS.md`) is more maintainable than manual instructions.
+For monorepos or projects with shared standards, using `opendeepseek.json` with glob patterns (like `packages/*/AGENTS.md`) is more maintainable than manual instructions.
 :::

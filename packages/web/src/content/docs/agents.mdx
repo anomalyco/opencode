@@ -112,9 +112,9 @@ You can customize the built-in agents or create your own through configuration. 
 
 ### JSON
 
-Configure agents in your `opencode.json` config file:
+Configure agents in your `opendeepseek.json` config file:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -158,7 +158,7 @@ Configure agents in your `opencode.json` config file:
 You can also define agents using markdown files. Place them in:
 
 - Global: `~/.config/opencode/agent/`
-- Per-project: `.opencode/agent/`
+- Per-project: `.opendeepseek/agent/`
 
 ```markdown title="~/.config/opencode/agent/review.md"
 ---
@@ -196,7 +196,7 @@ Let's look at these configuration options in detail.
 
 Use the `description` option to provide a brief description of what the agent does and when to use it.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "review": {
@@ -216,7 +216,7 @@ Control the randomness and creativity of the LLM's responses with the `temperatu
 
 Lower values make responses more focused and deterministic, while higher values increase creativity and variability.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "plan": {
@@ -235,7 +235,7 @@ Temperature values typically range from 0.0 to 1.0:
 - **0.3-0.5**: Balanced responses with some creativity, good for general development tasks
 - **0.6-1.0**: More creative and varied responses, useful for brainstorming and exploration
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "analyze": {
@@ -263,7 +263,7 @@ Control the maximum number of agentic iterations an agent can perform before bei
 
 If this is not set, the agent will continue to iterate until the model chooses to stop or the user interrupts the session.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "quick-thinker": {
@@ -283,7 +283,7 @@ When the limit is reached, the agent receives a special system prompt instructin
 
 Set to `true` to disable the agent.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "review": {
@@ -299,7 +299,7 @@ Set to `true` to disable the agent.
 
 Specify a custom system prompt file for this agent with the `prompt` config. The prompt file should contain instructions specific to the agent's purpose.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "review": {
@@ -321,7 +321,7 @@ Use the `model` config to override the model for this agent. Useful for using di
 If you don’t specify a model, primary agents use the [model globally configured](/docs/config#models) while subagents will use the model of the primary agent that invoked the subagent.
 :::
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "plan": {
@@ -339,7 +339,7 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 Control which tools are available in this agent with the `tools` config. You can enable or disable specific tools by setting them to `true` or `false`.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="opendeepseek.json" {3-6,9-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -363,7 +363,7 @@ The agent-specific config overrides the global config.
 
 You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -390,7 +390,7 @@ You can configure permissions to manage what actions an agent can take. Currentl
 - `"allow"` — Allow all operations without approval
 - `"deny"` — Disable the tool
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -401,7 +401,7 @@ You can configure permissions to manage what actions an agent can take. Currentl
 
 You can override these permissions per agent.
 
-```json title="opencode.json" {3-5,8-10}
+```json title="opendeepseek.json" {3-5,8-10}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -437,7 +437,7 @@ Only analyze code and suggest changes.
 
 You can set permissions for specific bash commands.
 
-```json title="opencode.json" {7}
+```json title="opendeepseek.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -454,7 +454,7 @@ You can set permissions for specific bash commands.
 
 This can take a glob pattern.
 
-```json title="opencode.json" {7}
+```json title="opendeepseek.json" {7}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -472,7 +472,7 @@ This can take a glob pattern.
 And you can also use the `*` wildcard to manage permissions for all commands.
 Where the specific rule can override the `*` wildcard.
 
-```json title="opencode.json" {8}
+```json title="opendeepseek.json" {8}
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -496,7 +496,7 @@ Where the specific rule can override the `*` wildcard.
 
 Control the agent's mode with the `mode` config. The `mode` option is used to determine how the agent can be used.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "agent": {
     "review": {
@@ -516,7 +516,7 @@ Any other options you specify in your agent configuration will be **passed throu
 
 For example, with OpenAI's reasoning models, you can control the reasoning effort:
 
-```json title="opencode.json" {6,7}
+```json title="opendeepseek.json" {6,7}
 {
   "agent": {
     "deep-thinker": {

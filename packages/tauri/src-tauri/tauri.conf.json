@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OpenCode Dev",
-  "identifier": "ai.opencode.desktop.dev",
-  "mainBinaryName": "OpenCode",
+  "productName": "Open DeepSeek",
+  "identifier": "com.opendeepseek.desktop",
+  "mainBinaryName": "Open DeepSeek",
   "version": "../package.json",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,8 +26,16 @@
       "icons/dev/icon.ico"
     ],
     "active": true,
-    "targets": ["deb", "rpm", "dmg", "nsis", "app"],
-    "externalBin": ["sidecars/opencode-cli"],
+    "targets": [
+      "deb",
+      "rpm",
+      "dmg",
+      "nsis",
+      "app"
+    ],
+    "externalBin": [
+      "sidecars/opendeepseek-cli"
+    ],
     "macOS": {
       "entitlements": "./entitlements.plist"
     },

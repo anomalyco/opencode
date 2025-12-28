@@ -1,9 +1,9 @@
-import solidPlugin from "./packages/opencode/node_modules/@opentui/solid/scripts/solid-plugin"
+import solidPlugin from "./packages/opendeepseek/node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
 
 const version = "@VERSION@"
-const pkg = path.join(process.cwd(), "packages/opencode")
+const pkg = path.join(process.cwd(), "packages/opendeepseek")
 const parser = fs.realpathSync(path.join(pkg, "./node_modules/@opentui/core/parser.worker.js"))
 const worker = "./src/cli/cmd/tui/worker.ts"
 const target = process.env["BUN_COMPILE_TARGET"]
@@ -53,13 +53,13 @@ const result = await Bun.build({
   sourcemap: "external",
   entrypoints: ["./src/index.ts", parser, worker],
   define: {
-    OPENCODE_VERSION: `'@VERSION@'`,
+    OPENDEEPSEEK_VERSION: `'@VERSION@'`,
     OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(pkg, parser).replace(/\\/g, "/"),
-    OPENCODE_CHANNEL: "'latest'",
+    OPENDEEPSEEK_CHANNEL: "'latest'",
   },
   compile: {
     target,
-    outfile: "opencode",
+    outfile: "opendeepseek",
     execArgv: ["--user-agent=opencode/" + version, '--env-file=""', "--"],
     windows: {},
   },
@@ -83,7 +83,7 @@ const bundle = await Bun.build({
   tsconfig: "./tsconfig.json",
   plugins: [solidPlugin],
   target: "bun",
-  outdir: "./.opencode-worker",
+  outdir: "./.opendeepseek-worker",
   sourcemap: "none",
 })
 

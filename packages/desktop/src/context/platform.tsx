@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opendeepseek/ui/context"
 import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 
 export type Platform = {

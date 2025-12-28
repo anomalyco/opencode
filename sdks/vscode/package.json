@@ -1,6 +1,6 @@
 {
-  "name": "opencode",
-  "displayName": "opencode",
+  "name": "@opendeepseek/vscode",
+  "displayName": "opendeepseek",
   "description": "opencode for VS Code",
   "version": "1.0.181",
   "publisher": "sst-dev",
@@ -15,7 +15,7 @@
     "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.94.0"
+    "node": ">=20.0.0"
   },
   "categories": [
     "Other"
@@ -104,5 +104,6 @@
     "typescript": "^5.8.3",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2"
-  }
+  },
+  "packageManager": "npm@10.8.2"
 }

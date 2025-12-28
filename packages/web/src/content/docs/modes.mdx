@@ -56,9 +56,9 @@ You can customize the built-in modes or create your own through configuration. M
 
 ### JSON Configuration
 
-Configure modes in your `opencode.json` config file:
+Configure modes in your `opendeepseek.json` config file:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
@@ -88,7 +88,7 @@ Configure modes in your `opencode.json` config file:
 You can also define modes using markdown files. Place them in:
 
 - Global: `~/.config/opencode/mode/`
-- Project: `.opencode/mode/`
+- Project: `.opendeepseek/mode/`
 
 ```markdown title="~/.config/opencode/mode/review.md"
 ---
@@ -120,7 +120,7 @@ Let's look at these configuration options in detail.
 
 Use the `model` config to override the default model for this mode. Useful for using different models optimized for different tasks. For example, a faster model for planning, a more capable model for implementation.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "mode": {
     "plan": {
@@ -136,7 +136,7 @@ Use the `model` config to override the default model for this mode. Useful for u
 
 Control the randomness and creativity of the AI's responses with the `temperature` config. Lower values make responses more focused and deterministic, while higher values increase creativity and variability.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "mode": {
     "plan": {
@@ -155,7 +155,7 @@ Temperature values typically range from 0.0 to 1.0:
 - **0.3-0.5**: Balanced responses with some creativity, good for general development tasks
 - **0.6-1.0**: More creative and varied responses, useful for brainstorming and exploration
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "mode": {
     "analyze": {
@@ -181,7 +181,7 @@ If no temperature is specified, opencode uses model-specific defaults (typically
 
 Specify a custom system prompt file for this mode with the `prompt` config. The prompt file should contain instructions specific to the mode's purpose.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "mode": {
     "review": {
@@ -247,7 +247,7 @@ You can create your own custom modes by adding them to the configuration. Here a
 
 ### Using JSON configuration
 
-```json title="opencode.json" {4-14}
+```json title="opendeepseek.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "mode": {
@@ -268,9 +268,9 @@ You can create your own custom modes by adding them to the configuration. Here a
 
 ### Using markdown files
 
-Create mode files in `.opencode/mode/` for project-specific modes or `~/.config/opencode/mode/` for global modes:
+Create mode files in `.opendeepseek/mode/` for project-specific modes or `~/.config/opencode/mode/` for global modes:
 
-```markdown title=".opencode/mode/debug.md"
+```markdown title=".opendeepseek/mode/debug.md"
 ---
 temperature: 0.1
 tools:

@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "@opencode-ai/docs",
+  "name": "@opendeepseek/docs",
   "colors": {
     "primary": "#16A34A",
     "light": "#07C983",

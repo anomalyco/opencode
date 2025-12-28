@@ -1,11 +1,12 @@
 import { useGlobalSync } from "@/context/global-sync"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { Logo } from "@opencode-ai/ui/logo"
+import { Button } from "@opendeepseek/ui/button"
+import { Logo } from "@opendeepseek/ui/logo"
+
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { Icon } from "@opencode-ai/ui/icon"
+import { base64Encode } from "@opendeepseek/util/encode"
+import { Icon } from "@opendeepseek/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 
@@ -37,7 +38,7 @@ export default function Home() {
 
   return (
     <div class="mx-auto mt-55">
-      <Logo class="w-xl opacity-12" />
+      <Logo class="w-2xl opacity-100" />
       <Switch>
         <Match when={sync.data.project.length > 0}>
           <div class="mt-20 w-full flex flex-col gap-4">

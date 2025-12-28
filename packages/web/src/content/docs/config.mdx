@@ -11,11 +11,11 @@ You can configure OpenCode using a JSON config file.
 
 OpenCode supports both **JSON** and **JSONC** (JSON with Comments) formats.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="opendeepseek.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   // Theme configuration
-  "theme": "opencode",
+  "theme": "opendeepseek",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
 }
@@ -31,20 +31,20 @@ different order of precedence.
 :::note[Config Merging]
 Configuration files are **merged together**, not replaced. Settings from all config locations are combined using a deep merge strategy, where later configs override earlier ones only for conflicting keys. Non-conflicting settings from all configs are preserved.
 
-For example, if your global config sets `theme: "opencode"` and `autoupdate: true`, and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include all three settings.
+For example, if your global config sets `theme: "opendeepseek"` and `autoupdate: true`, and your project config sets `model: "anthropic/claude-sonnet-4-5"`, the final configuration will include all three settings.
 :::
 
 ---
 
 ### Global
 
-Place your global OpenCode config in `~/.config/opencode/opencode.json`. You'll want to use the global config for things like themes, providers, or keybinds.
+Place your global OpenCode config in `~/.config/opencode/opendeepseek.json`. You'll want to use the global config for things like themes, providers, or keybinds.
 
 ---
 
 ### Per project
 
-You can also add a `opencode.json` in your project. Settings from this config are merged with and can override the global config. This is useful for configuring providers or modes specific to your project.
+You can also add a `opendeepseek.json` in your project. Settings from this config are merged with and can override the global config. This is useful for configuring providers or modes specific to your project.
 
 :::tip
 Place project specific config in the root of your project.
@@ -58,10 +58,10 @@ This is also safe to be checked into Git and uses the same schema as the global 
 
 ### Custom path
 
-You can also specify a custom config file path using the `OPENCODE_CONFIG` environment variable. Settings from this config are merged with and can override the global and project configs.
+You can also specify a custom config file path using the `OPENDEEPSEEK_CONFIG` environment variable. Settings from this config are merged with and can override the global and project configs.
 
 ```bash
-export OPENCODE_CONFIG=/path/to/my/custom-config.json
+export OPENDEEPSEEK_CONFIG=/path/to/my/custom-config.json
 opencode run "Hello world"
 ```
 
@@ -69,17 +69,17 @@ opencode run "Hello world"
 
 ### Custom directory
 
-You can specify a custom config directory using the `OPENCODE_CONFIG_DIR`
+You can specify a custom config directory using the `OPENDEEPSEEK_CONFIG_DIR`
 environment variable. This directory will be searched for agents, commands,
-modes, and plugins just like the standard `.opencode` directory, and should
+modes, and plugins just like the standard `.opendeepseek` directory, and should
 follow the same structure.
 
 ```bash
-export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
+export OPENDEEPSEEK_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
-Note: The custom directory is loaded after the global config and `.opencode` directories, so it can override their settings.
+Note: The custom directory is loaded after the global config and `.opendeepseek` directories, so it can override their settings.
 
 ---
 
@@ -95,7 +95,7 @@ Your editor should be able to validate and autocomplete based on the schema.
 
 You can configure TUI-specific settings through the `tui` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tui": {
@@ -120,7 +120,7 @@ Available options:
 
 You can manage the tools an LLM can use through the `tools` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -138,7 +138,7 @@ You can manage the tools an LLM can use through the `tools` option.
 
 You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
@@ -157,7 +157,7 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 You can configure the theme you want to use in your OpenCode config through the `theme` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "theme": ""
@@ -172,7 +172,7 @@ You can configure the theme you want to use in your OpenCode config through the 
 
 You can configure specialized agents for specific tasks through the `agent` option.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="opendeepseek.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
@@ -190,7 +190,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
 }
 ```
 
-You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
+You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opendeepseek/agent/`. [Learn more here](/docs/agents).
 
 ---
 
@@ -198,7 +198,7 @@ You can also define agents using markdown files in `~/.config/opencode/agent/` o
 
 You can set the default agent using the `default_agent` option. This determines which agent is used when none is explicitly specified.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "plan"
@@ -215,7 +215,7 @@ This setting applies across all interfaces: TUI, CLI (`opencode run`), desktop a
 
 You can configure the [share](/docs/share) feature through the `share` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "share": "manual"
@@ -236,7 +236,7 @@ By default, sharing is set to manual mode where you need to explicitly share con
 
 You can configure custom commands for repetitive tasks through the `command` option.
 
-```jsonc title="opencode.jsonc"
+```jsonc title="opendeepseek.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -254,7 +254,7 @@ You can configure custom commands for repetitive tasks through the `command` opt
 }
 ```
 
-You can also define commands using markdown files in `~/.config/opencode/command/` or `.opencode/command/`. [Learn more here](/docs/commands).
+You can also define commands using markdown files in `~/.config/opencode/command/` or `.opendeepseek/command/`. [Learn more here](/docs/commands).
 
 ---
 
@@ -262,7 +262,7 @@ You can also define commands using markdown files in `~/.config/opencode/command
 
 You can customize your keybinds through the `keybinds` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "keybinds": {}
@@ -277,7 +277,7 @@ You can customize your keybinds through the `keybinds` option.
 
 OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "autoupdate": false
@@ -292,7 +292,7 @@ If you don't want updates but want to be notified when a new version is availabl
 
 You can configure code formatters through the `formatter` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -320,7 +320,7 @@ By default, opencode **allows all operations** without requiring explicit approv
 
 For example, to ensure that the `edit` and `bash` tools require user approval:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -338,7 +338,7 @@ For example, to ensure that the `edit` and `bash` tools require user approval:
 
 You can configure MCP servers you want to use through the `mcp` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {}
@@ -353,7 +353,7 @@ You can configure MCP servers you want to use through the `mcp` option.
 
 You can configure the instructions for the model you're using through the `instructions` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
@@ -369,7 +369,7 @@ about rules here](/docs/rules).
 
 You can disable providers that are loaded automatically through the `disabled_providers` option. This is useful when you want to prevent certain providers from being loaded even if their credentials are available.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "disabled_providers": ["openai", "gemini"]
@@ -388,7 +388,7 @@ The `disabled_providers` option accepts an array of provider IDs. When a provide
 
 You can specify an allowlist of providers through the `enabled_providers` option. When set, only the specified providers will be enabled and all others will be ignored.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "enabled_providers": ["anthropic", "openai"]
@@ -413,10 +413,10 @@ You can use variable substitution in your config files to reference environment 
 
 Use `{env:VARIABLE_NAME}` to substitute environment variables:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "{env:OPENCODE_MODEL}",
+  "model": "{env:OPENDEEPSEEK_MODEL}",
   "provider": {
     "anthropic": {
       "models": {},
@@ -436,7 +436,7 @@ If the environment variable is not set, it will be replaced with an empty string
 
 Use `{file:path/to/file}` to substitute the contents of a file:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["./custom-instructions.md"],

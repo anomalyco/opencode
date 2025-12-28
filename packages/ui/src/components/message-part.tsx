@@ -8,7 +8,7 @@ import {
   TextPart,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk/v2"
+} from "@opendeepseek/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
@@ -19,8 +19,8 @@ import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
-import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+import { getDirectory as _getDirectory, getFilename } from "@opendeepseek/util/path"
+import { checksum } from "@opendeepseek/util/encode"
 
 interface Diagnostic {
   range: {

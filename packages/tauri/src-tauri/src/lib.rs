@@ -76,9 +76,9 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
 }
 
 fn get_sidecar_port() -> u32 {
-    option_env!("OPENCODE_PORT")
+    option_env!("OPENDEEPSEEK_PORT")
         .map(|s| s.to_string())
-        .or_else(|| std::env::var("OPENCODE_PORT").ok())
+        .or_else(|| std::env::var("OPENDEEPSEEK_PORT").ok())
         .and_then(|port_str| port_str.parse().ok())
         .unwrap_or_else(|| {
             TcpListener::bind("127.0.0.1:0")
@@ -89,6 +89,7 @@ fn get_sidecar_port() -> u32 {
         }) as u32
 }
 
+#[allow(dead_code)]
 fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
@@ -100,13 +101,13 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
     #[cfg(target_os = "windows")]
     let (mut rx, child) = app
         .shell()
-        .sidecar("opencode-cli")
+        .sidecar("opendeepseek-cli")
         .unwrap()
-        .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-        .env("OPENCODE_CLIENT", "desktop")
+        .env("OPENDEEPSEEK_EXPERIMENTAL_ICON_DISCOVERY", "true")
+        .env("OPENDEEPSEEK_CLIENT", "desktop")
         .args(["serve", &format!("--port={port}")])
         .spawn()
-        .expect("Failed to spawn opencode");
+        .expect("Failed to spawn opendeepseek");
 
     #[cfg(not(target_os = "windows"))]
     let (mut rx, child) = {
@@ -114,19 +115,19 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
             .expect("Failed to get current exe")
             .parent()
             .expect("Failed to get parent dir")
-            .join("opencode-cli");
+            .join("opendeepseek-cli");
         let shell = get_user_shell();
         app.shell()
             .command(&shell)
-            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-            .env("OPENCODE_CLIENT", "desktop")
+            .env("OPENDEEPSEEK_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("OPENDEEPSEEK_CLIENT", "desktop")
             .args([
                 "-il",
                 "-c",
                 &format!("{} serve --port={}", sidecar_path.display(), port),
             ])
             .spawn()
-            .expect("Failed to spawn opencode")
+            .expect("Failed to spawn opendeepseek")
     };
 
     tauri::async_runtime::spawn(async move {
@@ -215,7 +216,7 @@ pub fn run() {
                     loop {
                         if timestamp.elapsed() > Duration::from_secs(7) {
                             let res = app.dialog()
-                              .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
+                              .message("Failed to spawn opendeepseek Server. Copy logs using the button below and send them to the team for assistance.")
                               .title("Startup Failed")
                               .buttons(MessageDialogButtons::OkCancelCustom("Copy Logs And Exit".to_string(), "Exit".to_string()))
                               .blocking_show_with_result();
@@ -254,18 +255,18 @@ pub fn run() {
                     .map(|m| m.size().to_logical(m.scale_factor()))
                     .unwrap_or(LogicalSize::new(1920, 1080));
 
-                let mut window_builder =
+                let window_builder =
                     WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                        .title("OpenCode")
+                        .title("Open DeepSeek")
                         .inner_size(size.width as f64, size.height as f64)
                         .decorations(true)
                         .zoom_hotkeys_enabled(true)
                         .disable_drag_drop_handler()
                         .initialization_script(format!(
                             r#"
-                          window.__OPENCODE__ ??= {{}};
-                          window.__OPENCODE__.updaterEnabled = {updater_enabled};
-                          window.__OPENCODE__.port = {port};
+                          window.__OPENDEEPSEEK__ ??= {{}};
+                          window.__OPENDEEPSEEK__.updaterEnabled = {updater_enabled};
+                          window.__OPENDEEPSEEK__.port = {port};
                         "#
                         ));
 

@@ -1,11 +1,11 @@
 import { Component, createMemo, Show } from "solid-js"
 import { useLocal } from "@/context/local"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opendeepseek/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
-import { Button } from "@opencode-ai/ui/button"
-import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
+import { Button } from "@opendeepseek/ui/button"
+import { Tag } from "@opendeepseek/ui/tag"
+import { Dialog } from "@opendeepseek/ui/dialog"
+import { List } from "@opendeepseek/ui/list"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 
@@ -63,7 +63,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
         {(i) => (
           <div class="w-full flex items-center gap-x-2.5">
             <span>{i.name}</span>
-            <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+            <Show when={i.provider.id === "opendeepseek" && (!i.cost || i.cost?.input === 0)}>
               <Tag>Free</Tag>
             </Show>
             <Show when={i.latest}>

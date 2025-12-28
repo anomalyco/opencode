@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opendeepseek/ui/context"
 import { batch, createMemo } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { TextSelection } from "./local"

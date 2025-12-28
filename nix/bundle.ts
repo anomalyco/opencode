@@ -7,8 +7,8 @@ import fs from "fs"
 const dir = process.cwd()
 const parser = fs.realpathSync(path.join(dir, "node_modules/@opentui/core/parser.worker.js"))
 const worker = "./src/cli/cmd/tui/worker.ts"
-const version = process.env.OPENCODE_VERSION ?? "local"
-const channel = process.env.OPENCODE_CHANNEL ?? "local"
+const version = process.env.OPENDEEPSEEK_VERSION ?? "local"
+const channel = process.env.OPENDEEPSEEK_CHANNEL ?? "local"
 
 fs.rmSync(path.join(dir, "dist"), { recursive: true, force: true })
 
@@ -21,10 +21,10 @@ const result = await Bun.build({
   plugins: [solidPlugin],
   external: ["@opentui/core"],
   define: {
-    OPENCODE_VERSION: `'${version}'`,
-    OPENCODE_CHANNEL: `'${channel}'`,
+    OPENDEEPSEEK_VERSION: `'${version}'`,
+    OPENDEEPSEEK_CHANNEL: `'${channel}'`,
     // Leave undefined so runtime picks bundled/dist worker or fallback in code.
-    OPENCODE_WORKER_PATH: "undefined",
+    OPENDEEPSEEK_WORKER_PATH: "undefined",
     OTUI_TREE_SITTER_WORKER_PATH: 'new URL("./cli/cmd/tui/parser.worker.js", import.meta.url).href',
   },
 })

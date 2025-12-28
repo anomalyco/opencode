@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@opendeepseek/script"
 import { $ } from "bun"
 
 if (!Script.preview) {
@@ -11,4 +11,4 @@ await $`bun install`
 
 await $`gh release download --pattern "opencode-linux-*64.tar.gz" --pattern "opencode-darwin-*64.zip" -D dist`
 
-await import(`../packages/opencode/script/publish-registries.ts`)
+await import(`../packages/opendeepseek/script/publish-registries.ts`)

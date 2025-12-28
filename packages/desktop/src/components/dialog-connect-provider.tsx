@@ -1,23 +1,22 @@
 import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opendeepseek/ui/context/dialog"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
-import { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2/client"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List, ListRef } from "@opencode-ai/ui/list"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Icon } from "@opencode-ai/ui/icon"
-import { showToast } from "@opencode-ai/ui/toast"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { IconName } from "@opencode-ai/ui/icons/provider"
-import { iife } from "@opencode-ai/util/iife"
+import { ProviderAuthAuthorization } from "@opendeepseek/sdk/v2/client"
+import { Dialog } from "@opendeepseek/ui/dialog"
+import { List, ListRef } from "@opendeepseek/ui/list"
+import { Button } from "@opendeepseek/ui/button"
+import { IconButton } from "@opendeepseek/ui/icon-button"
+import { TextField } from "@opendeepseek/ui/text-field"
+import { Spinner } from "@opendeepseek/ui/spinner"
+import { Icon } from "@opendeepseek/ui/icon"
+import { showToast } from "@opendeepseek/ui/toast"
+import { ProviderIcon } from "@opendeepseek/ui/provider-icon"
+import { IconName } from "@opendeepseek/ui/icons/provider"
+import { iife } from "@opendeepseek/util/iife"
 import { Link } from "@/components/link"
-import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogSelectModel } from "./dialog-select-model"
 
 export function DialogConnectProvider(props: { provider: string }) {
@@ -118,10 +117,6 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   function goBack() {
-    if (methods().length === 1) {
-      dialog.show(() => <DialogSelectProvider />)
-      return
-    }
     if (store.authorization) {
       setStore("authorization", undefined)
       setStore("methodIndex", undefined)
@@ -131,7 +126,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       setStore("methodIndex", undefined)
       return
     }
-    dialog.show(() => <DialogSelectProvider />)
+    dialog.close()
   }
 
   return (
@@ -222,7 +217,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                 return (
                   <div class="flex flex-col gap-6">
                     <Switch>
-                      <Match when={provider().id === "opencode"}>
+                      <Match when={provider().id === "opendeepseek"}>
                         <div class="flex flex-col gap-4">
                           <div class="text-14-regular text-text-base">
                             OpenCode Zen gives you access to a curated set of reliable optimized models for coding
@@ -243,7 +238,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                       <Match when={true}>
                         <div class="text-14-regular text-text-base">
                           Enter your {provider().name} API key to connect your account and use {provider().name} models
-                          in OpenCode.
+                          in Open DeepSeek.
                         </div>
                       </Match>
                     </Switch>

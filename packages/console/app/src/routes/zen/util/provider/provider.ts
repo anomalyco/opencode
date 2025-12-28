@@ -1,4 +1,4 @@
-import { ZenData } from "@opencode-ai/console-core/model.js"
+import { ZenData } from "@opendeepseek/console-core/model.js"
 import {
   fromAnthropicChunk,
   fromAnthropicRequest,

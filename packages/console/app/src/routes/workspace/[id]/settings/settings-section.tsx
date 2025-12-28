@@ -2,10 +2,10 @@ import { json, action, useParams, useSubmission, createAsync, query } from "@sol
 import { createEffect, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
-import { Workspace } from "@opencode-ai/console-core/workspace.js"
+import { Workspace } from "@opendeepseek/console-core/workspace.js"
 import styles from "./settings-section.module.css"
-import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
-import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
+import { Database, eq } from "@opendeepseek/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@opendeepseek/console-core/schema/workspace.sql.js"
 
 const getWorkspaceInfo = query(async (workspaceID: string) => {
   "use server"

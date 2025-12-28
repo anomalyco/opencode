@@ -1,5 +1,5 @@
 import { defineConfig } from "vite"
-import desktopPlugin from "@opencode-ai/desktop/vite"
+import desktopPlugin from "@opendeepseek/desktop/vite"
 
 const host = process.env.TAURI_DEV_HOST
 

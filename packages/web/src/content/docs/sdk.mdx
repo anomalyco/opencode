@@ -18,7 +18,7 @@ Use it to build integrations and control opencode programmatically.
 Install the SDK from npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @opendeepseek/sdk
 ```
 
 ---
@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 Create an instance of opencode:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpenDeepSeek } from "@opendeepseek/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createOpenDeepSeek()
 ```
 
 This starts both a server and a client
@@ -49,12 +49,12 @@ This starts both a server and a client
 
 ## Config
 
-You can pass a configuration object to customize behavior. The instance still picks up your `opencode.json`, but you can override or add configuration inline:
+You can pass a configuration object to customize behavior. The instance still picks up your `opendeepseek.json`, but you can override or add configuration inline:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpenDeepSeek } from "@opendeepseek/sdk"
 
-const opencode = await createOpencode({
+const opencode = await createOpenDeepSeek({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 If you already have a running instance of opencode, you can create a client instance to connect to it:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpenDeepSeekClient } from "@opendeepseek/sdk"
 
-const client = createOpencodeClient({
+const client = createOpenDeepSeekClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 The SDK includes TypeScript definitions for all API types. Import them directly:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@opendeepseek/sdk"
 ```
 
 All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.

@@ -35,12 +35,12 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
   ```
 
 - Core pieces:
-  - `packages/opencode`: OpenCode core business logic & server.
-  - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
-  - `packages/plugin`: Source for `@opencode-ai/plugin`
+  - `packages/opendeepseek`: OpenCode core business logic & server.
+  - `packages/opendeepseek/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
+  - `packages/plugin`: Source for `@opendeepseek/plugin`
 
 > [!NOTE]
-> If you make changes to the API or SDK (e.g. `packages/opencode/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
+> If you make changes to the API or SDK (e.g. `packages/opendeepseek/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
 
 Please try to follow the [style guide](./STYLE_GUIDE.md)
 

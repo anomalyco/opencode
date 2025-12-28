@@ -8,7 +8,7 @@
         "@actions/github": "6.0.1",
         "@octokit/graphql": "9.0.1",
         "@octokit/rest": "22.0.0",
-        "@opencode-ai/sdk": "0.5.4",
+        "@opendeepseek/sdk": "0.5.4",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -55,7 +55,7 @@
 
     "@octokit/types": ["@octokit/types@14.1.0", "", { "dependencies": { "@octokit/openapi-types": "^25.1.0" } }, "sha512-1y6DgTy8Jomcpu33N+p5w58l6xyt55Ar2I91RPiIA0xCJBXyUAhXCcmZaDWSANiha7R9a6qJJ2CRomGPZ6f46g=="],
 
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@0.5.4", "", {}, "sha512-bNT9hJgTvmnWGZU4LM90PMy60xOxxCOI5IaGB5voP2EVj+8RdLxmkwuAB4FUHwLo7fNlmxkZp89NVsMYw2Y3Aw=="],
+    "@opendeepseek/sdk": ["@opendeepseek/sdk@0.5.4", "", {}, "sha512-bNT9hJgTvmnWGZU4LM90PMy60xOxxCOI5IaGB5voP2EVj+8RdLxmkwuAB4FUHwLo7fNlmxkZp89NVsMYw2Y3Aw=="],
 
     "@types/bun": ["@types/bun@1.2.20", "", { "dependencies": { "bun-types": "1.2.20" } }, "sha512-dX3RGzQ8+KgmMw7CsW4xT5ITBSCrSbfHc36SNT31EOUg/LA9JWq0VDdEXDRSe1InVWpd2yLUM1FUF/kEOyTzYA=="],
 

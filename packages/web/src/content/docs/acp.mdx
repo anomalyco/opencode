@@ -31,7 +31,7 @@ Add to your [Zed](https://zed.dev) configuration (`~/.config/zed/settings.json`)
 {
   "agent_servers": {
     "OpenCode": {
-      "command": "opencode",
+      "command": "opendeepseek",
       "args": ["acp"]
     }
   }
@@ -53,7 +53,7 @@ You can also bind a keyboard shortcut by editing your `keymap.json`:
             "custom": {
               "name": "OpenCode",
               "command": {
-                "command": "opencode",
+                "command": "opendeepseek",
                 "args": ["acp"]
               }
             }
@@ -93,8 +93,8 @@ Add to your [Avante.nvim](https://github.com/yetone/avante.nvim) configuration:
 ```lua
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["opendeepseek"] = {
+      command = "opendeepseek",
       args = { "acp" }
     }
   }
@@ -106,11 +106,11 @@ If you need to pass environment variables:
 ```lua {6-8}
 {
   acp_providers = {
-    ["opencode"] = {
-      command = "opencode",
+    ["opendeepseek"] = {
+      command = "opendeepseek",
       args = { "acp" },
       env = {
-        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+        OPENDEEPSEEK_API_KEY = os.getenv("OPENDEEPSEEK_API_KEY")
       }
     }
   }
@@ -128,7 +128,7 @@ require("codecompanion").setup({
   strategies = {
     chat = {
       adapter = {
-        name = "opencode",
+        name = "opendeepseek",
         model = "claude-sonnet-4",
       },
     },
@@ -138,7 +138,7 @@ require("codecompanion").setup({
 
 This config sets up CodeCompanion to use OpenCode as the ACP agent for chat.
 
-If you need to pass environment variables (like `OPENCODE_API_KEY`), refer to [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/configuration/adapters#environment-variables-setting-an-api-key) in the CodeCompanion.nvim documentation for full details.
+If you need to pass environment variables (like `OPENDEEPSEEK_API_KEY`), refer to [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/configuration/adapters#environment-variables-setting-an-api-key) in the CodeCompanion.nvim documentation for full details.
 
 ## Support
 

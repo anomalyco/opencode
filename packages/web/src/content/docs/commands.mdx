@@ -17,9 +17,9 @@ Custom commands are in addition to the built-in commands like `/init`, `/undo`, 
 
 Create markdown files in the `command/` directory to define custom commands.
 
-Create `.opencode/command/test.md`:
+Create `.opendeepseek/command/test.md`:
 
-```md title=".opencode/command/test.md"
+```md title=".opendeepseek/command/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -50,7 +50,7 @@ You can add custom commands through the OpenCode config or by creating markdown 
 
 Use the `command` option in your OpenCode [config](/docs/config):
 
-```json title="opencode.jsonc" {4-12}
+```json title="opendeepseek.jsonc" {4-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "command": {
@@ -80,7 +80,7 @@ Now you can run this command in the TUI:
 You can also define commands using markdown files. Place them in:
 
 - Global: `~/.config/opencode/command/`
-- Per-project: `.opencode/command/`
+- Per-project: `.opendeepseek/command/`
 
 ```markdown title="~/.config/opencode/command/test.md"
 ---
@@ -112,7 +112,7 @@ The prompts for the custom commands support several special placeholders and syn
 
 Pass arguments to commands using the `$ARGUMENTS` placeholder.
 
-```md title=".opencode/command/component.md"
+```md title=".opendeepseek/command/component.md"
 ---
 description: Create a new component
 ---
@@ -138,7 +138,7 @@ You can also access individual arguments using positional parameters:
 
 For example:
 
-```md title=".opencode/command/create-file.md"
+```md title=".opendeepseek/command/create-file.md"
 ---
 description: Create a new file with content
 ---
@@ -167,7 +167,7 @@ Use _!`command`_ to inject [bash command](/docs/tui#bash-commands) output into y
 
 For example, to create a custom command that analyzes test coverage:
 
-```md title=".opencode/command/analyze-coverage.md"
+```md title=".opendeepseek/command/analyze-coverage.md"
 ---
 description: Analyze test coverage
 ---
@@ -180,7 +180,7 @@ Based on these results, suggest improvements to increase coverage.
 
 Or to review recent changes:
 
-```md title=".opencode/command/review-changes.md"
+```md title=".opendeepseek/command/review-changes.md"
 ---
 description: Review recent changes
 ---
@@ -199,7 +199,7 @@ Commands run in your project's root directory and their output becomes part of t
 
 Include files in your command using `@` followed by the filename.
 
-```md title=".opencode/command/review-component.md"
+```md title=".opendeepseek/command/review-component.md"
 ---
 description: Review component
 ---
@@ -222,7 +222,7 @@ Let's look at the configuration options in detail.
 
 The `template` option defines the prompt that will be sent to the LLM when the command is executed.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "command": {
     "test": {
@@ -240,7 +240,7 @@ This is a **required** config option.
 
 Use the `description` option to provide a brief description of what the command does.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "command": {
     "test": {
@@ -260,7 +260,7 @@ Use the `agent` config to optionally specify which [agent](/docs/agents) should 
 If this is a [subagent](/docs/agents/#subagents) the command will trigger a subagent invocation by default.
 To disable this behavior, set `subtask` to `false`.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "command": {
     "review": {
@@ -280,7 +280,7 @@ Use the `subtask` boolean to force the command to trigger a [subagent](/docs/age
 This useful if you want the command to not pollute your primary context and will **force** the agent to act as a subagent,
 even if `mode` is set to `primary` on the [agent](/docs/agents) configuration.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "command": {
     "analyze": {
@@ -298,7 +298,7 @@ This is an **optional** config option.
 
 Use the `model` config to override the default model for this command.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "command": {
     "analyze": {

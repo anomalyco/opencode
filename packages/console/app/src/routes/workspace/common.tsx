@@ -1,12 +1,12 @@
-import { Resource } from "@opencode-ai/console-resource"
-import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Resource } from "@opendeepseek/console-resource"
+import { Actor } from "@opendeepseek/console-core/actor.js"
 import { action, json, query } from "@solidjs/router"
 import { withActor } from "~/context/auth.withActor"
-import { Billing } from "@opencode-ai/console-core/billing.js"
-import { User } from "@opencode-ai/console-core/user.js"
-import { and, Database, desc, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
-import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
-import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
+import { Billing } from "@opendeepseek/console-core/billing.js"
+import { User } from "@opendeepseek/console-core/user.js"
+import { and, Database, desc, eq, isNull } from "@opendeepseek/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@opendeepseek/console-core/schema/workspace.sql.js"
+import { UserTable } from "@opendeepseek/console-core/schema/user.sql.js"
 
 export function formatDateForTable(date: Date) {
   const options: Intl.DateTimeFormatOptions = {

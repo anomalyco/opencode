@@ -41,7 +41,7 @@ export default function Home() {
   }
 
   return (
-    <main data-page="opencode">
+    <main data-page="opendeepseek">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>OpenCode | The open source AI coding agent</Title>
       <Link rel="canonical" href={config.baseUrl} />
@@ -122,7 +122,7 @@ export default function Home() {
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">npm i -g </span>
-                        <span data-slot="highlight">opencode-ai</span>
+                        <span data-slot="highlight">opendeepseek-ai</span>
                       </span>
                       <CopyStatus />
                     </button>
@@ -131,7 +131,7 @@ export default function Home() {
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
                         <span data-slot="protocol">bun add -g </span>
-                        <span data-slot="highlight">opencode-ai</span>
+                        <span data-slot="highlight">opendeepseek-ai</span>
                       </span>
                       <CopyStatus />
                     </button>

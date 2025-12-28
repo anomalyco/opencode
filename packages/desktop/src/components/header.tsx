@@ -1,20 +1,20 @@
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLayout } from "@/context/layout"
-import { Session } from "@opencode-ai/sdk/v2/client"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Mark } from "@opencode-ai/ui/logo"
-import { Popover } from "@opencode-ai/ui/popover"
-import { Select } from "@opencode-ai/ui/select"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { base64Decode } from "@opencode-ai/util/encode"
-import { getFilename } from "@opencode-ai/util/path"
+import { Session } from "@opendeepseek/sdk/v2/client"
+import { Button } from "@opendeepseek/ui/button"
+import { Icon } from "@opendeepseek/ui/icon"
+
+import { Popover } from "@opendeepseek/ui/popover"
+import { Select } from "@opendeepseek/ui/select"
+import { TextField } from "@opendeepseek/ui/text-field"
+import { Tooltip } from "@opendeepseek/ui/tooltip"
+import { base64Decode } from "@opendeepseek/util/encode"
+import { getFilename } from "@opendeepseek/util/path"
 import { A, useParams } from "@solidjs/router"
 import { createMemo, createResource, Show } from "solid-js"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { iife } from "@opencode-ai/util/iife"
+import { IconButton } from "@opendeepseek/ui/icon-button"
+import { iife } from "@opendeepseek/util/iife"
 
 export function Header(props: {
   navigateToProject: (directory: string) => void
@@ -37,7 +37,6 @@ export function Header(props: {
         style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
         data-tauri-drag-region
       >
-        <Mark class="shrink-0" />
       </A>
       <div class="pl-4 px-6 flex items-center justify-between gap-4 w-full">
         <Show when={layout.projects.list().length > 0 && params.dir}>

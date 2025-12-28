@@ -1,11 +1,11 @@
 import { Router } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
-import { Font } from "@opencode-ai/ui/font"
+import { Font } from "@opendeepseek/ui/font"
 import { MetaProvider } from "@solidjs/meta"
-import { MarkedProvider } from "@opencode-ai/ui/context/marked"
+import { MarkedProvider } from "@opendeepseek/ui/context/marked"
 import { Suspense } from "solid-js"
 import "./app.css"
-import { Favicon } from "@opencode-ai/ui/favicon"
+import { Favicon } from "@opendeepseek/ui/favicon"
 
 export default function App() {
   return (

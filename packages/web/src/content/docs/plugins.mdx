@@ -20,14 +20,14 @@ functions. Each function receives a context object and returns a hooks object.
 
 Plugins are loaded from:
 
-1. `.opencode/plugin` directory either in your project
+1. `.opendeepseek/plugin` directory either in your project
 2. Or, globally in `~/.config/opencode/plugin`
 
 ---
 
 ### Basic structure
 
-```js title=".opencode/plugin/example.js"
+```js title=".opendeepseek/plugin/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
   console.log("Plugin initialized!")
 
@@ -52,7 +52,7 @@ The plugin function receives:
 For TypeScript plugins, you can import types from the plugin package:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@opendeepseek/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -139,13 +139,13 @@ Here are some examples of plugins you can use to extend opencode.
 
 Send notifications when certain events occur:
 
-```js title=".opencode/plugin/notification.js"
+```js title=".opendeepseek/plugin/notification.js"
 export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
   return {
     event: async ({ event }) => {
       // Send notification on session completion
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "opendeepseek"'`
       }
     },
   }
@@ -160,7 +160,7 @@ We are using `osascript` to run AppleScript on macOS. Here we are using it to se
 
 Prevent opencode from reading `.env` files:
 
-```javascript title=".opencode/plugin/env-protection.js"
+```javascript title=".opendeepseek/plugin/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
   return {
     "tool.execute.before": async (input, output) => {
@@ -178,8 +178,8 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 Plugins can also add custom tools to opencode:
 
-```ts title=".opencode/plugin/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+```ts title=".opendeepseek/plugin/custom-tools.ts"
+import { type Plugin, tool } from "@opendeepseek/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -212,8 +212,8 @@ Your custom tools will be available to opencode alongside built-in tools.
 
 Customize the context included when a session is compacted:
 
-```ts title=".opencode/plugin/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+```ts title=".opendeepseek/plugin/compaction.ts"
+import type { Plugin } from "@opendeepseek/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {

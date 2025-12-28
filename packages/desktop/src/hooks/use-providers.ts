@@ -1,9 +1,9 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Decode } from "@opencode-ai/util/encode"
+import { base64Decode } from "@opendeepseek/util/encode"
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 
-export const popularProviders = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
+export const popularProviders = ["opendeepseek", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel"]
 
 export function useProviders() {
   const globalSync = useGlobalSync()
@@ -18,7 +18,7 @@ export function useProviders() {
   })
   const connected = createMemo(() => providers().all.filter((p) => providers().connected.includes(p.id)))
   const paid = createMemo(() =>
-    connected().filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input)),
+    connected().filter((p) => p.id !== "opendeepseek" || Object.values(p.models).find((m) => m.cost?.input)),
   )
   const popular = createMemo(() => providers().all.filter((p) => popularProviders.includes(p.id)))
   return {

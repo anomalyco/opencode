@@ -1,12 +1,12 @@
-import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createOpenDeepSeekClient, type Event } from "@opendeepseek/sdk/v2/client"
+import { createSimpleContext } from "@opendeepseek/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { usePlatform } from "./platform"
 
 export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleContext({
   name: "GlobalSDK",
   init: (props: { url: string }) => {
-    const eventSdk = createOpencodeClient({
+    const eventSdk = createOpenDeepSeekClient({
       baseUrl: props.url,
       // signal: AbortSignal.timeout(1000 * 60 * 10),
     })
@@ -22,7 +22,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     })
 
     const platform = usePlatform()
-    const sdk = createOpencodeClient({
+    const sdk = createOpenDeepSeekClient({
       baseUrl: props.url,
       signal: AbortSignal.timeout(1000 * 60 * 10),
       fetch: platform.fetch,

@@ -1,4 +1,4 @@
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@opendeepseek/console-resource"
 import { RateLimitError } from "./error"
 import { logger } from "./logger"
 

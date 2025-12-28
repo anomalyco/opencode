@@ -1,9 +1,9 @@
 import { Component } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Switch } from "@opencode-ai/ui/switch"
+import { Dialog } from "@opendeepseek/ui/dialog"
+import { List } from "@opendeepseek/ui/list"
+import { Switch } from "@opendeepseek/ui/switch"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()

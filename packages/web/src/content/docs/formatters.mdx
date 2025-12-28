@@ -52,7 +52,7 @@ This process happens in the background, ensuring your code styles are maintained
 
 You can customize formatters through the `formatter` section in your OpenCode config.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {}
@@ -76,7 +76,7 @@ Let's look at some examples.
 
 To disable **all** formatters globally, set `formatter` to `false`:
 
-```json title="opencode.json" {3}
+```json title="opendeepseek.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": false
@@ -85,7 +85,7 @@ To disable **all** formatters globally, set `formatter` to `false`:
 
 To disable a **specific** formatter, set `disabled` to `true`:
 
-```json title="opencode.json" {5}
+```json title="opendeepseek.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {
@@ -102,7 +102,7 @@ To disable a **specific** formatter, set `disabled` to `true`:
 
 You can override the built-in formatters or add new ones by specifying the command, environment variables, and file extensions:
 
-```json title="opencode.json" {4-14}
+```json title="opendeepseek.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "formatter": {

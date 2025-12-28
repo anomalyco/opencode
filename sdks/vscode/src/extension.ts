@@ -3,7 +3,7 @@ export function deactivate() {}
 
 import * as vscode from "vscode"
 
-const TERMINAL_NAME = "opencode"
+const TERMINAL_NAME = "opendeepseek"
 
 export function activate(context: vscode.ExtensionContext) {
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     if (terminal.name === TERMINAL_NAME) {
       // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
+      const port = terminal.creationOptions.env?.["_EXTENSION_OPENDEEPSEEK_PORT"]
       port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef)
       terminal.show()
     }
@@ -56,8 +56,8 @@ export function activate(context: vscode.ExtensionContext) {
         preserveFocus: false,
       },
       env: {
-        _EXTENSION_OPENCODE_PORT: port.toString(),
-        OPENCODE_CALLER: "vscode",
+        _EXTENSION_OPENDEEPSEEK_PORT: port.toString(),
+        OPENDEEPSEEK_CALLER: "vscode",
       },
     })
 

@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/enterprise",
+  "name": "@opendeepseek/enterprise",
   "version": "1.0.181",
   "private": true,
   "type": "module",
@@ -7,35 +7,36 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev",
     "build": "vite build",
-    "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
+    "build:cloudflare": "OPENDEEPSEEK_DEPLOYMENT_TARGET=cloudflare vite build",
     "start": "vite start"
   },
   "dependencies": {
-    "@opencode-ai/util": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@opendeepseek/util": "*",
+    "@opendeepseek/ui": "*",
     "aws4fetch": "^1.0.20",
-    "@pierre/diffs": "catalog:",
-    "@solidjs/router": "catalog:",
-    "@solidjs/start": "catalog:",
-    "@solidjs/meta": "catalog:",
-    "hono": "catalog:",
-    "hono-openapi": "catalog:",
+    "@pierre/diffs": "1.0.0-beta.3",
+    "@solidjs/router": "0.15.4",
+    "@solidjs/start": "1.0.11",
+    "@solidjs/meta": "0.29.4",
+    "hono": "4.10.7",
+    "hono-openapi": "1.1.2",
     "js-base64": "3.7.7",
-    "luxon": "catalog:",
+    "luxon": "3.6.1",
     "nitro": "3.0.1-alpha.1",
-    "solid-js": "catalog:",
-    "zod": "catalog:"
+    "solid-js": "1.9.10",
+    "zod": "4.1.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@tailwindcss/vite": "catalog:",
-    "@typescript/native-preview": "catalog:",
-    "@types/luxon": "catalog:",
-    "tailwindcss": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:"
+    "@cloudflare/workers-types": "4.20251008.0",
+    "@tailwindcss/vite": "4.1.11",
+    "@typescript/native-preview": "7.0.0-dev.20251207.1",
+    "@types/luxon": "3.7.1",
+    "tailwindcss": "4.1.11",
+    "typescript": "5.8.2",
+    "vite": "7.1.4"
   },
   "engines": {
-    "node": ">=22"
-  }
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
 }

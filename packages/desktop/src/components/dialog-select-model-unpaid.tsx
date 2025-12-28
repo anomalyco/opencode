@@ -1,13 +1,13 @@
 import { Component, onCleanup, onMount, Show } from "solid-js"
 import { useLocal } from "@/context/local"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opendeepseek/ui/context/dialog"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { Button } from "@opencode-ai/ui/button"
-import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List, ListRef } from "@opencode-ai/ui/list"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { IconName } from "@opencode-ai/ui/icons/provider"
+import { Button } from "@opendeepseek/ui/button"
+import { Tag } from "@opendeepseek/ui/tag"
+import { Dialog } from "@opendeepseek/ui/dialog"
+import { List, ListRef } from "@opendeepseek/ui/list"
+import { ProviderIcon } from "@opendeepseek/ui/provider-icon"
+import { IconName } from "@opendeepseek/ui/icons/provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 
@@ -86,12 +86,12 @@ export const DialogSelectModelUnpaid: Component = () => {
                       // TODO: clean this up after we update icon in models.dev
                       classList={{
                         "text-icon-weak-base": true,
-                        "size-4 mx-0.5": i.id === "opencode",
-                        "size-5": i.id !== "opencode",
+                        "size-4 mx-0.5": i.id === "opendeepseek",
+                        "size-5": i.id !== "opendeepseek",
                       }}
                     />
                     <span>{i.name}</span>
-                    <Show when={i.id === "opencode"}>
+                    <Show when={i.id === "opendeepseek"}>
                       <Tag>Recommended</Tag>
                     </Show>
                     <Show when={i.id === "anthropic"}>

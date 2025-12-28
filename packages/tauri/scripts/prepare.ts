@@ -3,7 +3,7 @@
 import { $ } from "bun"
 
 import { copyBinaryToSidecarFolder, getCurrentSidecar } from "./utils"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@opendeepseek/script"
 
 const sidecarConfig = getCurrentSidecar()
 

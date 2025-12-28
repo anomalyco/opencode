@@ -1,9 +1,9 @@
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Button } from "@opencode-ai/ui/button"
+import { TextField } from "@opendeepseek/ui/text-field"
+
+import { Button } from "@opendeepseek/ui/button"
 import { Component } from "solid-js"
 import { usePlatform } from "@/context/platform"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@opendeepseek/ui/icon"
 
 export type InitError = {
   name: string
@@ -24,7 +24,7 @@ function formatInitError(error: InitError): string {
   const data = error.data
   switch (error.name) {
     case "MCPFailed":
-      return `MCP server "${data.name}" failed. Note, opencode does not support MCP authentication yet.`
+      return `MCP server "${data.name}" failed. Note, Open DeepSeek does not support MCP authentication yet.`
     case "ProviderModelNotFoundError": {
       const { providerID, modelID, suggestions } = data as {
         providerID: string
@@ -34,7 +34,7 @@ function formatInitError(error: InitError): string {
       return [
         `Model not found: ${providerID}/${modelID}`,
         ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
-        `Check your config (opencode.json) provider/model names`,
+        `Check your config (opendeepseek.json) provider/model names`,
       ].join("\n")
     }
     case "ProviderInitError":
@@ -48,8 +48,8 @@ function formatInitError(error: InitError): string {
     case "ConfigInvalidError": {
       const issues = Array.isArray(data.issues)
         ? data.issues.map(
-            (issue: { message: string; path: string[] }) => "↳ " + issue.message + " " + issue.path.join("."),
-          )
+          (issue: { message: string; path: string[] }) => "↳ " + issue.message + " " + issue.path.join("."),
+        )
         : []
       return [`Config file at ${data.path} is invalid` + (data.message ? `: ${data.message}` : ""), ...issues].join(
         "\n",
@@ -79,7 +79,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
-        <Logo class="w-58.5 opacity-12 shrink-0" />
+
         <div class="flex flex-col items-center gap-2 text-center">
           <h1 class="text-lg font-medium text-text-strong">Something went wrong</h1>
           <p class="text-sm text-text-weak">An error occurred while loading the application.</p>
@@ -97,7 +97,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           Restart
         </Button>
         <div class="flex items-center justify-center gap-1">
-          Please report this error to the OpenCode team
+          Please report this error
           <button
             type="button"
             class="flex items-center text-text-interactive-base gap-1"

@@ -1,6 +1,6 @@
 import { json, query, action, useParams, createAsync, useSubmission } from "@solidjs/router"
 import { createEffect, For, Show } from "solid-js"
-import { Provider } from "@opencode-ai/console-core/provider.js"
+import { Provider } from "@opendeepseek/console-core/provider.js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import styles from "./provider-section.module.css"

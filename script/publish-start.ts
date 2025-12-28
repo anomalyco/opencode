@@ -1,15 +1,15 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
-import { Script } from "@opencode-ai/script"
+import { createOpenDeepSeek } from "@opendeepseek/sdk"
+import { Script } from "@opendeepseek/script"
 
 const notes = [] as string[]
 
 console.log("=== publishing ===\n")
 
 if (!Script.preview) {
-  const previous = await fetch("https://registry.npmjs.org/opencode-ai/latest")
+  const previous = await fetch("https://registry.npmjs.org/opendeepseek-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
@@ -17,20 +17,20 @@ if (!Script.preview) {
     .then((data: any) => data.version)
 
   const log =
-    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opencode packages/sdk packages/plugin packages/tauri packages/desktop`.text()
+    await $`git log v${previous}..HEAD --oneline --format="%h %s" -- packages/opendeepseek packages/sdk packages/plugin packages/tauri packages/desktop`.text()
 
   const commits = log
     .split("\n")
     .filter((line) => line && !line.match(/^\w+ (ignore:|test:|chore:|ci:)/i))
     .join("\n")
 
-  const opencode = await createOpencode()
+  const opencode = await createOpenDeepSeek()
   const session = await opencode.client.session.create()
   console.log("generating changelog since " + previous)
 
   const team = [
     "actions-user",
-    "opencode",
+    "opendeepseek",
     "rekram1-node",
     "thdxr",
     "kommander",
@@ -48,7 +48,7 @@ if (!Script.preview) {
       },
       body: {
         model: {
-          providerID: "opencode",
+          providerID: "opendeepseek",
           modelID: "gemini-3-flash",
         },
         parts: [
@@ -65,7 +65,7 @@ if (!Script.preview) {
             ${commits}
 
             Group the changes into these categories based on the [areas: ...] tags (omit any category with no changes):
-            - **TUI**: Changes to "opencode" area (the terminal/CLI interface)
+            - **TUI**: Changes to "opendeepseek" area (the terminal/CLI interface)
             - **Desktop**: Changes to "desktop" or "tauri" areas (the desktop application)
             - **SDK**: Changes to "sdk" or "plugin" areas (the SDK and plugin system)
             - **Extensions**: Changes to "extensions/zed", "extensions/vscode", or "github" areas (editor extensions and GitHub Action)
@@ -170,7 +170,7 @@ await Bun.file(extensionToml).write(toml)
 await $`bun install`
 
 console.log("\n=== opencode ===\n")
-await import(`../packages/opencode/script/publish.ts`)
+await import(`../packages/opendeepseek/script/publish.ts`)
 
 console.log("\n=== sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)
@@ -190,7 +190,7 @@ if (!Script.preview) {
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force-with-lease`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
+  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opendeepseek/dist/*.zip ./packages/opendeepseek/dist/*.tar.gz`
   const release = await $`gh release view v${Script.version} --json id,tagName`.json()
   output += `release=${release.id}\n`
   output += `tag=${release.tagName}\n`

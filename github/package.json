@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "catalog:"
+    "@types/bun": "1.3.4"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -13,7 +13,11 @@
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
     "@octokit/graphql": "9.0.1",
-    "@octokit/rest": "catalog:",
-    "@opencode-ai/sdk": "workspace:*"
-  }
+    "@octokit/rest": "22.0.0",
+    "@opendeepseek/sdk": "*"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
 }

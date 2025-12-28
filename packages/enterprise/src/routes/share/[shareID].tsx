@@ -1,37 +1,37 @@
-import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { SessionReview } from "@opencode-ai/ui/session-review"
-import { DataProvider } from "@opencode-ai/ui/context"
-import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
-import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
-import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
+import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@opendeepseek/sdk/v2"
+import { SessionTurn } from "@opendeepseek/ui/session-turn"
+import { SessionReview } from "@opendeepseek/ui/session-review"
+import { DataProvider } from "@opendeepseek/ui/context"
+import { DiffComponentProvider } from "@opendeepseek/ui/context/diff"
+import { CodeComponentProvider } from "@opendeepseek/ui/context/code"
+import { WorkerPoolProvider } from "@opendeepseek/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
-import { Logo, Mark } from "@opencode-ai/ui/logo"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { createDefaultOptions } from "@opencode-ai/ui/pierre"
-import { iife } from "@opencode-ai/util/iife"
-import { Binary } from "@opencode-ai/util/binary"
-import { NamedError } from "@opencode-ai/util/error"
+
+import { IconButton } from "@opendeepseek/ui/icon-button"
+import { ProviderIcon } from "@opendeepseek/ui/provider-icon"
+import { createDefaultOptions } from "@opendeepseek/ui/pierre"
+import { iife } from "@opendeepseek/util/iife"
+import { Binary } from "@opendeepseek/util/binary"
+import { NamedError } from "@opendeepseek/util/error"
 import { DateTime } from "luxon"
-import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
+import { SessionMessageRail } from "@opendeepseek/ui/session-message-rail"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { Tabs } from "@opendeepseek/ui/tabs"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
+import { Diff as SSRDiff } from "@opendeepseek/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
-import { type IconName } from "@opencode-ai/ui/icons/provider"
+import { type IconName } from "@opendeepseek/ui/icons/provider"
 import { Meta } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 
-const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
-const ClientOnlyCode = clientOnly(() => import("@opencode-ai/ui/code").then((m) => ({ default: m.Code })))
+const ClientOnlyDiff = clientOnly(() => import("@opendeepseek/ui/diff").then((m) => ({ default: m.Diff })))
+const ClientOnlyCode = clientOnly(() => import("@opendeepseek/ui/code").then((m) => ({ default: m.Code })))
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
-  import("@opencode-ai/ui/pierre/worker").then((m) => ({
+  import("@opendeepseek/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
       <WorkerPoolProvider pool={m.workerPool}>{props.children}</WorkerPoolProvider>
     ),
@@ -254,10 +254,9 @@ export default function () {
                         const title = () => (
                           <div class="flex flex-col gap-4">
                             <div class="h-8 flex gap-4 items-center justify-start self-stretch">
-                              <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
-                                <Mark class="shrink-0 w-3 my-0.5" />
-                                <div class="text-12-mono text-text-base">v{info().version}</div>
-                              </div>
+                                 <div class="pl-[2.5px] pr-2 flex items-center gap-1.75 bg-surface-strong shadow-xs-border-base">
+                                   <div class="text-12-mono text-text-base">v{info().version}</div>
+                                 </div>
                               <div class="flex gap-2 items-center">
                                 <ProviderIcon
                                   id={provider() as IconName}
@@ -292,9 +291,8 @@ export default function () {
                                 )}
                               </For>
                             </div>
-                            <div class="px-4 flex items-center justify-center pt-20 pb-8 shrink-0">
-                              <Logo class="w-58.5 opacity-12" />
-                            </div>
+                               <div class="px-4 flex items-center justify-center pt-20 pb-8 shrink-0">
+                               </div>
                           </div>
                         )
 
@@ -303,11 +301,10 @@ export default function () {
                         return (
                           <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
                             <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
-                              <div class="">
-                                <a href="https://opencode.ai">
-                                  <Mark />
-                                </a>
-                              </div>
+                               <div class="">
+                                 <a href="https://opencode.ai">
+                                 </a>
+                               </div>
                               <div class="flex gap-3 items-center">
                                 <IconButton
                                   as={"a"}
@@ -371,11 +368,10 @@ export default function () {
                                               : "px-6"),
                                       }}
                                     >
-                                      <div
-                                        classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}
-                                      >
-                                        <Logo class="w-58.5 opacity-12" />
-                                      </div>
+                                       <div
+                                         classList={{ "w-full flex items-center justify-center pb-8 shrink-0": true }}
+                                       >
+                                       </div>
                                     </SessionTurn>
                                   </div>
                                 </div>

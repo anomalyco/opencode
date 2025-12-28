@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-function",
+  "name": "@opendeepseek/console-function",
   "version": "1.0.181",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
@@ -8,23 +8,27 @@
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/workers-types": "4.20251008.0",
     "@tsconfig/node22": "22.0.2",
-    "@types/node": "catalog:",
+    "@types/node": "22.13.9",
     "openai": "5.11.0",
-    "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "typescript": "5.8.2",
+    "@typescript/native-preview": "7.0.0-dev.20251207.1"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "2.0.0",
     "@ai-sdk/openai": "2.0.2",
     "@ai-sdk/openai-compatible": "1.0.1",
-    "@hono/zod-validator": "catalog:",
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
+    "@hono/zod-validator": "0.4.2",
+    "@opendeepseek/console-core": "*",
+    "@opendeepseek/console-resource": "*",
     "@openauthjs/openauth": "0.0.0-20250322224806",
-    "ai": "catalog:",
-    "hono": "catalog:",
-    "zod": "catalog:"
-  }
+    "ai": "5.0.97",
+    "hono": "4.10.7",
+    "zod": "4.1.8"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
 }

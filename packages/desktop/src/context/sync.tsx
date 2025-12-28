@@ -1,11 +1,11 @@
 import { produce } from "solid-js/store"
 import { createMemo } from "solid-js"
-import { Binary } from "@opencode-ai/util/binary"
-import { retry } from "@opencode-ai/util/retry"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { Binary } from "@opendeepseek/util/binary"
+import { retry } from "@opendeepseek/util/retry"
+import { createSimpleContext } from "@opendeepseek/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@opendeepseek/sdk/v2/client"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",

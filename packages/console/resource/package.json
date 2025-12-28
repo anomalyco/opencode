@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/console-resource",
+  "name": "@opendeepseek/console-resource",
   "dependencies": {
-    "@cloudflare/workers-types": "catalog:"
+    "@cloudflare/workers-types": "4.20251008.0"
   },
   "exports": {
     ".": {
@@ -13,9 +13,13 @@
     }
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/workers-types": "4.20251008.0",
     "@tsconfig/node22": "22.0.2",
-    "@types/node": "catalog:",
+    "@types/node": "22.13.9",
     "cloudflare": "5.2.0"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
 }

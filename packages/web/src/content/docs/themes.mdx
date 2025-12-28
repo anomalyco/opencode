@@ -5,7 +5,7 @@ description: Select a built-in theme or define your own.
 
 With OpenCode you can select from one of several built-in themes, use a theme that adapts to your terminal theme, or define your own custom theme.
 
-By default, OpenCode uses our own `opencode` theme.
+By default, OpenCode uses our own `opendeepseek` theme.
 
 ---
 
@@ -63,7 +63,7 @@ The system theme is for users who:
 
 You can select a theme by bringing up the theme select with the `/theme` command. Or you can specify it in your [config](/docs/config).
 
-```json title="opencode.json" {3}
+```json title="opendeepseek.json" {3}
 {
   "$schema": "https://opencode.ai/config.json",
   "theme": "tokyonight"
@@ -84,8 +84,8 @@ Themes are loaded from multiple directories in the following order where later d
 
 1. **Built-in themes** - These are embedded in the binary
 2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
-3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
-4. **Current working directory** - Defined in `./.opencode/themes/*.json`
+3. **Project root directory** - Defined in the `<project-root>/.opendeepseek/themes/*.json`
+4. **Current working directory** - Defined in `./.opendeepseek/themes/*.json`
 
 If multiple directories contain a theme with the same name, the theme from the directory with higher priority will be used.
 
@@ -105,8 +105,8 @@ vim ~/.config/opencode/themes/my-theme.json
 And for project-specific themes.
 
 ```bash no-frame
-mkdir -p .opencode/themes
-vim .opencode/themes/my-theme.json
+mkdir -p .opendeepseek/themes
+vim .opendeepseek/themes/my-theme.json
 ```
 
 ---

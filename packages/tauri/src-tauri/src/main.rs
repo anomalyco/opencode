@@ -25,11 +25,11 @@ fn configure_display_backend() -> Option<String> {
 
     // Allow users to explicitly keep Wayland if they know their setup is stable.
     let allow_wayland = matches!(
-        env::var("OC_ALLOW_WAYLAND"),
+        env::var("OPENDEEPSEEK_ALLOW_WAYLAND"),
         Ok(v) if matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
     );
     if allow_wayland {
-        return Some("Wayland session detected; respecting OC_ALLOW_WAYLAND=1".into());
+        return Some("Wayland session detected; respecting OPENDEEPSEEK_ALLOW_WAYLAND=1".into());
     }
 
     // Prefer XWayland when available to avoid Wayland protocol errors seen during startup.
@@ -46,7 +46,8 @@ fn configure_display_backend() -> Option<String> {
 
     set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     Some(
-        "Wayland session detected without X11; leaving Wayland enabled (set WINIT_UNIX_BACKEND/GDK_BACKEND manually if needed)."
+        "Wayland session detected without X11; leaving Wayland enabled (set WINIT_UNIX_BACKEND/GDK_BACKEND manually if needed). \
+         Set OPENDEEPSEEK_ALLOW_WAYLAND=1 to keep native Wayland."
             .into(),
     )
 }
@@ -59,5 +60,5 @@ fn main() {
         }
     }
 
-    opencode_lib::run()
+    opendeepseek_lib::run()
 }

@@ -36,7 +36,7 @@ export function IconGemini(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   )
 }
 
-export function IconOpencode(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
+export function IconOpenDeepSeek(props: JSX.SvgSVGAttributes<SVGSVGElement>) {
   return (
     <svg {...props} viewBox="0 0 70 70" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path

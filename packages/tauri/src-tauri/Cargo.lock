@@ -2746,7 +2746,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-desktop"
+name = "opendeepseek-desktop"
 version = "0.0.0"
 dependencies = [
  "gtk",

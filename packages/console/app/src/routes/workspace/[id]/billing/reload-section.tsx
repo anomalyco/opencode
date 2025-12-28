@@ -2,9 +2,9 @@ import { json, action, useParams, createAsync, useSubmission } from "@solidjs/ro
 import { createEffect, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
-import { Billing } from "@opencode-ai/console-core/billing.js"
-import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
-import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { Billing } from "@opendeepseek/console-core/billing.js"
+import { Database, eq } from "@opendeepseek/console-core/drizzle/index.js"
+import { BillingTable } from "@opendeepseek/console-core/schema/billing.sql.js"
 import styles from "./reload-section.module.css"
 import { queryBillingInfo } from "../../common"
 

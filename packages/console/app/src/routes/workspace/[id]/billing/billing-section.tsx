@@ -1,7 +1,7 @@
 import { action, useParams, useAction, createAsync, useSubmission, json } from "@solidjs/router"
 import { createMemo, Match, Show, Switch, createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Billing } from "@opencode-ai/console-core/billing.js"
+import { Billing } from "@opendeepseek/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
 import { IconCreditCard, IconStripe } from "~/component/icon"
 import styles from "./billing-section.module.css"

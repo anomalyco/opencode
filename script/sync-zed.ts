@@ -6,7 +6,7 @@ import { join } from "path"
 
 const FORK_REPO = "sst/zed-extensions"
 const UPSTREAM_REPO = "zed-industries/extensions"
-const EXTENSION_NAME = "opencode"
+const EXTENSION_NAME = "opendeepseek"
 
 async function main() {
   const version = process.argv[2]

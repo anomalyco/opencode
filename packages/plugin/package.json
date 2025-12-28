@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
+  "name": "@opendeepseek/plugin",
   "version": "1.0.181",
   "type": "module",
   "scripts": {
@@ -15,13 +15,17 @@
     "dist"
   ],
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
-    "zod": "catalog:"
+    "@opendeepseek/sdk": "*",
+    "zod": "4.1.8"
   },
   "devDependencies": {
-    "@tsconfig/node22": "catalog:",
-    "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
-  }
+    "@tsconfig/node22": "22.0.2",
+    "@types/node": "22.13.9",
+    "typescript": "5.8.2",
+    "@typescript/native-preview": "7.0.0-dev.20251207.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
 }

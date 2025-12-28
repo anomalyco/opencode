@@ -21,7 +21,7 @@ By default, all tools are set to `true`. To disable a tool, set it to `false`.
 
 Disable or enable tools globally using the `tools` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -34,7 +34,7 @@ Disable or enable tools globally using the `tools` option.
 
 You can also use wildcards to control multiple tools at once. For example, to disable all tools from an MCP server:
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -49,7 +49,7 @@ You can also use wildcards to control multiple tools at once. For example, to di
 
 Override global tool settings for specific agents using the `tools` config in the agent definition.
 
-```json title="opencode.json" {3-6,9-12}
+```json title="opendeepseek.json" {3-6,9-12}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -98,7 +98,7 @@ Here are all the built-in tools available in OpenCode.
 
 Execute shell commands in your project environment.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -115,7 +115,7 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 
 Modify existing files using exact string replacements.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -132,7 +132,7 @@ This tool performs precise edits to files by replacing exact text matches. It's 
 
 Create new files or overwrite existing ones.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -149,7 +149,7 @@ Use this to allow the LLM to create new files. It will overwrite existing files 
 
 Read file contents from your codebase.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -166,7 +166,7 @@ This tool reads files and returns their contents. It supports reading specific l
 
 Search file contents using regular expressions.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -183,7 +183,7 @@ Fast content search across your codebase. Supports full regex syntax and file pa
 
 Find files by pattern matching.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -200,7 +200,7 @@ Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns ma
 
 List files and directories in a given path.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -217,7 +217,7 @@ This tool lists directory contents. It accepts glob patterns to filter results.
 
 Apply patches to files.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -234,7 +234,7 @@ This tool applies patch files to your codebase. Useful for applying diffs and pa
 
 Manage todo lists during coding sessions.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -255,7 +255,7 @@ This tool is disabled for subagents by default, but you can enable it manually. 
 
 Read existing todo lists.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {
@@ -276,7 +276,7 @@ This tool is disabled for subagents by default, but you can enable it manually. 
 
 Fetch web content.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "tools": {

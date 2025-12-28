@@ -13,7 +13,7 @@ let
     );
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = "opencode";
+  pname = "opendeepseek";
   version = args.version;
 
   src = args.src;
@@ -29,8 +29,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   ];
 
   env.MODELS_DEV_API_JSON = args.modelsDev;
-  env.OPENCODE_VERSION = args.version;
-  env.OPENCODE_CHANNEL = "stable";
+  env.OPENDEEPSEEK_VERSION = args.version;
+  env.OPENDEEPSEEK_CHANNEL = "stable";
   dontConfigure = true;
 
   buildPhase = ''
@@ -40,14 +40,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     cp -r ${finalAttrs.node_modules}/packages .
 
     (
-      cd packages/opencode
+      cd packages/opendeepseek
 
       chmod -R u+w ./node_modules
-      mkdir -p ./node_modules/@opencode-ai
-      rm -f ./node_modules/@opencode-ai/{script,sdk,plugin}
-      ln -s $(pwd)/../../packages/script ./node_modules/@opencode-ai/script
-      ln -s $(pwd)/../../packages/sdk/js ./node_modules/@opencode-ai/sdk
-      ln -s $(pwd)/../../packages/plugin ./node_modules/@opencode-ai/plugin
+      mkdir -p ./node_modules/@opendeepseek-ai
+      rm -f ./node_modules/@opendeepseek/{script,sdk,plugin}
+      ln -s $(pwd)/../../packages/script ./node_modules/@opendeepseek/script
+      ln -s $(pwd)/../../packages/sdk/js ./node_modules/@opendeepseek/sdk
+      ln -s $(pwd)/../../packages/plugin ./node_modules/@opendeepseek/plugin
 
       cp ${./bundle.ts} ./bundle.ts
       chmod +x ./bundle.ts
@@ -60,7 +60,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    cd packages/opencode
+    cd packages/opendeepseek
     if [ ! -d dist ]; then
       echo "ERROR: dist directory missing after bundle step"
       exit 1
@@ -130,6 +130,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       "aarch64-darwin"
       "x86_64-darwin"
     ];
-    mainProgram = "opencode";
+    mainProgram = "opendeepseek";
   };
 })

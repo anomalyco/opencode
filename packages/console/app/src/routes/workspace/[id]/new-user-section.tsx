@@ -1,8 +1,8 @@
 import { query, useParams, createAsync } from "@solidjs/router"
 import { createMemo, createSignal, Show } from "solid-js"
 import { IconCopy, IconCheck } from "~/component/icon"
-import { Key } from "@opencode-ai/console-core/key.js"
-import { Billing } from "@opencode-ai/console-core/billing.js"
+import { Key } from "@opendeepseek/console-core/key.js"
+import { Billing } from "@opendeepseek/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
 import styles from "./new-user-section.module.css"
 

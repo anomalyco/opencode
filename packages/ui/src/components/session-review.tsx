@@ -5,13 +5,13 @@ import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { useDiffComponent } from "../context/diff"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { getDirectory, getFilename } from "@opendeepseek/util/path"
 import { For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
-import { type FileDiff } from "@opencode-ai/sdk/v2"
+import { type FileDiff } from "@opendeepseek/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { Dynamic } from "solid-js/web"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@opendeepseek/util/encode"
 
 export interface SessionReviewProps {
   split?: boolean

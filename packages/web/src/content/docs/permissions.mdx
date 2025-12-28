@@ -5,7 +5,7 @@ description: Control which actions require approval to run.
 
 By default, OpenCode allows most operations without approval, except `doom_loop` and `external_directory` which default to `ask`. You can configure this using the `permission` option.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -36,7 +36,7 @@ Currently, the permissions for the `edit`, `bash`, `webfetch`, `doom_loop`, and 
 
 Use the `permission.edit` key to control whether file editing operations require user approval.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -52,7 +52,7 @@ Use the `permission.edit` key to control whether file editing operations require
 You can use the `permission.bash` key to control whether bash commands as a
 whole need user approval.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -63,7 +63,7 @@ whole need user approval.
 
 Or, you can target specific commands and set it to `allow`, `ask`, or `deny`.
 
-```json title="opencode.json"
+```json title="opendeepseek.json"
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -91,7 +91,7 @@ You can use wildcards to manage permissions for specific bash commands.
 
 For example, **disable all** Terraform commands.
 
-```json title="opencode.json" {5}
+```json title="opendeepseek.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -105,7 +105,7 @@ For example, **disable all** Terraform commands.
 You can also use the `*` wildcard to manage permissions for all commands. For
 example, **deny all commands** except a couple of specific ones.
 
-```json title="opencode.json" {5}
+```json title="opendeepseek.json" {5}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -148,7 +148,7 @@ When an agent asks for permission to run a command in a pipeline, we use tree si
 
 Use the `permission.webfetch` key to control whether the LLM can fetch web pages.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -165,7 +165,7 @@ Use the `permission.doom_loop` key to control whether approval is required when 
 
 This helps prevent infinite loops where the LLM repeatedly attempts the same action without making progress.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -182,7 +182,7 @@ Use the `permission.external_directory` key to control whether file operations r
 
 This provides an additional safety layer to prevent unintended modifications to files outside your project.
 
-```json title="opencode.json" {4}
+```json title="opendeepseek.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {
@@ -198,7 +198,7 @@ This provides an additional safety layer to prevent unintended modifications to 
 You can also configure permissions per agent. Where the agent specific config
 overrides the global config. [Learn more](/docs/agents#permissions) about agent permissions.
 
-```json title="opencode.json" {3-7,10-14}
+```json title="opendeepseek.json" {3-7,10-14}
 {
   "$schema": "https://opencode.ai/config.json",
   "permission": {

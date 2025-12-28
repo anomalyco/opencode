@@ -1,6 +1,6 @@
 import type {
   Event,
-  createOpencodeClient,
+  createOpenDeepSeekClient,
   Project,
   Model,
   Provider,
@@ -10,7 +10,7 @@ import type {
   Part,
   Auth,
   Config,
-} from "@opencode-ai/sdk"
+} from "@opendeepseek/sdk"
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
@@ -24,7 +24,7 @@ export type ProviderContext = {
 }
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClient>
+  client: ReturnType<typeof createOpenDeepSeekClient>
   project: Project
   directory: string
   worktree: string

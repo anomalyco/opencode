@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-mail",
+  "name": "@opendeepseek/console-mail",
   "version": "1.0.181",
   "dependencies": {
     "@jsx-email/all": "2.2.3",
@@ -7,7 +7,7 @@
     "@tsconfig/bun": "1.0.9",
     "@types/react": "18.0.25",
     "react": "18.2.0",
-    "solid-js": "catalog:"
+    "solid-js": "1.9.10"
   },
   "exports": {
     "./*": "./emails/templates/*"
@@ -17,5 +17,9 @@
   "scripts": {
     "dev": "email preview emails/templates"
   },
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
 }

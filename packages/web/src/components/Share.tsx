@@ -2,7 +2,7 @@ import { For, Show, onMount, Suspense, onCleanup, createMemo, createSignal, Susp
 import { DateTime } from "luxon"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { IconArrowDown } from "./icons"
-import { IconOpencode } from "./icons/custom"
+import { IconOpenDeepSeek } from "./icons/custom"
 import styles from "./share.module.css"
 import type { MessageV2 } from "opencode/session/message-v2"
 import type { Message } from "opencode/session/message"
@@ -303,8 +303,8 @@ export default function Share(props: { id: string; api: string; info: Session.In
           <div data-component="header-details">
             <ul data-component="header-stats">
               <li title="opencode version" data-slot="item">
-                <div data-slot="icon" title="opencode">
-                  <IconOpencode width={16} height={16} />
+                <div data-slot="icon" title="opendeepseek">
+                  <IconOpenDeepSeek width={16} height={16} />
                 </div>
                 <Show when={store.info?.version} fallback="v0.0.1">
                   <span>v{store.info?.version}</span>
