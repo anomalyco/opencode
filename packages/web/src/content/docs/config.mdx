@@ -332,6 +332,26 @@ You can configure MCP servers you want to use through the `mcp` option.
 
 ---
 
+### Plugins
+
+You can load plugins from npm packages through the `plugin` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-helicone-session",
+    "@my-org/custom-plugin"
+  ]
+}
+```
+
+OpenCode automatically installs these packages at startup. Both regular and scoped npm packages are supported.
+
+You can also create local plugins by placing files in `.opencode/plugin/` or `~/.config/opencode/plugin/`. [Learn more here](/docs/plugins).
+
+---
+
 ### Instructions
 
 You can configure the instructions for the model you're using through the `instructions` option.

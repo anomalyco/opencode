@@ -7,19 +7,48 @@ Plugins allow you to extend OpenCode by hooking into various events and customiz
 
 ---
 
+## Use a plugin
+
+There are two ways to load plugins.
+
+---
+
+### From npm
+
+Specify npm packages in your config file. OpenCode automatically installs them at startup.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-helicone-session",
+    "opencode-wakatime",
+    "@my-org/custom-plugin"
+  ]
+}
+```
+
+Packages are cached in `~/.cache/opencode/`. Both regular and scoped npm packages are supported.
+
+Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
+
+---
+
+### From local files
+
+Place JavaScript or TypeScript files in the plugin directory.
+
+- `.opencode/plugin/` - Project-level plugins
+- `~/.config/opencode/plugin/` - Global plugins
+
+Files in these directories are automatically loaded at startup.
+
+---
+
 ## Create a plugin
 
 A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
 functions. Each function receives a context object and returns a hooks object.
-
----
-
-### Location
-
-Plugins are loaded from:
-
-1. `.opencode/plugin` directory either in your project
-2. Or, globally in `~/.config/opencode/plugin`
 
 ---
 
