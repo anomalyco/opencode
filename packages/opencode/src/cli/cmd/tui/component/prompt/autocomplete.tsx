@@ -326,6 +326,11 @@ export function Autocomplete(props: {
           description: "toggle thinking visibility",
           onSelect: () => command.trigger("session.toggle.thinking"),
         },
+        {
+          display: "/subagents",
+          description: "list subagents in this session",
+          onSelect: () => command.trigger("session.subagents"),
+        },
       )
       if (sync.data.config.share !== "disabled") {
         results.push({

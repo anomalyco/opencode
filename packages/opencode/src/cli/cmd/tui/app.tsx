@@ -19,6 +19,7 @@ import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
+import { DialogSubagentList } from "@tui/component/dialog-subagent-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
@@ -295,6 +296,19 @@ function App() {
           initialPrompt: currentPrompt,
         })
         dialog.clear()
+      },
+    },
+    {
+      title: "List subagents",
+      value: "session.subagents",
+      keybind: "session_subagents",
+      category: "Session",
+      disabled: route.data.type !== "session",
+      onSelect: () => {
+        const data = route.data
+        if (data.type === "session") {
+          dialog.replace(() => <DialogSubagentList sessionID={data.sessionID} />)
+        }
       },
     },
     {
