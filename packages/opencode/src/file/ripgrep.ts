@@ -380,14 +380,28 @@ export namespace Ripgrep {
       return []
     }
 
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
-    // Parse JSON lines from ripgrep output
+    const text = result.text()
+    return parseJsonLines(text)
+  }
 
-    return lines
-      .map((line) => JSON.parse(line))
-      .map((parsed) => Result.parse(parsed))
-      .filter((r) => r.type === "match")
-      .map((r) => r.data)
+  export function parseJsonLines(text: string): Match["data"][] {
+    const lines = text.trim().split(/\r?\n/).filter(Boolean)
+    const matches: Match["data"][] = []
+
+    for (const line of lines) {
+      try {
+        const json = JSON.parse(line)
+        const parsed = Result.safeParse(json)
+        if (!parsed.success) {
+          log.warn("failed to validate ripgrep result", { error: parsed.error, snippet: line.slice(0, 200) })
+          continue
+        }
+        if (parsed.data.type === "match") matches.push(parsed.data.data)
+      } catch (error) {
+        log.warn("failed to parse ripgrep json", { error, snippet: line.slice(0, 200) })
+      }
+    }
+
+    return matches
   }
 }
