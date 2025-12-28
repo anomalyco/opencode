@@ -1,17 +1,9 @@
-/**
- * Theme resolver - generates all CSS custom properties from theme seed colors.
- */
-
 import type { ColorValue, DesktopTheme, HexColor, ResolvedTheme, ThemeVariant } from "./types"
 import { generateNeutralScale, generateScale, hexToOklch, oklchToHex, withAlpha } from "./color"
 
-/**
- * Resolve a theme variant to all CSS custom properties
- */
 export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): ResolvedTheme {
   const { seeds, overrides = {} } = variant
 
-  // Generate color scales
   const neutral = generateNeutralScale(seeds.neutral, isDark)
   const primary = generateScale(seeds.primary, isDark)
   const success = generateScale(seeds.success, isDark)
@@ -22,19 +14,15 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const diffAdd = generateScale(seeds.diffAdd, isDark)
   const diffDelete = generateScale(seeds.diffDelete, isDark)
 
-  // Generate alpha variants for neutral
   const neutralAlpha = generateNeutralAlphaScale(neutral, isDark)
 
-  // Build the full token map
   const tokens: ResolvedTheme = {}
 
-  // === Background tokens ===
   tokens["background-base"] = neutral[0]
   tokens["background-weak"] = neutral[2]
   tokens["background-strong"] = neutral[0]
   tokens["background-stronger"] = isDark ? neutral[1] : "#fcfcfc"
 
-  // === Surface tokens ===
   tokens["surface-base"] = neutralAlpha[1]
   tokens["base"] = neutralAlpha[1]
   tokens["surface-base-hover"] = neutralAlpha[2]
@@ -62,17 +50,14 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["surface-strong"] = isDark ? neutralAlpha[6] : "#ffffff"
   tokens["surface-raised-stronger-non-alpha"] = isDark ? neutral[2] : "#ffffff"
 
-  // Brand surface
   tokens["surface-brand-base"] = primary[8]
   tokens["surface-brand-hover"] = primary[9]
 
-  // Interactive surfaces
   tokens["surface-interactive-base"] = interactive[2]
   tokens["surface-interactive-hover"] = interactive[3]
   tokens["surface-interactive-weak"] = interactive[1]
   tokens["surface-interactive-weak-hover"] = interactive[2]
 
-  // Status surfaces
   tokens["surface-success-base"] = success[2]
   tokens["surface-success-weak"] = success[1]
   tokens["surface-success-strong"] = success[8]
@@ -86,7 +71,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["surface-info-weak"] = info[1]
   tokens["surface-info-strong"] = info[8]
 
-  // Diff surfaces
   tokens["surface-diff-unchanged-base"] = isDark ? neutral[0] : "#ffffff00"
   tokens["surface-diff-skip-base"] = isDark ? neutralAlpha[0] : neutral[1]
   tokens["surface-diff-hidden-base"] = interactive[isDark ? 1 : 2]
@@ -105,7 +89,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["surface-diff-delete-strong"] = diffDelete[isDark ? 4 : 5]
   tokens["surface-diff-delete-stronger"] = diffDelete[isDark ? 10 : 8]
 
-  // === Input tokens ===
   tokens["input-base"] = isDark ? neutral[1] : neutral[0]
   tokens["input-hover"] = neutral[1]
   tokens["input-active"] = interactive[0]
@@ -113,7 +96,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["input-focus"] = interactive[0]
   tokens["input-disabled"] = neutral[3]
 
-  // === Text tokens ===
   tokens["text-base"] = neutral[10]
   tokens["text-weak"] = neutral[8]
   tokens["text-weaker"] = neutral[7]
@@ -146,13 +128,11 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["text-on-brand-weaker"] = neutralAlpha[7]
   tokens["text-on-brand-strong"] = neutralAlpha[11]
 
-  // === Button tokens ===
   tokens["button-secondary-base"] = isDark ? neutral[2] : neutral[0]
   tokens["button-secondary-hover"] = isDark ? neutral[3] : neutral[1]
   tokens["button-ghost-hover"] = neutralAlpha[1]
   tokens["button-ghost-hover2"] = neutralAlpha[2]
 
-  // === Border tokens ===
   tokens["border-base"] = neutralAlpha[6]
   tokens["border-hover"] = neutralAlpha[7]
   tokens["border-active"] = neutralAlpha[8]
@@ -178,7 +158,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-weaker-disabled"] = neutralAlpha[1]
   tokens["border-weaker-focus"] = neutralAlpha[5]
 
-  // Interactive borders
   tokens["border-interactive-base"] = interactive[6]
   tokens["border-interactive-hover"] = interactive[7]
   tokens["border-interactive-active"] = interactive[8]
@@ -186,7 +165,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-interactive-disabled"] = neutral[7]
   tokens["border-interactive-focus"] = interactive[8]
 
-  // Status borders
   tokens["border-success-base"] = success[5]
   tokens["border-success-hover"] = success[6]
   tokens["border-success-selected"] = success[8]
@@ -201,7 +179,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["border-info-selected"] = info[8]
   tokens["border-color"] = "#ffffff"
 
-  // === Icon tokens ===
   tokens["icon-base"] = neutral[8]
   tokens["icon-hover"] = neutral[isDark ? 9 : 10]
   tokens["icon-active"] = neutral[isDark ? 10 : 11]
@@ -240,13 +217,11 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["icon-on-brand-selected"] = neutralAlpha[11]
   tokens["icon-on-interactive-base"] = isDark ? neutral[11] : neutral[0]
 
-  // Agent icons (using semantic colors)
   tokens["icon-agent-plan-base"] = info[8]
   tokens["icon-agent-docs-base"] = warning[8]
   tokens["icon-agent-ask-base"] = interactive[8]
   tokens["icon-agent-build-base"] = interactive[isDark ? 10 : 8]
 
-  // Status icons
   tokens["icon-on-success-base"] = withAlpha(success[8], 0.9) as ColorValue
   tokens["icon-on-success-hover"] = withAlpha(success[9], 0.9) as ColorValue
   tokens["icon-on-success-selected"] = withAlpha(success[10], 0.9) as ColorValue
@@ -260,14 +235,12 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["icon-on-info-hover"] = withAlpha(info[9], 0.9) as ColorValue
   tokens["icon-on-info-selected"] = withAlpha(info[10], 0.9) as ColorValue
 
-  // Diff icons
   tokens["icon-diff-add-base"] = diffAdd[10]
   tokens["icon-diff-add-hover"] = diffAdd[isDark ? 9 : 11]
   tokens["icon-diff-add-active"] = diffAdd[isDark ? 10 : 11]
   tokens["icon-diff-delete-base"] = diffDelete[isDark ? 8 : 9]
   tokens["icon-diff-delete-hover"] = diffDelete[isDark ? 9 : 10]
 
-  // === Syntax tokens ===
   tokens["syntax-comment"] = "var(--text-weak)"
   tokens["syntax-regexp"] = "var(--text-base)"
   tokens["syntax-string"] = isDark ? "#00ceb9" : "#006656"
@@ -288,7 +261,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["syntax-diff-delete"] = diffDelete[10]
   tokens["syntax-diff-unknown"] = "#ff0000"
 
-  // === Markdown tokens ===
   tokens["markdown-heading"] = isDark ? "#9d7cd8" : "#d68c27"
   tokens["markdown-text"] = isDark ? "#eeeeee" : "#1a1a1a"
   tokens["markdown-link"] = isDark ? "#fab283" : "#3b7dd8"
@@ -304,7 +276,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["markdown-image-text"] = isDark ? "#56b6c2" : "#318795"
   tokens["markdown-code-block"] = isDark ? "#eeeeee" : "#1a1a1a"
 
-  // === Avatar tokens ===
   tokens["avatar-background-pink"] = isDark ? "#501b3f" : "#feeef8"
   tokens["avatar-background-mint"] = isDark ? "#033a34" : "#e1fbf4"
   tokens["avatar-background-orange"] = isDark ? "#5f2a06" : "#fff1e7"
@@ -318,7 +289,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["avatar-text-cyan"] = isDark ? "#369eff" : "#0894b3"
   tokens["avatar-text-lime"] = isDark ? "#c4f042" : "#5d770d"
 
-  // Apply any overrides
   for (const [key, value] of Object.entries(overrides)) {
     tokens[key] = value
   }
@@ -326,9 +296,6 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   return tokens
 }
 
-/**
- * Generate neutral alpha scale (approximated as solid colors)
- */
 function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean): HexColor[] {
   const alphas = isDark
     ? [0.02, 0.04, 0.08, 0.12, 0.16, 0.2, 0.26, 0.36, 0.44, 0.52, 0.72, 0.94]
@@ -336,7 +303,6 @@ function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean): H
 
   return neutralScale.map((hex, i) => {
     const baseOklch = hexToOklch(hex)
-    // Adjust lightness based on alpha - closer to background color
     const targetL = isDark ? 0.1 + alphas[i] * 0.8 : 1 - alphas[i] * 0.8
     return oklchToHex({
       ...baseOklch,
@@ -345,9 +311,6 @@ function generateNeutralAlphaScale(neutralScale: HexColor[], isDark: boolean): H
   })
 }
 
-/**
- * Resolve a complete theme to CSS for both light and dark modes
- */
 export function resolveTheme(theme: DesktopTheme): { light: ResolvedTheme; dark: ResolvedTheme } {
   return {
     light: resolveThemeVariant(theme.light, false),
@@ -355,9 +318,6 @@ export function resolveTheme(theme: DesktopTheme): { light: ResolvedTheme; dark:
   }
 }
 
-/**
- * Convert resolved theme tokens to CSS custom properties string
- */
 export function themeToCss(tokens: ResolvedTheme): string {
   return Object.entries(tokens)
     .map(([key, value]) => `--${key}: ${value};`)
