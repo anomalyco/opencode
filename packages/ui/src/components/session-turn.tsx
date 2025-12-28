@@ -124,77 +124,112 @@ export function SessionTurn(
     return allMessages().filter((m) => m.role === "assistant" && m.parentID === msg.id) as AssistantMessage[]
   })
 
-  const assistantParts = createMemo(() => {
-    const result: PartType[] = []
+  const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
+
+  const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+
+  const lastTextPart = createMemo(() => {
+    const msgs = assistantMessages()
+    for (let mi = msgs.length - 1; mi >= 0; mi--) {
+      const msgParts = data.store.part[msgs[mi].id] ?? []
+      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+        const part = msgParts[pi]
+        if (part?.type === "text") return part as TextPart
+      }
+    }
+    return undefined
+  })
+
+  const hasSteps = createMemo(() => {
     for (const m of assistantMessages()) {
       const msgParts = data.store.part[m.id]
-      if (msgParts) {
-        for (const p of msgParts) {
-          if (p) result.push(p)
+      if (!msgParts) continue
+      for (const p of msgParts) {
+        if (p?.type === "tool") return true
+      }
+    }
+    return false
+  })
+
+  const permissionParts = createMemo(() => {
+    const result: { part: ToolPart; message: AssistantMessage }[] = []
+    const permissions = data.store.permission?.[props.sessionID] ?? []
+    if (!permissions.length) return result
+
+    for (const m of assistantMessages()) {
+      const msgParts = data.store.part[m.id] ?? []
+      for (const p of msgParts) {
+        if (p?.type === "tool" && permissions.some((perm) => perm.callID === (p as ToolPart).callID)) {
+          result.push({ part: p as ToolPart, message: m })
         }
       }
     }
     return result
   })
 
-  const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
-
-  const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
-
-  const lastTextPart = createMemo(() => {
-    const ap = assistantParts()
-    for (let i = ap.length - 1; i >= 0; i--) {
-      if (ap[i]?.type === "text") return ap[i]
-    }
-    return undefined
-  })
-
-  const hasSteps = createMemo(() => assistantParts().some((p) => p?.type === "tool"))
-
-  const isShellMode = createMemo(() => {
+  const shellModePart = createMemo(() => {
     const p = parts()
-    const ap = assistantParts()
-    if (p.every((part) => part?.type === "text" && part?.synthetic) && ap.length === 1) {
-      const assistantPart = ap[0]
-      if (assistantPart?.type === "tool" && assistantPart?.tool === "bash") return true
-    }
-    return false
+    if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
+
+    const msgs = assistantMessages()
+    if (msgs.length !== 1) return
+
+    const msgParts = data.store.part[msgs[0].id] ?? []
+    if (msgParts.length !== 1) return
+
+    const assistantPart = msgParts[0]
+    if (assistantPart?.type === "tool" && assistantPart.tool === "bash") return assistantPart
   })
+
+  const isShellMode = createMemo(() => !!shellModePart())
 
   const rawStatus = createMemo(() => {
-    const ap = assistantParts()
-    const currentTask = ap.findLast(
-      (p) =>
-        p &&
-        p.type === "tool" &&
-        p.tool === "task" &&
-        p.state &&
-        "metadata" in p.state &&
-        p.state.metadata &&
-        p.state.metadata.sessionId &&
-        p.state.status === "running",
-    ) as ToolPart | undefined
+    const msgs = assistantMessages()
+    let last: PartType | undefined
+    let currentTask: ToolPart | undefined
 
-    let resolvedParts = ap
-    if (currentTask?.state && "metadata" in currentTask.state && currentTask.state.metadata?.sessionId) {
-      const taskMessages = data.store.message[currentTask.state.metadata.sessionId as string]?.filter(
-        (m) => m.role === "assistant",
-      )
-      if (taskMessages) {
-        const taskParts: PartType[] = []
-        for (const m of taskMessages) {
-          const msgParts = data.store.part[m.id]
-          if (msgParts) {
-            for (const p of msgParts) {
-              if (p) taskParts.push(p)
-            }
-          }
+    for (let mi = msgs.length - 1; mi >= 0; mi--) {
+      const msgParts = data.store.part[msgs[mi].id] ?? []
+      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+        const part = msgParts[pi]
+        if (!part) continue
+        if (!last) last = part
+
+        if (
+          part.type === "tool" &&
+          part.tool === "task" &&
+          part.state &&
+          "metadata" in part.state &&
+          part.state.metadata?.sessionId &&
+          part.state.status === "running"
+        ) {
+          currentTask = part as ToolPart
+          break
         }
-        if (taskParts.length > 0) resolvedParts = taskParts
+      }
+      if (currentTask) break
+    }
+
+    const taskSessionId =
+      currentTask?.state && "metadata" in currentTask.state
+        ? (currentTask.state.metadata?.sessionId as string | undefined)
+        : undefined
+
+    if (taskSessionId) {
+      const taskMessages = data.store.message[taskSessionId] ?? []
+      for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
+        const msg = taskMessages[mi]
+        if (!msg || msg.role !== "assistant") continue
+
+        const msgParts = data.store.part[msg.id] ?? []
+        for (let pi = msgParts.length - 1; pi >= 0; pi--) {
+          const part = msgParts[pi]
+          if (part) return computeStatusFromPart(part)
+        }
       }
     }
 
-    return computeStatusFromPart(resolvedParts.at(-1))
+    return computeStatusFromPart(last)
   })
 
   const status = createMemo(
@@ -294,6 +329,12 @@ export function SessionTurn(
   })
 
   createEffect(() => {
+    if (permissionParts().length > 0) {
+      autoScroll.forceScrollToBottom()
+    }
+  })
+
+  createEffect(() => {
     if (working() || !isLastUserMessage()) return
 
     const diffs = message()?.summary?.diffs
@@ -367,7 +408,7 @@ export function SessionTurn(
               >
                 <Switch>
                   <Match when={isShellMode()}>
-                    <Part part={assistantParts()[0]} message={msg()} defaultOpen />
+                    <Part part={shellModePart()!} message={msg()} defaultOpen />
                   </Match>
                   <Match when={true}>
                     {/* Title (sticky) */}
@@ -448,6 +489,13 @@ export function SessionTurn(
                             {error()?.data?.message as string}
                           </Card>
                         </Show>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && permissionParts().length > 0}>
+                      <div data-slot="session-turn-permission-parts">
+                        <For each={permissionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
                       </div>
                     </Show>
                     {/* Summary */}

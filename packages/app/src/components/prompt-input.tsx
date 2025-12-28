@@ -82,6 +82,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const command = useCommand()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
+  let scrollRef!: HTMLDivElement
+
+  const scrollCursorIntoView = () => {
+    const container = scrollRef
+    const selection = window.getSelection()
+    if (!container || !selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+    if (!editorRef.contains(range.startContainer)) return
+
+    const rect = range.getBoundingClientRect()
+    if (!rect.height) return
+
+    const containerRect = container.getBoundingClientRect()
+    const top = rect.top - containerRect.top + container.scrollTop
+    const bottom = rect.bottom - containerRect.top + container.scrollTop
+    const padding = 12
+
+    if (top < container.scrollTop + padding) {
+      container.scrollTop = Math.max(0, top - padding)
+      return
+    }
+
+    if (bottom > container.scrollTop + container.clientHeight - padding) {
+      container.scrollTop = bottom - container.clientHeight + padding
+    }
+  }
+
+  const queueScroll = () => {
+    requestAnimationFrame(scrollCursorIntoView)
+  }
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
@@ -103,7 +134,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
-    userHasEdited: boolean
   }>({
     popover: null,
     historyIndex: -1,
@@ -113,7 +143,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
-    userHasEdited: false,
   })
 
   const MAX_HISTORY = 100
@@ -150,12 +179,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const applyHistoryPrompt = (p: Prompt, position: "start" | "end") => {
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
-    setStore("userHasEdited", false)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
       setCursorPosition(editorRef, length)
       setStore("applyingHistory", false)
+      queueScroll()
     })
   }
 
@@ -219,6 +248,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
+    if (!isFocused()) return
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
@@ -241,7 +271,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
-  const handleDragOver = (event: DragEvent) => {
+  const handleGlobalDragOver = (event: DragEvent) => {
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
     if (hasFiles) {
@@ -249,15 +279,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  const handleDragLeave = (event: DragEvent) => {
-    const related = event.relatedTarget as Node | null
-    const form = event.currentTarget as HTMLElement
-    if (!related || !form.contains(related)) {
+  const handleGlobalDragLeave = (event: DragEvent) => {
+    // relatedTarget is null when leaving the document window
+    if (!event.relatedTarget) {
       setStore("dragging", false)
     }
   }
 
-  const handleDrop = async (event: DragEvent) => {
+  const handleGlobalDrop = async (event: DragEvent) => {
     event.preventDefault()
     setStore("dragging", false)
 
@@ -273,17 +302,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   onMount(() => {
     editorRef.addEventListener("paste", handlePaste)
+    document.addEventListener("dragover", handleGlobalDragOver)
+    document.addEventListener("dragleave", handleGlobalDragLeave)
+    document.addEventListener("drop", handleGlobalDrop)
   })
   onCleanup(() => {
     editorRef.removeEventListener("paste", handlePaste)
+    document.removeEventListener("dragover", handleGlobalDragOver)
+    document.removeEventListener("dragleave", handleGlobalDragLeave)
+    document.removeEventListener("drop", handleGlobalDrop)
   })
 
   createEffect(() => {
-    if (isFocused()) {
-      handleInput()
-    } else {
-      setStore("popover", null)
-    }
+    if (!isFocused()) setStore("popover", null)
   })
 
   const handleFileSelect = (path: string | undefined) => {
@@ -363,7 +394,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => prompt.current(),
       (currentParts) => {
         const domParts = parseFromDOM()
-        if (isPromptEqual(currentParts, domParts)) return
+        const normalized = Array.from(editorRef.childNodes).every((node) => {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent ?? ""
+            if (!text.includes("\u200B")) return true
+            if (text !== "\u200B") return false
+
+            const prev = node.previousSibling
+            const next = node.nextSibling
+            const prevIsBr = prev?.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).tagName === "BR"
+            const nextIsBr = next?.nodeType === Node.ELEMENT_NODE && (next as HTMLElement).tagName === "BR"
+            if (!prevIsBr && !nextIsBr) return false
+            if (nextIsBr && !prevIsBr && prev) return false
+            return true
+          }
+          if (node.nodeType !== Node.ELEMENT_NODE) return false
+          const el = node as HTMLElement
+          if (el.dataset.type === "file") return true
+          return el.tagName === "BR"
+        })
+        if (normalized && isPromptEqual(currentParts, domParts)) return
 
         const selection = window.getSelection()
         let cursorPosition: number | null = null
@@ -374,7 +424,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         editorRef.innerHTML = ""
         currentParts.forEach((part) => {
           if (part.type === "text") {
-            editorRef.appendChild(document.createTextNode(part.content))
+            editorRef.appendChild(createTextFragment(part.content))
           } else if (part.type === "file") {
             const pill = document.createElement("span")
             pill.textContent = part.content
@@ -395,34 +445,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const parseFromDOM = (): Prompt => {
-    const newParts: Prompt = []
+    const parts: Prompt = []
     let position = 0
+    let buffer = ""
 
-    const pushText = (content: string) => {
+    const flushText = () => {
+      const content = buffer.replace(/\r\n?/g, "\n").replace(/\u200B/g, "")
+      buffer = ""
       if (!content) return
-      newParts.push({ type: "text", content, start: position, end: position + content.length })
+      parts.push({ type: "text", content, start: position, end: position + content.length })
       position += content.length
     }
 
-    const rangeText = (range: Range) => {
-      const fragment = range.cloneContents()
-      const container = document.createElement("div")
-      container.append(fragment)
-      return container.innerText
-    }
-
-    const files = Array.from(editorRef.querySelectorAll<HTMLElement>("[data-type=file]"))
-    let last: HTMLElement | undefined
-
-    files.forEach((file) => {
-      const before = document.createRange()
-      before.selectNodeContents(editorRef)
-      if (last) before.setStartAfter(last)
-      before.setEndBefore(file)
-      pushText(rangeText(before))
-
+    const pushFile = (file: HTMLElement) => {
       const content = file.textContent ?? ""
-      newParts.push({
+      parts.push({
         type: "file",
         path: file.dataset.path!,
         content,
@@ -430,16 +467,44 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         end: position + content.length,
       })
       position += content.length
-      last = file
+    }
+
+    const visit = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        buffer += node.textContent ?? ""
+        return
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return
+
+      const el = node as HTMLElement
+      if (el.dataset.type === "file") {
+        flushText()
+        pushFile(el)
+        return
+      }
+      if (el.tagName === "BR") {
+        buffer += "\n"
+        return
+      }
+
+      for (const child of Array.from(el.childNodes)) {
+        visit(child)
+      }
+    }
+
+    const children = Array.from(editorRef.childNodes)
+    children.forEach((child, index) => {
+      const isBlock = child.nodeType === Node.ELEMENT_NODE && ["DIV", "P"].includes((child as HTMLElement).tagName)
+      visit(child)
+      if (isBlock && index < children.length - 1) {
+        buffer += "\n"
+      }
     })
 
-    const after = document.createRange()
-    after.selectNodeContents(editorRef)
-    if (last) after.setStartAfter(last)
-    pushText(rangeText(after))
+    flushText()
 
-    if (newParts.length === 0) newParts.push(...DEFAULT_PROMPT)
-    return newParts
+    if (parts.length === 0) parts.push(...DEFAULT_PROMPT)
+    return parts
   }
 
   const handleInput = () => {
@@ -452,7 +517,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (shouldReset) {
       setStore("popover", null)
-      setStore("userHasEdited", false)
       if (store.historyIndex >= 0 && !store.applyingHistory) {
         setStore("historyIndex", -1)
         setStore("savedPrompt", null)
@@ -460,6 +524,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (prompt.dirty()) {
         prompt.set(DEFAULT_PROMPT, 0)
       }
+      queueScroll()
       return
     }
 
@@ -487,11 +552,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
-    if (!store.applyingHistory) {
-      setStore("userHasEdited", true)
-    }
-
     prompt.set(rawParts, cursorPosition)
+    queueScroll()
   }
 
   const addPart = (part: ContentPart) => {
@@ -516,25 +578,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const gap = document.createTextNode(" ")
       const range = selection.getRangeAt(0)
 
-      if (atMatch) {
-        let runningLength = 0
+      const setEdge = (edge: "start" | "end", offset: number) => {
+        let remaining = offset
+        const nodes = Array.from(editorRef.childNodes)
 
-        const walker = document.createTreeWalker(editorRef, NodeFilter.SHOW_TEXT, null)
-        let currentNode = walker.nextNode()
-        while (currentNode) {
-          const textContent = currentNode.textContent || ""
-          if (runningLength + textContent.length >= atMatch.index!) {
-            const localStart = atMatch.index! - runningLength
-            const localEnd = cursorPosition - runningLength
-            if (currentNode === range.startContainer || runningLength + textContent.length >= cursorPosition) {
-              range.setStart(currentNode, localStart)
-              range.setEnd(currentNode, Math.min(localEnd, textContent.length))
-              break
-            }
+        for (const node of nodes) {
+          const length = getNodeLength(node)
+          const isText = node.nodeType === Node.TEXT_NODE
+          const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+          const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
+
+          if (isText && remaining <= length) {
+            if (edge === "start") range.setStart(node, remaining)
+            if (edge === "end") range.setEnd(node, remaining)
+            return
           }
-          runningLength += textContent.length
-          currentNode = walker.nextNode()
+
+          if ((isFile || isBreak) && remaining <= length) {
+            if (edge === "start" && remaining === 0) range.setStartBefore(node)
+            if (edge === "start" && remaining > 0) range.setStartAfter(node)
+            if (edge === "end" && remaining === 0) range.setEndBefore(node)
+            if (edge === "end" && remaining > 0) range.setEndAfter(node)
+            return
+          }
+
+          remaining -= length
         }
+      }
+
+      if (atMatch) {
+        const start = atMatch.index ?? cursorPosition - atMatch[0].length
+        setEdge("start", start)
+        setEdge("end", cursorPosition)
       }
 
       range.deleteContents()
@@ -545,11 +620,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       selection.removeAllRanges()
       selection.addRange(range)
     } else if (part.type === "text") {
-      const textNode = document.createTextNode(part.content)
       const range = selection.getRangeAt(0)
+      const fragment = createTextFragment(part.content)
+      const last = fragment.lastChild
       range.deleteContents()
-      range.insertNode(textNode)
-      range.setStartAfter(textNode)
+      range.insertNode(fragment)
+      if (last) {
+        if (last.nodeType === Node.TEXT_NODE) {
+          const text = last.textContent ?? ""
+          if (text === "\u200B") {
+            range.setStart(last, 0)
+          }
+          if (text !== "\u200B") {
+            range.setStart(last, text.length)
+          }
+        }
+        if (last.nodeType !== Node.TEXT_NODE) {
+          range.setStartAfter(last)
+        }
+      }
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)
@@ -560,9 +649,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const abort = () =>
-    sdk.client.session.abort({
-      sessionID: params.id!,
-    })
+    sdk.client.session
+      .abort({
+        sessionID: params.id!,
+      })
+      .catch(() => {})
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const text = prompt
@@ -584,8 +675,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const navigateHistory = (direction: "up" | "down") => {
-    if (store.userHasEdited) return false
-
     const entries = store.mode === "shell" ? shellHistory.entries : history.entries
     const current = store.historyIndex
 
@@ -628,6 +717,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Backspace") {
+      const selection = window.getSelection()
+      if (selection && selection.isCollapsed) {
+        const node = selection.anchorNode
+        const offset = selection.anchorOffset
+        if (node && node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent ?? ""
+          if (/^\u200B+$/.test(text) && offset > 0) {
+            const range = document.createRange()
+            range.setStart(node, 0)
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }
+        }
+      }
+    }
+
     if (event.key === "!" && store.mode === "normal") {
       const cursorPosition = getCursorPosition(editorRef)
       if (cursorPosition === 0) {
@@ -668,7 +775,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       const cursorPosition = getCursorPosition(editorRef)
       const textLength = promptLength(prompt.current())
-      const textContent = editorRef.textContent ?? ""
+      const textContent = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
       const isEmpty = textContent.trim() === "" || textLength <= 1
       const hasNewlines = textContent.includes("\n")
       const inHistory = store.historyIndex >= 0
@@ -692,6 +802,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    if (event.key === "Enter" && event.shiftKey) {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
+      return
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -717,7 +832,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addToHistory(currentPrompt, store.mode)
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
-    setStore("userHasEdited", false)
 
     let existing = info()
     if (!existing) {
@@ -777,12 +891,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const agent = local.agent.current()!.name
 
     if (isShellMode) {
-      sdk.client.session.shell({
-        sessionID: existing.id,
-        agent,
-        model,
-        command: text,
-      })
+      sdk.client.session
+        .shell({
+          sessionID: existing.id,
+          agent,
+          model,
+          command: text,
+        })
+        .catch((e) => {
+          console.error("Failed to send shell command", e)
+        })
       return
     }
 
@@ -791,13 +909,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
-        sdk.client.session.command({
-          sessionID: existing.id,
-          command: commandName,
-          arguments: args.join(" "),
-          agent,
-          model: `${model.providerID}/${model.modelID}`,
-        })
+        sdk.client.session
+          .command({
+            sessionID: existing.id,
+            command: commandName,
+            arguments: args.join(" "),
+            agent,
+            model: `${model.providerID}/${model.modelID}`,
+          })
+          .catch((e) => {
+            console.error("Failed to send command", e)
+          })
         return
       }
     }
@@ -823,13 +945,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       model,
     })
 
-    sdk.client.session.prompt({
-      sessionID: existing.id,
-      agent,
-      model,
-      messageID,
-      parts: requestParts,
-    })
+    sdk.client.session
+      .prompt({
+        sessionID: existing.id,
+        agent,
+        model,
+        messageID,
+        parts: requestParts,
+      })
+      .catch((e) => {
+        console.error("Failed to send prompt", e)
+      })
   }
 
   return (
@@ -904,9 +1030,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       </Show>
       <form
         onSubmit={handleSubmit}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
         classList={{
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-md overflow-clip focus-within:shadow-xs-border": true,
@@ -956,7 +1079,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </For>
           </div>
         </Show>
-        <div class="relative max-h-[240px] overflow-y-auto">
+        <div class="relative max-h-[240px] overflow-y-auto" ref={(el) => (scrollRef = el)}>
           <div
             data-component="prompt-input"
             ref={(el) => {
@@ -967,18 +1090,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onInput={handleInput}
             onKeyDown={handleKeyDown}
             classList={{
-              "w-full px-5 py-3 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-              "[&>[data-type=file]]:text-icon-info-active": true,
+              "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "[&_[data-type=file]]:text-icon-info-active": true,
               "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
-            <div class="absolute top-0 inset-x-0 px-5 py-3 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? "Enter shell command..."
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
             </div>
           </Show>
+          <div class="absolute top-4.5 right-4">
+            <SessionContextUsage />
+          </div>
         </div>
         <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
@@ -1035,7 +1161,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Tooltip>
               </Match>
             </Switch>
-            <SessionContextUsage />
           </div>
           <div class="flex items-center gap-1 absolute right-2 bottom-2">
             <input
@@ -1095,23 +1220,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 }
 
+function createTextFragment(content: string): DocumentFragment {
+  const fragment = document.createDocumentFragment()
+  const segments = content.split("\n")
+  segments.forEach((segment, index) => {
+    if (segment) {
+      fragment.appendChild(document.createTextNode(segment))
+    } else if (segments.length > 1) {
+      fragment.appendChild(document.createTextNode("\u200B"))
+    }
+    if (index < segments.length - 1) {
+      fragment.appendChild(document.createElement("br"))
+    }
+  })
+  return fragment
+}
+
+function getNodeLength(node: Node): number {
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
+  return (node.textContent ?? "").replace(/\u200B/g, "").length
+}
+
+function getTextLength(node: Node): number {
+  if (node.nodeType === Node.TEXT_NODE) return (node.textContent ?? "").replace(/\u200B/g, "").length
+  if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR") return 1
+  let length = 0
+  for (const child of Array.from(node.childNodes)) {
+    length += getTextLength(child)
+  }
+  return length
+}
+
 function getCursorPosition(parent: HTMLElement): number {
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return 0
   const range = selection.getRangeAt(0)
+  if (!parent.contains(range.startContainer)) return 0
   const preCaretRange = range.cloneRange()
   preCaretRange.selectNodeContents(parent)
   preCaretRange.setEnd(range.startContainer, range.startOffset)
-  return preCaretRange.toString().length
+  return getTextLength(preCaretRange.cloneContents())
 }
 
 function setCursorPosition(parent: HTMLElement, position: number) {
   let remaining = position
   let node = parent.firstChild
   while (node) {
-    const length = node.textContent ? node.textContent.length : 0
+    const length = getNodeLength(node)
     const isText = node.nodeType === Node.TEXT_NODE
     const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+    const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
     if (isText && remaining <= length) {
       const range = document.createRange()
@@ -1123,10 +1281,24 @@ function setCursorPosition(parent: HTMLElement, position: number) {
       return
     }
 
-    if (isFile && remaining <= length) {
+    if ((isFile || isBreak) && remaining <= length) {
       const range = document.createRange()
       const selection = window.getSelection()
-      range.setStartAfter(node)
+      if (remaining === 0) {
+        range.setStartBefore(node)
+      }
+      if (remaining > 0 && isFile) {
+        range.setStartAfter(node)
+      }
+      if (remaining > 0 && isBreak) {
+        const next = node.nextSibling
+        if (next && next.nodeType === Node.TEXT_NODE) {
+          range.setStart(next, 0)
+        }
+        if (!next || next.nodeType !== Node.TEXT_NODE) {
+          range.setStartAfter(node)
+        }
+      }
       range.collapse(true)
       selection?.removeAllRanges()
       selection?.addRange(range)
