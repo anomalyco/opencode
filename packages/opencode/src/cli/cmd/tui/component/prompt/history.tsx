@@ -64,6 +64,9 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       get items() {
         return store.history
       },
+      setIndex(index: number) {
+        setStore("index", index)
+      },
       move(direction: 1 | -1, input: string) {
         if (!store.history.length) return undefined
         const current = store.history.at(store.index)

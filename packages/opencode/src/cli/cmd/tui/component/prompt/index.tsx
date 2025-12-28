@@ -696,6 +696,11 @@ export function Prompt(props: PromptProps) {
     setStore("prompt", { input: match.input, parts: match.parts })
     setStore("mode", match.mode ?? "normal")
     restoreExtmarksFromParts(match.parts)
+    // Align history navigation cursor so Up/Down continues from this match
+    const matchIndexInHistory = history.items.findIndex((item) => item.input === match.input)
+    if (matchIndexInHistory !== -1) {
+      history.setIndex(-(history.items.length - matchIndexInHistory))
+    }
     exitHistorySearch(false)
   }
 
