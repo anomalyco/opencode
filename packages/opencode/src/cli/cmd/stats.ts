@@ -86,16 +86,15 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   const sessions = await getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
-  let cutoffTime = 0
-  if (days !== undefined) {
+  const cutoffTime = (() => {
+    if (days === undefined) return 0
     if (days === 0) {
       const now = new Date()
       now.setHours(0, 0, 0, 0)
-      cutoffTime = now.getTime()
-    } else {
-      cutoffTime = Date.now() - days * MS_IN_DAY
+      return now.getTime()
     }
-  }
+    return Date.now() - days * MS_IN_DAY
+  })()
 
   let filteredSessions = cutoffTime > 0 ? sessions.filter((session) => session.time.updated >= cutoffTime) : sessions
 
