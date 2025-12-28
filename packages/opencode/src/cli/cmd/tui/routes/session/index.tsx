@@ -66,7 +66,6 @@ import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
-import { DialogSubagent } from "./dialog-subagent.tsx"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 
 addDefaultParsers(parsers.parsers)

@@ -53,10 +53,6 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
     textarea.gotoLineEnd()
   })
 
-  const toggleOption = (key: "thinking" | "toolDetails") => {
-    setStore(key, !store[key])
-  }
-
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
