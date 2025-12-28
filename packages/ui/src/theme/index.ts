@@ -52,9 +52,6 @@ export { applyTheme, loadThemeFromUrl, getActiveTheme, removeTheme, setColorSche
 // Theme context (SolidJS)
 export { ThemeProvider, useTheme, type ColorScheme } from "./context"
 
-// Preload script utilities
-export { generatePreloadScript, generatePreloadScriptFormatted, STORAGE_KEYS, getThemeCacheKey } from "./preload"
-
 // Default themes
 export {
   DEFAULT_THEMES,
