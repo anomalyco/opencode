@@ -286,10 +286,8 @@ function ansiToRgba(code: number): RGBA {
   return RGBA.fromInts(0, 0, 0)
 }
 
-const SPECIAL_THEMES = {
-  FALLBACK: "opencode",
-  SYSTEM: "system",
-} as const
+const FALLBACK_THEME = "opencode"
+const SYSTEM_THEME = "system"
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
@@ -299,7 +297,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", SPECIAL_THEMES.FALLBACK)) as string,
+      active: (sync.data.config.theme ?? kv.get("theme", FALLBACK_THEME)) as string,
       ready: false,
     })
 
@@ -316,7 +314,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const getSystem = detectSystemColors().then((colors) => {
       const theme = generateSystemTheme(colors)
-      setStore("themes", { [SPECIAL_THEMES.SYSTEM]: theme })
+      setStore("themes", { [SYSTEM_THEME]: theme })
     })
 
     let getTheme
@@ -327,7 +325,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
        * the assumption that _all_ default themes have this property.
        */
       getTheme = Promise.resolve()
-    } else if (store.active === SPECIAL_THEMES.SYSTEM) {
+    } else if (store.active === SYSTEM_THEME) {
       getTheme = getSystem
     } else {
       getTheme = getCustom.then((themes) => {
@@ -337,11 +335,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       })
     }
 
-    getTheme.catch(() => setStore("active", SPECIAL_THEMES.FALLBACK)).finally(() => setStore("ready", true))
+    getTheme.catch(() => setStore("active", FALLBACK_THEME)).finally(() => setStore("ready", true))
 
     const values = createMemo(() => {
-      const theme = store.themes[store.active] ?? store.themes[SPECIAL_THEMES.FALLBACK]
-      const systemTheme = store.themes[SPECIAL_THEMES.SYSTEM] as SystemThemeJson
+      const theme = store.themes[store.active] ?? store.themes[FALLBACK_THEME]
+      const systemTheme = store.themes[SYSTEM_THEME] as SystemThemeJson
       return resolveTheme(theme, systemTheme, store.mode)
     })
 
@@ -448,7 +446,7 @@ function generateSystemTheme(colors: TerminalColors): SystemThemeJson {
   const graysDark = generateGrayScale(bg, true)
   const grays: Record<number, RGBAVariant> = {}
 
-  Object.keys(graysDark).forEach(index => {
+  Object.keys(graysDark).forEach((index) => {
     const i = Number(index)
     grays[i] = {
       dark: graysDark[i],
