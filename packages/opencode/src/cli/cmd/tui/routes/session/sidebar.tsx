@@ -7,7 +7,6 @@ import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
 import { Installation } from "@/installation"
-import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
@@ -60,6 +59,14 @@ export function Sidebar(props: { sessionID: string }) {
     }
   })
 
+  const sessionTokens = createMemo(() => {
+    const total = messages().reduce((sum, x) => {
+      if (x.role !== "assistant") return sum
+      return sum + x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
+    }, 0)
+    return total.toLocaleString()
+  })
+
   const directory = useDirectory()
   const kv = useKV()
 
@@ -94,6 +101,12 @@ export function Sidebar(props: { sessionID: string }) {
               </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
+            </box>
+            <box>
+              <text fg={theme.text}>
+                <b>Session</b>
+              </text>
+              <text fg={theme.textMuted}>{sessionTokens()} total tokens</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
             <Show when={mcpEntries().length > 0}>
