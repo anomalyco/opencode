@@ -53,17 +53,30 @@ export function Sidebar(props: { sessionID: string }) {
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
+    const limit = model?.limit.context ?? 0
     return {
       tokens: total.toLocaleString(),
-      percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      percentage: limit ? Math.round((total / limit) * 100) : null,
+      limit: limit ? (limit >= 1000000 ? `${(limit / 1000000).toFixed(1)}M` : `${Math.round(limit / 1000)}k`) : null,
     }
   })
 
   const sessionTokens = createMemo(() => {
-    const total = messages().reduce((sum, x) => {
-      if (x.role !== "assistant") return sum
-      return sum + x.tokens.input + x.tokens.output
-    }, 0)
+    const msgs = messages()
+    let total = 0
+    let peakBeforeCompaction = 0
+    for (const msg of msgs) {
+      if (msg.role !== "assistant") continue
+      const assistant = msg as AssistantMessage
+      const tokens = assistant.tokens.input + assistant.tokens.output
+      if (assistant.summary) {
+        total += peakBeforeCompaction
+        peakBeforeCompaction = tokens
+      } else {
+        peakBeforeCompaction = tokens
+      }
+    }
+    total += peakBeforeCompaction
     return total.toLocaleString()
   })
 
@@ -100,7 +113,9 @@ export function Sidebar(props: { sessionID: string }) {
                 <b>Context</b>
               </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
-              <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
+              <text fg={theme.textMuted}>
+                {context()?.percentage ?? 0}% used{context()?.limit ? ` of ${context()!.limit}` : ""}
+              </text>
             </box>
             <box>
               <text fg={theme.text}>
