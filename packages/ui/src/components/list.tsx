@@ -15,6 +15,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
   children: (item: T) => JSX.Element
   emptyMessage?: string
   onKeyEvent?: (event: KeyboardEvent, item: T | undefined) => void
+  onMove?: (item: T | undefined) => void
   activeIcon?: IconProps["name"]
   filter?: string
   search?: ListSearchProps | boolean
@@ -80,6 +81,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     }
     const element = scrollRef()?.querySelector(`[data-key="${active()}"]`)
     element?.scrollIntoView({ block: "center", behavior: "smooth" })
+  })
+
+  createEffect(() => {
+    const all = flat()
+    const current = active()
+    const item = all.find((x) => props.key(x) === current)
+    props.onMove?.(item)
   })
 
   const handleSelect = (item: T | undefined, index: number) => {
