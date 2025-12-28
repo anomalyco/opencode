@@ -34,7 +34,7 @@ jobs:
       - name: Check for new commits
         id: check
         run: |
-          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          BEHIND=$(git rev-list --count HEAD..upstream/dev)
           echo "behind=$BEHIND" >> $GITHUB_OUTPUT
           echo "Upstream is $BEHIND commits ahead"
 
@@ -50,7 +50,7 @@ jobs:
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
           git checkout -b "$BRANCH_NAME"
           
-          if git merge upstream/main --no-edit; then
+          if git merge upstream/dev --no-edit; then
             echo "status=success" >> $GITHUB_OUTPUT
             echo "Clean merge successful!"
           else
@@ -67,7 +67,7 @@ jobs:
           git push -u origin HEAD
           
           # Get commit list for PR body
-          COMMITS=$(git log origin/main..HEAD --oneline --reverse | head -30)
+          COMMITS=$(git log origin/dev..HEAD --oneline --reverse | head -30)
           
           gh pr create \
             --title "⬆️ Sync upstream $(date +%Y-%m-%d)" \
@@ -94,12 +94,12 @@ jobs:
         run: |
           # Get list of files that would conflict
           git checkout -b temp-conflict-check
-          git merge upstream/main --no-commit 2>/dev/null || true
+          git merge upstream/dev --no-commit 2>/dev/null || true
           CONFLICTS=$(git diff --name-only --diff-filter=U | head -20)
           git merge --abort 2>/dev/null || git reset --hard HEAD
           
           # Get recent upstream commits
-          UPSTREAM_COMMITS=$(git log HEAD..upstream/main --oneline | head -15)
+          UPSTREAM_COMMITS=$(git log HEAD..upstream/dev --oneline | head -15)
           
           gh issue create \
             --title "⚠️ Upstream sync conflict - $(date +%Y-%m-%d)" \
@@ -122,7 +122,7 @@ jobs:
           git checkout -b sync/upstream-$(date +%Y%m%d)
           
           # Attempt merge
-          git merge upstream/main
+          git merge upstream/dev
           
           # Resolve conflicts in your editor, then:
           git add .
