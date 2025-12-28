@@ -1,4 +1,5 @@
-import { $ } from "bun"
+import "../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import path from "node:path"
 import { Octokit } from "@octokit/rest"
 import { graphql } from "@octokit/graphql"

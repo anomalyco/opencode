@@ -1,7 +1,8 @@
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
 import { Flag } from "@/flag/flag"

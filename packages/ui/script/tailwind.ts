@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import "../../../scripts/bun-shim"
 
 const colors = await Bun.file(import.meta.dir + "/colors.txt").text()
 

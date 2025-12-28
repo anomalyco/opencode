@@ -1,0 +1,50 @@
+---
+import { Base64 } from "js-base64";
+import type { Props } from '@astrojs/starlight/props'
+import Default from '@astrojs/starlight/components/Head.astro'
+import config from '../../config.mjs'
+
+const base = import.meta.env.BASE_URL.slice(1)
+
+const slug = Astro.url.pathname.replace(/^\//, "").replace(/\/$/, "");
+const {
+  entry: {
+    data: { title , description },
+  },
+} = Astro.locals.starlightRoute;
+const isDocs = slug.startsWith("docs")
+
+let encodedTitle = '';
+let ogImage = `${config.url}/social-share.png`;
+let truncatedDesc = '';
+
+if (isDocs) {
+  // Truncate to fit S3's max key size
+  encodedTitle = encodeURIComponent(
+    Base64.encode(
+      // Convert to ASCII
+      encodeURIComponent(
+        // Truncate to fit S3's max key size
+        title.substring(0, 700)
+      )
+    )
+  );
+
+  if (description) {
+    truncatedDesc = encodeURIComponent(description.substring(0, 400))
+  }
+
+  ogImage = `${config.socialCard}/opencode-docs/${encodedTitle}.png?desc=${truncatedDesc}`;
+}
+---
+
+{ slug === "" && (
+<title>{title} | AI coding agent built for the terminal</title>
+)}
+
+<Default {...Astro.props}><slot /></Default>
+
+{ (!slug.startsWith(`${base}/s`)) && (
+  <meta property="og:image" content={ogImage} />
+  <meta property="twitter:image" content={ogImage} />
+)}

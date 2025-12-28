@@ -1,4 +1,5 @@
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import path from "path"
 import fs from "fs/promises"
 import { Log } from "../util/log"

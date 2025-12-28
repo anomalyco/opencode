@@ -1,0 +1,113 @@
+---
+import { Base64 } from "js-base64";
+
+import config from '../../../config.mjs'
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import Share from "../../components/Share.tsx";
+
+const apiUrl = import.meta.env.VITE_API_URL;
+
+const { id } = Astro.params;
+const res = await fetch(`${apiUrl}/share_data?id=${id}`);
+const data = await res.json();
+
+if (!data.info) {
+  return new Response(null, {
+    status: 404,
+    statusText: 'Not found'
+  });
+}
+
+const models: Set<string> = new Set();
+const version = data.info.version ? `v${data.info.version}` : "v0.0.1";
+
+Object.values(data.messages).forEach((d) => {
+  if (d.role === "assistant" && d.modelID) {
+    models.add(d.modelID);
+  }
+});
+
+const encodedTitle = encodeURIComponent(
+  Base64.encode(
+    // Convert to ASCII
+    encodeURIComponent(
+      // Truncate to fit S3's max key size
+      data.info.title.substring(0, 700),
+    )
+  )
+);
+
+const modelsArray = Array.from(models);
+let modelParam;
+if (modelsArray.length === 1) {
+  modelParam = modelsArray[0];
+}
+else if (modelsArray.length === 2) {
+  modelParam = encodeURIComponent(`${modelsArray[0]} & ${modelsArray[1]}`);
+}
+else {
+  modelParam = encodeURIComponent(`${modelsArray[0]} & ${modelsArray.length - 1} others`);
+}
+
+const ogImage = `${config.socialCard}/opencode-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${id}`;
+---
+<StarlightPage
+  hasSidebar={false}
+  frontmatter={{
+    title: data.info.title,
+    pagefind: false,
+    template: "splash",
+    tableOfContents: false,
+    head: [
+      {
+        tag: "meta",
+        attrs: {
+          name: "description",
+          content: "opencode - The AI coding agent built for the terminal.",
+        },
+      },
+      {
+        tag: "meta",
+        attrs: {
+          name: "robots",
+          content: "noindex, nofollow, noarchive, nosnippet",
+        }
+      },
+      {
+        tag: "meta",
+        attrs: {
+          property: "og:image",
+          content: ogImage,
+        },
+      },
+      {
+        tag: "meta",
+        attrs: {
+          name: "twitter:image",
+          content: ogImage,
+        },
+      },
+    ],
+  }}
+>
+  <Share
+    id={id}
+    api={apiUrl}
+    info={data.info}
+    messages={data.messages}
+    client:only="solid"
+  />
+</StarlightPage>
+
+<style is:global>
+body > .page > .main-frame .main-pane > main > .content-panel:first-of-type {
+  display: none;
+}
+body > .page > .main-frame .main-pane > main {
+  padding: 0;
+}
+body > .page > .main-frame .main-pane > main > .content-panel + .content-panel {
+  border-top: none !important;
+  padding: 0;
+}
+</style>

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Get the latest Git tag
+latest_tag=$(git tag --sort=committerdate | grep -E '^vscode-v[0-9]+\.[0-9]+\.[0-9]+$' | tail -1)
+if [ -z "$latest_tag" ]; then
+    echo "No tags found"
+    exit 1
+fi
+echo "Latest tag: $latest_tag"
+version=$(echo "$latest_tag" | sed 's/^vscode-v//')
+echo "Latest version: $version"
+
+# package-marketplace
+vsce package --no-git-tag-version --no-update-package-json --no-dependencies --skip-license -o dist/opencode.vsix "$version"
+
+# publish-marketplace
+vsce publish --packagePath dist/opencode.vsix
+
+# publish-openvsx
+npx ovsx publish dist/opencode.vsix -p "$OPENVSX_TOKEN"

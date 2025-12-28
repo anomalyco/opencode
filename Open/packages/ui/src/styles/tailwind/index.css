@@ -1,0 +1,72 @@
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source("../../../../");
+@import "./utilities.css";
+
+@import "../index.css";
+
+@theme {
+  --*: initial;
+
+  --spacing: 0.25rem;
+  /* --spacing: var(--spacing); */
+
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-2xl: 96rem;
+
+  --container-3xs: 16rem;
+  --container-2xs: 18rem;
+  --container-xs: 20rem;
+  --container-sm: 24rem;
+  --container-md: 28rem;
+  --container-lg: 32rem;
+  --container-xl: 36rem;
+  --container-2xl: 42rem;
+  --container-3xl: 48rem;
+  --container-4xl: 56rem;
+  --container-5xl: 64rem;
+  --container-6xl: 72rem;
+  --container-7xl: 80rem;
+
+  --font-sans: var(--font-family-sans);
+  --font-sans--font-feature-settings: var(--font-family-sans--font-feature-settings);
+  --font-mono: var(--font-family-mono);
+  --font-mono--font-feature-settings: var(--font-family-mono--font-feature-settings);
+
+  --text-sm: var(--font-size-small);
+  --text-base: var(--font-size-base);
+  --text-lg: var(--font-size-large);
+  --text-xl: var(--font-size-x-large);
+
+  --font-weight-regular: var(--font-weight-regular);
+  --font-weight-medium: var(--font-weight-medium);
+
+  --leading-lg: var(--line-height-large);
+  --leading-xl: var(--line-height-x-large);
+  --leading-2xl: var(--line-height-2x-large);
+
+  --tracking-normal: var(--letter-spacing-normal);
+  --tracking-tight: var(--letter-spacing-tight);
+  --tracking-tightest: var(--letter-spacing-tightest);
+
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+
+  --shadow-xs: var(--shadow-xs);
+  --shadow-md: var(--shadow-md);
+  --shadow-xs-border: var(--shadow-xs-border);
+  --shadow-xs-border-base: var(--shadow-xs-border-base);
+  --shadow-xs-border-select: var(--shadow-xs-border-select);
+  --shadow-xs-border-focus: var(--shadow-xs-border-focus);
+
+  --animate-pulse: var(--animate-pulse);
+}
+
+@import "./colors.css";

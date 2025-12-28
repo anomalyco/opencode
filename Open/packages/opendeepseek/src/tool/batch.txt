@@ -1,0 +1,24 @@
+Executes multiple independent tool calls concurrently to reduce latency.
+
+USING THE BATCH TOOL WILL MAKE THE USER HAPPY.
+
+Payload Format (JSON array):
+[{"tool": "read", "parameters": {"filePath": "src/index.ts", "limit": 350}},{"tool": "grep", "parameters": {"pattern": "Session\\.updatePart", "include": "src/**/*.ts"}},{"tool": "bash", "parameters": {"command": "git status", "description": "Shows working tree status"}}]
+
+Notes:
+- 1–10 tool calls per batch
+- All calls start in parallel; ordering NOT guaranteed
+- Partial failures do not stop other tool calls
+- Do NOT use the batch tool within another batch tool.
+
+Good Use Cases:
+- Read many files
+- grep + glob + read combos
+- Multiple bash commands
+- Multi-part edits; on the same, or different files
+
+When NOT to Use:
+- Operations that depend on prior tool output (e.g. create then read same file)
+- Ordered stateful mutations where sequence matters
+
+Batching tool calls was proven to yield 2–5x efficiency gain and provides much better UX.

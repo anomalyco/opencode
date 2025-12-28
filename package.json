@@ -7,7 +7,7 @@
   "packageManager": "npm@10.8.2",
   "scripts": {
     "dev": "npx tsx --cwd packages/opendeepseek --conditions=browser src/index.ts",
-    "typecheck": "bun turbo typecheck",
+    "typecheck": "turbo run typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'"
@@ -20,14 +20,18 @@
     "sdks/*"
   ],
   "devDependencies": {
-    "@tsconfig/bun": "1.0.9",
+    "@tsconfig/node20": "1.0.1",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "sst": "3.17.23",
     "turbo": "2.5.6",
     "tsx": "4.19.2",
     "esbuild": "0.24.0",
-    "ts-node": "10.9.2"
+    "ts-node": "10.9.2",
+    "@types/node": "22.13.9",
+    "execa": "^7.1.1",
+    "toml": "^3.0.0",
+    "fast-glob": "^3.2.12"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",

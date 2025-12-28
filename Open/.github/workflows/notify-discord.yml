@@ -1,0 +1,14 @@
+name: discord
+
+on:
+  release:
+    types: [released] # fires when a draft release is published
+
+jobs:
+  notify:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Send nicely-formatted embed to Discord
+        uses: SethCohen/github-releases-to-discord@v1
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}

@@ -1,0 +1,41 @@
+{
+  "name": "@opendeepseek/tauri",
+  "private": true,
+  "version": "1.0.181",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsgo -b",
+    "predev": "npx tsx ./scripts/predev.ts",
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@opendeepseek/desktop": "*",
+    "@solid-primitives/storage": "4.3.3",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "~2",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-os": "~2",
+    "@tauri-apps/plugin-process": "~2",
+    "@tauri-apps/plugin-shell": "~2",
+    "@tauri-apps/plugin-store": "~2",
+    "@tauri-apps/plugin-updater": "~2",
+    "@tauri-apps/plugin-http": "~2",
+    "@tauri-apps/plugin-window-state": "~2",
+    "solid-js": "1.9.10"
+  },
+  "devDependencies": {
+    "@actions/artifact": "4.0.0",
+    "@tauri-apps/cli": "^2",
+    "@types/bun": "1.3.4",
+    "@typescript/native-preview": "7.0.0-dev.20251207.1",
+    "typescript": "~5.6.2",
+    "vite": "7.1.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "npm@10.8.2"
+}

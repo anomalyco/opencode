@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import "../../../scripts/bun-shim"
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opendeepseek/script"

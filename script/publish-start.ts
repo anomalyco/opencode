@@ -1,6 +1,8 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import "../scripts/bun-shim"
 
-import { $ } from "bun"
+import "../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import { createOpenDeepSeek } from "@opendeepseek/sdk"
 import { Script } from "@opendeepseek/script"
 
@@ -167,16 +169,7 @@ toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Sc
 console.log("updated:", extensionToml)
 await Bun.file(extensionToml).write(toml)
 
-await $`bun install`
-
-console.log("\n=== opencode ===\n")
-await import(`../packages/opendeepseek/script/publish.ts`)
-
-console.log("\n=== sdk ===\n")
-await import(`../packages/sdk/js/script/publish.ts`)
-
-console.log("\n=== plugin ===\n")
-await import(`../packages/plugin/script/publish.ts`)
+  await $`npm install`
 
 const dir = new URL("..", import.meta.url).pathname
 process.chdir(dir)

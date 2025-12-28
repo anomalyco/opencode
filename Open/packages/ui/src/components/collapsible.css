@@ -1,0 +1,99 @@
+[data-component="collapsible"] {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-inset-base);
+  border: 1px solid var(--border-weaker-base);
+  transition: background-color 0.15s ease;
+  border-radius: var(--radius-md);
+  overflow: clip;
+
+  [data-slot="collapsible-trigger"] {
+    width: 100%;
+    display: flex;
+    height: 32px;
+    padding: 6px 8px 6px 12px;
+    align-items: center;
+    align-self: stretch;
+    cursor: default;
+    user-select: none;
+    color: var(--text-base);
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+
+    /* &:hover { */
+    /*   background-color: var(--surface-base); */
+    /* } */
+    &:focus-visible {
+      outline: none;
+    }
+    &[data-disabled] {
+      cursor: not-allowed;
+    }
+
+    [data-slot="collapsible-arrow"] {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      /* [data-slot="collapsible-arrow-icon"] { */
+      /* } */
+    }
+  }
+
+  [data-slot="collapsible-content"] {
+    overflow: hidden;
+    /* animation: slideUp 250ms ease-out; */
+
+    /* &[data-expanded] { */
+    /*   animation: slideDown 250ms ease-out; */
+    /* } */
+  }
+
+  &[data-variant="ghost"] {
+    background-color: transparent;
+    border: none;
+
+    > [data-slot="collapsible-trigger"] {
+      background-color: transparent;
+      border: none;
+      padding: 0;
+
+      /* &:hover { */
+      /*   color: var(--text-strong); */
+      /* } */
+      &:focus-visible {
+        outline: none;
+      }
+      &[data-disabled] {
+        cursor: not-allowed;
+      }
+    }
+  }
+}
+
+@keyframes slideDown {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--kb-collapsible-content-height);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    height: var(--kb-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}

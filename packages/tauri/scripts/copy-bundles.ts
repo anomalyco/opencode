@@ -1,4 +1,5 @@
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import * as path from "node:path"
 
 import { RUST_TARGET } from "./utils"

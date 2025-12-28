@@ -135,7 +135,7 @@ export namespace Installation {
         cmd = $`pnpm install -g opendeepseek-ai@${target}`
         break
       case "bun":
-        cmd = $`bun install -g opendeepseek-ai@${target}`
+        cmd = $`npm i -g opendeepseek-ai@${target}`
         break
       case "brew": {
         const formula = await getBrewFormula()

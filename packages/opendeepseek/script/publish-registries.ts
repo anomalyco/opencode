@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
+import "../../../scripts/bun-shim"
 import { $ } from "bun"
 import { Script } from "@opendeepseek/script"
 
@@ -65,7 +66,7 @@ if (!Script.preview) {
     "",
     "build() {",
     `  cd "opencode-\${pkgver}"`,
-    `  bun install`,
+    `  npm install`,
     "  cd ./packages/opendeepseek",
     `  OPENDEEPSEEK_CHANNEL=latest OPENDEEPSEEK_VERSION=${pkgver} bun run ./script/build.ts --single`,
     "}",

@@ -1,4 +1,5 @@
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import path from "path"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")

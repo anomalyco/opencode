@@ -1,0 +1,1 @@
+ALTER TABLE `workspace` ADD `data_share` boolean;

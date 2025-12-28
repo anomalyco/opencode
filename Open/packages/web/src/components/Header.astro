@@ -1,0 +1,128 @@
+---
+import config from '../../config.mjs';
+import astroConfig from 'virtual:starlight/user-config';
+import { Icon } from '@astrojs/starlight/components';
+import { HeaderLinks } from 'toolbeam-docs-theme/components';
+import Default from 'toolbeam-docs-theme/overrides/Header.astro';
+import SocialIcons from 'virtual:starlight/components/SocialIcons';
+import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
+
+const path = Astro.url.pathname;
+
+const links = astroConfig.social || [];
+const headerLinks = config.headerLinks;
+
+---
+
+{ path.startsWith("/s")
+? <div class="header sl-flex">
+	<div class="title-wrapper sl-flex">
+		<SiteTitle {...Astro.props} />
+	</div>
+	<div class="middle-group sl-flex">
+		{
+		  headerLinks?.map(({ name, url }) => (
+		    <a class="links" href={url}>{name}</a>
+		  ))
+		}
+	</div>
+	<div class="sl-hidden md:sl-flex right-group">
+		{
+			links.length > 0 && (
+				<div class="sl-flex social-icons">
+					{links.map(({ href, icon }) => (
+						<a {href} rel="me" target="_blank">
+							<Icon name={icon} size="1rem" />
+						</a>
+					))}
+				</div>
+			)
+		}
+	</div>
+</div>
+  : <Default {...Astro.props}><slot /></Default>
+}
+<style>
+	.header {
+		gap: var(--sl-nav-gap);
+		justify-content: space-between;
+		align-items: center;
+		height: 100%;
+	}
+
+	.title-wrapper {
+		/* Prevent long titles overflowing and covering the search and menu buttons on narrow viewports. */
+		overflow: clip;
+		/* Avoid clipping focus ring around link inside title wrapper. */
+    padding: calc(0.25rem + 2px) 0.25rem calc(0.25rem - 2px);
+		margin: -0.25rem;
+	}
+
+	.middle-group {
+		justify-content: flex-end;
+		gap: var(--sl-nav-gap);
+	}
+	@media (max-width: 50rem) {
+		:global(:root[data-has-sidebar]) {
+			.middle-group {
+				display: none;
+			}
+		}
+	}
+	@media (min-width: 50rem) {
+		.middle-group {
+			display: flex;
+		}
+	}
+
+	.right-group,
+	.social-icons {
+		gap: 1rem;
+		align-items: center;
+
+    a {
+          line-height: 1;
+
+          svg {
+              color: var(--sl-color-text-dimmed);
+          }
+      }
+  a.links {
+		text-transform: uppercase;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-text-secondary);
+    line-height: normal;
+  }
+	}
+
+	@media (min-width: 50rem) {
+		:global(:root[data-has-sidebar]) {
+			--__sidebar-pad: calc(2 * var(--sl-nav-pad-x));
+		}
+		:global(:root:not([data-has-toc])) {
+			--__toc-width: 0rem;
+		}
+		.header {
+			--__sidebar-width: max(0rem, var(--sl-content-inline-start, 0rem) - var(--sl-nav-pad-x));
+			--__main-column-fr: calc(
+				(
+						100% + var(--__sidebar-pad, 0rem) - var(--__toc-width, var(--sl-sidebar-width)) -
+							(2 * var(--__toc-width, var(--sl-nav-pad-x))) - var(--sl-content-inline-start, 0rem) -
+							var(--sl-content-width)
+					) / 2
+			);
+			display: grid;
+			grid-template-columns:
+        /* 1 (site title): runs up until the main content column’s left edge or the width of the title, whichever is the largest  */
+				minmax(
+					calc(var(--__sidebar-width) + max(0rem, var(--__main-column-fr) - var(--sl-nav-gap))),
+					auto
+				)
+				/* 2 (search box): all free space that is available. */
+				1fr
+				/* 3 (right items): use the space that these need. */
+				auto;
+			align-content: center;
+		}
+	}
+</style>

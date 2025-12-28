@@ -10,7 +10,8 @@ import path from "path"
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
 import type ParcelWatcher from "@parcel/watcher"
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import { Flag } from "@/flag/flag"
 
 declare const OPENDEEPSEEK_LIBC: string | undefined
