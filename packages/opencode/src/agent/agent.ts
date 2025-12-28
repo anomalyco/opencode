@@ -34,6 +34,7 @@ export namespace Agent {
         webfetch: Config.Permission.optional(),
         doom_loop: Config.Permission.optional(),
         external_directory: Config.Permission.optional(),
+        read_env: z.enum(["allow", "deny"]).optional(),
       }),
       model: z
         .object({
@@ -392,6 +393,7 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
     skill: mergedSkill ?? { "*": "allow" },
     doom_loop: merged.doom_loop,
     external_directory: merged.external_directory,
+    read_env: merged.read_env,
   }
 
   return result

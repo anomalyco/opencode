@@ -171,3 +171,91 @@ describe("tool.read env file blocking", () => {
     })
   })
 })
+
+describe("tool.read read_env permission", () => {
+  test("allows reading .env when read_env is allow", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, ".env"), "SECRET_KEY=value")
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            permission: {
+              read_env: "allow",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, ".env") }, ctx)
+        expect(result.output).toContain("SECRET_KEY=value")
+      },
+    })
+  })
+
+  test("blocks reading .env when read_env is deny", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, ".env"), "SECRET_KEY=value")
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            permission: {
+              read_env: "deny",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, ".env") }, ctx)).rejects.toThrow("blocked")
+      },
+    })
+  })
+
+  test("blocks reading .env by default (no permission set)", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, ".env"), "SECRET_KEY=value")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(read.execute({ filePath: path.join(tmp.path, ".env") }, ctx)).rejects.toThrow("blocked")
+      },
+    })
+  })
+
+  test("allows reading .env.local when read_env is allow", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, ".env.local"), "LOCAL_SECRET=value")
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            permission: {
+              read_env: "allow",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, ".env.local") }, ctx)
+        expect(result.output).toContain("LOCAL_SECRET=value")
+      },
+    })
+  })
+})

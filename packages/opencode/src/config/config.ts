@@ -426,6 +426,7 @@ export namespace Config {
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
           external_directory: Permission.optional(),
+          read_env: z.enum(["allow", "deny"]).optional().describe("Allow reading .env files (default: deny)"),
         })
         .optional(),
     })
@@ -791,6 +792,7 @@ export namespace Config {
           webfetch: Permission.optional(),
           doom_loop: Permission.optional(),
           external_directory: Permission.optional(),
+          read_env: z.enum(["allow", "deny"]).optional().describe("Allow reading .env files (default: deny)"),
         })
         .optional(),
       tools: z.record(z.string(), z.boolean()).optional(),

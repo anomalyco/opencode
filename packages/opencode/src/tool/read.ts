@@ -59,7 +59,7 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const block = iife(() => {
+    const isEnvFile = iife(() => {
       const basename = path.basename(filepath)
       const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
 
@@ -70,7 +70,7 @@ export const ReadTool = Tool.define("read", {
       return false
     })
 
-    if (block) {
+    if (isEnvFile && agent.permission.read_env !== "allow") {
       throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
     }
 
