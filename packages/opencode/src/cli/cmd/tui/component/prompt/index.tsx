@@ -660,6 +660,7 @@ export function Prompt(props: PromptProps) {
   })
 
   function enterHistorySearch() {
+    command.keybinds(false)
     setStore("historySearch", {
       active: true,
       query: "",
@@ -671,6 +672,7 @@ export function Prompt(props: PromptProps) {
   }
 
   function exitHistorySearch(restore: boolean) {
+    command.keybinds(true)
     if (restore) {
       const original = store.historySearch.originalPrompt
       input.setText(original.input)
