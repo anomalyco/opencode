@@ -141,6 +141,14 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
+    // Apply flag overrides for compaction settings
+    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
+      result.compaction = { ...result.compaction, auto: false }
+    }
+    if (Flag.OPENCODE_DISABLE_PRUNE) {
+      result.compaction = { ...result.compaction, prune: false }
+    }
+
     return {
       config: result,
       directories,
@@ -587,6 +595,17 @@ export namespace Config {
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
+  export const Server = z
+    .object({
+      port: z.number().int().positive().optional().describe("Port to listen on"),
+      hostname: z.string().optional().describe("Hostname to listen on"),
+      mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
+    })
+    .strict()
+    .meta({
+      ref: "ServerConfig",
+    })
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -635,6 +654,7 @@ export namespace Config {
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
+      server: Server.optional().describe("Server configuration for opencode serve and web commands"),
       command: z
         .record(z.string(), Command)
         .optional()
@@ -777,6 +797,12 @@ export namespace Config {
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
+        })
+        .optional(),
+      compaction: z
+        .object({
+          auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
+          prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
       experimental: z

@@ -1156,6 +1156,24 @@ export type KeybindsConfig = {
  */
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 
+/**
+ * Server configuration for opencode serve and web commands
+ */
+export type ServerConfig = {
+  /**
+   * Port to listen on
+   */
+  port?: number
+  /**
+   * Hostname to listen on
+   */
+  hostname?: string
+  /**
+   * Enable mDNS service discovery
+   */
+  mdns?: boolean
+}
+
 export type AgentConfig = {
   model?: string
   temperature?: number
@@ -1416,6 +1434,7 @@ export type Config = {
      */
     diff_style?: "auto" | "stacked"
   }
+  server?: ServerConfig
   /**
    * Command configuration, see https://opencode.ai/docs/commands
    */
@@ -1566,6 +1585,16 @@ export type Config = {
      * Enterprise URL
      */
     url?: string
+  }
+  compaction?: {
+    /**
+     * Enable automatic compaction when context is full (default: true)
+     */
+    auto?: boolean
+    /**
+     * Enable pruning of old tool outputs (default: true)
+     */
+    prune?: boolean
   }
   experimental?: {
     hook?: {
@@ -3326,6 +3355,24 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
+
+export type PermissionListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/permission"
+}
+
+export type PermissionListResponses = {
+  /**
+   * List of pending permissions
+   */
+  200: Array<Permission>
+}
+
+export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
 
 export type CommandListData = {
   body?: never
