@@ -892,7 +892,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
-              placeholder={props.sessionID ? undefined : `${PLACEHOLDERS[store.placeholder]}`}
+              placeholder={props.sessionID ? undefined : `${PLACEHOLDERS[store.placeholder]}`} // **CRITICAL**: Crucial change in formatting DO NOT CLOBBER DURING MERGES!
               textColor={keybind.leader ? theme.textMuted : theme.text}
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
