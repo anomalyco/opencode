@@ -61,25 +61,6 @@ export function Sidebar(props: { sessionID: string }) {
     }
   })
 
-  const sessionTokens = createMemo(() => {
-    const msgs = messages()
-    let total = 0
-    let peakBeforeCompaction = 0
-    for (const msg of msgs) {
-      if (msg.role !== "assistant") continue
-      const assistant = msg as AssistantMessage
-      const tokens = assistant.tokens.input + assistant.tokens.output
-      if (assistant.summary) {
-        total += peakBeforeCompaction
-        peakBeforeCompaction = tokens
-      } else {
-        peakBeforeCompaction = tokens
-      }
-    }
-    total += peakBeforeCompaction
-    return total.toLocaleString()
-  })
-
   const directory = useDirectory()
   const kv = useKV()
 
@@ -121,7 +102,6 @@ export function Sidebar(props: { sessionID: string }) {
               <text fg={theme.text}>
                 <b>Session</b>
               </text>
-              <text fg={theme.textMuted}>{sessionTokens()} total tokens</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
             <Show when={mcpEntries().length > 0}>
