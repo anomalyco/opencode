@@ -173,20 +173,26 @@ export namespace Provider {
       ])
       if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
-      const region = awsRegion ?? "us-east-1"
+      const defaultRegion = awsRegion ?? "us-east-1"
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
         autoload: true,
         options: {
-          region,
+          region: defaultRegion,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has global prefix
           if (modelID.startsWith("global.")) {
             return sdk.languageModel(modelID)
           }
+
+          // Region resolution precedence (highest to lowest):
+          // 1. options.region from opencode.json provider config
+          // 2. defaultRegion from AWS_REGION environment variable
+          // 3. Default "us-east-1" (baked into defaultRegion)
+          const region = options?.region ?? defaultRegion
 
           let regionPrefix = region.split("-")[0]
 
