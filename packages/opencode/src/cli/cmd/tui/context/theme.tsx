@@ -122,20 +122,24 @@ type HexColor = `#${string}`
 type RefName = string
 type AnsiCode = number
 type PrimitiveColor = HexColor | RefName | AnsiCode | RGBA
-type Variant = {
-  dark: PrimitiveColor
-  light: PrimitiveColor
-}
+type Variant = { dark: PrimitiveColor; light: PrimitiveColor }
 type ColorValue = PrimitiveColor | Variant
-type ThemeJson = {
+
+type BaseThemeJson<V> = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
-  theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
-    selectedListItemText?: ColorValue
-    backgroundMenu?: ColorValue
+  theme: Omit<Record<keyof ThemeColors, V>, "selectedListItemText" | "backgroundMenu"> & {
+    selectedListItemText?: V
+    backgroundMenu?: V
     thinkingOpacity?: number
   }
 }
+
+type ThemeJson = BaseThemeJson<ColorValue>
+
+type RGBAVariant = { dark: RGBA; light: RGBA }
+type RGBAValue = RGBA | RGBAVariant
+type SystemThemeJson = BaseThemeJson<RGBAValue>
 
 export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
@@ -172,43 +176,48 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   zenburn,
 }
 
-function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
+function resolveTheme(theme: ThemeJson, systemTheme: SystemThemeJson | undefined, mode: "dark" | "light") {
   const defs = theme.defs ?? {}
-  function resolveColor(c: ColorValue): RGBA {
-    if (c instanceof RGBA) return c
-    if (typeof c === "string") {
-      if (c === "transparent" || c === "none") return RGBA.fromInts(0, 0, 0, 0)
 
-      if (c.startsWith("#")) return RGBA.fromHex(c)
+  function resolveColor(value: ColorValue, systemKey: keyof ThemeColors): RGBA {
+    if (value instanceof RGBA) return value
+    if (typeof value === "number") return ansiToRgba(value)
+    if (typeof value !== "string") return resolveColor(value[mode], systemKey)
 
-      if (defs[c] != null) {
-        return resolveColor(defs[c])
-      } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
-        return resolveColor(theme.theme[c as keyof ThemeColors]!)
-      } else {
-        throw new Error(`Color reference "${c}" not found in defs or theme`)
-      }
+    switch (value) {
+      case "transparent":
+      case "none":
+        return RGBA.fromInts(0, 0, 0, 0)
+      case "system":
+        const newValue = systemTheme?.theme[systemKey]
+        if (newValue === undefined) return RGBA.fromInts(0, 0, 0, 0)
+        return resolveColor(newValue, systemKey)
     }
-    if (typeof c === "number") {
-      return ansiToRgba(c)
-    }
-    return resolveColor(c[mode])
+
+    if (value.startsWith("#")) return RGBA.fromHex(value)
+    if (defs[value] !== undefined) return resolveColor(defs[value], systemKey)
+
+    const newKey = value as keyof ThemeColors
+    const newValue = theme.theme[newKey]
+    if (newValue !== undefined)
+      // Cross-referencing must update `systemKey`.
+      return resolveColor(newValue, newKey)
+
+    throw new Error(`Color reference "${value}" not found in defs or theme`)
   }
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
       .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
-        // TODO: Resolve "system" to use `generateSystem`'s output for this key.
-        const v = value === "system" ? "none" : value
-        return [key, resolveColor(v as ColorValue)]
+        return [key, resolveColor(value as ColorValue, key as keyof ThemeColors)]
       }),
   ) as Partial<ThemeColors>
 
   // Handle selectedListItemText separately since it's optional
   const hasSelectedListItemText = theme.theme.selectedListItemText !== undefined
   if (hasSelectedListItemText) {
-    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!)
+    resolved.selectedListItemText = resolveColor(theme.theme.selectedListItemText!, "selectedListItemText")
   } else {
     // Backward compatibility: if selectedListItemText is not defined, use background color
     // This preserves the current behavior for all existing themes
@@ -217,7 +226,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
   // Handle backgroundMenu - optional with fallback to backgroundElement
   if (theme.theme.backgroundMenu !== undefined) {
-    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu)
+    resolved.backgroundMenu = resolveColor(theme.theme.backgroundMenu, "backgroundMenu")
   } else {
     resolved.backgroundMenu = resolved.backgroundElement
   }
@@ -331,7 +340,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     getTheme.catch(() => setStore("active", SPECIAL_THEMES.FALLBACK)).finally(() => setStore("ready", true))
 
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes[SPECIAL_THEMES.FALLBACK], store.mode)
+      const theme = store.themes[store.active] ?? store.themes[SPECIAL_THEMES.FALLBACK]
+      const systemTheme = store.themes[SPECIAL_THEMES.SYSTEM] as SystemThemeJson
+      return resolveTheme(theme, systemTheme, store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
@@ -415,7 +426,7 @@ async function loadCustomThemes() {
   return result
 }
 
-function generateSystemTheme(colors: TerminalColors): ThemeJson {
+function generateSystemTheme(colors: TerminalColors): SystemThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
 
@@ -435,18 +446,15 @@ function generateSystemTheme(colors: TerminalColors): ThemeJson {
   // Generate gray scale based on terminal background
   const graysLight = generateGrayScale(bg, false)
   const graysDark = generateGrayScale(bg, true)
-  const grays = Object.keys(graysDark).reduce(
-    (acc, index) => {
-      const i = Number(index)
-      acc[i] = {
-        dark: graysDark[i],
-        light: graysLight[i],
-      }
+  const grays: Record<number, RGBAVariant> = {}
 
-      return acc
-    },
-    {} as Record<number, Variant>,
-  )
+  Object.keys(graysDark).forEach(index => {
+    const i = Number(index)
+    grays[i] = {
+      dark: graysDark[i],
+      light: graysLight[i],
+    }
+  })
 
   const textMuted = {
     dark: generateMutedTextColor(bg, true),
