@@ -343,6 +343,8 @@
 
   .error-card {
     color: var(--text-on-critical-base);
+    max-height: 240px;
+    overflow-y: auto;
   }
 
   [data-slot="session-turn-collapsible-content-inner"] {
