@@ -22,6 +22,10 @@ interface ThemeContextValue {
   setTheme: (id: string) => void
   setColorScheme: (scheme: ColorScheme) => void
   registerTheme: (theme: DesktopTheme) => void
+  previewTheme: (id: string) => void
+  previewColorScheme: (scheme: ColorScheme) => void
+  commitPreview: () => void
+  cancelPreview: () => void
 }
 
 const ThemeContext = createContext<ThemeContextValue>()
@@ -104,6 +108,8 @@ export function ThemeProvider(props: { children: JSX.Element; defaultTheme?: str
   const [themeId, setThemeIdSignal] = createSignal(props.defaultTheme ?? "oc-1")
   const [colorScheme, setColorSchemeSignal] = createSignal<ColorScheme>("system")
   const [mode, setMode] = createSignal<"light" | "dark">(getSystemMode())
+  const [previewThemeId, setPreviewThemeId] = createSignal<string | null>(null)
+  const [previewScheme, setPreviewScheme] = createSignal<ColorScheme | null>(null)
 
   onMount(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
@@ -169,6 +175,46 @@ export function ThemeProvider(props: { children: JSX.Element; defaultTheme?: str
     }))
   }
 
+  const previewTheme = (id: string) => {
+    const theme = themes()[id]
+    if (!theme) return
+    setPreviewThemeId(id)
+    const previewMode = previewScheme() ? (previewScheme() === "system" ? getSystemMode() : previewScheme()!) : mode()
+    applyThemeCss(theme, id, previewMode as "light" | "dark")
+  }
+
+  const previewColorScheme = (scheme: ColorScheme) => {
+    setPreviewScheme(scheme)
+    const previewMode = scheme === "system" ? getSystemMode() : scheme
+    const id = previewThemeId() ?? themeId()
+    const theme = themes()[id]
+    if (theme) {
+      applyThemeCss(theme, id, previewMode)
+    }
+  }
+
+  const commitPreview = () => {
+    const id = previewThemeId()
+    const scheme = previewScheme()
+    if (id) {
+      setTheme(id)
+    }
+    if (scheme) {
+      setColorSchemePref(scheme)
+    }
+    setPreviewThemeId(null)
+    setPreviewScheme(null)
+  }
+
+  const cancelPreview = () => {
+    setPreviewThemeId(null)
+    setPreviewScheme(null)
+    const theme = themes()[themeId()]
+    if (theme) {
+      applyThemeCss(theme, themeId(), mode())
+    }
+  }
+
   return (
     <ThemeContext.Provider
       value={{
@@ -179,6 +225,10 @@ export function ThemeProvider(props: { children: JSX.Element; defaultTheme?: str
         setTheme,
         setColorScheme: setColorSchemePref,
         registerTheme,
+        previewTheme,
+        previewColorScheme,
+        commitPreview,
+        cancelPreview,
       }}
     >
       {props.children}
