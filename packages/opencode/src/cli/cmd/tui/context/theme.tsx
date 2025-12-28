@@ -37,7 +37,7 @@ import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
-import { createStore, produce } from "solid-js/store"
+import { createStore } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 
@@ -298,46 +298,32 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (theme) setStore("active", theme)
     })
 
-    loadCustomThemes()
-      .then((custom) => {
-        setStore(
-          produce((draft) => {
-            Object.assign(draft.themes, custom)
-          }),
-        )
-      })
-      .catch(() => {
-        if (!(store.active === SPECIAL_THEMES.SYSTEM || store.active in DEFAULT_THEMES)) {
-          setStore("active", SPECIAL_THEMES.FALLBACK)
-        }
-      })
-      .finally(() => {
-        if (store.active !== SPECIAL_THEMES.SYSTEM) {
-          setStore("ready", true)
-        }
-      })
+    const getCustom = loadCustomThemes().then((themes) => {
+      setStore("themes", themes)
+    })
 
-    detectSystemColors()
-      .then((colors) => {
-        setStore(
-          produce((draft) => {
-            draft.themes[SPECIAL_THEMES.SYSTEM] = generateSystemTheme(colors)
-            if (store.active === SPECIAL_THEMES.SYSTEM) {
-              draft.ready = true
-            }
-          }),
-        )
-      })
-      .catch(() => {
-        if (store.active === SPECIAL_THEMES.SYSTEM) {
-          setStore(
-            produce((draft) => {
-              draft.active = SPECIAL_THEMES.FALLBACK
-              draft.ready = true
-            }),
-          )
-        }
-      })
+    const getSystem = detectSystemColors().then((colors) => {
+      const theme = generateSystemTheme(colors)
+      setStore("themes", { [SPECIAL_THEMES.SYSTEM]: theme })
+    })
+
+    let getTheme
+    if (store.active in DEFAULT_THEMES) {
+      /**
+       * To safeguard against a broken experience, we need at least _some_
+       * default themes to not rely on system color detection. Here we're baking
+       * the assumption that _all_ default themes have this property.
+       */
+      getTheme = Promise.resolve()
+    } else if (store.active === SPECIAL_THEMES.SYSTEM) {
+      getTheme = getSystem
+    } else {
+      getTheme = getCustom
+    }
+
+    getTheme
+      .catch(() => setStore("active", SPECIAL_THEMES.FALLBACK))
+      .finally(() => setStore("ready", true))
 
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes[SPECIAL_THEMES.FALLBACK], store.mode)
