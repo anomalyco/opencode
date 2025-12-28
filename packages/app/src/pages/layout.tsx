@@ -41,7 +41,7 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { showToast, Toast } from "@opencode-ai/ui/toast"
+import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
@@ -118,13 +118,15 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const seenPermissions = new Set<string>()
+    const seenSessions = new Set<string>()
+    const toastBySession = new Map<string, number>()
     const unsub = globalSDK.event.listen((e) => {
       if (e.details?.type !== "permission.updated") return
       const directory = e.name
       const permission = e.details.properties
-      if (seenPermissions.has(permission.id)) return
-      seenPermissions.add(permission.id)
+      const sessionKey = `${directory}:${permission.sessionID}`
+      if (seenSessions.has(sessionKey)) return
+      seenSessions.add(sessionKey)
       const currentDir = params.dir ? base64Decode(params.dir) : undefined
       const currentSession = params.id
       if (directory === currentDir && permission.sessionID === currentSession) return
@@ -133,7 +135,7 @@ export default function Layout(props: ParentProps) {
       if (directory === currentDir && session?.parentID === currentSession) return
       const sessionTitle = session?.title ?? "New session"
       const projectName = getFilename(directory)
-      showToast({
+      const toastId = showToast({
         persistent: true,
         icon: "checklist",
         title: "Permission required",
@@ -144,7 +146,6 @@ export default function Layout(props: ParentProps) {
             onClick: () => {
               navigate(`/${base64Encode(directory)}/session/${permission.sessionID}`)
             },
-            dismissAfter: true,
           },
           {
             label: "Dismiss",
@@ -152,8 +153,33 @@ export default function Layout(props: ParentProps) {
           },
         ],
       })
+      toastBySession.set(sessionKey, toastId)
     })
     onCleanup(unsub)
+
+    createEffect(() => {
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      if (!currentDir || !currentSession) return
+      const sessionKey = `${currentDir}:${currentSession}`
+      const toastId = toastBySession.get(sessionKey)
+      if (toastId !== undefined) {
+        toaster.dismiss(toastId)
+        toastBySession.delete(sessionKey)
+        seenSessions.delete(sessionKey)
+      }
+      const [store] = globalSync.child(currentDir)
+      const childSessions = store.session.filter((s) => s.parentID === currentSession)
+      for (const child of childSessions) {
+        const childKey = `${currentDir}:${child.id}`
+        const childToastId = toastBySession.get(childKey)
+        if (childToastId !== undefined) {
+          toaster.dismiss(childToastId)
+          toastBySession.delete(childKey)
+          seenSessions.delete(childKey)
+        }
+      }
+    })
   })
 
   function sortSessions(a: Session, b: Session) {
