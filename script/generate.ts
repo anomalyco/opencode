@@ -4,8 +4,8 @@ import "../scripts/bun-shim"
 import "../scripts/bun-shim"
 const $ = (globalThis as any).Bun.$
 
-await $`bun ./packages/sdk/js/script/build.ts`
+await $`npx tsx ./packages/sdk/js/script/build.ts`
 
-await $`bun dev generate > ../sdk/openapi.json`.cwd("packages/opendeepseek")
+await $`npm --workspace packages/opendeepseek run dev --silent > ../sdk/openapi.json`.cwd("packages/opendeepseek")
 
-await $`./script/format.ts`
+await $`npx tsx ./script/format.ts`

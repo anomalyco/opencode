@@ -4,4 +4,4 @@ import "../scripts/bun-shim"
 import "../scripts/bun-shim"
 const $ = (globalThis as any).Bun.$
 
-await $`bun run prettier --ignore-unknown --write .`
+await $`npx prettier --ignore-unknown --write .`

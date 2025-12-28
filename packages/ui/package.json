@@ -19,7 +19,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite",
-    "generate:tailwind": "bun run script/tailwind.ts"
+    "generate:tailwind": "npx tsx script/tailwind.ts"
   },
   "devDependencies": {
     "@types/bun": "1.3.4",
