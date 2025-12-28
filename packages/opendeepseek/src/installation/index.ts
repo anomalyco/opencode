@@ -1,7 +1,8 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import path from "path"
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import z from "zod"
 import { NamedError } from "@opendeepseek/util/error"
 import { Log } from "../util/log"

@@ -1,5 +1,6 @@
 {
   "name": "github",
+  "version": "1.0.181",
   "module": "index.ts",
   "type": "module",
   "private": true,

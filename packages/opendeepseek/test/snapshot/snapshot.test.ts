@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import { Snapshot } from "../../src/snapshot"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"

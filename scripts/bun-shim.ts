@@ -10,7 +10,25 @@ function makeFile(pathStr: string) {
     async text() {
       return await fs.readFile(pathStr, "utf8")
     },
-    async write(content: string) {
+    async json() {
+      return JSON.parse(await fs.readFile(pathStr, "utf8"))
+    },
+    async arrayBuffer() {
+      const buf = await fs.readFile(pathStr)
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+    },
+    async exists() {
+      try {
+        await fs.access(pathStr)
+        return true
+      } catch {
+        return false
+      }
+    },
+    async write(content: any) {
+      if (content instanceof Uint8Array || Buffer.isBuffer(content)) {
+        return await fs.writeFile(pathStr, Buffer.from(content))
+      }
       return await fs.writeFile(pathStr, content, "utf8")
     },
   }
@@ -65,8 +83,9 @@ const BunShim: any = {
   file(p: string) {
     return makeFile(p)
   },
-  async write(p: string, content: string) {
-    await fs.writeFile(p, content, "utf8")
+  async write(p: string, content: any) {
+    if (content instanceof Uint8Array || Buffer.isBuffer(content)) return await fs.writeFile(p, Buffer.from(content))
+    return await fs.writeFile(p, content, "utf8")
   },
   TOML: {
     parse(s: string) {
@@ -76,7 +95,13 @@ const BunShim: any = {
   Glob,
   $: make$(),
   spawn(...args: any[]) {
-    const cp = spawnNative(...args)
+    let cp
+    if (Array.isArray(args[0])) {
+      const [cmd, ...rest] = args[0]
+      cp = spawnNative(cmd, rest, { stdio: "inherit" })
+    } else {
+      cp = spawnNative(...args)
+    }
     return {
       pid: cp.pid,
       exited: new Promise((resolve) => cp.on("close", resolve)),

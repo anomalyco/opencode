@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import "../../../scripts/bun-shim"
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 import pkg from "../package.json"
 import { Script } from "@opendeepseek/script"
 import { fileURLToPath } from "url"

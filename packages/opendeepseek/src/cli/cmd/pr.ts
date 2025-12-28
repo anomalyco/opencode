@@ -1,7 +1,8 @@
 import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Instance } from "@/project/instance"
-import { $ } from "bun"
+import "../../../scripts/bun-shim"
+const $ = (globalThis as any).Bun.$
 
 export const PrCommand = cmd({
   command: "pr <number>",

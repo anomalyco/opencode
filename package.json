@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "opendeepseek",
+  "version": "1.0.181",
   "description": "AI-powered development tool",
   "private": true,
   "type": "module",

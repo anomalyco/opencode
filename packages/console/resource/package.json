@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opendeepseek/console-resource",
+  "version": "1.0.181",
   "dependencies": {
     "@cloudflare/workers-types": "4.20251008.0"
   },
