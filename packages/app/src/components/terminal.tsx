@@ -1,9 +1,9 @@
 import { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
-import { ComponentProps, onCleanup, onMount, splitProps } from "solid-js"
+import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
-import { usePrefersDark } from "@solid-primitives/media"
+import { resolveThemeVariant, useTheme } from "@opencode-ai/ui/theme"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -12,8 +12,28 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onConnectError?: (error: unknown) => void
 }
 
+type TerminalColors = {
+  background: string
+  foreground: string
+  cursor: string
+}
+
+const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
+  light: {
+    background: "#fcfcfc",
+    foreground: "#211e1e",
+    cursor: "#211e1e",
+  },
+  dark: {
+    background: "#191515",
+    foreground: "#d4d4d4",
+    cursor: "#d4d4d4",
+  },
+}
+
 export const Terminal = (props: TerminalProps) => {
   const sdk = useSDK()
+  const theme = useTheme()
   let container!: HTMLDivElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "onConnectError"])
   let ws: WebSocket
@@ -22,7 +42,35 @@ export const Terminal = (props: TerminalProps) => {
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
-  const prefersDark = usePrefersDark()
+
+  const getTerminalColors = (): TerminalColors => {
+    const mode = theme.mode()
+    const fallback = DEFAULT_TERMINAL_COLORS[mode]
+    const currentTheme = theme.themes()[theme.themeId()]
+    if (!currentTheme) return fallback
+    const variant = mode === "dark" ? currentTheme.dark : currentTheme.light
+    if (!variant?.seeds) return fallback
+    const resolved = resolveThemeVariant(variant, mode === "dark")
+    const text = resolved["text-base"] ?? fallback.foreground
+    const background = resolved["background-stronger"] ?? fallback.background
+    return {
+      background,
+      foreground: text,
+      cursor: text,
+    }
+  }
+
+  const [terminalColors, setTerminalColors] = createSignal<TerminalColors>(getTerminalColors())
+
+  createEffect(() => {
+    const colors = getTerminalColors()
+    setTerminalColors(colors)
+    if (!term) return
+    const setOption = (term as unknown as { setOption?: (key: string, value: TerminalColors) => void }).setOption
+    if (!setOption) return
+    setOption("theme", colors)
+  })
+
   const focusTerminal = () => term?.focus()
   const copySelection = () => {
     if (!term || !term.hasSelection()) return false
@@ -62,17 +110,7 @@ export const Terminal = (props: TerminalProps) => {
       fontSize: 14,
       fontFamily: "IBM Plex Mono, monospace",
       allowTransparency: true,
-      theme: prefersDark()
-        ? {
-            background: "#191515",
-            foreground: "#d4d4d4",
-            cursor: "#d4d4d4",
-          }
-        : {
-            background: "#fcfcfc",
-            foreground: "#211e1e",
-            cursor: "#211e1e",
-          },
+      theme: terminalColors(),
       scrollback: 10_000,
       ghostty,
     })
@@ -192,6 +230,7 @@ export const Terminal = (props: TerminalProps) => {
       ref={container}
       data-component="terminal"
       data-prevent-autofocus
+      style={{ "background-color": terminalColors().background }}
       classList={{
         ...(local.classList ?? {}),
         "size-full px-6 py-3 font-mono": true,

@@ -137,6 +137,9 @@
 
   [data-slot="message-part-tool-error-message"] {
     color: var(--text-on-critical-weak);
+    max-height: 240px;
+    overflow-y: auto;
+    word-break: break-word;
   }
 }
 
