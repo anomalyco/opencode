@@ -2,7 +2,6 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
-import { Skill } from "../skill"
 
 import { Instance } from "../project/instance"
 import path from "path"
