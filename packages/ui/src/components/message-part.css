@@ -245,6 +245,14 @@
 
 [data-component="edit-content"] {
   border-top: 1px solid var(--border-weaker-base);
+  max-height: 420px;
+  overflow-y: auto;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 [data-component="write-content"] {
