@@ -623,7 +623,14 @@ ToolRegistry.register({
       const sessionId = childSessionId()
       if (!sessionId) return undefined
       const permissions = data.store.permission?.[sessionId] ?? []
-      return permissions.toSorted((a, b) => a.id.localeCompare(b.id))[0]
+      return permissions.reduce(
+        (result, perm) => {
+          if (!result) return perm
+          if (perm.id < result.id) return perm
+          return result
+        },
+        undefined as (typeof permissions)[number] | undefined,
+      )
     })
 
     const childToolPart = createMemo(() => {
