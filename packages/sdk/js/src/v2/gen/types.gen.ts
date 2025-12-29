@@ -1616,6 +1616,22 @@ export type Config = {
      * Enable pruning of old tool outputs (default: true)
      */
     prune?: boolean
+    /**
+     * Compaction method: 'standard' summarizes entire conversation, 'collapse' extracts oldest messages and creates summary at breakpoint (default: collapse)
+     */
+    method?: "standard" | "collapse"
+    /**
+     * Trigger compaction at this fraction of total context (default: 0.85 = 85%)
+     */
+    trigger?: number
+    /**
+     * For collapse mode: fraction of oldest tokens to extract and summarize (default: 0.65)
+     */
+    extractRatio?: number
+    /**
+     * For collapse mode: fraction of newest tokens to use as reference context (default: 0.15)
+     */
+    recentRatio?: number
   }
   experimental?: {
     hook?: {

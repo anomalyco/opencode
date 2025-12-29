@@ -1121,6 +1121,8 @@ export namespace Server {
               break
             }
           }
+          // Create compaction trigger, then loop processes it
+          // process() will route to the appropriate method (collapse or standard)
           await SessionCompaction.create({
             sessionID,
             agent: currentAgent,

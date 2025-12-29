@@ -92,6 +92,12 @@ export function Sidebar(props: { sessionID: string }) {
               <text fg={theme.text}>
                 <b>Context</b>
               </text>
+              <text fg={theme.textMuted}>
+                compact{" "}
+                {sync.data.config.compaction?.auto === false
+                  ? "disabled"
+                  : kv.get("compaction_method", sync.data.config.compaction?.method ?? "standard")}
+              </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>

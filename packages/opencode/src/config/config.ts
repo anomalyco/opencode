@@ -807,6 +807,30 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          method: z
+            .enum(["standard", "collapse"])
+            .optional()
+            .describe(
+              "Compaction method: 'standard' summarizes entire conversation, 'collapse' extracts oldest messages and creates summary at breakpoint (default: collapse)",
+            ),
+          trigger: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe("Trigger compaction at this fraction of total context (default: 0.85 = 85%)"),
+          extractRatio: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe("For collapse mode: fraction of oldest tokens to extract and summarize (default: 0.65)"),
+          recentRatio: z
+            .number()
+            .min(0)
+            .max(1)
+            .optional()
+            .describe("For collapse mode: fraction of newest tokens to use as reference context (default: 0.15)"),
         })
         .optional(),
       experimental: z

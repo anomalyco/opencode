@@ -11,8 +11,11 @@ import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
+import { Log } from "../util/log"
 
 export namespace MessageV2 {
+  const log = Log.create({ service: "message-v2" })
+
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
   export const AuthError = NamedError.create(
@@ -577,17 +580,28 @@ export namespace MessageV2 {
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()
+
     for await (const msg of stream) {
+      const hasCompactionPart = msg.parts.some((part) => part.type === "compaction")
+      const isAssistantSummary =
+        msg.info.role === "assistant" && (msg.info as Assistant).summary && (msg.info as Assistant).finish
+
       result.push(msg)
-      if (
-        msg.info.role === "user" &&
-        completed.has(msg.info.id) &&
-        msg.parts.some((part) => part.type === "compaction")
-      )
+
+      // Check if this is a compaction breakpoint
+      if (msg.info.role === "user" && completed.has(msg.info.id) && hasCompactionPart) {
+        log.debug("breakpoint", { id: msg.info.id })
         break
-      if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish) completed.add(msg.info.parentID)
+      }
+
+      // If assistant with summary=true and finish, add parentID to completed set
+      if (isAssistantSummary) {
+        completed.add((msg.info as Assistant).parentID)
+      }
     }
+
     result.reverse()
+    log.debug("filtered", { count: result.length })
     return result
   }
 

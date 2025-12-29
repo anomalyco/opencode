@@ -14,6 +14,8 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { Global } from "@/global"
+import path from "path"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -27,15 +29,60 @@ export namespace SessionCompaction {
     ),
   }
 
+  // Default configuration values
+  export const DEFAULTS = {
+    method: "standard" as const,
+    trigger: 0.85, // Trigger at 85% of usable context to leave headroom
+    extractRatio: 0.65,
+    recentRatio: 0.15,
+  }
+
+  /**
+   * Get the compaction method.
+   * Priority: TUI toggle (kv.json) > config file > default
+   */
+  export async function getMethod(): Promise<"standard" | "collapse"> {
+    const config = await Config.get()
+    const configMethod = config.compaction?.method
+
+    // Check TUI toggle override
+    try {
+      const file = Bun.file(path.join(Global.Path.state, "kv.json"))
+      if (await file.exists()) {
+        const kv = await file.json()
+        const toggle = kv["compaction_method"]
+        if (toggle === "standard" || toggle === "collapse") {
+          return toggle
+        }
+      }
+    } catch {
+      // Ignore KV read errors
+    }
+
+    return configMethod ?? DEFAULTS.method
+  }
+
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
-    const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = context - output
-    return count > usable
+
+    const count = input.tokens.input + input.tokens.cache.read + input.tokens.cache.write + input.tokens.output
+    const trigger = config.compaction?.trigger ?? DEFAULTS.trigger
+    const threshold = context * trigger
+    const isOver = count > threshold
+
+    log.debug("overflow check", {
+      tokens: input.tokens,
+      count,
+      context,
+      trigger,
+      threshold,
+      isOver,
+    })
+
+    return isOver
   }
 
   export const PRUNE_MINIMUM = 20_000
@@ -89,13 +136,37 @@ export namespace SessionCompaction {
     }
   }
 
+  /**
+   * Process compaction - routes to appropriate method based on config.
+   * This is called via the create() -> loop() -> process() flow.
+   */
   export async function process(input: {
     parentID: string
     messages: MessageV2.WithParts[]
     sessionID: string
     abort: AbortSignal
     auto: boolean
-  }) {
+  }): Promise<"continue" | "stop"> {
+    const method = await getMethod()
+    log.info("compacting", { method })
+
+    if (method === "collapse") {
+      return processCollapse(input)
+    }
+    return processStandard(input)
+  }
+
+  /**
+   * Standard compaction: Summarizes entire conversation at end.
+   */
+  async function processStandard(input: {
+    parentID: string
+    messages: MessageV2.WithParts[]
+    sessionID: string
+    abort: AbortSignal
+    auto: boolean
+  }): Promise<"continue" | "stop"> {
+    log.debug("standard", { parentID: input.parentID })
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
     const model = agent.model
@@ -192,6 +263,350 @@ export namespace SessionCompaction {
     return "continue"
   }
 
+  /**
+   * Collapse compaction: Extract oldest messages, distill with AI, insert summary at breakpoint.
+   * Messages before the breakpoint are filtered out by filterCompacted().
+   */
+  async function processCollapse(input: {
+    parentID: string
+    messages: MessageV2.WithParts[]
+    sessionID: string
+    abort: AbortSignal
+    auto: boolean
+  }): Promise<"continue" | "stop"> {
+    const config = await Config.get()
+    const extractRatio = config.compaction?.extractRatio ?? DEFAULTS.extractRatio
+    const recentRatio = config.compaction?.recentRatio ?? DEFAULTS.recentRatio
+
+    log.debug("collapse", {
+      messages: input.messages.length,
+      extractRatio,
+      recentRatio,
+    })
+
+    // Calculate token counts for messages
+    const messageTokens: number[] = []
+    let totalTokens = 0
+    for (const msg of input.messages) {
+      const estimate = estimateMessageTokens(msg)
+      messageTokens.push(estimate)
+      totalTokens += estimate
+    }
+
+    // Calculate extraction targets
+    const extractTarget = Math.floor(totalTokens * extractRatio)
+    const recentTarget = Math.floor(totalTokens * recentRatio)
+
+    // Find split points
+    let extractedTokens = 0
+    let extractSplitIndex = 0
+    for (let i = 0; i < input.messages.length; i++) {
+      if (extractedTokens >= extractTarget) break
+      extractedTokens += messageTokens[i]
+      extractSplitIndex = i + 1
+    }
+
+    let recentTokens = 0
+    let recentSplitIndex = input.messages.length
+    for (let i = input.messages.length - 1; i >= 0; i--) {
+      if (recentTokens >= recentTarget) break
+      recentTokens += messageTokens[i]
+      recentSplitIndex = i
+    }
+
+    // Ensure recent split doesn't overlap with extract
+    if (recentSplitIndex <= extractSplitIndex) {
+      recentSplitIndex = extractSplitIndex
+    }
+
+    const extractedMessages = input.messages.slice(0, extractSplitIndex)
+    const recentReferenceMessages = input.messages.slice(recentSplitIndex)
+
+    log.debug("collapse split", {
+      totalTokens,
+      extractTarget,
+      extractedTokens,
+      extractedMessages: extractedMessages.length,
+      recentTarget,
+      recentTokens,
+      recentMessages: recentReferenceMessages.length,
+    })
+
+    if (extractedMessages.length === 0) {
+      log.info("collapse skipped", { reason: "no messages to extract" })
+      return "continue"
+    }
+
+    // Convert extracted messages to markdown for distillation
+    const markdownContent = messagesToMarkdown(extractedMessages)
+    const recentContext = messagesToMarkdown(recentReferenceMessages)
+
+    // Get the original compaction user message (placeholder created by create())
+    const originalUserMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+
+    // Get the last extracted message to determine breakpoint position
+    const lastExtractedMessage = extractedMessages[extractedMessages.length - 1]
+    const lastExtractedId = lastExtractedMessage.info.id
+
+    // Extract timestamp from the last extracted message ID
+    // Use createLike to handle both 6-byte and 7-byte ID formats
+    const breakpointTimestamp = lastExtractedMessage.info.time.created + 1
+
+    log.debug("collapse positioning", {
+      lastExtractedId,
+      breakpointTimestamp,
+    })
+
+    // Create the compaction user message at the breakpoint position
+    const compactionUserId = Identifier.createLike(lastExtractedId, "message", false, 1)
+    const compactionUserMsg = await Session.updateMessage({
+      id: compactionUserId,
+      role: "user",
+      model: originalUserMessage.model,
+      sessionID: input.sessionID,
+      agent: originalUserMessage.agent,
+      time: {
+        created: breakpointTimestamp,
+      },
+    })
+    await Session.updatePart({
+      id: Identifier.createLike(lastExtractedId, "part", false, 1),
+      messageID: compactionUserMsg.id,
+      sessionID: input.sessionID,
+      type: "compaction",
+      auto: input.auto,
+    })
+
+    const agent = await Agent.get("compaction")
+    const model = agent.model
+      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+      : await Provider.getModel(originalUserMessage.model.providerID, originalUserMessage.model.modelID)
+
+    // Create assistant summary message positioned right after the compaction user message
+    // Use compactionUserId as reference (not lastExtractedId) to ensure assistant sorts immediately after user
+    // This prevents other messages from being created with IDs that sort between user and assistant
+    const compactionAssistantId = Identifier.createLike(compactionUserId, "message", false, 1)
+    const msg = (await Session.updateMessage({
+      id: compactionAssistantId,
+      role: "assistant",
+      parentID: compactionUserMsg.id,
+      sessionID: input.sessionID,
+      mode: "compaction",
+      agent: "compaction",
+      summary: true,
+      path: {
+        cwd: Instance.directory,
+        root: Instance.worktree,
+      },
+      cost: 0,
+      tokens: {
+        output: 0,
+        input: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: model.id,
+      providerID: model.providerID,
+      time: {
+        created: breakpointTimestamp + 1,
+      },
+    })) as MessageV2.Assistant
+
+    const processor = SessionProcessor.create({
+      assistantMessage: msg,
+      sessionID: input.sessionID,
+      model,
+      abort: input.abort,
+    })
+
+    // Allow plugins to inject context
+    const compacting = await Plugin.trigger(
+      "experimental.session.compacting",
+      { sessionID: input.sessionID },
+      { context: [], prompt: undefined },
+    )
+
+    const collapsePrompt = `You are creating a comprehensive context restoration document from a collapsed conversation segment. This document will serve as the foundation for continued work - it must preserve critical knowledge that would otherwise be lost.
+
+## Output Structure
+
+Create a detailed summary (target: 600-800 lines, approximately 8,000-12,000 tokens) with the following sections:
+
+### 1. Current Task State
+- What is actively being worked on
+- Immediate next steps
+- Any blockers or open questions
+
+### 2. Resolved Code & Lessons Learned
+For each complex or highly iterative area of focus, include:
+- The actual working code in markdown fences (this is critical - preserve it verbatim)
+- What approaches failed and why
+- What finally worked and why
+- Insights that would help if revisiting this area
+- Any edge cases or gotchas discovered
+
+Format example:
+\`\`\`typescript
+// Solution for X problem
+// Failed approaches: tried A (failed because...), tried B (failed because...)
+// Working solution: C works because...
+// Gotcha: watch out for Y when Z
+<actual working code here>
+\`\`\`
+
+### 3. User Directives
+Bullet points of explicit or implicit user preferences:
+- Things they want you to always do
+- Things they want you to never do
+- Coding style preferences
+- Communication preferences
+- Project-specific rules they've established
+
+### 4. Custom Utilities & Commands
+- Any custom scripts, commands, or workflows established
+- Special tool configurations or aliases
+- Debugging commands that proved useful
+- Project-specific shortcuts or patterns
+
+### 5. Design Decisions & Derived Requirements
+Requirements and decisions that emerged from the conversation but aren't documented elsewhere:
+- Architecture decisions made and their rationale
+- API contracts or interfaces agreed upon
+- Naming conventions established
+- File organization patterns
+- Integration patterns discovered
+
+### 6. Technical Facts
+- Key file paths and their purposes
+- Important function/class names and what they do
+- Configuration values that matter
+- Environment specifics
+- Dependencies or version constraints
+
+## Critical Rules
+
+- PRESERVE working code verbatim in fenced blocks - this is essential context that prevents re-solving solved problems
+- INCLUDE failed approaches with explanations - this prevents repeating the same mistakes
+- Be specific: exact paths, line numbers, function names, config values
+- Capture the "why" behind decisions, not just the "what"
+- If something was hard-won through iteration, document the full journey
+- User directives are sacred - never omit explicit user preferences
+- This document should allow work to continue seamlessly as if the conversation never broke
+
+## Extracted Context (to distill)
+
+${markdownContent}
+
+## Recent Context (for reference - shows current state)
+
+${recentContext}
+
+${compacting.context.length > 0 ? "\n## Additional Context\n\n" + compacting.context.join("\n\n") : ""}
+
+Generate the context restoration document now:`
+
+    const result = await processor.process({
+      user: originalUserMessage,
+      agent,
+      abort: input.abort,
+      sessionID: input.sessionID,
+      tools: {},
+      system: [],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: collapsePrompt }],
+        },
+      ],
+      model,
+    })
+
+    // NOTE: We intentionally do NOT add a "Continue if you have next steps" message
+    // for collapse mode. The collapse summary is just context restoration - the loop
+    // should exit after the summary is generated so the user can continue naturally.
+
+    if (processor.message.error) return "stop"
+
+    // Update token count on the chronologically last assistant message
+    // so isOverflow() sees the correct post-collapse state.
+    const allMessages = await Session.messages({ sessionID: input.sessionID })
+    const lastAssistant = allMessages
+      .filter(
+        (m): m is MessageV2.WithParts & { info: MessageV2.Assistant } =>
+          m.info.role === "assistant" && m.info.id !== msg.id,
+      )
+      .sort((a, b) => b.info.time.created - a.info.time.created)[0]
+
+    if (lastAssistant) {
+      const originalTokens = { ...lastAssistant.info.tokens }
+      const collapseSummaryTokens = processor.message.tokens.output
+
+      const currentTotal =
+        lastAssistant.info.tokens.input +
+        lastAssistant.info.tokens.cache.read +
+        lastAssistant.info.tokens.cache.write +
+        lastAssistant.info.tokens.output
+
+      const newTotal = Math.max(0, currentTotal - extractedTokens + collapseSummaryTokens)
+
+      lastAssistant.info.tokens = {
+        input: 0,
+        output: lastAssistant.info.tokens.output,
+        reasoning: lastAssistant.info.tokens.reasoning,
+        cache: {
+          read: Math.max(0, newTotal - lastAssistant.info.tokens.output),
+          write: 0,
+        },
+      }
+      await Session.updateMessage(lastAssistant.info)
+
+      log.debug("tokens adjusted", {
+        extracted: extractedTokens,
+        summary: collapseSummaryTokens,
+        total: newTotal,
+      })
+    }
+
+    log.info("collapsed", {
+      messages: extractedMessages.length,
+      tokens: extractedTokens,
+    })
+
+    // Delete the original trigger message (created by create()) to prevent
+    // the loop from picking it up again as a pending compaction task.
+    // The trigger is the message at input.parentID - we've created a new
+    // compaction user message at the breakpoint position.
+    if (input.parentID !== compactionUserMsg.id) {
+      log.debug("cleanup trigger", { id: input.parentID })
+      // Delete parts first
+      const triggerMsg = input.messages.find((m) => m.info.id === input.parentID)
+      if (triggerMsg) {
+        for (const part of triggerMsg.parts) {
+          await Session.removePart({
+            sessionID: input.sessionID,
+            messageID: input.parentID,
+            partID: part.id,
+          })
+        }
+      }
+      await Session.removeMessage({
+        sessionID: input.sessionID,
+        messageID: input.parentID,
+      })
+    }
+
+    Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+
+    // For auto-compaction: return "continue" so the loop processes the user's
+    // original message that triggered the overflow. The trigger message is deleted,
+    // so the loop will find the real user message and respond to it.
+    // For manual compaction: return "stop" - user explicitly requested compaction only.
+    if (input.auto) {
+      return "continue"
+    }
+    return "stop"
+  }
+
   export const create = fn(
     z.object({
       sessionID: Identifier.schema("session"),
@@ -222,4 +637,61 @@ export namespace SessionCompaction {
       })
     },
   )
+
+  /**
+   * Estimate tokens for a message (respects compaction state)
+   */
+  function estimateMessageTokens(msg: MessageV2.WithParts): number {
+    let tokens = 0
+    for (const part of msg.parts) {
+      if (part.type === "text") {
+        tokens += Token.estimate(part.text)
+      } else if (part.type === "tool" && part.state.status === "completed") {
+        // Skip compacted tool outputs
+        if (part.state.time.compacted) continue
+        tokens += Token.estimate(JSON.stringify(part.state.input))
+        tokens += Token.estimate(part.state.output)
+      }
+    }
+    return tokens
+  }
+
+  /**
+   * Convert messages to markdown format for distillation
+   */
+  function messagesToMarkdown(messages: MessageV2.WithParts[]): string {
+    const lines: string[] = []
+
+    for (const msg of messages) {
+      const role = msg.info.role === "user" ? "User" : "Assistant"
+      lines.push(`### ${role}`)
+      lines.push("")
+
+      for (const part of msg.parts) {
+        if (part.type === "text" && part.text) {
+          // Skip synthetic parts like "Continue if you have next steps"
+          if (part.synthetic) continue
+          lines.push(part.text)
+          lines.push("")
+        } else if (part.type === "tool" && part.state.status === "completed") {
+          // Skip compacted tool outputs
+          if (part.state.time.compacted) continue
+          lines.push(`**Tool: ${part.tool}**`)
+          lines.push("```json")
+          lines.push(JSON.stringify(part.state.input, null, 2))
+          lines.push("```")
+          if (part.state.output) {
+            lines.push("Output:")
+            lines.push("```")
+            lines.push(part.state.output.slice(0, 1000))
+            if (part.state.output.length > 1000) lines.push("... (truncated)")
+            lines.push("```")
+          }
+          lines.push("")
+        }
+      }
+    }
+
+    return lines.join("\n")
+  }
 }
