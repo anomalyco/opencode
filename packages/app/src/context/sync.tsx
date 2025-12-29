@@ -81,7 +81,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }),
             )
 
-            setStore("todo", sessionID, reconcile(todo.data ?? [], { key: "id" }))
+            setStore("todo", sessionID, reconcile(todo.data ?? []))
             setStore(
               "message",
               sessionID,
@@ -115,7 +115,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               .slice()
               .sort((a, b) => a.id.localeCompare(b.id))
               .slice(0, store.limit)
-            setStore("session", reconcile(sessions, { key: "id" }))
+            setStore("session", sessions)
           })
         },
         more: createMemo(() => store.session.length >= store.limit),
