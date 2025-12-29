@@ -124,7 +124,7 @@ function createGlobalSync() {
           const updated = new Date(s.time.updated).getTime()
           return updated > fourHoursAgo
         })
-        setStore("session", reconcile(sessions, { key: "id" }))
+        setStore("session", sessions)
       })
       .catch((err) => {
         console.error("Failed to load sessions", err)
@@ -263,7 +263,7 @@ function createGlobalSync() {
         setStore("session_diff", event.properties.sessionID, reconcile(event.properties.diff, { key: "file" }))
         break
       case "todo.updated":
-        setStore("todo", event.properties.sessionID, reconcile(event.properties.todos, { key: "id" }))
+        setStore("todo", event.properties.sessionID, reconcile(event.properties.todos))
         break
       case "session.status": {
         setStore("session_status", event.properties.sessionID, reconcile(event.properties.status))
