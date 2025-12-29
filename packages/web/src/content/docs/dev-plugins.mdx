@@ -1,53 +1,795 @@
 ---
-title: Developing Plugins
-description: Write your own plugins to extend OpenCode.
+title: Plugin Development
+description: Create plugins to extend OpenCode.
 ---
 
-Plugins allow you to extend OpenCode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify OpenCode's default behavior.
+A plugin is a JavaScript or TypeScript module that exports one or more plugin functions. Each function receives a context object and returns **events**, **hooks**, and **providers**.
 
-For examples, check out the [plugins](/docs/ecosystem#plugins) created by the community.
+- **Events** - React to things that happen in OpenCode
+- **Hooks** - Intercept and modify OpenCode's behavior
+- **Providers** - Add new capabilities like authentication flows and custom tools
 
----
+```ts title=".opencode/plugin/example.ts"
+import type { Plugin } from "@opencode-ai/plugin"
 
-## Create a plugin
-
-A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
-functions. Each function receives a context object and returns a hooks object.
-
----
-
-### Basic structure
-
-```js title=".opencode/plugin/example.js"
-export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
-  console.log("Plugin initialized!")
-
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
-    // Hook implementations go here
+    // Events
+    event: async ({ event }) => {
+      /* ... */
+    },
+
+    // Hooks
+    "tool.execute.before": async (input, output) => {
+      /* ... */
+    },
+
+    // Providers
+    auth: {
+      /* ... */
+    },
+    tool: {
+      /* ... */
+    },
   }
 }
 ```
 
 The plugin function receives:
 
-- `project`: The current project information.
-- `directory`: The current working directory.
-- `worktree`: The git worktree path.
-- `client`: An opencode SDK client for interacting with the AI.
-- `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) for executing commands.
+- `project`: The current project information
+- `directory`: The current working directory
+- `worktree`: The git worktree path
+- `client`: An OpenCode SDK client for interacting with the AI
+- `$`: Bun's [shell API](https://bun.sh/docs/runtime/shell) for executing commands
 
 ---
 
-### TypeScript support
+## Events
 
-For TypeScript plugins, you can import types from the plugin package:
+Subscribe to events emitted by OpenCode. Events are read-only notifications—you can react to them but not modify them.
 
-```ts title="my-plugin.ts" {1}
+```ts title=".opencode/plugin/events.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
-export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+export const EventPlugin: Plugin = async (ctx) => {
   return {
-    // Type-safe hook implementations
+    event: async ({ event }) => {
+      if (event.type === "session.idle") {
+        // Session finished processing
+      }
+    },
+  }
+}
+```
+
+Events are named `{group}.{event}`, e.g. `session.idle` or `file.edited`. OpenCode emits four types of events:
+
+- **Session events** — Lifecycle and status changes for chat sessions
+- **Message events** — Updates to messages and message parts
+- **File events** — File edits and filesystem changes
+- **System events** — Server, LSP, permissions, and other system-level events
+
+---
+
+### Session events
+
+Session events track the lifecycle of chat sessions: [`session.created`](#sessioncreated), [`session.updated`](#sessionupdated), [`session.deleted`](#sessiondeleted), [`session.status`](#sessionstatus), [`session.idle`](#sessionidle), [`session.compacted`](#sessioncompacted), [`session.diff`](#sessiondiff), and [`session.error`](#sessionerror).
+
+#### Expected properties for session events
+
+| Property    | created | updated | deleted | status | idle | compacted | diff | error |
+| ----------- | ------- | ------- | ------- | ------ | ---- | --------- | ---- | ----- |
+| `sessionID` |         |         |         | ✓      | ✓    | ✓         | ✓    | ✓     |
+| `info`      | ✓       | ✓       | ✓       |        |      |           |      |       |
+| `status`    |         |         |         | ✓      |      |           |      |       |
+| `diff`      |         |         |         |        |      |           | ✓    |       |
+| `error`     |         |         |         |        |      |           |      | ✓     |
+
+#### session.created
+
+A new session was created.
+
+```json title="Example session.created event"
+{
+  "type": "session.created",
+  "properties": {
+    "info": {
+      "id": "session_01jgk...",
+      "projectID": "proj_abc123",
+      "directory": "/Users/dev/myproject",
+      "title": "New session - 2024-01-15T10:30:00.000Z",
+      "version": "0.1.0",
+      "time": {
+        "created": 1705315800000,
+        "updated": 1705315800000
+      }
+    }
+  }
+}
+```
+
+#### session.updated
+
+Session metadata was modified (title, share status, etc.).
+
+```json title="Example session.updated event"
+{
+  "type": "session.updated",
+  "properties": {
+    "info": {
+      "id": "session_01jgk...",
+      "projectID": "proj_abc123",
+      "directory": "/Users/dev/myproject",
+      "title": "Refactor authentication module",
+      "version": "0.1.0",
+      "time": {
+        "created": 1705315800000,
+        "updated": 1705316400000
+      }
+    }
+  }
+}
+```
+
+#### session.deleted
+
+A session was deleted.
+
+```json title="Example session.deleted event"
+{
+  "type": "session.deleted",
+  "properties": {
+    "info": {
+      "id": "session_01jgk...",
+      "projectID": "proj_abc123",
+      "directory": "/Users/dev/myproject",
+      "title": "Old session",
+      "version": "0.1.0",
+      "time": {
+        "created": 1705315800000,
+        "updated": 1705316400000
+      }
+    }
+  }
+}
+```
+
+#### session.status
+
+Session status changed (busy, idle, or retry).
+
+```json title="Example session.status event (busy)"
+{
+  "type": "session.status",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "status": {
+      "type": "busy"
+    }
+  }
+}
+```
+
+```json title="Example session.status event (retry)"
+{
+  "type": "session.status",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "status": {
+      "type": "retry",
+      "attempt": 2,
+      "message": "Rate limited, retrying...",
+      "next": 1705316500000
+    }
+  }
+}
+```
+
+#### session.idle
+
+Session finished processing and is now idle. This is a convenience event—you can also check for `session.status` with `status.type === "idle"`.
+
+```json title="Example session.idle event"
+{
+  "type": "session.idle",
+  "properties": {
+    "sessionID": "session_01jgk..."
+  }
+}
+```
+
+#### session.compacted
+
+Session context was compacted to reduce token usage.
+
+```json title="Example session.compacted event"
+{
+  "type": "session.compacted",
+  "properties": {
+    "sessionID": "session_01jgk..."
+  }
+}
+```
+
+#### session.diff
+
+Session file changes were calculated.
+
+```json title="Example session.diff event"
+{
+  "type": "session.diff",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "diff": [
+      {
+        "path": "src/auth.ts",
+        "status": "modified",
+        "additions": 25,
+        "deletions": 10
+      }
+    ]
+  }
+}
+```
+
+#### session.error
+
+An error occurred during session processing.
+
+```json title="Example session.error event"
+{
+  "type": "session.error",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "error": {
+      "name": "ProviderAuthError",
+      "providerID": "anthropic",
+      "message": "Invalid API key"
+    }
+  }
+}
+```
+
+---
+
+### Message events
+
+Message events track updates to messages and their parts: [`message.updated`](#messageupdated), [`message.removed`](#messageremoved), [`message.part.updated`](#messagepartupdated), and [`message.part.removed`](#messagepartremoved).
+
+#### Expected properties for message events
+
+| Property    | updated | removed | part.updated | part.removed |
+| ----------- | ------- | ------- | ------------ | ------------ |
+| `info`      | ✓       |         |              |              |
+| `sessionID` |         | ✓       |              | ✓            |
+| `messageID` |         | ✓       |              | ✓            |
+| `part`      |         |         | ✓            |              |
+| `partID`    |         |         |              | ✓            |
+| `delta`     |         |         | ✓            |              |
+
+#### message.updated
+
+A message was created or updated.
+
+```json title="Example message.updated event (user message)"
+{
+  "type": "message.updated",
+  "properties": {
+    "info": {
+      "id": "message_01abc...",
+      "sessionID": "session_01jgk...",
+      "role": "user",
+      "time": { "created": 1705315800000 },
+      "agent": "coder",
+      "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" }
+    }
+  }
+}
+```
+
+```json title="Example message.updated event (assistant message)"
+{
+  "type": "message.updated",
+  "properties": {
+    "info": {
+      "id": "message_01def...",
+      "sessionID": "session_01jgk...",
+      "role": "assistant",
+      "parentID": "message_01abc...",
+      "agent": "coder",
+      "modelID": "claude-sonnet-4-20250514",
+      "providerID": "anthropic",
+      "time": { "created": 1705315801000 },
+      "cost": 0.0023,
+      "tokens": {
+        "input": 1500,
+        "output": 250,
+        "reasoning": 0,
+        "cache": { "read": 1200, "write": 300 }
+      }
+    }
+  }
+}
+```
+
+#### message.removed
+
+A message was deleted (e.g., during revert).
+
+```json title="Example message.removed event"
+{
+  "type": "message.removed",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01def..."
+  }
+}
+```
+
+#### message.part.updated
+
+A message part was created or updated. Parts include text, tool calls, reasoning, files, and more.
+
+```json title="Example message.part.updated event (text)"
+{
+  "type": "message.part.updated",
+  "properties": {
+    "part": {
+      "id": "part_01xyz...",
+      "sessionID": "session_01jgk...",
+      "messageID": "message_01def...",
+      "type": "text",
+      "text": "I'll help you refactor that module."
+    },
+    "delta": " that module."
+  }
+}
+```
+
+```json title="Example message.part.updated event (tool)"
+{
+  "type": "message.part.updated",
+  "properties": {
+    "part": {
+      "id": "part_02abc...",
+      "sessionID": "session_01jgk...",
+      "messageID": "message_01def...",
+      "type": "tool",
+      "callID": "call_123",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": { "filePath": "/src/auth.ts" },
+        "output": "// file contents...",
+        "title": "Read src/auth.ts",
+        "metadata": {},
+        "time": { "start": 1705315802000, "end": 1705315803000 }
+      }
+    }
+  }
+}
+```
+
+#### message.part.removed
+
+A message part was deleted.
+
+```json title="Example message.part.removed event"
+{
+  "type": "message.part.removed",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01def...",
+    "partID": "part_01xyz..."
+  }
+}
+```
+
+---
+
+### File events
+
+File events track filesystem changes: [`file.edited`](#fileedited) and [`file.watcher.updated`](#filewatcherupdated).
+
+#### Expected properties for file events
+
+| Property | edited | watcher.updated |
+| -------- | ------ | --------------- |
+| `file`   | ✓      | ✓               |
+| `event`  |        | ✓               |
+
+#### file.edited
+
+A file was edited by OpenCode (via the `write` or `edit` tools).
+
+```json title="Example file.edited event"
+{
+  "type": "file.edited",
+  "properties": {
+    "file": "/Users/dev/myproject/src/auth.ts"
+  }
+}
+```
+
+#### file.watcher.updated
+
+A file changed on disk (detected by the file watcher).
+
+```json title="Example file.watcher.updated event"
+{
+  "type": "file.watcher.updated",
+  "properties": {
+    "file": "/Users/dev/myproject/src/config.ts",
+    "event": "change"
+  }
+}
+```
+
+The `event` property can be `add`, `change`, or `unlink`.
+
+---
+
+### System events
+
+System events cover server state, LSP, permissions, commands, todos, and UI actions.
+
+#### server.connected
+
+The OpenCode server started and is ready.
+
+```json title="Example server.connected event"
+{
+  "type": "server.connected",
+  "properties": {}
+}
+```
+
+#### command.executed
+
+A slash command was executed.
+
+```json title="Example command.executed event"
+{
+  "type": "command.executed",
+  "properties": {
+    "name": "init",
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01abc...",
+    "arguments": ""
+  }
+}
+```
+
+#### permission.updated
+
+A permission request was created or updated.
+
+```json title="Example permission.updated event"
+{
+  "type": "permission.updated",
+  "properties": {
+    "id": "perm_01xyz...",
+    "type": "bash",
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01def...",
+    "callID": "call_123",
+    "title": "Run: npm install",
+    "metadata": { "command": "npm install" },
+    "time": { "created": 1705315805000 }
+  }
+}
+```
+
+#### permission.replied
+
+A permission request was answered.
+
+```json title="Example permission.replied event"
+{
+  "type": "permission.replied",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "permissionID": "perm_01xyz...",
+    "response": "allow"
+  }
+}
+```
+
+#### todo.updated
+
+The todo list was updated.
+
+```json title="Example todo.updated event"
+{
+  "type": "todo.updated",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "todos": [
+      { "id": "1", "content": "Fix authentication bug", "status": "completed", "priority": "high" },
+      { "id": "2", "content": "Add unit tests", "status": "in_progress", "priority": "medium" }
+    ]
+  }
+}
+```
+
+#### lsp.updated
+
+LSP servers were initialized or updated.
+
+```json title="Example lsp.updated event"
+{
+  "type": "lsp.updated",
+  "properties": {}
+}
+```
+
+#### lsp.client.diagnostics
+
+LSP diagnostics were received for a file.
+
+```json title="Example lsp.client.diagnostics event"
+{
+  "type": "lsp.client.diagnostics",
+  "properties": {
+    "serverID": "typescript",
+    "path": "/Users/dev/myproject/src/auth.ts"
+  }
+}
+```
+
+#### installation.updated
+
+OpenCode was upgraded to a new version.
+
+```json title="Example installation.updated event"
+{
+  "type": "installation.updated",
+  "properties": {
+    "version": "0.2.0"
+  }
+}
+```
+
+#### installation.update-available
+
+A new version of OpenCode is available.
+
+```json title="Example installation.update-available event"
+{
+  "type": "installation.update-available",
+  "properties": {
+    "version": "0.2.0"
+  }
+}
+```
+
+#### mcp.tools.changed
+
+MCP server tools were added, removed, or updated.
+
+```json title="Example mcp.tools.changed event"
+{
+  "type": "mcp.tools.changed",
+  "properties": {
+    "server": "my-mcp-server"
+  }
+}
+```
+
+#### vcs.branch.updated
+
+The current git branch changed.
+
+```json title="Example vcs.branch.updated event"
+{
+  "type": "vcs.branch.updated",
+  "properties": {
+    "branch": "feature/new-feature"
+  }
+}
+```
+
+#### PTY events
+
+Terminal (PTY) session events for the integrated terminal:
+
+- **`pty.created`** — A new terminal session was created
+- **`pty.updated`** — Terminal session metadata was updated (e.g., title)
+- **`pty.exited`** — Terminal process exited
+- **`pty.deleted`** — Terminal session was deleted
+
+```json title="Example pty.created event"
+{
+  "type": "pty.created",
+  "properties": {
+    "info": {
+      "id": "pty_01abc...",
+      "title": "zsh",
+      "command": "/bin/zsh",
+      "args": [],
+      "cwd": "/Users/dev/myproject",
+      "status": "running",
+      "pid": 12345
+    }
+  }
+}
+```
+
+```json title="Example pty.exited event"
+{
+  "type": "pty.exited",
+  "properties": {
+    "id": "pty_01abc...",
+    "exitCode": 0
+  }
+}
+```
+
+#### tui.prompt.append
+
+Text was appended to the input prompt.
+
+```json title="Example tui.prompt.append event"
+{
+  "type": "tui.prompt.append",
+  "properties": {
+    "text": "Fix the bug in auth.ts"
+  }
+}
+```
+
+#### tui.command.execute
+
+A UI command was triggered via keybinding or menu.
+
+```json title="Example tui.command.execute event"
+{
+  "type": "tui.command.execute",
+  "properties": {
+    "command": "session.new"
+  }
+}
+```
+
+Available commands include: `session.list`, `session.new`, `session.share`, `session.interrupt`, `session.compact`, `session.page.up`, `session.page.down`, `session.half.page.up`, `session.half.page.down`, `session.first`, `session.last`, `prompt.clear`, `prompt.submit`, `agent.cycle`.
+
+#### tui.toast.show
+
+A toast notification was displayed.
+
+```json title="Example tui.toast.show event"
+{
+  "type": "tui.toast.show",
+  "properties": {
+    "title": "Success",
+    "message": "File saved",
+    "variant": "success",
+    "duration": 5000
+  }
+}
+```
+
+The `variant` property can be `info`, `success`, `warning`, or `error`.
+
+---
+
+### Property descriptions
+
+| Property       | Type   | Description                                                                                  |
+| -------------- | ------ | -------------------------------------------------------------------------------------------- |
+| `sessionID`    | String | Unique identifier for the session                                                            |
+| `messageID`    | String | Unique identifier for the message                                                            |
+| `partID`       | String | Unique identifier for the message part                                                       |
+| `callID`       | String | Unique identifier for a tool call                                                            |
+| `info`         | Object | Full session, message, or PTY object with all metadata                                       |
+| `status`       | Object | Session status: `{ type: "idle" }`, `{ type: "busy" }`, or `{ type: "retry", attempt, ... }` |
+| `error`        | Object | Error details with `name` and additional context                                             |
+| `part`         | Object | Message part (text, tool, reasoning, file, etc.)                                             |
+| `delta`        | String | Incremental text change (for streaming updates)                                              |
+| `diff`         | Array  | File changes with path, status, additions, and deletions                                     |
+| `file`         | String | Absolute file path                                                                           |
+| `event`        | String | File watcher event type: `add`, `change`, or `unlink`                                        |
+| `todos`        | Array  | List of todo items with id, content, status, and priority                                    |
+| `version`      | String | OpenCode version string                                                                      |
+| `variant`      | String | Toast variant: `info`, `success`, `warning`, or `error`                                      |
+| `server`       | String | MCP server name                                                                              |
+| `branch`       | String | Git branch name                                                                              |
+| `exitCode`     | Number | Process exit code                                                                            |
+| `serverID`     | String | LSP server identifier (e.g., `typescript`)                                                   |
+| `path`         | String | File path (for LSP diagnostics)                                                              |
+| `command`      | String | TUI command name or shell command                                                            |
+| `text`         | String | Text content (for prompt append)                                                             |
+| `name`         | String | Slash command name                                                                           |
+| `arguments`    | String | Slash command arguments                                                                      |
+| `permissionID` | String | Unique identifier for a permission request                                                   |
+| `response`     | String | Permission response: `allow` or `deny`                                                       |
+
+---
+
+## Hooks
+
+Hooks intercept and modify OpenCode's behavior. Each hook receives input parameters and can modify output parameters.
+
+| Hook                                | Description                                                 |
+| ----------------------------------- | ----------------------------------------------------------- |
+| [tool.execute](#toolexecute)        | Intercept tool execution before and after                   |
+| [chat.message](#chatmessage)        | Modify user messages before sending to AI                   |
+| [chat.params](#chatparams)          | Modify LLM parameters                                       |
+| [permission.ask](#permissionask)    | Override permission decisions                               |
+| [config](#config)                   | Modify configuration at startup                             |
+| [experimental](#experimental-hooks) | Customize compaction, transform messages and system prompts |
+
+---
+
+### tool.execute
+
+Intercept tool execution before or after it runs.
+
+**`tool.execute.before`** — Modify tool arguments or prevent execution by throwing an error.
+
+```ts title=".opencode/plugin/tool-before.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ToolBeforePlugin: Plugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      // input: { tool: string, sessionID: string, callID: string }
+      // output: { args: any }
+
+      // Prevent reading .env files
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Cannot read .env files")
+      }
+
+      // Modify arguments
+      if (input.tool === "bash") {
+        output.args.timeout = 30000
+      }
+    },
+  }
+}
+```
+
+**`tool.execute.after`** — Modify tool output after execution.
+
+```ts title=".opencode/plugin/tool-after.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ToolAfterPlugin: Plugin = async (ctx) => {
+  return {
+    "tool.execute.after": async (input, output) => {
+      // input: { tool: string, sessionID: string, callID: string }
+      // output: { title: string, output: string, metadata: any }
+
+      // Redact sensitive data from output
+      output.output = output.output.replace(/API_KEY=\w+/g, "API_KEY=***")
+    },
+  }
+}
+```
+
+---
+
+### chat.message
+
+Modify user messages before they're sent to the AI.
+
+```ts title=".opencode/plugin/chat-message.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ChatMessagePlugin: Plugin = async (ctx) => {
+  return {
+    "chat.message": async (input, output) => {
+      // input: { sessionID, agent?, model?, messageID? }
+      // output: { message: UserMessage, parts: Part[] }
+
+      // Add context to every message
+      output.parts.push({
+        type: "text",
+        text: "\n\nRemember to follow our coding standards.",
+      })
+    },
   }
 }
 ```
@@ -120,54 +862,448 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 ---
 
-## Examples
+### chat.params
 
-Here are some examples of plugins you can use to extend opencode.
+Modify LLM parameters like temperature before requests.
+
+```ts title=".opencode/plugin/chat-params.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ChatParamsPlugin: Plugin = async (ctx) => {
+  return {
+    "chat.params": async (input, output) => {
+      // input: { sessionID, agent, model, provider, message }
+      // output: { temperature, topP, topK, options }
+
+      output.temperature = 0.2
+      output.options.maxTokens = 4096
+    },
+  }
+}
+```
 
 ---
 
-### Send notifications
+### permission.ask
 
-Send notifications when certain events occur:
+Override permission decisions for tool execution.
 
-```js title=".opencode/plugin/notification.js"
-export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
+```ts title=".opencode/plugin/permission.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const PermissionPlugin: Plugin = async (ctx) => {
   return {
-    event: async ({ event }) => {
-      // Send notification on session completion
-      if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
+    "permission.ask": async (input, output) => {
+      // input: Permission object with tool, args, etc.
+      // output: { status: "ask" | "deny" | "allow" }
+
+      // Auto-allow read operations
+      if (input.tool === "read") {
+        output.status = "allow"
+      }
+
+      // Auto-deny dangerous operations
+      if (input.tool === "bash" && input.args.command.includes("rm -rf")) {
+        output.status = "deny"
       }
     },
   }
 }
 ```
 
-We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
-
 ---
 
-### .env protection
+### config
 
-Prevent opencode from reading `.env` files:
+Modify the OpenCode configuration at startup.
 
-```javascript title=".opencode/plugin/env-protection.js"
-export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
+```ts title=".opencode/plugin/config.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ConfigPlugin: Plugin = async (ctx) => {
   return {
-    "tool.execute.before": async (input, output) => {
-      if (input.tool === "read" && output.args.filePath.includes(".env")) {
-        throw new Error("Do not read .env files")
-      }
+    config: async (config) => {
+      // Modify config in place
+      config.disabled_tools = [...(config.disabled_tools ?? []), "bash"]
     },
   }
 }
 ```
+
+---
+
+### Experimental hooks
+
+These hooks may change in future versions.
+
+**`experimental.session.compacting`** — Customize the context included when a session is compacted.
+
+```ts title=".opencode/plugin/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // input: { sessionID: string }
+      // output: { context: string[], prompt?: string }
+
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+`)
+    },
+  }
+}
+```
+
+Set `output.prompt` to replace the entire compaction prompt:
+
+```ts
+output.prompt = `
+You are generating a continuation prompt.
+Summarize the current task and next steps.
+`
+```
+
+**`experimental.chat.messages.transform`** — Transform the message history before sending to the LLM.
+
+```ts title=".opencode/plugin/messages-transform.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MessagesTransformPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.chat.messages.transform": async (input, output) => {
+      // output: { messages: Array<{ info: Message, parts: Part[] }> }
+
+      // Filter or modify messages
+      output.messages = output.messages.filter(
+        (m) => !m.parts.some((p) => p.type === "text" && p.text.includes("SECRET")),
+      )
+    },
+  }
+}
+```
+
+**`experimental.chat.system.transform`** — Transform the system prompt before sending to the LLM.
+
+```ts title=".opencode/plugin/system-transform.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const SystemTransformPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.chat.system.transform": async (input, output) => {
+      // output: { system: string[] }
+
+      output.system.push("Always respond in formal English.")
+    },
+  }
+}
+```
+
+**`experimental.text.complete`** — Modify text completion output.
+
+```ts title=".opencode/plugin/text-complete.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const TextCompletePlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.text.complete": async (input, output) => {
+      // input: { sessionID, messageID, partID }
+      // output: { text: string }
+
+      // Post-process AI output
+      output.text = output.text.trim()
+    },
+  }
+}
+```
+
+---
+
+## Providers
+
+Providers add new capabilities to OpenCode.
+
+| Provider                          | Description                 |
+| --------------------------------- | --------------------------- |
+| [Authentication](#authentication) | Custom authentication flows |
+| [Custom tools](#custom-tools)     | Tools the AI can call       |
+
+---
+
+### Authentication
+
+Add custom authentication flows for LLM providers. Authentication methods appear in the `/connect` command.
+
+```ts title=".opencode/plugin/auth.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const AuthPlugin: Plugin = async (ctx) => {
+  return {
+    auth: {
+      provider: "my-provider",
+      methods: [
+        /* ... */
+      ],
+      loader: async (getAuth, provider) => {
+        /* ... */
+      },
+    },
+  }
+}
+```
+
+The `auth` property has three parts:
+
+| Property   | Description                                           |
+| ---------- | ----------------------------------------------------- |
+| `provider` | Provider ID this auth flow applies to                 |
+| `methods`  | Array of authentication methods (oauth or api)        |
+| `loader`   | Optional function to transform credentials before use |
+
+#### Methods
+
+Each method defines how users can authenticate. You can provide multiple methods to give users options.
+
+**API key method** — Users enter an API key directly.
+
+```ts
+{
+  type: "api",
+  label: "Enter API key",
+}
+```
+
+The `label` appears in the `/connect` menu. OpenCode handles prompting for and storing the key.
+
+To customize what happens after the user enters their key, add an `authorize` function:
+
+```ts
+{
+  type: "api",
+  label: "Enter API key",
+  async authorize(inputs) {
+    // inputs.apiKey contains the entered key
+    // Validate or transform the key
+    const isValid = await validateKey(inputs.apiKey)
+    if (!isValid) {
+      return { type: "failed" }
+    }
+    return { type: "success", key: inputs.apiKey }
+  },
+}
+```
+
+**OAuth method** — Browser-based authentication flow.
+
+```ts
+{
+  type: "oauth",
+  label: "Sign in with SSO",
+  async authorize() {
+    return {
+      url: "https://auth.example.com/authorize?client_id=...",
+      instructions: "Complete sign-in in your browser",
+      method: "auto",
+      async callback() {
+        const token = await pollForToken()
+        return {
+          type: "success",
+          access: token.access_token,
+          refresh: token.refresh_token,
+          expires: Date.now() + token.expires_in * 1000,
+        }
+      },
+    }
+  },
+}
+```
+
+The `authorize` function returns:
+
+| Property       | Description                                  |
+| -------------- | -------------------------------------------- |
+| `url`          | URL to open in the browser                   |
+| `instructions` | Text shown to the user while authenticating  |
+| `method`       | How to complete auth: `"auto"` or `"code"`   |
+| `callback`     | Function called to get the final credentials |
+
+**Callback methods:**
+
+- **`auto`** — Your plugin handles the callback automatically (e.g., polling a server, running a local callback server). The `callback()` function takes no arguments.
+
+- **`code`** — User copies a code from the browser and pastes it into OpenCode. The `callback(code)` function receives the code as an argument.
+
+```ts
+// Code-based callback
+{
+  type: "oauth",
+  label: "Sign in",
+  async authorize() {
+    return {
+      url: "https://auth.example.com/authorize",
+      instructions: "Copy the code after signing in",
+      method: "code",
+      async callback(code) {
+        const response = await fetch("https://auth.example.com/token", {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        })
+        const data = await response.json()
+        return { type: "success", key: data.api_key }
+      },
+    }
+  },
+}
+```
+
+**Callback return values:**
+
+The callback must return one of:
+
+```ts
+// API key credential
+{ type: "success", key: "sk-..." }
+
+// OAuth tokens (for token refresh support)
+{
+  type: "success",
+  access: "access_token",
+  refresh: "refresh_token",
+  expires: 1234567890000,  // Unix timestamp in milliseconds
+}
+
+// Authentication failed
+{ type: "failed" }
+```
+
+#### Prompts
+
+Collect additional information before authentication using `prompts`. Both `oauth` and `api` methods support prompts.
+
+```ts
+{
+  type: "api",
+  label: "Connect to custom endpoint",
+  prompts: [
+    {
+      type: "select",
+      key: "region",
+      message: "Select region",
+      options: [
+        { label: "US East", value: "us-east-1" },
+        { label: "EU West", value: "eu-west-1" },
+        { label: "Custom", value: "custom" },
+      ],
+    },
+    {
+      type: "text",
+      key: "endpoint",
+      message: "Custom endpoint URL",
+      placeholder: "https://api.example.com",
+      condition: (inputs) => inputs.region === "custom",
+    },
+  ],
+  async authorize(inputs) {
+    // inputs: { region: "us-east-1", endpoint: "...", apiKey: "..." }
+    return { type: "success", key: inputs.apiKey }
+  },
+}
+```
+
+**Text prompt:**
+
+| Property      | Description                                            |
+| ------------- | ------------------------------------------------------ |
+| `type`        | `"text"`                                               |
+| `key`         | Key in the inputs object                               |
+| `message`     | Prompt message shown to user                           |
+| `placeholder` | Optional placeholder text                              |
+| `validate`    | Optional function returning error message or undefined |
+| `condition`   | Optional function to conditionally show this prompt    |
+
+**Select prompt:**
+
+| Property    | Description                                         |
+| ----------- | --------------------------------------------------- |
+| `type`      | `"select"`                                          |
+| `key`       | Key in the inputs object                            |
+| `message`   | Prompt message shown to user                        |
+| `options`   | Array of `{ label, value, hint? }`                  |
+| `condition` | Optional function to conditionally show this prompt |
+
+Prompt values are passed to the `authorize` function as the `inputs` object.
+
+#### Loader
+
+The `loader` function transforms stored credentials before they're used. This is useful for:
+
+- Refreshing expired OAuth tokens
+- Adding custom headers or options
+- Validating credentials before use
+
+```ts
+{
+  auth: {
+    provider: "my-provider",
+    async loader(getAuth, provider) {
+      const auth = await getAuth()
+
+      // No stored credentials
+      if (!auth) return {}
+
+      // API key credential
+      if (auth.type === "api") {
+        return { apiKey: auth.key }
+      }
+
+      // OAuth credential - check if expired
+      if (auth.type === "oauth") {
+        if (auth.expires < Date.now()) {
+          // Refresh the token
+          const newToken = await refreshToken(auth.refresh)
+          return { apiKey: newToken.access_token }
+        }
+        return { apiKey: auth.access }
+      }
+
+      return {}
+    },
+    methods: [/* ... */],
+  },
+}
+```
+
+The `loader` receives:
+
+| Parameter  | Description                                    |
+| ---------- | ---------------------------------------------- |
+| `getAuth`  | Async function that returns stored credentials |
+| `provider` | Provider info object                           |
+
+The `getAuth()` function returns one of:
+
+```ts
+// OAuth tokens
+{ type: "oauth", access: string, refresh: string, expires: number }
+
+// API key
+{ type: "api", key: string }
+
+// No credentials stored
+undefined
+```
+
+The loader should return an object with credentials to pass to the provider (e.g., `{ apiKey: "..." }`).
 
 ---
 
 ### Custom tools
 
-Plugins can also add custom tools to opencode:
+Add tools that the AI can call alongside built-in tools.
 
 ```ts title=".opencode/plugin/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -189,65 +1325,8 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-The `tool` helper creates a custom tool that opencode can call. It takes a Zod schema function and returns a tool definition with:
+The `tool` helper creates a custom tool with:
 
-- `description`: What the tool does
+- `description`: What the tool does (shown to the AI)
 - `args`: Zod schema for the tool's arguments
 - `execute`: Function that runs when the tool is called
-
-Your custom tools will be available to opencode alongside built-in tools.
-
----
-
-### Compaction hooks
-
-Customize the context included when a session is compacted:
-
-```ts title=".opencode/plugin/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
-
-export const CompactionPlugin: Plugin = async (ctx) => {
-  return {
-    "experimental.session.compacting": async (input, output) => {
-      // Inject additional context into the compaction prompt
-      output.context.push(`
-## Custom Context
-
-Include any state that should persist across compaction:
-- Current task status
-- Important decisions made
-- Files being actively worked on
-`)
-    },
-  }
-}
-```
-
-The `experimental.session.compacting` hook fires before the LLM generates a continuation summary. Use it to inject domain-specific context that the default compaction prompt would miss.
-
-You can also replace the compaction prompt entirely by setting `output.prompt`:
-
-```ts title=".opencode/plugin/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
-
-export const CustomCompactionPlugin: Plugin = async (ctx) => {
-  return {
-    "experimental.session.compacting": async (input, output) => {
-      // Replace the entire compaction prompt
-      output.prompt = `
-You are generating a continuation prompt for a multi-agent swarm session.
-
-Summarize:
-1. The current task and its status
-2. Which files are being modified and by whom
-3. Any blockers or dependencies between agents
-4. The next steps to complete the work
-
-Format as a structured prompt that a new agent can use to resume work.
-`
-    },
-  }
-}
-```
-
-When `output.prompt` is set, it completely replaces the default compaction prompt. The `output.context` array is ignored in this case.
