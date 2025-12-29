@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { Global } from "../global"
 import { lazy } from "../util/lazy"
 import { Lock } from "../util/lock"
+import { FileLock } from "../util/file-lock"
 import { $ } from "bun"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
@@ -169,7 +170,8 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
-      using _ = await Lock.read(target)
+      using _mem = await Lock.read(target)
+      using _file = await FileLock.acquire(target)
       const result = await Bun.file(target).json()
       return result as T
     })
@@ -179,7 +181,8 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
-      using _ = await Lock.write(target)
+      using _mem = await Lock.write(target)
+      using _file = await FileLock.acquire(target)
       const content = await Bun.file(target).json()
       fn(content)
       await Bun.write(target, JSON.stringify(content, null, 2))
@@ -191,7 +194,8 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
-      using _ = await Lock.write(target)
+      using _mem = await Lock.write(target)
+      using _file = await FileLock.acquire(target)
       await Bun.write(target, JSON.stringify(content, null, 2))
     })
   }

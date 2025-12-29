@@ -80,6 +80,8 @@ export namespace Pty {
     Deleted: BusEvent.define("pty.deleted", z.object({ id: Identifier.schema("pty") })),
   }
 
+  const MAX_BUFFER_SIZE = 1_000_000
+
   interface ActiveSession {
     info: Info
     process: IPty
@@ -147,6 +149,9 @@ export namespace Pty {
     ptyProcess.onData((data) => {
       if (session.subscribers.size === 0) {
         session.buffer += data
+        if (session.buffer.length > MAX_BUFFER_SIZE) {
+          session.buffer = session.buffer.slice(-MAX_BUFFER_SIZE)
+        }
         return
       }
       for (const ws of session.subscribers) {

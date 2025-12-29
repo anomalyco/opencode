@@ -575,11 +575,17 @@ export namespace MessageV2 {
     },
   )
 
-  export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
+  const MAX_MESSAGES_IN_MEMORY = 500
+
+  export async function filterCompacted(
+    stream: AsyncIterable<MessageV2.WithParts>,
+    maxMessages = MAX_MESSAGES_IN_MEMORY,
+  ) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()
     for await (const msg of stream) {
       result.push(msg)
+      if (result.length >= maxMessages) break
       if (
         msg.info.role === "user" &&
         completed.has(msg.info.id) &&

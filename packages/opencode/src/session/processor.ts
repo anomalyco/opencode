@@ -16,7 +16,18 @@ import { Config } from "@/config/config"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const MAX_TOOL_OUTPUT_LENGTH = 1_000_000
   const log = Log.create({ service: "session.processor" })
+
+  function truncateOutput(output: string): string {
+    if (output.length <= MAX_TOOL_OUTPUT_LENGTH) return output
+    const half = Math.floor(MAX_TOOL_OUTPUT_LENGTH / 2)
+    return (
+      output.slice(0, half) +
+      `\n\n[... ${output.length - MAX_TOOL_OUTPUT_LENGTH} characters truncated ...]\n\n` +
+      output.slice(-half)
+    )
+  }
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
@@ -187,7 +198,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "completed",
                         input: value.input,
-                        output: value.output.output,
+                        output: truncateOutput(value.output.output),
                         metadata: value.output.metadata,
                         title: value.output.title,
                         time: {
