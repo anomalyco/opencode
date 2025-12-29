@@ -1,5 +1,5 @@
 // packages/opencode/src/cli/cmd/tui/context/layout.tsx
-import { createSignal, createMemo } from "solid-js"
+import { createMemo } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { Layout } from "../layout/types"

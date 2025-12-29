@@ -1149,6 +1149,58 @@ export type KeybindsConfig = {
    * Toggle tips on home screen
    */
   tips_toggle?: string
+  /**
+   * Focus window to the left
+   */
+  window_focus_left?: string
+  /**
+   * Focus window below
+   */
+  window_focus_down?: string
+  /**
+   * Focus window above
+   */
+  window_focus_up?: string
+  /**
+   * Focus window to the right
+   */
+  window_focus_right?: string
+  /**
+   * Split window horizontally
+   */
+  window_split_horizontal?: string
+  /**
+   * Split window vertically
+   */
+  window_split_vertical?: string
+  /**
+   * Close current window
+   */
+  window_close?: string
+  /**
+   * Close all other windows
+   */
+  window_close_others?: string
+  /**
+   * Equalize window sizes
+   */
+  window_equalize?: string
+  /**
+   * Increase window height
+   */
+  window_increase_height?: string
+  /**
+   * Decrease window height
+   */
+  window_decrease_height?: string
+  /**
+   * Increase window width
+   */
+  window_increase_width?: string
+  /**
+   * Decrease window width
+   */
+  window_decrease_width?: string
 }
 
 /**
@@ -1433,6 +1485,120 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Message display settings
+     */
+    messages?: {
+      /**
+       * Padding around messages
+       */
+      padding?: number
+      /**
+       * Gap between messages
+       */
+      gap?: number
+    }
+    /**
+     * Sidebar settings
+     */
+    sidebar?: {
+      /**
+       * Padding inside sidebar
+       */
+      padding?: number
+      /**
+       * Sidebar width in characters
+       */
+      width?: number
+      /**
+       * Show sidebar by default
+       */
+      visible?: boolean
+    }
+    /**
+     * Header settings
+     */
+    header?: {
+      /**
+       * Padding inside header
+       */
+      padding?: number
+      /**
+       * Show header
+       */
+      visible?: boolean
+      /**
+       * Show session title
+       */
+      show_title?: boolean
+      /**
+       * Show context info
+       */
+      show_context?: boolean
+      /**
+       * Show cost information
+       */
+      show_cost?: boolean
+      /**
+       * Show token count
+       */
+      show_tokens?: boolean
+    }
+    /**
+     * Footer settings
+     */
+    footer?: {
+      /**
+       * Padding inside footer
+       */
+      padding?: number
+      /**
+       * Show footer
+       */
+      visible?: boolean
+      /**
+       * Show current directory
+       */
+      show_directory?: boolean
+      /**
+       * Show LSP status
+       */
+      show_lsp_status?: boolean
+      /**
+       * Show MCP status
+       */
+      show_mcp_status?: boolean
+      /**
+       * Show version
+       */
+      show_version?: boolean
+      /**
+       * Show keybind hints
+       */
+      show_keybind_hints?: boolean
+    }
+    /**
+     * Prompt settings
+     */
+    prompt?: {
+      /**
+       * Padding around prompt
+       */
+      padding?: number
+    }
+    /**
+     * Window settings
+     */
+    window?: {
+      /**
+       * Padding inside windows
+       */
+      padding?: number
+      /**
+       * Show window borders
+       */
+      border?: boolean
+    }
   }
   server?: ServerConfig
   /**

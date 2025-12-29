@@ -29,8 +29,8 @@ describe("Layout.Split", () => {
       id: "split-1",
       direction: "horizontal",
       children: [
-        { type: "window", id: "win-1", viewID: "session" },
-        { type: "window", id: "win-2", viewID: "home" },
+        { type: "window", id: "win-1", viewID: "session", focused: false },
+        { type: "window", id: "win-2", viewID: "home", focused: false },
       ],
       ratios: [0.5, 0.5],
     })
@@ -69,7 +69,7 @@ describe("Layout.Float", () => {
 describe("Layout.Root", () => {
   test("creates root layout with single window", () => {
     const root = Layout.Root.create({
-      root: { type: "window", id: "win-1", viewID: "session" },
+      root: { type: "window", id: "win-1", viewID: "session", focused: false },
       floats: [],
       focusedID: "win-1",
     })

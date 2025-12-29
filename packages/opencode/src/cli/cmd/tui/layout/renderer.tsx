@@ -42,8 +42,8 @@ const TreeViewRenderer: Component<{ view: View.Tree.Info }> = (props) => {
 
   return (
     <box flexDirection="column">
-      <text fg={theme.text} bold>
-        {props.view.title}
+      <text fg={theme.text}>
+        <span style={{ bold: true }}>{props.view.title}</span>
       </text>
       <For each={props.view.nodes}>{(node) => renderNode(node, 0)}</For>
     </box>
@@ -55,8 +55,8 @@ const ListViewRenderer: Component<{ view: View.List.Info }> = (props) => {
 
   return (
     <box flexDirection="column">
-      <text fg={theme.text} bold>
-        {props.view.title}
+      <text fg={theme.text}>
+        <span style={{ bold: true }}>{props.view.title}</span>
       </text>
       <Show when={props.view.searchable}>
         <text fg={theme.textMuted}>Search: {props.view.searchQuery ?? ""}</text>
@@ -81,8 +81,8 @@ const TextViewRenderer: Component<{ view: View.Text.Info }> = (props) => {
 
   return (
     <box flexDirection="column">
-      <text fg={theme.text} bold>
-        {props.view.title}
+      <text fg={theme.text}>
+        <span style={{ bold: true }}>{props.view.title}</span>
       </text>
       <Show when={props.view.filetype} fallback={<text fg={theme.text}>{props.view.content}</text>}>
         <code filetype={props.view.filetype} syntaxStyle={syntax()} content={props.view.content} fg={theme.text} />
@@ -96,25 +96,25 @@ const FormViewRenderer: Component<{ view: View.Form.Info }> = (props) => {
 
   return (
     <box flexDirection="column">
-      <text fg={theme.text} bold>
-        {props.view.title}
+      <text fg={theme.text}>
+        <span style={{ bold: true }}>{props.view.title}</span>
       </text>
       <For each={props.view.fields}>
         {(field) => (
           <box flexDirection="row" gap={1}>
             <text fg={theme.text}>{field.label}:</text>
             <Switch>
-              <Match when={field.type === "text"}>
-                <text fg={theme.textMuted}>[{(field as any).value ?? (field as any).placeholder ?? ""}]</text>
+              <Match when={field.type === "text" && field}>
+                {(f) => <text fg={theme.textMuted}>[{f().value ?? f().placeholder ?? ""}]</text>}
               </Match>
-              <Match when={field.type === "toggle"}>
-                <text fg={theme.accent}>{(field as any).value ? "[x]" : "[ ]"}</text>
+              <Match when={field.type === "toggle" && field}>
+                {(f) => <text fg={theme.accent}>{f().value ? "[x]" : "[ ]"}</text>}
               </Match>
-              <Match when={field.type === "select"}>
-                <text fg={theme.textMuted}>[{(field as any).value ?? "select..."}]</text>
+              <Match when={field.type === "select" && field}>
+                {(f) => <text fg={theme.textMuted}>[{f().value ?? "select..."}]</text>}
               </Match>
-              <Match when={field.type === "number"}>
-                <text fg={theme.textMuted}>[{(field as any).value ?? 0}]</text>
+              <Match when={field.type === "number" && field}>
+                {(f) => <text fg={theme.textMuted}>[{f().value ?? 0}]</text>}
               </Match>
             </Switch>
           </box>

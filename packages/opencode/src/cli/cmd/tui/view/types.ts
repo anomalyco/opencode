@@ -17,7 +17,7 @@ export namespace View {
         icon: z.string().optional(),
         children: z.array(Node),
         expanded: z.boolean().optional().default(false),
-        metadata: z.record(z.any()).optional(),
+        metadata: z.record(z.string(), z.any()).optional(),
       }),
     )
 
@@ -55,7 +55,7 @@ export namespace View {
       label: z.string(),
       description: z.string().optional(),
       icon: z.string().optional(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
     })
     export type Item = z.output<typeof Item>
 

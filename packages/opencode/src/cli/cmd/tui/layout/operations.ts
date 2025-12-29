@@ -2,10 +2,10 @@
 import { Layout } from "./types"
 
 export namespace LayoutOps {
-  let idCounter = 0
-  export function generateID(prefix: string): string {
-    return `${prefix}-${++idCounter}`
-  }
+  export const generateID = (() => {
+    const counter = { value: 0 }
+    return (prefix: string): string => `${prefix}-${++counter.value}`
+  })()
 
   export function findWindow(root: Layout.Root.Info, windowID: string): Layout.Window.Info | undefined {
     function search(node: Layout.Node): Layout.Window.Info | undefined {
@@ -83,7 +83,6 @@ export namespace LayoutOps {
 
       const newChildren: Layout.Node[] = []
       const newRatios: number[] = []
-      let removedRatio = 0
 
       for (let i = 0; i < node.children.length; i++) {
         const child = node.children[i]
@@ -91,8 +90,6 @@ export namespace LayoutOps {
         if (result !== null) {
           newChildren.push(result)
           newRatios.push(node.ratios[i])
-        } else {
-          removedRatio = node.ratios[i]
         }
       }
 
