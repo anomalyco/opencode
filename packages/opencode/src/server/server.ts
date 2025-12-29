@@ -28,6 +28,7 @@ import { Auth } from "../auth"
 import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
+import { Plugin } from "../plugin"
 import { ProjectRoute } from "./project"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
@@ -2567,6 +2568,41 @@ export namespace Server {
           const info = c.req.valid("json")
           await Auth.set(providerID, info)
           return c.json(true)
+        },
+      )
+      .get(
+        "/plugin/sidebar",
+        describeRoute({
+          summary: "Get plugin sidebar panels",
+          description: "Get sidebar panels registered by plugins.",
+          operationId: "plugin.sidebar",
+          responses: {
+            200: {
+              description: "Plugin sidebar panels",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.array(
+                      z.object({
+                        id: z.string(),
+                        title: z.string(),
+                        items: z.array(
+                          z.object({
+                            label: z.string(),
+                            value: z.string().optional(),
+                            status: z.enum(["success", "warning", "error", "info"]).optional(),
+                          }),
+                        ),
+                      }),
+                    ),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(Plugin.getSidebarPanels())
         },
       )
       .get(

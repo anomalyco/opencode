@@ -57,6 +57,7 @@ import type {
   PermissionListResponses,
   PermissionRespondErrors,
   PermissionRespondResponses,
+  PluginSidebarResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -2654,6 +2655,27 @@ export class Tui extends HeyApiClient {
   control = new Control({ client: this.client })
 }
 
+export class Plugin extends HeyApiClient {
+  /**
+   * Get plugin sidebar panels
+   *
+   * Get sidebar panels registered by plugins.
+   */
+  public sidebar<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<PluginSidebarResponses, unknown, ThrowOnError>({
+      url: "/plugin/sidebar",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Event extends HeyApiClient {
   /**
    * Subscribe to events
@@ -2724,6 +2746,8 @@ export class OpencodeClient extends HeyApiClient {
   tui = new Tui({ client: this.client })
 
   auth = new Auth({ client: this.client })
+
+  plugin = new Plugin({ client: this.client })
 
   event = new Event({ client: this.client })
 }

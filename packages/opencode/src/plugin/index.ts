@@ -11,6 +11,12 @@ import { Flag } from "../flag/flag"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
+  let loadedHooks: Hooks[] = []
+  let pluginsLoadedResolve: (() => void) | null = null
+  const pluginsLoaded = new Promise<void>((resolve) => {
+    pluginsLoadedResolve = resolve
+  })
+
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
@@ -46,6 +52,8 @@ export namespace Plugin {
       }
     }
 
+    loadedHooks = hooks
+    if (pluginsLoadedResolve) pluginsLoadedResolve()
     return {
       hooks,
       input,
@@ -73,22 +81,17 @@ export namespace Plugin {
     return state().then((x) => x.hooks)
   }
 
-  export async function getSidebarPanels() {
-    try {
-      const hooks = await state().then((x) => x.hooks)
-      const panels: import("@opencode-ai/plugin").SidebarPanel[] = []
-      for (const hook of hooks) {
-        const sidebar = hook.sidebar
-        if (!sidebar) continue
-        try {
-          const resolved = typeof sidebar === "function" ? sidebar() : sidebar
-          panels.push(...resolved)
-        } catch {}
-      }
-      return panels
-    } catch {
-      return []
+  export function getSidebarPanels() {
+    const panels: import("@opencode-ai/plugin").SidebarPanel[] = []
+    for (const hook of loadedHooks) {
+      const sidebar = hook.sidebar
+      if (!sidebar) continue
+      try {
+        const resolved = typeof sidebar === "function" ? sidebar() : sidebar
+        panels.push(...resolved)
+      } catch {}
     }
+    return panels
   }
 
   export async function init() {

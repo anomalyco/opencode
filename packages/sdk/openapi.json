@@ -4990,6 +4990,71 @@
         ]
       }
     },
+    "/plugin/sidebar": {
+      "get": {
+        "operationId": "plugin.sidebar",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get plugin sidebar panels",
+        "description": "Get sidebar panels registered by plugins.",
+        "responses": {
+          "200": {
+            "description": "Plugin sidebar panels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["success", "warning", "error", "info"]
+                            }
+                          },
+                          "required": ["label"]
+                        }
+                      }
+                    },
+                    "required": ["id", "title", "items"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.plugin.sidebar({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/event": {
       "get": {
         "operationId": "event.subscribe",
