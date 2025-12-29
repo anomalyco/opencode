@@ -1,5 +1,5 @@
-import { produce } from "solid-js/store"
-import { createMemo } from "solid-js"
+import { batch, createMemo } from "solid-js"
+import { produce, reconcile } from "solid-js/store"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -56,7 +56,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 const result = Binary.search(messages, input.messageID, (m) => m.id)
                 messages.splice(result.index, 0, message)
               }
-              draft.part[input.messageID] = input.parts.slice()
+              draft.part[input.messageID] = input.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
             }),
           )
         },
@@ -67,22 +67,46 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             retry(() => sdk.client.session.todo({ sessionID })),
             retry(() => sdk.client.session.diff({ sessionID })),
           ])
-          setStore(
-            produce((draft) => {
-              const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
-              draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages
-                .data!.map((x) => x.info)
-                .slice()
-                .sort((a, b) => a.id.localeCompare(b.id))
-              for (const message of messages.data!) {
-                draft.part[message.info.id] = message.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
-              }
-              draft.session_diff[sessionID] = diff.data ?? []
-            }),
-          )
+
+          batch(() => {
+            setStore(
+              "session",
+              produce((draft) => {
+                const match = Binary.search(draft, sessionID, (s) => s.id)
+                if (match.found) {
+                  draft[match.index] = session.data!
+                  return
+                }
+                draft.splice(match.index, 0, session.data!)
+              }),
+            )
+
+            setStore("todo", sessionID, reconcile(todo.data ?? [], { key: "id" }))
+            setStore(
+              "message",
+              sessionID,
+              reconcile(
+                (messages.data ?? [])
+                  .map((x) => x.info)
+                  .slice()
+                  .sort((a, b) => a.id.localeCompare(b.id)),
+                { key: "id" },
+              ),
+            )
+
+            for (const message of messages.data ?? []) {
+              setStore(
+                "part",
+                message.info.id,
+                reconcile(
+                  message.parts.slice().sort((a, b) => a.id.localeCompare(b.id)),
+                  { key: "id" },
+                ),
+              )
+            }
+
+            setStore("session_diff", sessionID, reconcile(diff.data ?? [], { key: "file" }))
+          })
         },
         fetch: async (count = 10) => {
           setStore("limit", (x) => x + count)
@@ -91,7 +115,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               .slice()
               .sort((a, b) => a.id.localeCompare(b.id))
               .slice(0, store.limit)
-            setStore("session", sessions)
+            setStore("session", reconcile(sessions, { key: "id" }))
           })
         },
         more: createMemo(() => store.session.length >= store.limit),
