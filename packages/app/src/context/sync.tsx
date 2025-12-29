@@ -56,7 +56,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 const result = Binary.search(messages, input.messageID, (m) => m.id)
                 messages.splice(result.index, 0, message)
               }
-              draft.part[input.messageID] = input.parts.slice()
+              draft.part[input.messageID] = input.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
             }),
           )
         },
