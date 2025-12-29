@@ -111,13 +111,23 @@ export function SessionTurn(
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? [])
 
-  const message = createMemo(() => {
+  const messageIndex = createMemo(() => {
     const messages = allMessages()
     const result = Binary.search(messages, props.messageID, (m) => m.id)
-    if (!result.found) return undefined
+    if (!result.found) return -1
 
     const msg = messages[result.index]
-    if (msg.role !== "user") return undefined
+    if (msg.role !== "user") return -1
+
+    return result.index
+  })
+
+  const message = createMemo(() => {
+    const index = messageIndex()
+    if (index < 0) return undefined
+
+    const msg = allMessages()[index]
+    if (!msg || msg.role !== "user") return undefined
 
     return msg
   })
@@ -139,13 +149,6 @@ export function SessionTurn(
     const msg = message()
     if (!msg) return []
     return data.store.part[msg.id] ?? []
-  })
-
-  const messageIndex = createMemo(() => {
-    const messages = allMessages()
-    const result = Binary.search(messages, props.messageID, (m) => m.id)
-    if (!result.found) return -1
-    return result.index
   })
 
   const assistantMessages = createMemo(() => {

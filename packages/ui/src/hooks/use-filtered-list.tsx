@@ -51,9 +51,17 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     )
   })
 
+  function initialActive() {
+    if (props.current) return props.key(props.current)
+
+    const items = flat()
+    if (items.length === 0) return ""
+    return props.key(items[0])
+  }
+
   const list = createList({
     items: () => flat().map(props.key),
-    initialActive: props.current ? props.key(props.current) : props.key(flat()[0]),
+    initialActive: initialActive(),
     loop: true,
   })
 

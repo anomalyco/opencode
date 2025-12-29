@@ -364,16 +364,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const permission = createMemo(() => {
     const sessionID = props.message.sessionID
     const permissions = data.store.permission?.[sessionID] ?? []
-    const next = permissions.reduce(
-      (result, perm) => {
-        if (!result) return perm
-        if (perm.id < result.id) return perm
-        return result
-      },
-      undefined as (typeof permissions)[number] | undefined,
-    )
-    if (!next) return undefined
-    return next.callID === part.callID ? next : undefined
+    return permissions.find((perm) => perm.callID === part.callID)
   })
 
   const [forceOpen, setForceOpen] = createSignal(false)
