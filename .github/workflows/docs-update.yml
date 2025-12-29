@@ -5,6 +5,9 @@ on:
     - cron: "0 */12 * * *"
   workflow_dispatch:
 
+env:
+  LOOKBACK_HOURS: 4
+
 jobs:
   update-docs:
     if: github.repository == 'sst/opencode'
@@ -25,9 +28,9 @@ jobs:
       - name: Get recent commits
         id: commits
         run: |
-          COMMITS=$(git log --since="4 hours ago" --pretty=format:"- %h %s" 2>/dev/null || echo "")
+          COMMITS=$(git log --since="${{ env.LOOKBACK_HOURS }} hours ago" --pretty=format:"- %h %s" 2>/dev/null || echo "")
           if [ -z "$COMMITS" ]; then
-            echo "No commits in the last 4 hours"
+            echo "No commits in the last ${{ env.LOOKBACK_HOURS }} hours"
             echo "has_commits=false" >> $GITHUB_OUTPUT
           else
             echo "has_commits=true" >> $GITHUB_OUTPUT
@@ -47,7 +50,7 @@ jobs:
           model: opencode/gpt-5.2
           agent: docs
           prompt: |
-            Review the following commits from the last 4 hours and identify any new features that may need documentation.
+            Review the following commits from the last ${{ env.LOOKBACK_HOURS }} hours and identify any new features that may need documentation.
 
             <recent_commits>
             ${{ steps.commits.outputs.list }}
