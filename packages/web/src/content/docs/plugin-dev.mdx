@@ -3,14 +3,34 @@ title: Plugin Development
 description: Create plugins to extend OpenCode.
 ---
 
-A plugin is a JavaScript or TypeScript module that exports one or more plugin functions. Each function receives a context object and returns hooks and extensions.
+A plugin is a JavaScript or TypeScript module that exports one or more plugin functions. Each function receives a context object and returns **events**, **hooks**, and **providers**.
+
+- **Events** - React to things that happen in OpenCode
+- **Hooks** - Intercept and modify OpenCode's behavior
+- **Providers** - Add new capabilities like authentication flows and custom tools
 
 ```ts title=".opencode/plugin/example.ts"
 import type { Plugin } from "@opencode-ai/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
-    // Hooks and extensions go here
+    // Events
+    event: async ({ event }) => {
+      /* ... */
+    },
+
+    // Hooks
+    "tool.execute.before": async (input, output) => {
+      /* ... */
+    },
+
+    // Providers
+    auth: {
+      /* ... */
+    },
+    tool: {
+      /* ... */
+    },
   }
 }
 ```
@@ -25,35 +45,9 @@ The plugin function receives:
 
 ---
 
-## Hooks
+## Events
 
-Hooks intercept and modify OpenCode's behavior. Each hook receives input parameters and can modify output parameters.
-
-| Hook                                      | Description                                                 |
-| ----------------------------------------- | ----------------------------------------------------------- |
-| [Event hooks](#event-hooks)               | React to session, file, message, and tool events            |
-| [Tool hooks](#tool-hooks)                 | Intercept tool execution before and after                   |
-| [Chat hooks](#chat-hooks)                 | Modify messages and LLM parameters                          |
-| [Permission hooks](#permission-hooks)     | Override permission decisions                               |
-| [Config hook](#config-hook)               | Modify configuration at startup                             |
-| [Experimental hooks](#experimental-hooks) | Customize compaction, transform messages and system prompts |
-
----
-
-## Extensions
-
-Extensions add new capabilities to OpenCode.
-
-| Extension                     | Description                 |
-| ----------------------------- | --------------------------- |
-| [Auth](#auth)                 | Custom authentication flows |
-| [Custom tools](#custom-tools) | Tools the AI can call       |
-
----
-
-## Event hooks
-
-Subscribe to events emitted by OpenCode. The `event` hook receives all events and lets you react to them.
+Subscribe to events emitted by OpenCode. Events are read-only notifications - you can react to them but not modify them.
 
 ```ts title=".opencode/plugin/events.ts"
 import type { Plugin } from "@opencode-ai/plugin"
@@ -69,23 +63,38 @@ export const EventPlugin: Plugin = async (ctx) => {
 }
 ```
 
-**Available events:**
-
-- **Command**: `command.executed`
-- **File**: `file.edited`, `file.watcher.updated`
-- **Installation**: `installation.updated`
-- **LSP**: `lsp.client.diagnostics`, `lsp.updated`
-- **Message**: `message.part.removed`, `message.part.updated`, `message.removed`, `message.updated`
-- **Permission**: `permission.replied`, `permission.updated`
-- **Server**: `server.connected`
-- **Session**: `session.created`, `session.compacted`, `session.deleted`, `session.diff`, `session.error`, `session.idle`, `session.status`, `session.updated`
-- **Todo**: `todo.updated`
-- **Tool**: `tool.execute.after`, `tool.execute.before`
-- **TUI**: `tui.prompt.append`, `tui.command.execute`, `tui.toast.show`
+| Event           | Description                       |
+| --------------- | --------------------------------- |
+| command.\*      | Command execution                 |
+| file.\*         | File edits and watcher updates    |
+| installation.\* | Installation updates              |
+| lsp.\*          | LSP diagnostics and updates       |
+| message.\*      | Message and part changes          |
+| permission.\*   | Permission requests and replies   |
+| server.\*       | Server connection                 |
+| session.\*      | Session lifecycle and status      |
+| todo.\*         | Todo list updates                 |
+| tool.\*         | Tool execution before/after       |
+| tui.\*          | TUI prompts, commands, and toasts |
 
 ---
 
-## Tool hooks
+## Hooks
+
+Hooks intercept and modify OpenCode's behavior. Each hook receives input parameters and can modify output parameters.
+
+| Hook                                | Description                                                 |
+| ----------------------------------- | ----------------------------------------------------------- |
+| [tool.execute](#toolexecute)        | Intercept tool execution before and after                   |
+| [chat.message](#chatmessage)        | Modify user messages before sending to AI                   |
+| [chat.params](#chatparams)          | Modify LLM parameters                                       |
+| [permission.ask](#permissionask)    | Override permission decisions                               |
+| [config](#config)                   | Modify configuration at startup                             |
+| [experimental](#experimental-hooks) | Customize compaction, transform messages and system prompts |
+
+---
+
+### tool.execute
 
 Intercept tool execution before or after it runs.
 
@@ -134,9 +143,9 @@ export const ToolAfterPlugin: Plugin = async (ctx) => {
 
 ---
 
-## Chat hooks
+### chat.message
 
-**`chat.message`** — Modify user messages before they're sent to the AI.
+Modify user messages before they're sent to the AI.
 
 ```ts title=".opencode/plugin/chat-message.ts"
 import type { Plugin } from "@opencode-ai/plugin"
@@ -157,7 +166,11 @@ export const ChatMessagePlugin: Plugin = async (ctx) => {
 }
 ```
 
-**`chat.params`** — Modify LLM parameters like temperature before requests.
+---
+
+### chat.params
+
+Modify LLM parameters like temperature before requests.
 
 ```ts title=".opencode/plugin/chat-params.ts"
 import type { Plugin } from "@opencode-ai/plugin"
@@ -177,9 +190,9 @@ export const ChatParamsPlugin: Plugin = async (ctx) => {
 
 ---
 
-## Permission hooks
+### permission.ask
 
-**`permission.ask`** — Override permission decisions for tool execution.
+Override permission decisions for tool execution.
 
 ```ts title=".opencode/plugin/permission.ts"
 import type { Plugin } from "@opencode-ai/plugin"
@@ -206,7 +219,7 @@ export const PermissionPlugin: Plugin = async (ctx) => {
 
 ---
 
-## Config hook
+### config
 
 Modify the OpenCode configuration at startup.
 
@@ -225,7 +238,7 @@ export const ConfigPlugin: Plugin = async (ctx) => {
 
 ---
 
-## Experimental hooks
+### Experimental hooks
 
 These hooks may change in future versions.
 
@@ -316,7 +329,18 @@ export const TextCompletePlugin: Plugin = async (ctx) => {
 
 ---
 
-## Auth
+## Providers
+
+Providers add new capabilities to OpenCode.
+
+| Provider                          | Description                 |
+| --------------------------------- | --------------------------- |
+| [Authentication](#authentication) | Custom authentication flows |
+| [Custom tools](#custom-tools)     | Tools the AI can call       |
+
+---
+
+### Authentication
 
 Add custom authentication flows for LLM providers. Authentication methods appear in the `/connect` command.
 
@@ -338,7 +362,7 @@ export const AuthPlugin: Plugin = async (ctx) => {
 }
 ```
 
-The `auth` extension has three parts:
+The `auth` property has three parts:
 
 | Property   | Description                                           |
 | ---------- | ----------------------------------------------------- |
@@ -346,15 +370,11 @@ The `auth` extension has three parts:
 | `methods`  | Array of authentication methods (oauth or api)        |
 | `loader`   | Optional function to transform credentials before use |
 
----
-
-### Methods
+#### Methods
 
 Each method defines how users can authenticate. You can provide multiple methods to give users options.
 
-#### API key method
-
-The simplest method - users enter an API key directly.
+**API key method** — Users enter an API key directly.
 
 ```ts
 {
@@ -383,9 +403,7 @@ To customize what happens after the user enters their key, add an `authorize` fu
 }
 ```
 
-#### OAuth method
-
-Browser-based authentication flow.
+**OAuth method** — Browser-based authentication flow.
 
 ```ts
 {
@@ -468,9 +486,7 @@ The callback must return one of:
 { type: "failed" }
 ```
 
----
-
-### Prompts
+#### Prompts
 
 Collect additional information before authentication using `prompts`. Both `oauth` and `api` methods support prompts.
 
@@ -527,9 +543,7 @@ Collect additional information before authentication using `prompts`. Both `oaut
 
 Prompt values are passed to the `authorize` function as the `inputs` object.
 
----
-
-### Loader
+#### Loader
 
 The `loader` function transforms stored credentials before they're used. This is useful for:
 
@@ -593,7 +607,7 @@ The loader should return an object with credentials to pass to the provider (e.g
 
 ---
 
-## Custom tools
+### Custom tools
 
 Add tools that the AI can call alongside built-in tools.
 
