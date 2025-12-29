@@ -3,7 +3,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { useSync } from "@/context/sync"
 import { useParams } from "@solidjs/router"
-import { AssistantMessage } from "@opencode-ai/sdk/v2"
+import { AssistantMessage } from "@opencode-ai/sdk/v2/client"
 
 export function SessionContextUsage() {
   const sync = useSync()
@@ -35,19 +35,13 @@ export function SessionContextUsage() {
       {(ctx) => (
         <Tooltip
           value={
-            <div class="flex flex-col gap-1">
-              <div class="flex gap-3">
-                <span class="opacity-70 text-right flex-1">Tokens</span>
-                <span class="text-left flex-1">{ctx().tokens}</span>
-              </div>
-              <div class="flex gap-3">
-                <span class="opacity-70 text-right flex-1">Usage</span>
-                <span class="text-left flex-1">{ctx().percentage ?? 0}%</span>
-              </div>
-              <div class="flex gap-3">
-                <span class="opacity-70 text-right flex-1">Cost</span>
-                <span class="text-left flex-1">{cost()}</span>
-              </div>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+              <span class="opacity-70 text-right">Tokens</span>
+              <span class="text-left">{ctx().tokens}</span>
+              <span class="opacity-70 text-right">Usage</span>
+              <span class="text-left">{ctx().percentage ?? 0}%</span>
+              <span class="opacity-70 text-right">Cost</span>
+              <span class="text-left">{cost()}</span>
             </div>
           }
           placement="top"
