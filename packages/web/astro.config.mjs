@@ -80,12 +80,13 @@ export default defineConfig({
             "acp",
             "skills",
             "custom-tools",
+            "use-plugins",
           ],
         },
 
         {
           label: "Develop",
-          items: ["sdk", "server", "plugins", "ecosystem"],
+          items: ["sdk", "server", "dev-plugins", "ecosystem"],
         },
       ],
       components: {

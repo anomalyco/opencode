@@ -1,66 +1,11 @@
 ---
-title: Plugins
+title: Developing Plugins
 description: Write your own plugins to extend OpenCode.
 ---
 
 Plugins allow you to extend OpenCode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify OpenCode's default behavior.
 
 For examples, check out the [plugins](/docs/ecosystem#plugins) created by the community.
-
----
-
-## Use a plugin
-
-There are two ways to load plugins.
-
----
-
-### From local files
-
-Place JavaScript or TypeScript files in the plugin directory.
-
-- `.opencode/plugin/` - Project-level plugins
-- `~/.config/opencode/plugin/` - Global plugins
-
-Files in these directories are automatically loaded at startup.
-
----
-
-### From npm
-
-Specify npm packages in your config file.
-
-```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
-}
-```
-
-Both regular and scoped npm packages are supported.
-
-Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
-
----
-
-### How plugins are installed
-
-**npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
-
-**Local plugins** are loaded directly from the plugin directory. Dependencies are not installed automatically. If your local plugin requires external packages, publish it to npm instead and add it to your config.
-
----
-
-### Load order
-
-Plugins are loaded from all sources and all hooks run in sequence. The load order is:
-
-1. Global config (`~/.config/opencode/opencode.json`)
-2. Project config (`opencode.json`)
-3. Global plugin directory (`~/.config/opencode/plugin/`)
-4. Project plugin directory (`.opencode/plugin/`)
-
-Duplicate npm packages with the same name and version are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
 
 ---
 
