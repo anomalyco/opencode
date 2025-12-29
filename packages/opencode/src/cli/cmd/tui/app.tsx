@@ -20,6 +20,8 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
+import { LayoutProvider } from "@tui/context/layout"
+import { WindowCommandsProvider } from "@tui/context/window-commands"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
@@ -121,17 +123,21 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
                               <KeybindProvider>
-                                <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <PromptHistoryProvider>
-                                        <PromptRefProvider>
-                                          <App />
-                                        </PromptRefProvider>
-                                      </PromptHistoryProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </PromptStashProvider>
+                                <LayoutProvider>
+                                  <WindowCommandsProvider>
+                                    <PromptStashProvider>
+                                      <DialogProvider>
+                                        <CommandProvider>
+                                          <PromptHistoryProvider>
+                                            <PromptRefProvider>
+                                              <App />
+                                            </PromptRefProvider>
+                                          </PromptHistoryProvider>
+                                        </CommandProvider>
+                                      </DialogProvider>
+                                    </PromptStashProvider>
+                                  </WindowCommandsProvider>
+                                </LayoutProvider>
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
