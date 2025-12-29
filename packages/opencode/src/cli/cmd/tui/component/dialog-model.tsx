@@ -21,6 +21,7 @@ export function DialogModel(props: { providerID?: string }) {
   const dialog = useDialog()
   const [ref, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [query, setQuery] = createSignal("")
+  const [showLatestOnly, setShowLatestOnly] = createSignal(true)
 
   const connected = useConnected()
   const providers = createDialogProviderOptions()
@@ -116,14 +117,27 @@ export function DialogModel(props: { providerID?: string }) {
           entries(),
           filter(([_, info]) => info.status !== "deprecated"),
           filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
+          // Filter out dated model versions when "show latest only" is enabled
+          filter(([model, _]) => !showLatestOnly() || !model.match(/-\d{8}$/)),
           map(([model, info]) => {
             const value = {
               providerID: provider.id,
               modelID: model,
             }
+            // Extract date suffix from model ID (e.g., "20251101" from "claude-opus-4-5-20251101")
+            const dateMatch = model.match(/-(\d{8})$/)
+            let title = info.name ?? model
+            // If model has a date suffix and title doesn't already include it, append it
+            if (dateMatch && !title.includes(dateMatch[1])) {
+              title = `${title} (${dateMatch[1]})`
+            }
+            // If model doesn't have a date suffix and title doesn't say "latest", mark it as latest
+            else if (!dateMatch && !title.toLowerCase().includes("latest")) {
+              title = `${title} (latest)`
+            }
             return {
               value,
-              title: info.name ?? model,
+              title,
               description: favorites.some(
                 (item) => item.providerID === value.providerID && item.modelID === value.modelID,
               )
@@ -150,10 +164,6 @@ export function DialogModel(props: { providerID?: string }) {
               (item) => item.providerID === value.providerID && item.modelID === value.modelID,
             )
             if (inFavorites) return false
-            const inRecents = recents.some(
-              (item) => item.providerID === value.providerID && item.modelID === value.modelID,
-            )
-            if (inRecents) return false
             return true
           }),
           sortBy(
@@ -217,6 +227,14 @@ export function DialogModel(props: { providerID?: string }) {
           disabled: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
+          },
+        },
+        {
+          keybind: Keybind.parse("ctrl+l")[0],
+          title: showLatestOnly() ? "Show all versions" : "Show latest only",
+          disabled: !connected(),
+          onTrigger: () => {
+            setShowLatestOnly(!showLatestOnly())
           },
         },
       ]}
