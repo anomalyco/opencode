@@ -25,6 +25,7 @@ import {
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
+import { useDialog } from "../context/dialog"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
@@ -33,6 +34,7 @@ import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
+import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createAutoScroll } from "../hooks"
@@ -264,6 +266,8 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+  const dialog = useDialog()
+
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
@@ -286,13 +290,26 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     }),
   )
 
+  const openImagePreview = (url: string, alt?: string) => {
+    dialog.show(() => <ImagePreview src={url} alt={alt} />)
+  }
+
   return (
     <div data-component="user-message">
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
             {(file) => (
-              <div data-slot="user-message-attachment" data-type={file.mime.startsWith("image/") ? "image" : "file"}>
+              <div
+                data-slot="user-message-attachment"
+                data-type={file.mime.startsWith("image/") ? "image" : "file"}
+                data-clickable={file.mime.startsWith("image/") && !!file.url}
+                onClick={() => {
+                  if (file.mime.startsWith("image/") && file.url) {
+                    openImagePreview(file.url, file.filename)
+                  }
+                }}
+              >
                 <Show
                   when={file.mime.startsWith("image/") && file.url}
                   fallback={
