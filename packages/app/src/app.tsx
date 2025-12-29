@@ -69,7 +69,7 @@ export function App() {
                               <Route
                                 path="/session/:id?"
                                 component={(p) => (
-                                  <Show when={p.params.id ?? "new"} keyed>
+                                  <Show when={p.params.id || true} keyed>
                                     <TerminalProvider>
                                       <PromptProvider>
                                         <Session />
