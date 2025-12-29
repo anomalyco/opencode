@@ -254,6 +254,119 @@ The opencode server exposes the following APIs.
 
 ---
 
+### Streaming (Experimental)
+
+:::caution
+These endpoints require `experimental.durableStreams` to be enabled in your config.
+:::
+
+| Method | Path             | Description                                  | Response                                    |
+| ------ | ---------------- | -------------------------------------------- | ------------------------------------------- |
+| `GET`  | `/stream/events` | Stream session events with catch-up support  | <a href={typesUrl}><code>StreamEvent[]</code></a> or SSE stream |
+
+#### GET /stream/events
+
+Stream events for a session with support for both catch-up and live modes.
+
+**Query Parameters:**
+
+- `sessionId` (required) - Session identifier
+- `offset` (optional, default: `-1`) - Starting offset. Use `-1` to start from the beginning, or a ULID offset from a previous response
+- `live` (optional) - Set to `"true"` for live SSE streaming with real-time events
+
+**Catch-up Mode** (default):
+
+Returns a JSON array of events from the specified offset onwards.
+
+**Response Headers:**
+- `Stream-Next-Offset` - Latest offset for subsequent requests
+- `Stream-Up-To-Date` - `"true"` if caught up, `"false"` otherwise
+
+**Live Mode** (`live=true`):
+
+Returns an SSE stream that:
+1. Sends all catch-up events from the offset
+2. Transitions to real-time event streaming
+3. Stays open for new events as they occur
+
+**Example:**
+
+```bash
+# Catch-up mode: Get events from the beginning
+curl "http://localhost:4096/stream/events?sessionId=abc123&offset=-1"
+
+# Catch-up mode: Resume from specific offset
+curl "http://localhost:4096/stream/events?sessionId=abc123&offset=01HQXYZ..."
+
+# Live mode: Catch-up + real-time streaming
+curl "http://localhost:4096/stream/events?sessionId=abc123&offset=-1&live=true"
+```
+
+**Use Cases:**
+
+- Build resilient clients that can reconnect without losing events
+- Resume streaming from last known offset after network interruption
+- Sync multiple clients to the same session state
+
+---
+
+### Server Discovery (Experimental)
+
+:::caution
+These endpoints require `experimental.durableStreams` to be enabled in your config.
+:::
+
+| Method   | Path           | Description                     | Response                                    |
+| -------- | -------------- | ------------------------------- | ------------------------------------------- |
+| `GET`    | `/servers`     | List all registered servers     | <a href={typesUrl}><code>ServerEntry[]</code></a> |
+| `POST`   | `/servers`     | Manually register a server      | `boolean`                                   |
+| `DELETE` | `/servers/:id` | Unregister a server by ID       | `boolean`                                   |
+
+#### Server Registry
+
+The server registry enables multi-server discovery for distributed OpenCode deployments.
+
+**Server Entry Schema:**
+
+```json
+{
+  "id": "unique-server-id",
+  "hostname": "192.168.1.100",
+  "port": 4096,
+  "lastSeen": 1735481234567,
+  "metadata": {
+    "version": "1.0.0",
+    "platform": "darwin"
+  }
+}
+```
+
+**Auto-Registration:**
+
+When `experimental.durableStreams` is enabled, `opencode serve` automatically:
+1. Registers itself in the server registry
+2. Sends heartbeat updates every 15 seconds
+3. Unregisters on clean shutdown
+
+Stale servers (no heartbeat for >30s) are automatically pruned.
+
+**Manual Registration:**
+
+Use `POST /servers` to manually register an external server:
+
+```bash
+curl -X POST http://localhost:4096/servers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "remote-server-1",
+    "hostname": "192.168.1.200",
+    "port": 4096,
+    "metadata": { "region": "us-west" }
+  }'
+```
+
+---
+
 ### Docs
 
 | Method | Path   | Description               | Response                    |

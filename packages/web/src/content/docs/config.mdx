@@ -529,6 +529,53 @@ Experimental options are not stable. They may change or be removed without notic
 
 ---
 
+### Experimental
+
+The `experimental` key contains options that are under active development.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "durableStreams": false
+  }
+}
+```
+
+:::caution
+Experimental options are not stable. They may change or be removed without notice.
+:::
+
+---
+
+#### Durable Streams
+
+Enable durable streaming architecture with event persistence and server discovery.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "durableStreams": true
+  }
+}
+```
+
+When enabled, this feature provides:
+
+- **Event Persistence**: All session events are persisted to SQLite with ULID offsets
+- **Catch-up Streaming**: Clients can resume streams from any offset
+- **Server Discovery**: Multi-server registry with automatic heartbeat
+- **SSE Streaming**: Live server-sent events with catch-up support
+
+This enables building resilient clients that can reconnect and resume without losing events.
+
+**Default:** `false` (opt-in)
+
+**Note:** This is an experimental feature under active development. The API may change in future releases.
+
+---
+
 ## Variables
 
 You can use variable substitution in your config files to reference environment variables and file contents.
