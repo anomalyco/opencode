@@ -79,17 +79,25 @@ export default function Page() {
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
-  const userMessages = createMemo(() =>
-    messages()
-      .filter((m) => m.role === "user")
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  )
+  const userMessages = createMemo(() => messages().filter((m) => m.role === "user"))
   const visibleUserMessages = createMemo(() => {
     const revert = revertMessageID()
     if (!revert) return userMessages()
     return userMessages().filter((m) => m.id < revert)
   })
   const lastUserMessage = createMemo(() => visibleUserMessages()?.at(-1))
+
+  createEffect(
+    on(
+      () => lastUserMessage()?.id,
+      () => {
+        const msg = lastUserMessage()
+        if (!msg) return
+        if (msg.agent) local.agent.set(msg.agent)
+        if (msg.model) local.model.set(msg.model)
+      },
+    ),
+  )
 
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
@@ -575,6 +583,7 @@ export default function Page() {
             <SessionTurn
               sessionID={params.id!}
               messageID={message.id}
+              lastUserMessageID={lastUserMessage()?.id}
               stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
               onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
               onUserInteracted={() => setStore("userInteracted", true)}
@@ -631,6 +640,7 @@ export default function Page() {
             <SessionTurn
               sessionID={params.id!}
               messageID={activeMessage()!.id}
+              lastUserMessageID={lastUserMessage()?.id}
               stepsExpanded={store.stepsExpanded}
               onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
               onUserInteracted={() => setStore("userInteracted", true)}

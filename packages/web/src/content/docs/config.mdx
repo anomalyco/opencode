@@ -106,7 +106,8 @@ You can configure TUI-specific settings through the `tui` option.
     "scroll_speed": 3,
     "scroll_acceleration": {
       "enabled": true
-    }
+    },
+    "diff_style": "auto"
   }
 }
 ```
@@ -115,6 +116,7 @@ Available options:
 
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
 - `scroll_speed` - Custom scroll speed multiplier (default: `1`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
+- `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
 
 [Learn more about using the TUI here](/docs/tui).
 
@@ -177,6 +179,25 @@ You can configure the providers and models you want to use in your OpenCode conf
 ```
 
 The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+
+Provider options can include `timeout` and `setCacheKey`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "timeout": 600000,
+        "setCacheKey": true
+      }
+    }
+  }
+}
+```
+
+- `timeout` - Request timeout in milliseconds (default: 300000). Set to `false` to disable.
+- `setCacheKey` - Ensure a cache key is always set for designated provider.
 
 You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
 
@@ -363,6 +384,42 @@ For example, to ensure that the `edit` and `bash` tools require user approval:
 
 ---
 
+### Compaction
+
+You can control context compaction behavior through the `compaction` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}
+```
+
+- `auto` - Automatically compact the session when context is full (default: `true`).
+- `prune` - Remove old tool outputs to save tokens (default: `true`).
+
+---
+
+### Watcher
+
+You can configure file watcher ignore patterns through the `watcher` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", ".git/**"]
+  }
+}
+```
+
+Patterns follow glob syntax. Use this to exclude noisy directories from file watching.
+
+---
+
 ### MCP servers
 
 You can configure MCP servers you want to use through the `mcp` option.
@@ -375,6 +432,23 @@ You can configure MCP servers you want to use through the `mcp` option.
 ```
 
 [Learn more here](/docs/mcp-servers).
+
+---
+
+### Plugins
+
+[Plugins](/docs/plugins) extend OpenCode with custom tools, hooks, and integrations.
+
+Place plugin files in `.opencode/plugin/` or `~/.config/opencode/plugin/`. You can also load plugins from npm through the `plugin` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
+}
+```
+
+[Learn more here](/docs/plugins).
 
 ---
 
@@ -435,6 +509,23 @@ The `disabled_providers` takes priority over `enabled_providers`.
 :::
 
 If a provider appears in both `enabled_providers` and `disabled_providers`, the `disabled_providers` takes priority for backwards compatibility.
+
+---
+
+### Experimental
+
+The `experimental` key contains options that are under active development.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {}
+}
+```
+
+:::caution
+Experimental options are not stable. They may change or be removed without notice.
+:::
 
 ---
 

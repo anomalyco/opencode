@@ -364,7 +364,16 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const permission = createMemo(() => {
     const sessionID = props.message.sessionID
     const permissions = data.store.permission?.[sessionID] ?? []
-    return permissions.find((p) => p.callID === part.callID)
+    const next = permissions.reduce(
+      (result, perm) => {
+        if (!result) return perm
+        if (perm.id < result.id) return perm
+        return result
+      },
+      undefined as (typeof permissions)[number] | undefined,
+    )
+    if (!next) return undefined
+    return next.callID === part.callID ? next : undefined
   })
 
   const [forceOpen, setForceOpen] = createSignal(false)
@@ -623,7 +632,14 @@ ToolRegistry.register({
       const sessionId = childSessionId()
       if (!sessionId) return undefined
       const permissions = data.store.permission?.[sessionId] ?? []
-      return permissions.toSorted((a, b) => a.id.localeCompare(b.id))[0]
+      return permissions.reduce(
+        (result, perm) => {
+          if (!result) return perm
+          if (perm.id < result.id) return perm
+          return result
+        },
+        undefined as (typeof permissions)[number] | undefined,
+      )
     })
 
     const childToolPart = createMemo(() => {
@@ -807,19 +823,19 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={props.metadata.filediff}>
+        <Show when={props.metadata.filediff?.path || props.input.filePath}>
           <div data-component="edit-content">
             <Dynamic
               component={diffComponent}
               before={{
-                name: props.metadata.filediff.path,
-                contents: props.metadata.filediff.before,
-                cacheKey: checksum(props.metadata.filediff.before),
+                name: props.metadata?.filediff?.file || props.input.filePath,
+                contents: props.metadata?.filediff?.before || props.input.oldString,
+                cacheKey: checksum(props.metadata?.filediff?.before || props.input.oldString),
               }}
               after={{
-                name: props.metadata.filediff.path,
-                contents: props.metadata.filediff.after,
-                cacheKey: checksum(props.metadata.filediff.after),
+                name: props.metadata?.filediff?.file || props.input.filePath,
+                contents: props.metadata?.filediff?.after || props.input.newString,
+                cacheKey: checksum(props.metadata?.filediff?.after || props.input.newString),
               }}
             />
           </div>
