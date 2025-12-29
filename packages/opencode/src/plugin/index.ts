@@ -11,12 +11,6 @@ import { Flag } from "../flag/flag"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  let loadedHooks: Hooks[] = []
-  let pluginsLoadedResolve: (() => void) | null = null
-  const pluginsLoaded = new Promise<void>((resolve) => {
-    pluginsLoadedResolve = resolve
-  })
-
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
@@ -24,7 +18,7 @@ export namespace Plugin {
       fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
-    const hooks = []
+    const hooks: Hooks[] = []
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -39,21 +33,23 @@ export namespace Plugin {
     }
     for (let plugin of plugins) {
       log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version)
-      }
-      const mod = await import(plugin)
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        const init = await fn(input)
-        hooks.push(init)
+      try {
+        if (!plugin.startsWith("file://")) {
+          const lastAtIndex = plugin.lastIndexOf("@")
+          const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+          const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+          plugin = await BunProc.install(pkg, version)
+        }
+        const mod = await import(plugin)
+        for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+          const init = await fn(input)
+          hooks.push(init)
+        }
+      } catch (e) {
+        log.error("failed to load plugin", { path: plugin, error: e })
       }
     }
 
-    loadedHooks = hooks
-    if (pluginsLoadedResolve) pluginsLoadedResolve()
     return {
       hooks,
       input,
@@ -82,9 +78,9 @@ export namespace Plugin {
   }
 
   export async function getSidebarPanels() {
-    await pluginsLoaded
+    const { hooks } = await state()
     const panels: import("@opencode-ai/plugin").SidebarPanel[] = []
-    for (const hook of loadedHooks) {
+    for (const hook of hooks) {
       const sidebar = hook.sidebar
       if (!sidebar) continue
       try {
