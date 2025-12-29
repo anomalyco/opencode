@@ -116,7 +116,7 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url}>
+                      <SDKProvider url={input.url} directory={input.args?.directory}>
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>

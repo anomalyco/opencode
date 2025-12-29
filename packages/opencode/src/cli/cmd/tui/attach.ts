@@ -1,3 +1,4 @@
+import path from "path"
 import { cmd } from "../cmd"
 import { tui } from "./app"
 
@@ -24,7 +25,10 @@ export const AttachCommand = cmd({
     if (args.dir) process.chdir(args.dir)
     await tui({
       url: args.url,
-      args: { sessionID: args.session },
+      args: { 
+        sessionID: args.session,
+        directory: args.dir ? path.resolve(args.dir) : undefined
+      },
     })
   },
 })
