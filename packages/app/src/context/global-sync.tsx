@@ -71,21 +71,19 @@ function createGlobalSync() {
     project: Project[]
     provider: ProviderListResponse
     provider_auth: ProviderAuthResponse
-    children: Record<string, State>
   }>({
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: [],
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
-    children: {},
   })
 
   const children: Record<string, ReturnType<typeof createStore<State>>> = {}
   function child(directory: string) {
     if (!directory) console.error("No directory provided")
     if (!children[directory]) {
-      setGlobalStore("children", directory, {
+      children[directory] = createStore<State>({
         project: "",
         provider: { all: [], connected: [], default: {} },
         config: {},
@@ -105,7 +103,6 @@ function createGlobalSync() {
         message: {},
         part: {},
       })
-      children[directory] = createStore(globalStore.children[directory])
       bootstrapInstance(directory)
     }
     return children[directory]
