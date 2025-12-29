@@ -49,7 +49,7 @@ import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
-import { useCommand } from "@/context/command"
+import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
 export default function Layout(props: ParentProps) {
@@ -323,7 +323,7 @@ export default function Layout(props: ParentProps) {
   }
 
   command.register(() => {
-    const commands = [
+    const commands: CommandOption[] = [
       {
         id: "sidebar.toggle",
         title: "Toggle sidebar",
@@ -387,7 +387,11 @@ export default function Layout(props: ParentProps) {
         id: `theme.set.${id}`,
         title: `Use theme: ${definition.name ?? id}`,
         category: "Theme",
-        onSelect: () => theme.setTheme(id),
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewTheme(id)
+          return () => theme.cancelPreview()
+        },
       })
     }
 
@@ -404,7 +408,11 @@ export default function Layout(props: ParentProps) {
         id: `theme.scheme.${scheme}`,
         title: `Use color scheme: ${colorSchemeLabel[scheme]}`,
         category: "Theme",
-        onSelect: () => theme.setColorScheme(scheme),
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewColorScheme(scheme)
+          return () => theme.cancelPreview()
+        },
       })
     }
 
