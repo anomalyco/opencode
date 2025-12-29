@@ -47,7 +47,7 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 **npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
 
-**Local plugins** are loaded directly from the plugin directory. Dependencies are not installed automatically. If your local plugin requires external packages, publish it to npm instead and add it to your config.
+**Local plugins** are loaded directly from the plugin directory. To use external packages, you must create a `package.json` within your config directory (see [Dependencies](#dependencies)), or publish the plugin to npm and [add it to your config](/docs/config#plugins).
 
 ---
 
@@ -68,6 +68,36 @@ Duplicate npm packages with the same name and version are loaded once. However, 
 
 A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
 functions. Each function receives a context object and returns a hooks object.
+
+---
+
+### Dependencies
+
+Local plugins and custom tools can use external npm packages. Add a `package.json` to your config directory with the dependencies you need.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode runs `bun install` at startup to install these. Your plugins and tools can then import them.
+
+```ts title=".opencode/plugin/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
 
 ---
 
