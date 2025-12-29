@@ -4,7 +4,7 @@ import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -193,11 +193,16 @@ export function SessionTurn(
     return false
   })
 
-  const permissionParts = createMemo(() => {
-    const permissions = data.store.permission?.[props.sessionID] ?? []
-    if (!permissions.length) return [] as { part: ToolPart; message: AssistantMessage }[]
+  const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? [])
+  const permissionCount = createMemo(() => permissions().length)
 
-    const ids = new Set(permissions.map((perm) => perm.callID))
+  const permissionParts = createMemo(() => {
+    if (props.stepsExpanded) return [] as { part: ToolPart; message: AssistantMessage }[]
+
+    const items = permissions()
+    if (!items.length) return [] as { part: ToolPart; message: AssistantMessage }[]
+
+    const ids = new Set(items.map((perm) => perm.callID))
     const result: { part: ToolPart; message: AssistantMessage }[] = []
 
     for (const message of assistantMessages()) {
@@ -371,11 +376,13 @@ export function SessionTurn(
     }
   })
 
-  createEffect(() => {
-    if (permissionParts().length > 0) {
+  createEffect(
+    on(permissionCount, (count, prev) => {
+      if (!count) return
+      if (prev !== undefined && count <= prev) return
       autoScroll.forceScrollToBottom()
-    }
-  })
+    }),
+  )
 
   createEffect(() => {
     if (working() || !isLastUserMessage()) return
