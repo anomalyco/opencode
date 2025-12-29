@@ -575,6 +575,20 @@ export namespace Config {
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
+      // Window commands (Vim-style with <C-w> prefix)
+      window_focus_left: z.string().optional().default("ctrl+w h").describe("Focus window to the left"),
+      window_focus_down: z.string().optional().default("ctrl+w j").describe("Focus window below"),
+      window_focus_up: z.string().optional().default("ctrl+w k").describe("Focus window above"),
+      window_focus_right: z.string().optional().default("ctrl+w l").describe("Focus window to the right"),
+      window_split_horizontal: z.string().optional().default("ctrl+w s").describe("Split window horizontally"),
+      window_split_vertical: z.string().optional().default("ctrl+w v").describe("Split window vertically"),
+      window_close: z.string().optional().default("ctrl+w c").describe("Close current window"),
+      window_close_others: z.string().optional().default("ctrl+w o").describe("Close all other windows"),
+      window_equalize: z.string().optional().default("ctrl+w =").describe("Equalize window sizes"),
+      window_increase_height: z.string().optional().default("ctrl+w +").describe("Increase window height"),
+      window_decrease_height: z.string().optional().default("ctrl+w -").describe("Decrease window height"),
+      window_increase_width: z.string().optional().default("ctrl+w >").describe("Increase window width"),
+      window_decrease_width: z.string().optional().default("ctrl+w <").describe("Decrease window width"),
     })
     .strict()
     .meta({
