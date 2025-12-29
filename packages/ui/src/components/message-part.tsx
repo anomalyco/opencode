@@ -93,7 +93,7 @@ export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 
-const TEXT_RENDER_THROTTLE_MS = 250
+const TEXT_RENDER_THROTTLE_MS = 100
 
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
@@ -441,6 +441,18 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return next
   })
 
+  const [showPermission, setShowPermission] = createSignal(false)
+
+  createEffect(() => {
+    const perm = permission()
+    if (perm) {
+      const timeout = setTimeout(() => setShowPermission(true), 50)
+      onCleanup(() => clearTimeout(timeout))
+    } else {
+      setShowPermission(false)
+    }
+  })
+
   const [forceOpen, setForceOpen] = createSignal(false)
   createEffect(() => {
     if (permission()) setForceOpen(true)
@@ -466,7 +478,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
   return (
-    <div data-component="tool-part-wrapper" data-permission={!!permission()}>
+    <div data-component="tool-part-wrapper" data-permission={showPermission()}>
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
@@ -507,7 +519,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           />
         </Match>
       </Switch>
-      <Show when={permission()}>
+      <Show when={showPermission() && permission()}>
         {(perm) => (
           <div data-component="permission-prompt">
             <div data-slot="permission-message">{perm().title}</div>
