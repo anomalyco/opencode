@@ -393,8 +393,6 @@ export function SessionTurn(
     if (summary()) return
     if (store.summaryWaitTimedOut) return
 
-    // If session was already completed before we started viewing it,
-    // show the response immediately without waiting for summary
     const completed = lastAssistantMessage()?.time.completed
     if (completed && Date.now() - completed > 2000) {
       setStore("summaryWaitTimedOut", true)
