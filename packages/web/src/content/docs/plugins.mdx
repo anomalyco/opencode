@@ -47,7 +47,7 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 **npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
 
-**Local plugins** are loaded directly from the plugin directory. Dependencies are not installed automatically. If your local plugin requires external packages, publish it to npm instead and add it to your config.
+**Local plugins** are loaded directly from the plugin directory. To use external packages, add a `package.json` to your config directory (see [Dependencies](#dependencies)), or publish it to npm and [add it to your config](/docs/config#plugins).
 
 ---
 
@@ -94,7 +94,7 @@ export const MyPlugin = async (ctx) => {
       if (input.tool === "bash") {
         output.args.command = escape(output.args.command)
       }
-    }
+    },
   }
 }
 ```
