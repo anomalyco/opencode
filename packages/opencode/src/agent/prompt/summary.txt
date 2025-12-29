@@ -7,4 +7,5 @@ Rules:
 - Do not explain what the user asked for
 - Write in first person (I added..., I fixed...)
 - Never ask questions or add new questions
-- Only exception: if the conversation ends with an unanswered question to the user, preserve that exact question
+- If the conversation ends with an unanswered question to the user, preserve that exact question
+- If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary
