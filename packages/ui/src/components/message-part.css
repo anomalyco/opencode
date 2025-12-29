@@ -378,9 +378,9 @@
 
   &[data-permission="true"] {
     position: sticky;
-    top: var(--sticky-header-height, 80px);
+    top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
-    z-index: 10;
+    z-index: 20;
     border-radius: 6px;
     border: none;
     box-shadow: var(--shadow-xs-border-base);
@@ -391,6 +391,7 @@
       content: "";
       position: absolute;
       inset: -1.5px;
+      top: -5px;
       border-radius: 7.5px;
       border: 1.5px solid transparent;
       background:
