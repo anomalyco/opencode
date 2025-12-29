@@ -4,7 +4,6 @@ import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
 import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
-import { Global } from "../global"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -38,9 +37,6 @@ export namespace Skill {
 
   export const state = Instance.state(async () => {
     const directories = await Config.directories()
-    // include the global claude skills
-    directories.push(Global.Path.home)
-
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {
@@ -77,16 +73,16 @@ export namespace Skill {
       })) {
         await addSkill(match)
       }
+    }
 
-      for await (const match of CLAUDE_SKILL_GLOB.scan({
-        cwd: dir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-        dot: true,
-      })) {
-        await addSkill(match)
-      }
+    for await (const match of CLAUDE_SKILL_GLOB.scan({
+      cwd: Instance.worktree,
+      absolute: true,
+      onlyFiles: true,
+      followSymlinks: true,
+      dot: true,
+    })) {
+      await addSkill(match)
     }
 
     return skills
