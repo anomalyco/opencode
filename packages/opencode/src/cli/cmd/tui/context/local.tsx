@@ -33,94 +33,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    // Automatically update model when agent changes
-    createEffect(() => {
-      const value = agent.current()
-      if (value.model) {
-        if (isModelValid(value.model))
-          model.set({
-            providerID: value.model.providerID,
-            modelID: value.model.modelID,
-          })
-        else
-          toast.show({
-            variant: "warning",
-            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
-            duration: 3000,
-          })
-      }
-    })
-
-    const variant = iife(() => {
-      // Store variant selection per model (providerID/modelID)
-      const [variantStore, setVariantStore] = createStore<{
-        model: Record<string, string | undefined>
-      }>({
-        model: {},
-      })
-
-      const file = Bun.file(path.join(Global.Path.state, "variant.json"))
-
-      function save() {
-        Bun.write(file, JSON.stringify(variantStore.model))
-      }
-
-      file
-        .json()
-        .then((x) => {
-          if (typeof x === "object" && x !== null) {
-            setVariantStore("model", x)
-          }
-        })
-        .catch(() => {})
-
-      function modelKey() {
-        const m = model.current()
-        return m ? `${m.providerID}/${m.modelID}` : undefined
-      }
-
-      function list() {
-        const m = model.current()
-        if (!m) return []
-        const provider = sync.data.provider.find((x) => x.id === m.providerID)
-        const info = provider?.models[m.modelID]
-        if (!info?.variants) return []
-        return Object.entries(info.variants)
-          .filter(([_, v]) => !v.disabled)
-          .map(([name]) => name)
-      }
-
-      return {
-        current() {
-          const key = modelKey()
-          return key ? variantStore.model[key] : undefined
-        },
-        list,
-        set(value: string | undefined) {
-          const key = modelKey()
-          if (!key) return
-          setVariantStore("model", key, value)
-          save()
-        },
-        cycle() {
-          const variants = list()
-          if (variants.length === 0) return
-          const current = this.current()
-          if (!current) {
-            this.set(variants[0])
-            return
-          }
-          const index = variants.indexOf(current)
-          if (index === -1 || index === variants.length - 1) {
-            // Not found or at end - clear selection
-            this.set(undefined)
-            return
-          }
-          this.set(variants[index + 1])
-        },
-      }
-    })
-
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
@@ -190,11 +102,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           providerID: string
           modelID: string
         }[]
+        variant: Record<string, string | undefined>
       }>({
         ready: false,
         model: {},
         recent: [],
         favorite: [],
+        variant: {},
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
@@ -205,6 +119,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           JSON.stringify({
             recent: modelStore.recent,
             favorite: modelStore.favorite,
+            variant: modelStore.variant,
           }),
         )
       }
@@ -214,6 +129,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((x) => {
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
+          if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
         })
         .catch(() => {})
         .finally(() => {
@@ -381,6 +297,46 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             save()
           })
         },
+        variant: {
+          current() {
+            const m = currentModel()
+            if (!m) return undefined
+            const key = `${m.providerID}/${m.modelID}`
+            return modelStore.variant[key]
+          },
+          list() {
+            const m = currentModel()
+            if (!m) return []
+            const provider = sync.data.provider.find((x) => x.id === m.providerID)
+            const info = provider?.models[m.modelID]
+            if (!info?.variants) return []
+            return Object.entries(info.variants)
+              .filter(([_, v]) => !v.disabled)
+              .map(([name]) => name)
+          },
+          set(value: string | undefined) {
+            const m = currentModel()
+            if (!m) return
+            const key = `${m.providerID}/${m.modelID}`
+            setModelStore("variant", key, value)
+            save()
+          },
+          cycle() {
+            const variants = this.list()
+            if (variants.length === 0) return
+            const current = this.current()
+            if (!current) {
+              this.set(variants[0])
+              return
+            }
+            const index = variants.indexOf(current)
+            if (index === -1 || index === variants.length - 1) {
+              this.set(undefined)
+              return
+            }
+            this.set(variants[index + 1])
+          },
+        },
       }
     })
 
@@ -401,11 +357,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    // Automatically update model when agent changes
+    createEffect(() => {
+      const value = agent.current()
+      if (value.model) {
+        if (isModelValid(value.model))
+          model.set({
+            providerID: value.model.providerID,
+            modelID: value.model.modelID,
+          })
+        else
+          toast.show({
+            variant: "warning",
+            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
+            duration: 3000,
+          })
+      }
+    })
+
     const result = {
       model,
       agent,
       mcp,
-      variant,
     }
     return result
   },

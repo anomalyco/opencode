@@ -207,7 +207,7 @@ export function Prompt(props: PromptProps) {
 
     // Set variant from last message
     if (msg.variant) {
-      local.variant.set(msg.variant)
+      local.model.variant.set(msg.variant)
     }
   })
 
@@ -589,7 +589,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const variant = local.variant.current()
+    const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -749,9 +749,9 @@ export function Prompt(props: PromptProps) {
   })
 
   const showVariant = createMemo(() => {
-    const variants = local.variant.list()
+    const variants = local.model.variant.list()
     if (variants.length === 0) return false
-    const current = local.variant.current()
+    const current = local.model.variant.current()
     return !!current
   })
 
@@ -882,8 +882,8 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("variant_cycle", e)) {
                   e.preventDefault()
-                  if (local.variant.list().length === 0) return
-                  local.variant.cycle()
+                  if (local.model.variant.list().length === 0) return
+                  local.model.variant.cycle()
                   return
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
@@ -1004,7 +1004,7 @@ export function Prompt(props: PromptProps) {
                   <Show when={showVariant()}>
                     <text fg={theme.textMuted}>·</text>
                     <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.variant.current()}</span>
+                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
                 </box>
