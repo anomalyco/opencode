@@ -87,6 +87,7 @@ const context = createContext<{
   showTimestamps: () => boolean
   usernameVisible: () => boolean
   showDetails: () => boolean
+  dynamicDetails: () => boolean
   userMessageMarkdown: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
@@ -124,6 +125,7 @@ export function Session() {
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
   const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
   const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
+  const [dynamicDetails, setDynamicDetails] = createSignal(kv.get("dynamic_details", true))
   const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
   const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(kv.get("user_message_markdown", true))
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
@@ -554,6 +556,17 @@ export function Session() {
         const newValue = !showDetails()
         setShowDetails(newValue)
         kv.set("tool_details_visibility", newValue)
+        dialog.clear()
+      },
+    },
+    {
+      title: dynamicDetails() ? "Disable dynamic details" : "Enable dynamic details",
+      value: "session.toggle.dynamic_details",
+      category: "Session",
+      onSelect: (dialog) => {
+        const newValue = !dynamicDetails()
+        setDynamicDetails(newValue)
+        kv.set("dynamic_details", newValue)
         dialog.clear()
       },
     },
@@ -995,6 +1008,7 @@ export function Session() {
         showTimestamps,
         usernameVisible,
         showDetails,
+        dynamicDetails,
         userMessageMarkdown,
         diffWrapMode,
         sync,
@@ -1398,7 +1412,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const { theme } = useTheme()
-  const { showDetails } = use()
+  const { showDetails, dynamicDetails } = use()
   const sync = useSync()
   const [margin, setMargin] = createSignal(0)
   const component = createMemo(() => {
@@ -1418,9 +1432,50 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
     const metadata = props.part.state.status === "pending" ? {} : (props.part.state.metadata ?? {})
     const input = props.part.state.input ?? {}
     const container = ToolRegistry.container(props.part.tool)
+
+    // Dynamic details collapsing
+    const rawOutput = props.part.state.status === "completed" ? props.part.state.output : undefined
+    const [collapsed, setCollapsed] = createSignal(true)
+
     const permissions = sync.data.permission[props.message.sessionID] ?? []
     const permissionIndex = permissions.findIndex((x) => x.callID === props.part.callID)
     const permission = permissions[permissionIndex]
+
+    // Get configured max lines threshold
+    const maxLines = createMemo(() => sync.data.config.tui?.dynamic_details_max_lines ?? 15)
+
+    // Only collapse if it's a block container with content that would be tall
+    const shouldCollapse = createMemo(() => {
+      if (container !== "block" || !dynamicDetails()) return false
+
+      const threshold = maxLines()
+
+      // For tools with output (bash, patch), check output length
+      if (rawOutput) {
+        const lines = rawOutput.split("\n")
+        return lines.length > threshold
+      }
+
+      // For write tool, check content length
+      if (props.part.tool === "write") {
+        const content = (input as any).content
+        if (typeof content === "string") {
+          const lines = content.split("\n")
+          return lines.length > threshold
+        }
+      }
+
+      // For edit tool, check diff length
+      if (props.part.tool === "edit") {
+        const diff = (metadata as any).diff
+        if (typeof diff === "string") {
+          const lines = diff.split("\n")
+          return lines.length > threshold
+        }
+      }
+
+      return false
+    })
 
     const style: BoxProps =
       container === "block" || permission
@@ -1439,10 +1494,19 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
             paddingLeft: 3,
           }
 
+    const handleToggle = () => {
+      if (!shouldCollapse()) return
+      setCollapsed(!collapsed())
+    }
+
     return (
       <box
         marginTop={margin()}
         {...style}
+        maxHeight={shouldCollapse() && collapsed() ? maxLines() + 2 : undefined}
+        overflow={shouldCollapse() && collapsed() ? "hidden" : undefined}
+        justifyContent={shouldCollapse() && collapsed() ? "flex-start" : undefined}
+        onMouseUp={handleToggle}
         renderBefore={function () {
           const el = this as BoxRenderable
           const parent = el.parent
@@ -1472,8 +1536,15 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
           tool={props.part.tool}
           metadata={metadata}
           permission={permission?.metadata ?? {}}
-          output={props.part.state.status === "completed" ? props.part.state.output : undefined}
+          output={rawOutput}
         />
+        {shouldCollapse() && (
+          <box flexDirection="row">
+            <box backgroundColor={theme.backgroundElement} paddingLeft={2} paddingRight={2}>
+              <text fg={theme.textMuted}>{collapsed() ? "Click to expand" : "Click to collapse"}</text>
+            </box>
+          </box>
+        )}
         {props.part.state.status === "error" && (
           <box paddingLeft={2}>
             <text fg={theme.error}>{props.part.state.error.replace("Error: ", "")}</text>

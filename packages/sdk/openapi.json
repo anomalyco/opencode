@@ -8233,6 +8233,12 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
+              },
+              "dynamic_details_max_lines": {
+                "description": "Max lines before tool output becomes collapsible (default: 15)",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
               }
             }
           },
