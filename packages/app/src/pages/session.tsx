@@ -91,6 +91,18 @@ export default function Page() {
   })
   const lastUserMessage = createMemo(() => visibleUserMessages()?.at(-1))
 
+  createEffect(
+    on(
+      () => lastUserMessage()?.id,
+      () => {
+        const msg = lastUserMessage()
+        if (!msg) return
+        if (msg.agent) local.agent.set(msg.agent)
+        if (msg.model) local.model.set(msg.model)
+      },
+    ),
+  )
+
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
     activeDraggable: undefined as string | undefined,
