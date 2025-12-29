@@ -56,7 +56,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
     }
 
     // Check stored client info (from dynamic registration)
-    const entry = await McpAuth.get(this.mcpName)
+    // Use getForUrl to validate credentials are for the current server URL
+    const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
     if (entry?.clientInfo) {
       // Check if client secret has expired
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
@@ -69,17 +70,21 @@ export class McpOAuthProvider implements OAuthClientProvider {
       }
     }
 
-    // No client info - will trigger dynamic registration
+    // No client info or URL changed - will trigger dynamic registration
     return undefined
   }
 
   async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
-    await McpAuth.updateClientInfo(this.mcpName, {
-      clientId: info.client_id,
-      clientSecret: info.client_secret,
-      clientIdIssuedAt: info.client_id_issued_at,
-      clientSecretExpiresAt: info.client_secret_expires_at,
-    })
+    await McpAuth.updateClientInfo(
+      this.mcpName,
+      {
+        clientId: info.client_id,
+        clientSecret: info.client_secret,
+        clientIdIssuedAt: info.client_id_issued_at,
+        clientSecretExpiresAt: info.client_secret_expires_at,
+      },
+      this.serverUrl,
+    )
     log.info("saved dynamically registered client", {
       mcpName: this.mcpName,
       clientId: info.client_id,
@@ -87,7 +92,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
-    const entry = await McpAuth.get(this.mcpName)
+    // Use getForUrl to validate tokens are for the current server URL
+    const entry = await McpAuth.getForUrl(this.mcpName, this.serverUrl)
     if (!entry?.tokens) return undefined
 
     return {
@@ -102,12 +108,16 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
-    await McpAuth.updateTokens(this.mcpName, {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAt: tokens.expires_in ? Date.now() / 1000 + tokens.expires_in : undefined,
-      scope: tokens.scope,
-    })
+    await McpAuth.updateTokens(
+      this.mcpName,
+      {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: tokens.expires_in ? Date.now() / 1000 + tokens.expires_in : undefined,
+        scope: tokens.scope,
+      },
+      this.serverUrl,
+    )
     log.info("saved oauth tokens", { mcpName: this.mcpName })
   }
 
@@ -126,6 +136,18 @@ export class McpOAuthProvider implements OAuthClientProvider {
       throw new Error(`No code verifier saved for MCP server: ${this.mcpName}`)
     }
     return entry.codeVerifier
+  }
+
+  async saveState(state: string): Promise<void> {
+    await McpAuth.updateOAuthState(this.mcpName, state)
+  }
+
+  async state(): Promise<string> {
+    const entry = await McpAuth.get(this.mcpName)
+    if (!entry?.oauthState) {
+      throw new Error(`No OAuth state saved for MCP server: ${this.mcpName}`)
+    }
+    return entry.oauthState
   }
 }
 

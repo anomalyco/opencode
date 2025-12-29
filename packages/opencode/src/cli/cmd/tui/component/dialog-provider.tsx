@@ -5,6 +5,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
+import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
@@ -122,11 +123,13 @@ function AutoMethod(props: AutoMethodProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD}>{props.title}</text>
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          {props.title}
+        </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
       <box gap={1}>
-        <text fg={theme.primary}>{props.authorization.url}</text>
+        <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
       <text fg={theme.textMuted}>Waiting for authorization...</text>
@@ -168,7 +171,7 @@ function CodeMethod(props: CodeMethodProps) {
       description={() => (
         <box gap={1}>
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
-          <text fg={theme.primary}>{props.authorization.url}</text>
+          <Link href={props.authorization.url} fg={theme.primary} />
           <Show when={error()}>
             <text fg={theme.error}>Invalid code</text>
           </Show>
@@ -198,7 +201,7 @@ function ApiMethod(props: ApiMethodProps) {
             <text fg={theme.textMuted}>
               OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
             </text>
-            <text>
+            <text fg={theme.text}>
               Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
             </text>
           </box>

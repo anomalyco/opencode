@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import path from "path"
+import { pathToFileURL, fileURLToPath } from "url"
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node"
 import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
 import { Log } from "../util/log"
@@ -10,6 +11,9 @@ import type { LSPServer } from "./server"
 import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
+import { Filesystem } from "../util/filesystem"
+
+const DIAGNOSTICS_DEBOUNCE_MS = 150
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -46,14 +50,15 @@ export namespace LSPClient {
 
     const diagnostics = new Map<string, Diagnostic[]>()
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
-      const path = new URL(params.uri).pathname
+      const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
       l.info("textDocument/publishDiagnostics", {
-        path,
+        path: filePath,
+        count: params.diagnostics.length,
       })
-      const exists = diagnostics.has(path)
-      diagnostics.set(path, params.diagnostics)
+      const exists = diagnostics.has(filePath)
+      diagnostics.set(filePath, params.diagnostics)
       if (!exists && input.serverID === "typescript") return
-      Bus.publish(Event.Diagnostics, { path, serverID: input.serverID })
+      Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
     connection.onRequest("window/workDoneProgress/create", (params) => {
       l.info("window/workDoneProgress/create", params)
@@ -68,7 +73,7 @@ export namespace LSPClient {
     connection.onRequest("workspace/workspaceFolders", async () => [
       {
         name: "workspace",
-        uri: "file://" + input.root,
+        uri: pathToFileURL(input.root).href,
       },
     ])
     connection.listen()
@@ -76,12 +81,12 @@ export namespace LSPClient {
     l.info("sending initialize")
     await withTimeout(
       connection.sendRequest("initialize", {
-        rootUri: "file://" + input.root,
+        rootUri: pathToFileURL(input.root).href,
         processId: input.server.process.pid,
         workspaceFolders: [
           {
             name: "workspace",
-            uri: "file://" + input.root,
+            uri: pathToFileURL(input.root).href,
           },
         ],
         initializationOptions: {
@@ -154,7 +159,7 @@ export namespace LSPClient {
             })
             await connection.sendNotification("textDocument/didChange", {
               textDocument: {
-                uri: `file://` + input.path,
+                uri: pathToFileURL(input.path).href,
                 version: next,
               },
               contentChanges: [{ text }],
@@ -166,7 +171,7 @@ export namespace LSPClient {
           diagnostics.delete(input.path)
           await connection.sendNotification("textDocument/didOpen", {
             textDocument: {
-              uri: `file://` + input.path,
+              uri: pathToFileURL(input.path).href,
               languageId,
               version: 0,
               text,
@@ -180,16 +185,23 @@ export namespace LSPClient {
         return diagnostics
       },
       async waitForDiagnostics(input: { path: string }) {
-        input.path = path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path)
-        log.info("waiting for diagnostics", input)
+        const normalizedPath = Filesystem.normalizePath(
+          path.isAbsolute(input.path) ? input.path : path.resolve(Instance.directory, input.path),
+        )
+        log.info("waiting for diagnostics", { path: normalizedPath })
         let unsub: () => void
+        let debounceTimer: ReturnType<typeof setTimeout> | undefined
         return await withTimeout(
           new Promise<void>((resolve) => {
             unsub = Bus.subscribe(Event.Diagnostics, (event) => {
-              if (event.properties.path === input.path && event.properties.serverID === result.serverID) {
-                log.info("got diagnostics", input)
-                unsub?.()
-                resolve()
+              if (event.properties.path === normalizedPath && event.properties.serverID === result.serverID) {
+                // Debounce to allow LSP to send follow-up diagnostics (e.g., semantic after syntax)
+                if (debounceTimer) clearTimeout(debounceTimer)
+                debounceTimer = setTimeout(() => {
+                  log.info("got diagnostics", { path: normalizedPath })
+                  unsub?.()
+                  resolve()
+                }, DIAGNOSTICS_DEBOUNCE_MS)
               }
             })
           }),
@@ -197,6 +209,7 @@ export namespace LSPClient {
         )
           .catch(() => {})
           .finally(() => {
+            if (debounceTimer) clearTimeout(debounceTimer)
             unsub?.()
           })
       },

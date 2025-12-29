@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">The AI coding agent built for the terminal.</p>
+<p align="center">The open source AI coding agent.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
@@ -30,12 +30,28 @@ scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
 brew install opencode              # macOS and Linux
 paru -S opencode-bin               # Arch Linux
-mise use --pin -g ubi:sst/opencode # Any OS
+mise use -g github:sst/opencode # Any OS
 nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
 ```
 
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
+
+### Desktop App (BETA)
+
+OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/sst/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+
+| Platform              | Download                              |
+| --------------------- | ------------------------------------- |
+| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
+| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
+| Windows               | `opencode-desktop-windows-x64.exe`    |
+| Linux                 | `.deb`, `.rpm`, or AppImage           |
+
+```bash
+# macOS (Homebrew)
+brew install --cask opencode-desktop
+```
 
 #### Installation Directory
 
@@ -63,7 +79,7 @@ you can switch between these using the `Tab` key.
   - Asks permission before running bash commands
   - Ideal for exploring unfamiliar codebases or planning changes
 
-Also, included is a **general** subagent for complex searches and multi-step tasks.
+Also, included is a **general** subagent for complex searches and multistep tasks.
 This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
@@ -78,11 +94,11 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 ### Building on OpenCode
 
-If you are working on a project that's related to OpenCode and is using "opencode" as a part of its name; for example, "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in anyway.
+If you are working on a project that's related to OpenCode and is using "opencode" as a part of its name; for example, "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
 ### FAQ
 
-#### How is this different than Claude Code?
+#### How is this different from Claude Code?
 
 It's very similar to Claude Code in terms of capability. Here are the key differences:
 

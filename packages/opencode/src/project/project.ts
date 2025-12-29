@@ -107,7 +107,7 @@ export namespace Project {
         await migrateFromGlobal(id, worktree)
       }
     }
-    if (Flag.OPENCODE_EXPERIMENTAL) discover(existing)
+    if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
     const result: Info = {
       ...existing,
       worktree,

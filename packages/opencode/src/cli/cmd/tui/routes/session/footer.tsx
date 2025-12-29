@@ -10,7 +10,7 @@ export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
-  const mcp = createMemo(() => Object.keys(sync.data.mcp))
+  const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
   const permissions = createMemo(() => {
@@ -66,7 +66,7 @@ export function Footer() {
             <text fg={theme.text}>
               <span style={{ fg: theme.success }}>•</span> {lsp().length} LSP
             </text>
-            <Show when={mcp().length}>
+            <Show when={mcp()}>
               <text fg={theme.text}>
                 <Switch>
                   <Match when={mcpError()}>
@@ -76,7 +76,7 @@ export function Footer() {
                     <span style={{ fg: theme.success }}>⊙ </span>
                   </Match>
                 </Switch>
-                {mcp().length} MCP
+                {mcp()} MCP
               </text>
             </Show>
             <text fg={theme.textMuted}>/status</text>

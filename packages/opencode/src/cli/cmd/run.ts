@@ -10,6 +10,7 @@ import { select } from "@clack/prompts"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
+import { Agent } from "../../agent/agent"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -88,7 +89,9 @@ export const RunCommand = cmd({
       })
   },
   handler: async (args) => {
-    let message = [...args.message, ...(args["--"] || [])].join(" ")
+    let message = [...args.message, ...(args["--"] || [])]
+      .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
+      .join(" ")
 
     const fileParts: any[] = []
     if (args.file) {
@@ -221,10 +224,33 @@ export const RunCommand = cmd({
         }
       })()
 
+      // Validate agent if specified
+      const resolvedAgent = await (async () => {
+        if (!args.agent) return undefined
+        const agent = await Agent.get(args.agent)
+        if (!agent) {
+          UI.println(
+            UI.Style.TEXT_WARNING_BOLD + "!",
+            UI.Style.TEXT_NORMAL,
+            `agent "${args.agent}" not found. Falling back to default agent`,
+          )
+          return undefined
+        }
+        if (agent.mode === "subagent") {
+          UI.println(
+            UI.Style.TEXT_WARNING_BOLD + "!",
+            UI.Style.TEXT_NORMAL,
+            `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+          )
+          return undefined
+        }
+        return args.agent
+      })()
+
       if (args.command) {
         await sdk.session.command({
           sessionID,
-          agent: args.agent || "build",
+          agent: resolvedAgent,
           model: args.model,
           command: args.command,
           arguments: message,
@@ -233,7 +259,7 @@ export const RunCommand = cmd({
         const modelParam = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
           sessionID,
-          agent: args.agent || "build",
+          agent: resolvedAgent,
           model: modelParam,
           parts: [...fileParts, { type: "text", text: message }],
         })
@@ -277,8 +303,8 @@ export const RunCommand = cmd({
           }
           return { error }
         })
-        if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
         }
       }
 
@@ -330,8 +356,8 @@ export const RunCommand = cmd({
           }
           return { error }
         })
-        if (!shareResult.error) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  https://opencode.ai/s/" + sessionID.slice(-8))
+        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
+          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
         }
       }
 

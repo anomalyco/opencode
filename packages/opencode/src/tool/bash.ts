@@ -14,11 +14,10 @@ import { Permission } from "@/permission"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import path from "path"
-import { iife } from "@/util/iife"
+import { Shell } from "@/shell/shell"
 
 const MAX_OUTPUT_LENGTH = Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH || 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
-const SIGKILL_TIMEOUT_MS = 200
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -51,38 +50,12 @@ const parser = lazy(async () => {
 })
 
 // TODO: we may wanna rename this tool so it works better on other shells
-
 export const BashTool = Tool.define("bash", async () => {
-  const shell = iife(() => {
-    const s = process.env.SHELL
-    if (s) {
-      const basename = path.basename(s)
-      if (!new Set(["fish", "nu"]).has(basename)) {
-        return s
-      }
-    }
-
-    if (process.platform === "darwin") {
-      return "/bin/zsh"
-    }
-
-    if (process.platform === "win32") {
-      // Let Bun / Node pick COMSPEC (usually cmd.exe)
-      // or explicitly:
-      return process.env.COMSPEC || true
-    }
-
-    const bash = Bun.which("bash")
-    if (bash) {
-      return bash
-    }
-
-    return true
-  })
+  const shell = Shell.acceptable()
   log.info("bash tool using shell", { shell })
 
   return {
-    description: DESCRIPTION,
+    description: DESCRIPTION.replaceAll("${directory}", Instance.directory),
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -188,7 +161,7 @@ export const BashTool = Tool.define("bash", async () => {
           const action = Wildcard.allStructured({ head: command[0], tail: command.slice(1) }, permissions)
           if (action === "deny") {
             throw new Error(
-              `The user has specifically restricted access to this command, you are not allowed to execute it. Here is the configuration: ${JSON.stringify(permissions)}`,
+              `The user has specifically restricted access to this command: "${command.join(" ")}", you are not allowed to execute it. The user has these settings configured: ${JSON.stringify(permissions)}`,
             )
           }
           if (action === "ask") {
@@ -261,51 +234,23 @@ export const BashTool = Tool.define("bash", async () => {
       let aborted = false
       let exited = false
 
-      const killTree = async () => {
-        const pid = proc.pid
-        if (!pid || exited) {
-          return
-        }
-
-        if (process.platform === "win32") {
-          await new Promise<void>((resolve) => {
-            const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
-            killer.once("exit", resolve)
-            killer.once("error", resolve)
-          })
-          return
-        }
-
-        try {
-          process.kill(-pid, "SIGTERM")
-          await Bun.sleep(SIGKILL_TIMEOUT_MS)
-          if (!exited) {
-            process.kill(-pid, "SIGKILL")
-          }
-        } catch (_e) {
-          proc.kill("SIGTERM")
-          await Bun.sleep(SIGKILL_TIMEOUT_MS)
-          if (!exited) {
-            proc.kill("SIGKILL")
-          }
-        }
-      }
+      const kill = () => Shell.killTree(proc, { exited: () => exited })
 
       if (ctx.abort.aborted) {
         aborted = true
-        await killTree()
+        await kill()
       }
 
       const abortHandler = () => {
         aborted = true
-        void killTree()
+        void kill()
       }
 
       ctx.abort.addEventListener("abort", abortHandler, { once: true })
 
       const timeoutTimer = setTimeout(() => {
         timedOut = true
-        void killTree()
+        void kill()
       }, timeout + 100)
 
       await new Promise<void>((resolve, reject) => {

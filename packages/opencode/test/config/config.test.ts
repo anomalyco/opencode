@@ -450,6 +450,38 @@ test("merges plugin arrays from global and local configs", async () => {
   })
 })
 
+test("does not error when only custom agent is a subagent", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const agentDir = path.join(opencodeDir, "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Bun.write(
+        path.join(agentDir, "helper.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Helper subagent prompt`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["helper"]).toEqual({
+        name: "helper",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Helper subagent prompt",
+      })
+    },
+  })
+})
+
 test("deduplicates duplicate plugins from global and local configs", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -498,6 +530,100 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
         (p) => p.includes("global-plugin") || p.includes("local-plugin") || p.includes("duplicate-plugin"),
       )
       expect(pluginNames.length).toBe(3)
+    },
+  })
+})
+
+test("compaction config defaults to true when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // When not specified, compaction should be undefined (defaults handled in usage)
+      expect(config.compaction).toBeUndefined()
+    },
+  })
+})
+
+test("compaction config can disable auto compaction", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          compaction: {
+            auto: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.compaction?.auto).toBe(false)
+      expect(config.compaction?.prune).toBeUndefined()
+    },
+  })
+})
+
+test("compaction config can disable prune", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          compaction: {
+            prune: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.compaction?.prune).toBe(false)
+      expect(config.compaction?.auto).toBeUndefined()
+    },
+  })
+})
+
+test("compaction config can disable both auto and prune", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          compaction: {
+            auto: false,
+            prune: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.compaction?.auto).toBe(false)
+      expect(config.compaction?.prune).toBe(false)
     },
   })
 })

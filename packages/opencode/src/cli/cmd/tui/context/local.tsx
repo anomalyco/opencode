@@ -52,11 +52,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
+      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: agents().find((x) => x.default)?.name ?? agents()[0].name,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [

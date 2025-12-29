@@ -1,8 +1,0 @@
-{
-  "extends": "../desktop/tsconfig.json",
-  "compilerOptions": {
-    "outDir": "ts-dist"
-  },
-  "references": [{ "path": "../desktop" }],
-  "include": ["src"]
-}

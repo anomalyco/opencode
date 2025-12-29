@@ -1,0 +1,33 @@
+name: "Auto-close stale issues"
+
+on:
+  schedule:
+    - cron: "30 1 * * *" # Daily at 1:30 AM
+  workflow_dispatch:
+
+env:
+  DAYS_BEFORE_STALE: 90
+  DAYS_BEFORE_CLOSE: 7
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/stale@v10
+        with:
+          days-before-stale: ${{ env.DAYS_BEFORE_STALE }}
+          days-before-close: ${{ env.DAYS_BEFORE_CLOSE }}
+          stale-issue-label: "stale"
+          close-issue-message: |
+            [automated] Closing due to ${{ env.DAYS_BEFORE_STALE }}+ days of inactivity.
+
+            Feel free to reopen if you still need this!
+          stale-issue-message: |
+            [automated] This issue has had no activity for ${{ env.DAYS_BEFORE_STALE }} days.
+
+            It will be closed in ${{ env.DAYS_BEFORE_CLOSE }} days if there's no new activity.
+          remove-stale-when-updated: true
+          exempt-issue-labels: "pinned,security,feature-request,on-hold"
+          start-date: "2025-12-27"

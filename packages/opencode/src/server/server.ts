@@ -10,7 +10,7 @@ import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { mapValues } from "remeda"
+import { filter, mapValues, sortBy, pipe } from "remeda"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
 import { Ripgrep } from "../file/ripgrep"
@@ -45,8 +45,11 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
+import type { BunWebSocketData } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
+import { Installation } from "@/installation"
+import { MDNS } from "./mdns"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -56,6 +59,7 @@ export namespace Server {
 
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
+    Disposed: BusEvent.define("global.disposed", z.object({})),
   }
 
   const app = new Hono()
@@ -96,6 +100,27 @@ export namespace Server {
       })
       .use(cors())
       .get(
+        "/global/health",
+        describeRoute({
+          summary: "Get health",
+          description: "Get health information about the OpenCode server.",
+          operationId: "global.health",
+          responses: {
+            200: {
+              description: "Health information",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json({ healthy: true, version: Installation.VERSION })
+        },
+      )
+      .get(
         "/global/event",
         describeRoute({
           summary: "Get global events",
@@ -124,14 +149,36 @@ export namespace Server {
         async (c) => {
           log.info("global event connected")
           return streamSSE(c, async (stream) => {
+            stream.writeSSE({
+              data: JSON.stringify({
+                payload: {
+                  type: "server.connected",
+                  properties: {},
+                },
+              }),
+            })
             async function handler(event: any) {
               await stream.writeSSE({
                 data: JSON.stringify(event),
               })
             }
             GlobalBus.on("event", handler)
+
+            // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+            const heartbeat = setInterval(() => {
+              stream.writeSSE({
+                data: JSON.stringify({
+                  payload: {
+                    type: "server.heartbeat",
+                    properties: {},
+                  },
+                }),
+              })
+            }, 30000)
+
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {
+                clearInterval(heartbeat)
                 GlobalBus.off("event", handler)
                 resolve()
                 log.info("global event disconnected")
@@ -140,8 +187,37 @@ export namespace Server {
           })
         },
       )
+      .post(
+        "/global/dispose",
+        describeRoute({
+          summary: "Dispose instance",
+          description: "Clean up and dispose all OpenCode instances, releasing all resources.",
+          operationId: "global.dispose",
+          responses: {
+            200: {
+              description: "Global disposed",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          await Instance.disposeAll()
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: Event.Disposed.type,
+              properties: {},
+            },
+          })
+          return c.json(true)
+        },
+      )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") ?? c.req.header("x-opencode-directory") ?? process.cwd()
+        const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
@@ -483,6 +559,7 @@ export namespace Server {
                   schema: resolver(
                     z
                       .object({
+                        home: z.string(),
                         state: z.string(),
                         config: z.string(),
                         worktree: z.string(),
@@ -499,6 +576,7 @@ export namespace Server {
         }),
         async (c) => {
           return c.json({
+            home: Global.Path.home,
             state: Global.Path.state,
             config: Global.Path.config,
             worktree: Instance.worktree,
@@ -549,7 +627,11 @@ export namespace Server {
         }),
         async (c) => {
           const sessions = await Array.fromAsync(Session.list())
-          sessions.sort((a, b) => b.time.updated - a.time.updated)
+          pipe(
+            await Array.fromAsync(Session.list()),
+            filter((s) => !s.time.archived),
+            sortBy((s) => s.time.updated),
+          )
           return c.json(sessions)
         },
       )
@@ -721,9 +803,6 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           await Session.remove(sessionID)
-          await Bus.publish(TuiEvent.CommandExecute, {
-            command: "session.list",
-          })
           return c.json(true)
         },
       )
@@ -755,6 +834,11 @@ export namespace Server {
           "json",
           z.object({
             title: z.string().optional(),
+            time: z
+              .object({
+                archived: z.number().optional(),
+              })
+              .optional(),
           }),
         ),
         async (c) => {
@@ -765,6 +849,7 @@ export namespace Server {
             if (updates.title !== undefined) {
               session.title = updates.title
             }
+            if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
           })
 
           return c.json(updatedSession)
@@ -993,17 +1078,20 @@ export namespace Server {
           z.object({
             providerID: z.string(),
             modelID: z.string(),
+            auto: z.boolean().optional().default(false),
           }),
         ),
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          const session = await Session.get(sessionID)
+          await SessionRevert.cleanup(session)
           const msgs = await Session.messages({ sessionID })
-          let currentAgent = "build"
+          let currentAgent = await Agent.defaultAgent()
           for (let i = msgs.length - 1; i >= 0; i--) {
             const info = msgs[i].info
             if (info.role === "user") {
-              currentAgent = info.agent || "build"
+              currentAgent = info.agent || (await Agent.defaultAgent())
               break
             }
           }
@@ -1014,7 +1102,7 @@ export namespace Server {
               providerID: body.providerID,
               modelID: body.modelID,
             },
-            auto: false,
+            auto: body.auto,
           })
           await SessionPrompt.loop(sessionID)
           return c.json(true)
@@ -1125,6 +1213,79 @@ export namespace Server {
             messageID: params.messageID,
           })
           return c.json(message)
+        },
+      )
+      .delete(
+        "/session/:sessionID/message/:messageID/part/:partID",
+        describeRoute({
+          description: "Delete a part from a message",
+          operationId: "part.delete",
+          responses: {
+            200: {
+              description: "Successfully deleted part",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+            partID: z.string().meta({ description: "Part ID" }),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          await Session.removePart({
+            sessionID: params.sessionID,
+            messageID: params.messageID,
+            partID: params.partID,
+          })
+          return c.json(true)
+        },
+      )
+      .patch(
+        "/session/:sessionID/message/:messageID/part/:partID",
+        describeRoute({
+          description: "Update a part in a message",
+          operationId: "part.update",
+          responses: {
+            200: {
+              description: "Successfully updated part",
+              content: {
+                "application/json": {
+                  schema: resolver(MessageV2.Part),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string().meta({ description: "Session ID" }),
+            messageID: z.string().meta({ description: "Message ID" }),
+            partID: z.string().meta({ description: "Part ID" }),
+          }),
+        ),
+        validator("json", MessageV2.Part),
+        async (c) => {
+          const params = c.req.valid("param")
+          const body = c.req.valid("json")
+          if (body.id !== params.partID || body.messageID !== params.messageID || body.sessionID !== params.sessionID) {
+            throw new Error(
+              `Part mismatch: body.id='${body.id}' vs partID='${params.partID}', body.messageID='${body.messageID}' vs messageID='${params.messageID}', body.sessionID='${body.sessionID}' vs sessionID='${params.sessionID}'`,
+            )
+          }
+          const part = await Session.updatePart(body)
+          return c.json(part)
         },
       )
       .post(
@@ -1372,6 +1533,28 @@ export namespace Server {
         },
       )
       .get(
+        "/permission",
+        describeRoute({
+          summary: "List pending permissions",
+          description: "Get all pending permission requests across all sessions.",
+          operationId: "permission.list",
+          responses: {
+            200: {
+              description: "List of pending permissions",
+              content: {
+                "application/json": {
+                  schema: resolver(Permission.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const permissions = Permission.list()
+          return c.json(permissions)
+        },
+      )
+      .get(
         "/command",
         describeRoute({
           summary: "List commands",
@@ -1460,12 +1643,15 @@ export namespace Server {
             }
           }
 
-          const providers = mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x))
-          const connected = await Provider.list().then((x) => Object.keys(x))
+          const connected = await Provider.list()
+          const providers = Object.assign(
+            mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
+            connected,
+          )
           return c.json({
             all: Object.values(providers),
             default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-            connected,
+            connected: Object.keys(connected),
           })
         },
       )
@@ -2417,8 +2603,20 @@ export namespace Server {
                 stream.close()
               }
             })
+
+            // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
+            const heartbeat = setInterval(() => {
+              stream.writeSSE({
+                data: JSON.stringify({
+                  type: "server.heartbeat",
+                  properties: {},
+                }),
+              })
+            }, 30000)
+
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {
+                clearInterval(heartbeat)
                 unsub()
                 resolve()
                 log.info("event disconnected")
@@ -2428,10 +2626,10 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://desktop.opencode.ai${c.req.path}`, {
+        return proxy(`https://app.opencode.ai${c.req.path}`, {
           ...c.req,
           headers: {
-            host: "desktop.opencode.ai",
+            host: "app.opencode.ai",
           },
         })
       }),
@@ -2451,14 +2649,41 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string }) {
-    const server = Bun.serve({
-      port: opts.port,
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean }) {
+    const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
-    })
+    } as const
+    const tryServe = (port: number) => {
+      try {
+        return Bun.serve({ ...args, port })
+      } catch {
+        return undefined
+      }
+    }
+    const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
+    if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+    const shouldPublishMDNS =
+      opts.mdns &&
+      server.port &&
+      opts.hostname !== "127.0.0.1" &&
+      opts.hostname !== "localhost" &&
+      opts.hostname !== "::1"
+    if (shouldPublishMDNS) {
+      MDNS.publish(server.port!)
+    } else if (opts.mdns) {
+      log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
+    }
+
+    const originalStop = server.stop.bind(server)
+    server.stop = async (closeActiveConnections?: boolean) => {
+      if (shouldPublishMDNS) MDNS.unpublish()
+      return originalStop(closeActiveConnections)
+    }
+
     return server
   }
 }

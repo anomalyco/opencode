@@ -1,15 +1,40 @@
 import { cmd } from "./cmd"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
+import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
+import { Installation } from "../../installation"
 import path from "path"
-import os from "os"
 import { Global } from "../../global"
+
+function getAuthStatusIcon(status: MCP.AuthStatus): string {
+  switch (status) {
+    case "authenticated":
+      return "✓"
+    case "expired":
+      return "⚠"
+    case "not_authenticated":
+      return "○"
+  }
+}
+
+function getAuthStatusText(status: MCP.AuthStatus): string {
+  switch (status) {
+    case "authenticated":
+      return "authenticated"
+    case "expired":
+      return "expired"
+    case "not_authenticated":
+      return "not authenticated"
+  }
+}
 
 export const McpCommand = cmd({
   command: "mcp",
@@ -19,6 +44,7 @@ export const McpCommand = cmd({
       .command(McpListCommand)
       .command(McpAuthCommand)
       .command(McpLogoutCommand)
+      .command(McpDebugCommand)
       .demandCommand(),
   async handler() {},
 })
@@ -94,10 +120,12 @@ export const McpAuthCommand = cmd({
   command: "auth [name]",
   describe: "authenticate with an OAuth-enabled MCP server",
   builder: (yargs) =>
-    yargs.positional("name", {
-      describe: "name of the MCP server",
-      type: "string",
-    }),
+    yargs
+      .positional("name", {
+        describe: "name of the MCP server",
+        type: "string",
+      })
+      .command(McpAuthListCommand),
   async handler(args) {
     await Instance.provide({
       directory: process.cwd(),
@@ -108,20 +136,19 @@ export const McpAuthCommand = cmd({
         const config = await Config.get()
         const mcpServers = config.mcp ?? {}
 
-        // Get OAuth-enabled servers
-        const oauthServers = Object.entries(mcpServers).filter(([_, cfg]) => cfg.type === "remote" && !!cfg.oauth)
+        // Get OAuth-capable servers (remote servers with oauth not explicitly disabled)
+        const oauthServers = Object.entries(mcpServers).filter(
+          ([_, cfg]) => cfg.type === "remote" && cfg.oauth !== false,
+        )
 
         if (oauthServers.length === 0) {
-          prompts.log.warn("No OAuth-enabled MCP servers configured")
-          prompts.log.info("Add OAuth config to a remote MCP server in opencode.json:")
+          prompts.log.warn("No OAuth-capable MCP servers configured")
+          prompts.log.info("Remote MCP servers support OAuth by default. Add a remote server in opencode.json:")
           prompts.log.info(`
   "mcp": {
     "my-server": {
       "type": "remote",
-      "url": "https://example.com/mcp",
-      "oauth": {
-        "scope": "tools:read"
-      }
+      "url": "https://example.com/mcp"
     }
   }`)
           prompts.outro("Done")
@@ -130,13 +157,24 @@ export const McpAuthCommand = cmd({
 
         let serverName = args.name
         if (!serverName) {
+          // Build options with auth status
+          const options = await Promise.all(
+            oauthServers.map(async ([name, cfg]) => {
+              const authStatus = await MCP.getAuthStatus(name)
+              const icon = getAuthStatusIcon(authStatus)
+              const statusText = getAuthStatusText(authStatus)
+              const url = cfg.type === "remote" ? cfg.url : ""
+              return {
+                label: `${icon} ${name} (${statusText})`,
+                value: name,
+                hint: url,
+              }
+            }),
+          )
+
           const selected = await prompts.select({
             message: "Select MCP server to authenticate",
-            options: oauthServers.map(([name, cfg]) => ({
-              label: name,
-              value: name,
-              hint: cfg.type === "remote" ? cfg.url : undefined,
-            })),
+            options,
           })
           if (prompts.isCancel(selected)) throw new UI.CancelledError()
           serverName = selected
@@ -149,22 +187,24 @@ export const McpAuthCommand = cmd({
           return
         }
 
-        if (serverConfig.type !== "remote" || !serverConfig.oauth) {
-          prompts.log.error(`MCP server ${serverName} does not have OAuth configured`)
+        if (serverConfig.type !== "remote" || serverConfig.oauth === false) {
+          prompts.log.error(`MCP server ${serverName} does not support OAuth (oauth is disabled)`)
           prompts.outro("Done")
           return
         }
 
         // Check if already authenticated
-        const hasTokens = await MCP.hasStoredTokens(serverName)
-        if (hasTokens) {
+        const authStatus = await MCP.getAuthStatus(serverName)
+        if (authStatus === "authenticated") {
           const confirm = await prompts.confirm({
-            message: `${serverName} already has stored credentials. Re-authenticate?`,
+            message: `${serverName} already has valid credentials. Re-authenticate?`,
           })
           if (prompts.isCancel(confirm) || !confirm) {
             prompts.outro("Cancelled")
             return
           }
+        } else if (authStatus === "expired") {
+          prompts.log.warn(`${serverName} has expired credentials. Re-authenticating...`)
         }
 
         const spinner = prompts.spinner()
@@ -202,6 +242,46 @@ export const McpAuthCommand = cmd({
         }
 
         prompts.outro("Done")
+      },
+    })
+  },
+})
+
+export const McpAuthListCommand = cmd({
+  command: "list",
+  aliases: ["ls"],
+  describe: "list OAuth-capable MCP servers and their auth status",
+  async handler() {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("MCP OAuth Status")
+
+        const config = await Config.get()
+        const mcpServers = config.mcp ?? {}
+
+        // Get OAuth-capable servers
+        const oauthServers = Object.entries(mcpServers).filter(
+          ([_, cfg]) => cfg.type === "remote" && cfg.oauth !== false,
+        )
+
+        if (oauthServers.length === 0) {
+          prompts.log.warn("No OAuth-capable MCP servers configured")
+          prompts.outro("Done")
+          return
+        }
+
+        for (const [name, serverConfig] of oauthServers) {
+          const authStatus = await MCP.getAuthStatus(name)
+          const icon = getAuthStatusIcon(authStatus)
+          const statusText = getAuthStatusText(authStatus)
+          const url = serverConfig.type === "remote" ? serverConfig.url : ""
+
+          prompts.log.info(`${icon} ${name} ${UI.Style.TEXT_DIM}${statusText}\n    ${UI.Style.TEXT_DIM}${url}`)
+        }
+
+        prompts.outro(`${oauthServers.length} OAuth-capable server(s)`)
       },
     })
   },
@@ -396,5 +476,179 @@ export const McpAddCommand = cmd({
     }
 
     prompts.outro("MCP server added successfully")
+  },
+})
+
+export const McpDebugCommand = cmd({
+  command: "debug <name>",
+  describe: "debug OAuth connection for an MCP server",
+  builder: (yargs) =>
+    yargs.positional("name", {
+      describe: "name of the MCP server",
+      type: "string",
+      demandOption: true,
+    }),
+  async handler(args) {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("MCP OAuth Debug")
+
+        const config = await Config.get()
+        const mcpServers = config.mcp ?? {}
+        const serverName = args.name
+
+        const serverConfig = mcpServers[serverName]
+        if (!serverConfig) {
+          prompts.log.error(`MCP server not found: ${serverName}`)
+          prompts.outro("Done")
+          return
+        }
+
+        if (serverConfig.type !== "remote") {
+          prompts.log.error(`MCP server ${serverName} is not a remote server`)
+          prompts.outro("Done")
+          return
+        }
+
+        if (serverConfig.oauth === false) {
+          prompts.log.warn(`MCP server ${serverName} has OAuth explicitly disabled`)
+          prompts.outro("Done")
+          return
+        }
+
+        prompts.log.info(`Server: ${serverName}`)
+        prompts.log.info(`URL: ${serverConfig.url}`)
+
+        // Check stored auth status
+        const authStatus = await MCP.getAuthStatus(serverName)
+        prompts.log.info(`Auth status: ${getAuthStatusIcon(authStatus)} ${getAuthStatusText(authStatus)}`)
+
+        const entry = await McpAuth.get(serverName)
+        if (entry?.tokens) {
+          prompts.log.info(`  Access token: ${entry.tokens.accessToken.substring(0, 20)}...`)
+          if (entry.tokens.expiresAt) {
+            const expiresDate = new Date(entry.tokens.expiresAt * 1000)
+            const isExpired = entry.tokens.expiresAt < Date.now() / 1000
+            prompts.log.info(`  Expires: ${expiresDate.toISOString()} ${isExpired ? "(EXPIRED)" : ""}`)
+          }
+          if (entry.tokens.refreshToken) {
+            prompts.log.info(`  Refresh token: present`)
+          }
+        }
+        if (entry?.clientInfo) {
+          prompts.log.info(`  Client ID: ${entry.clientInfo.clientId}`)
+          if (entry.clientInfo.clientSecretExpiresAt) {
+            const expiresDate = new Date(entry.clientInfo.clientSecretExpiresAt * 1000)
+            prompts.log.info(`  Client secret expires: ${expiresDate.toISOString()}`)
+          }
+        }
+
+        const spinner = prompts.spinner()
+        spinner.start("Testing connection...")
+
+        // Test basic HTTP connectivity first
+        try {
+          const response = await fetch(serverConfig.url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json, text/event-stream",
+            },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "initialize",
+              params: {
+                protocolVersion: "2024-11-05",
+                capabilities: {},
+                clientInfo: { name: "opencode-debug", version: Installation.VERSION },
+              },
+              id: 1,
+            }),
+          })
+
+          spinner.stop(`HTTP response: ${response.status} ${response.statusText}`)
+
+          // Check for WWW-Authenticate header
+          const wwwAuth = response.headers.get("www-authenticate")
+          if (wwwAuth) {
+            prompts.log.info(`WWW-Authenticate: ${wwwAuth}`)
+          }
+
+          if (response.status === 401) {
+            prompts.log.warn("Server returned 401 Unauthorized")
+
+            // Try to discover OAuth metadata
+            const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
+            const authProvider = new McpOAuthProvider(
+              serverName,
+              serverConfig.url,
+              {
+                clientId: oauthConfig?.clientId,
+                clientSecret: oauthConfig?.clientSecret,
+                scope: oauthConfig?.scope,
+              },
+              {
+                onRedirect: async () => {},
+              },
+            )
+
+            prompts.log.info("Testing OAuth flow (without completing authorization)...")
+
+            // Try creating transport with auth provider to trigger discovery
+            const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
+              authProvider,
+            })
+
+            try {
+              const client = new Client({
+                name: "opencode-debug",
+                version: Installation.VERSION,
+              })
+              await client.connect(transport)
+              prompts.log.success("Connection successful (already authenticated)")
+              await client.close()
+            } catch (error) {
+              if (error instanceof UnauthorizedError) {
+                prompts.log.info(`OAuth flow triggered: ${error.message}`)
+
+                // Check if dynamic registration would be attempted
+                const clientInfo = await authProvider.clientInformation()
+                if (clientInfo) {
+                  prompts.log.info(`Client ID available: ${clientInfo.client_id}`)
+                } else {
+                  prompts.log.info("No client ID - dynamic registration will be attempted")
+                }
+              } else {
+                prompts.log.error(`Connection error: ${error instanceof Error ? error.message : String(error)}`)
+              }
+            }
+          } else if (response.status >= 200 && response.status < 300) {
+            prompts.log.success("Server responded successfully (no auth required or already authenticated)")
+            const body = await response.text()
+            try {
+              const json = JSON.parse(body)
+              if (json.result?.serverInfo) {
+                prompts.log.info(`Server info: ${JSON.stringify(json.result.serverInfo)}`)
+              }
+            } catch {
+              // Not JSON, ignore
+            }
+          } else {
+            prompts.log.warn(`Unexpected status: ${response.status}`)
+            const body = await response.text().catch(() => "")
+            if (body) {
+              prompts.log.info(`Response body: ${body.substring(0, 500)}`)
+            }
+          }
+        } catch (error) {
+          spinner.stop("Connection failed", 1)
+          prompts.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`)
+        }
+
+        prompts.outro("Debug complete")
+      },
+    })
   },
 })

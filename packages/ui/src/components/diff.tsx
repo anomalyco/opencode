@@ -1,4 +1,4 @@
-import { FileDiff } from "@pierre/precision-diffs"
+import { FileDiff } from "@pierre/diffs"
 import { createEffect, createMemo, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
 import { workerPool } from "../pierre/worker"

@@ -24,6 +24,7 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
+import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
@@ -107,7 +108,9 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
     render(
       () => {
         return (
-          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
+          <ErrorBoundary
+            fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
+          >
             <ArgsProvider {...input.args}>
               <ExitProvider onExit={onExit}>
                 <KVProvider>
@@ -118,15 +121,17 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
                               <KeybindProvider>
-                                <DialogProvider>
-                                  <CommandProvider>
-                                    <PromptHistoryProvider>
-                                      <PromptRefProvider>
-                                        <App />
-                                      </PromptRefProvider>
-                                    </PromptHistoryProvider>
-                                  </CommandProvider>
-                                </DialogProvider>
+                                <PromptStashProvider>
+                                  <DialogProvider>
+                                    <CommandProvider>
+                                      <PromptHistoryProvider>
+                                        <PromptRefProvider>
+                                          <App />
+                                        </PromptRefProvider>
+                                      </PromptHistoryProvider>
+                                    </CommandProvider>
+                                  </DialogProvider>
+                                </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
@@ -144,7 +149,15 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: true,
+        useKittyKeyboard: {},
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          },
+        },
       },
     )
   })
@@ -159,12 +172,28 @@ function App() {
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
-  const { event } = useSDK()
+  const sdk = useSDK()
   const toast = useToast()
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+
+  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
+  renderer.console.onCopySelection = async (text: string) => {
+    if (!text || text.length === 0) return
+
+    const base64 = Buffer.from(text).toString("base64")
+    const osc52 = `\x1b]52;c;${base64}\x07`
+    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+    // @ts-expect-error writeOut is not in type definitions
+    renderer.writeOut(finalOsc52)
+    await Clipboard.copy(text)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+    renderer.clearSelection()
+  }
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -172,21 +201,23 @@ function App() {
 
   // Update terminal window title based on current route and session
   createEffect(() => {
+    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("opencode")
+      renderer.setTerminalTitle("OpenCode")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("opencode")
+        renderer.setTerminalTitle("OpenCode")
         return
       }
 
       // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`oc | ${title}`)
+      renderer.setTerminalTitle(`OC | ${title}`)
     }
   })
 
@@ -215,8 +246,11 @@ function App() {
 
   let continued = false
   createEffect(() => {
-    if (continued || sync.status !== "complete" || !args.continue) return
-    const match = sync.data.session.at(0)?.id
+    // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
+    if (continued || sync.status === "loading" || !args.continue) return
+    const match = sync.data.session
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
       route.navigate({ type: "session", sessionID: match })
@@ -291,6 +325,24 @@ function App() {
       category: "Agent",
       onSelect: () => {
         local.model.cycle(-1)
+      },
+    },
+    {
+      title: "Favorite cycle",
+      value: "model.cycle_favorite",
+      keybind: "model_cycle_favorite",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(1)
+      },
+    },
+    {
+      title: "Favorite cycle reverse",
+      value: "model.cycle_favorite_reverse",
+      keybind: "model_cycle_favorite_reverse",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(-1)
       },
     },
     {
@@ -383,6 +435,15 @@ function App() {
       category: "System",
     },
     {
+      title: "Open WebUI",
+      value: "webui.open",
+      onSelect: () => {
+        open(sdk.url).catch(() => {})
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
       title: "Exit the app",
       value: "app.exit",
       onSelect: () => exit(),
@@ -400,7 +461,7 @@ function App() {
     {
       title: "Toggle console",
       category: "System",
-      value: "app.fps",
+      value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
         dialog.clear()
@@ -421,6 +482,21 @@ function App() {
         process.kill(0, "SIGTSTP")
       },
     },
+    {
+      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      value: "terminal.title.toggle",
+      keybind: "terminal_title_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setTerminalTitleEnabled((prev) => {
+          const next = !prev
+          kv.set("terminal_title_enabled", next)
+          if (!next) renderer.setTerminalTitle("")
+          return next
+        })
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
@@ -437,11 +513,11 @@ function App() {
     }
   })
 
-  event.on(TuiEvent.CommandExecute.type, (evt) => {
+  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)
   })
 
-  event.on(TuiEvent.ToastShow.type, (evt) => {
+  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
     toast.show({
       title: evt.properties.title,
       message: evt.properties.message,
@@ -450,9 +526,8 @@ function App() {
     })
   })
 
-  event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
@@ -461,10 +536,10 @@ function App() {
     }
   })
 
-  event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
     const message = (() => {
-      if (!error) return "An error occured"
+      if (!error) return "An error occurred"
 
       if (typeof error === "object") {
         const data = error.data
@@ -482,7 +557,7 @@ function App() {
     })
   })
 
-  event.on(Installation.Event.Updated.type, (evt) => {
+  sdk.event.on(Installation.Event.Updated.type, (evt) => {
     toast.show({
       variant: "success",
       title: "Update Complete",
@@ -491,7 +566,7 @@ function App() {
     })
   })
 
-  event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
       title: "Update Available",
@@ -536,7 +611,12 @@ function App() {
   )
 }
 
-function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => Promise<void> }) {
+function ErrorComponent(props: {
+  error: Error
+  reset: () => void
+  onExit: () => Promise<void>
+  mode?: "dark" | "light"
+}) {
   const term = useTerminalDimensions()
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
@@ -546,6 +626,15 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
   const [copied, setCopied] = createSignal(false)
 
   const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+
+  // Choose safe fallback colors per mode since theme context may not be available
+  const isLight = props.mode === "light"
+  const colors = {
+    bg: isLight ? "#ffffff" : "#0a0a0a",
+    text: isLight ? "#1a1a1a" : "#eeeeee",
+    muted: isLight ? "#8a8a8a" : "#808080",
+    primary: isLight ? "#3b7dd8" : "#fab283",
+  }
 
   if (props.error.message) {
     issueURL.searchParams.set("title", `opentui: fatal: ${props.error.message}`)
@@ -567,27 +656,31 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
   }
 
   return (
-    <box flexDirection="column" gap={1}>
+    <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text attributes={TextAttributes.BOLD}>Please report an issue.</text>
-        <box onMouseUp={copyIssueURL} backgroundColor="#565f89" padding={1}>
-          <text attributes={TextAttributes.BOLD}>Copy issue URL (exception info pre-filled)</text>
+        <text attributes={TextAttributes.BOLD} fg={colors.text}>
+          Please report an issue.
+        </text>
+        <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
+          <text attributes={TextAttributes.BOLD} fg={colors.bg}>
+            Copy issue URL (exception info pre-filled)
+          </text>
         </box>
-        {copied() && <text>Successfully copied</text>}
+        {copied() && <text fg={colors.muted}>Successfully copied</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
-        <text>A fatal error occurred!</text>
-        <box onMouseUp={props.reset} backgroundColor="#565f89" padding={1}>
-          <text>Reset TUI</text>
+        <text fg={colors.text}>A fatal error occurred!</text>
+        <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
+          <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor="#565f89" padding={1}>
-          <text>Exit</text>
+        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+          <text fg={colors.bg}>Exit</text>
         </box>
       </box>
       <scrollbox height={Math.floor(term().height * 0.7)}>
-        <text>{props.error.stack}</text>
+        <text fg={colors.muted}>{props.error.stack}</text>
       </scrollbox>
-      <text>{props.error.message}</text>
+      <text fg={colors.text}>{props.error.message}</text>
     </box>
   )
 }

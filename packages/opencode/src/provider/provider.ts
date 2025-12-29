@@ -25,6 +25,15 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createXai } from "@ai-sdk/xai"
+import { createMistral } from "@ai-sdk/mistral"
+import { createGroq } from "@ai-sdk/groq"
+import { createDeepInfra } from "@ai-sdk/deepinfra"
+import { createCerebras } from "@ai-sdk/cerebras"
+import { createCohere } from "@ai-sdk/cohere"
+import { createGateway } from "@ai-sdk/gateway"
+import { createTogetherAI } from "@ai-sdk/togetherai"
+import { createPerplexity } from "@ai-sdk/perplexity"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -39,6 +48,15 @@ export namespace Provider {
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
+    "@ai-sdk/xai": createXai,
+    "@ai-sdk/mistral": createMistral,
+    "@ai-sdk/groq": createGroq,
+    "@ai-sdk/deepinfra": createDeepInfra,
+    "@ai-sdk/cerebras": createCerebras,
+    "@ai-sdk/cohere": createCohere,
+    "@ai-sdk/gateway": createGateway,
+    "@ai-sdk/togetherai": createTogetherAI,
+    "@ai-sdk/perplexity": createPerplexity,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
@@ -67,6 +85,8 @@ export namespace Provider {
         const env = Env.all()
         if (input.env.some((item) => env[item])) return true
         if (await Auth.get(input.id)) return true
+        const config = await Config.get()
+        if (config.provider?.["opencode"]?.options?.apiKey) return true
         return false
       })()
 
@@ -145,28 +165,43 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      const [awsProfile, awsAccessKeyId, awsBearerToken, awsRegion] = await Promise.all([
-        Env.get("AWS_PROFILE"),
-        Env.get("AWS_ACCESS_KEY_ID"),
-        Env.get("AWS_BEARER_TOKEN_BEDROCK"),
-        Env.get("AWS_REGION"),
-      ])
+      const auth = await Auth.get("amazon-bedrock")
+      const awsProfile = Env.get("AWS_PROFILE")
+      const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
+      const awsRegion = Env.get("AWS_REGION")
+
+      const awsBearerToken = iife(() => {
+        const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
+        if (envToken) return envToken
+        if (auth?.type === "api") {
+          Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+          return auth.key
+        }
+        return undefined
+      })
+
       if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
-      const region = awsRegion ?? "us-east-1"
+      const defaultRegion = awsRegion ?? "us-east-1"
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
         autoload: true,
         options: {
-          region,
+          region: defaultRegion,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has global prefix
           if (modelID.startsWith("global.")) {
             return sdk.languageModel(modelID)
           }
+
+          // Region resolution precedence (highest to lowest):
+          // 1. options.region from opencode.json provider config
+          // 2. defaultRegion from AWS_REGION environment variable
+          // 3. Default "us-east-1" (baked into defaultRegion)
+          const region = options?.region ?? defaultRegion
 
           let regionPrefix = region.split("-")[0]
 
@@ -344,6 +379,7 @@ export namespace Provider {
         npm: z.string(),
       }),
       name: z.string(),
+      family: z.string().optional(),
       capabilities: z.object({
         temperature: z.boolean(),
         reasoning: z.boolean(),
@@ -395,6 +431,7 @@ export namespace Provider {
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
+      release_date: z.string(),
     })
     .meta({
       ref: "Model",
@@ -421,6 +458,7 @@ export namespace Provider {
       id: model.id,
       providerID: provider.id,
       name: model.name,
+      family: model.family,
       api: {
         id: model.id,
         url: provider.api!,
@@ -472,6 +510,7 @@ export namespace Provider {
         },
         interleaved: model.interleaved ?? false,
       },
+      release_date: model.release_date,
     }
   }
 
@@ -604,6 +643,8 @@ export namespace Provider {
             output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
           },
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
+          family: model.family ?? existingModel?.family ?? "",
+          release_date: model.release_date ?? existingModel?.release_date ?? "",
         }
         parsed.models[modelID] = parsedModel
       }
@@ -860,7 +901,7 @@ export namespace Provider {
     return info
   }
 
-  export async function getLanguage(model: Model) {
+  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
     const s = await state()
     const key = `${model.providerID}/${model.id}`
     if (s.models.has(key)) return s.models.get(key)!

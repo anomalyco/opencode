@@ -28,7 +28,9 @@ import type {
   FindSymbolsResponses,
   FindTextResponses,
   FormatterStatusResponses,
+  GlobalDisposeResponses,
   GlobalEventResponses,
+  GlobalHealthResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -46,7 +48,13 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  Part as Part2,
+  PartDeleteErrors,
+  PartDeleteResponses,
+  PartUpdateErrors,
+  PartUpdateResponses,
   PathGetResponses,
+  PermissionListResponses,
   PermissionRespondErrors,
   PermissionRespondResponses,
   ProjectCurrentResponses,
@@ -183,6 +191,18 @@ class HeyApiRegistry<T> {
 
 export class Global extends HeyApiClient {
   /**
+   * Get health
+   *
+   * Get health information about the OpenCode server.
+   */
+  public health<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalHealthResponses, unknown, ThrowOnError>({
+      url: "/global/health",
+      ...options,
+    })
+  }
+
+  /**
    * Get global events
    *
    * Subscribe to global events from the OpenCode system using server-sent events.
@@ -190,6 +210,18 @@ export class Global extends HeyApiClient {
   public event<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<GlobalEventResponses, unknown, ThrowOnError>({
       url: "/global/event",
+      ...options,
+    })
+  }
+
+  /**
+   * Dispose instance
+   *
+   * Clean up and dispose all OpenCode instances, releasing all resources.
+   */
+  public dispose<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<GlobalDisposeResponses, unknown, ThrowOnError>({
+      url: "/global/dispose",
       ...options,
     })
   }
@@ -812,6 +844,9 @@ export class Session extends HeyApiClient {
       sessionID: string
       directory?: string
       title?: string
+      time?: {
+        archived?: number
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -823,6 +858,7 @@ export class Session extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "body", key: "title" },
+            { in: "body", key: "time" },
           ],
         },
       ],
@@ -1110,6 +1146,7 @@ export class Session extends HeyApiClient {
       directory?: string
       providerID?: string
       modelID?: string
+      auto?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1122,6 +1159,7 @@ export class Session extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "providerID" },
             { in: "body", key: "modelID" },
+            { in: "body", key: "auto" },
           ],
         },
       ],
@@ -1186,10 +1224,10 @@ export class Session extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
-      system?: string
       tools?: {
         [key: string]: boolean
       }
+      system?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1205,8 +1243,8 @@ export class Session extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
-            { in: "body", key: "system" },
             { in: "body", key: "tools" },
+            { in: "body", key: "system" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1272,10 +1310,10 @@ export class Session extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
-      system?: string
       tools?: {
         [key: string]: boolean
       }
+      system?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1291,8 +1329,8 @@ export class Session extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
-            { in: "body", key: "system" },
             { in: "body", key: "tools" },
+            { in: "body", key: "system" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1469,6 +1507,79 @@ export class Session extends HeyApiClient {
   }
 }
 
+export class Part extends HeyApiClient {
+  /**
+   * Delete a part from a message
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      partID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "path", key: "partID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<PartDeleteResponses, PartDeleteErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update a part in a message
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      messageID: string
+      partID: string
+      directory?: string
+      part?: Part2
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "messageID" },
+            { in: "path", key: "partID" },
+            { in: "query", key: "directory" },
+            { key: "part", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<PartUpdateResponses, PartUpdateErrors, ThrowOnError>({
+      url: "/session/{sessionID}/message/{messageID}/part/{partID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Permission extends HeyApiClient {
   /**
    * Respond to permission
@@ -1506,6 +1617,25 @@ export class Permission extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * List pending permissions
+   *
+   * Get all pending permission requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<PermissionListResponses, unknown, ThrowOnError>({
+      url: "/permission",
+      ...options,
+      ...params,
     })
   }
 }
@@ -2570,6 +2700,8 @@ export class OpencodeClient extends HeyApiClient {
   vcs = new Vcs({ client: this.client })
 
   session = new Session({ client: this.client })
+
+  part = new Part({ client: this.client })
 
   permission = new Permission({ client: this.client })
 
