@@ -382,6 +382,22 @@ function App() {
         local.agent.move(-1)
       },
     },
+    ...([1, 2, 3, 4, 5] as const).map((i) => ({
+      title: `Model slot ${i}`,
+      value: `model.slot_${i}`,
+      keybind: `model_slot_${i}` as keyof import("@opencode-ai/sdk/v2").KeybindsConfig,
+      category: "Agent" as const,
+      disabled: true,
+      onSelect: () => local.model.setFavorite(i - 1),
+    })),
+    ...([1, 2, 3, 4, 5] as const).map((i) => ({
+      title: `Agent slot ${i}`,
+      value: `agent.slot_${i}`,
+      keybind: `agent_slot_${i}` as keyof import("@opencode-ai/sdk/v2").KeybindsConfig,
+      category: "Agent" as const,
+      disabled: true,
+      onSelect: () => local.agent.setSlot(i - 1),
+    })),
     {
       title: "Connect provider",
       value: "provider.connect",

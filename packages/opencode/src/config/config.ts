@@ -579,6 +579,16 @@ export namespace Config {
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
+      model_slot_1: z.string().optional().default("none").describe("Jump to favorite model #1"),
+      model_slot_2: z.string().optional().default("none").describe("Jump to favorite model #2"),
+      model_slot_3: z.string().optional().default("none").describe("Jump to favorite model #3"),
+      model_slot_4: z.string().optional().default("none").describe("Jump to favorite model #4"),
+      model_slot_5: z.string().optional().default("none").describe("Jump to favorite model #5"),
+      agent_slot_1: z.string().optional().default("none").describe("Jump to agent #1"),
+      agent_slot_2: z.string().optional().default("none").describe("Jump to agent #2"),
+      agent_slot_3: z.string().optional().default("none").describe("Jump to agent #3"),
+      agent_slot_4: z.string().optional().default("none").describe("Jump to agent #4"),
+      agent_slot_5: z.string().optional().default("none").describe("Jump to agent #5"),
     })
     .strict()
     .meta({

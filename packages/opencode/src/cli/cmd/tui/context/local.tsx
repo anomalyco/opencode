@@ -99,6 +99,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
+        setSlot(index: number) {
+          const list = agents()
+          const target = list[index]
+          if (!target) {
+            toast.show({ variant: "info", message: `No agent at slot ${index + 1}`, duration: 3000 })
+            return
+          }
+          setAgentStore("current", target.name)
+        },
       }
     })
 
@@ -308,6 +317,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             setModelStore("favorite", next)
             save()
           })
+        },
+        setFavorite(index: number) {
+          const favorites = modelStore.favorite.filter((item) => isModelValid(item))
+          const target = favorites[index]
+          if (!target) {
+            toast.show({ variant: "info", message: `No favorite model at slot ${index + 1}`, duration: 3000 })
+            return
+          }
+          setModelStore("model", agent.current().name, { ...target })
+          const uniq = uniqueBy([target, ...modelStore.recent], (x) => x.providerID + x.modelID)
+          if (uniq.length > 10) uniq.pop()
+          setModelStore("recent", uniq)
+          save()
         },
       }
     })
