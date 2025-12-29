@@ -627,3 +627,70 @@ test("compaction config can disable both auto and prune", async () => {
     },
   })
 })
+})
+
+test("experimental.durableStreams defaults to undefined when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.experimental?.durableStreams).toBeUndefined()
+    },
+  })
+})
+
+test("experimental.durableStreams can be enabled", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          experimental: {
+            durableStreams: true,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.experimental?.durableStreams).toBe(true)
+    },
+  })
+})
+
+test("experimental.durableStreams can be disabled explicitly", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          experimental: {
+            durableStreams: false,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.experimental?.durableStreams).toBe(false)
+    },
+  })
+})
