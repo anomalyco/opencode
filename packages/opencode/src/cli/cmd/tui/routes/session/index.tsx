@@ -168,6 +168,7 @@ export function Session() {
 
   const toast = useToast()
   const sdk = useSDK()
+  const local = useLocal()
 
   // Handle initial prompt from fork
   createEffect(() => {
@@ -175,6 +176,22 @@ export function Session() {
       prompt.set(route.initialPrompt)
     }
   })
+
+  // On session change, set model/agent to last used
+  createEffect(
+    on(
+      () => session()?.id,
+      (sessionId) => {
+        const lastUserMessage = sync.data.message[sessionId]?.findLast((x) => x.role === "user")
+        if (!lastUserMessage) return
+        local.model.set(lastUserMessage.model)
+
+        const agent = sync.data.agent.find((x) => x.name === lastUserMessage.agent)
+        if (agent?.mode === "subagent" || agent?.hidden) return
+        local.agent.set(lastUserMessage.agent)
+      },
+    ),
+  )
 
   // Auto-navigate to whichever session currently needs permission input
   createEffect(() => {
@@ -276,8 +293,6 @@ export function Session() {
       if (scroll) scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
-
-  const local = useLocal()
 
   function moveChild(direction: number) {
     const parentID = session()?.parentID ?? session()?.id
