@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.208",
+  "version": "1.0.209",
   "name": "opencode",
   "type": "module",
   "private": true,
