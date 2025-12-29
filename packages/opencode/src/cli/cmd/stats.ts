@@ -82,12 +82,21 @@ async function getAllSessions(): Promise<Session.Info[]> {
   return sessions
 }
 
-async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
+export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
   const sessions = await getAllSessions()
-  const DAYS_IN_SECOND = 24 * 60 * 60 * 1000
-  const cutoffTime = days ? Date.now() - days * DAYS_IN_SECOND : 0
+  const MS_IN_DAY = 24 * 60 * 60 * 1000
 
-  let filteredSessions = days ? sessions.filter((session) => session.time.updated >= cutoffTime) : sessions
+  const cutoffTime = (() => {
+    if (days === undefined) return 0
+    if (days === 0) {
+      const now = new Date()
+      now.setHours(0, 0, 0, 0)
+      return now.getTime()
+    }
+    return Date.now() - days * MS_IN_DAY
+  })()
+
+  let filteredSessions = cutoffTime > 0 ? sessions.filter((session) => session.time.updated >= cutoffTime) : sessions
 
   if (projectFilter !== undefined) {
     if (projectFilter === "") {
@@ -198,7 +207,7 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
     }
   }
 
-  const actualDays = Math.max(1, Math.ceil((latestTime - earliestTime) / DAYS_IN_SECOND))
+  const actualDays = Math.max(1, Math.ceil((latestTime - earliestTime) / MS_IN_DAY))
   stats.dateRange = {
     earliest: earliestTime,
     latest: latestTime,
