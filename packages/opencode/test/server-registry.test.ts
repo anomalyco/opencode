@@ -162,4 +162,120 @@ describe("ServerRegistry", () => {
 
     expect(exists).toBe(false)
   })
+
+  test("register() with same ID overwrites existing entry", async () => {
+    const server1: ServerRegistry.ServerEntry = {
+      id: "duplicate-test",
+      url: "http://localhost:7633",
+      port: 7633,
+      pid: process.pid,
+      lastHeartbeat: Date.now(),
+    }
+
+    const server2: ServerRegistry.ServerEntry = {
+      id: "duplicate-test",
+      url: "http://localhost:7634",
+      port: 7634,
+      pid: process.pid + 1,
+      lastHeartbeat: Date.now(),
+    }
+
+    await ServerRegistry.register(server1)
+    await ServerRegistry.register(server2)
+
+    const servers = await ServerRegistry.list()
+    expect(servers).toHaveLength(1)
+    expect(servers[0].port).toBe(7634)
+    expect(servers[0].pid).toBe(process.pid + 1)
+  })
+
+  test("unregister() on nonexistent server is no-op", async () => {
+    await ServerRegistry.unregister("nonexistent-id")
+    const servers = await ServerRegistry.list()
+    expect(servers).toEqual([])
+  })
+
+  test("heartbeat() on nonexistent server is no-op", async () => {
+    await ServerRegistry.heartbeat("nonexistent-id")
+    const servers = await ServerRegistry.list()
+    expect(servers).toEqual([])
+  })
+
+  test("corrupted JSON file recovers to empty state", async () => {
+    // Write invalid JSON
+    await fs.writeFile(testFilePath, "{invalid json here}")
+
+    // Should recover gracefully
+    const servers = await ServerRegistry.list()
+    expect(servers).toEqual([])
+
+    // Should be able to register after recovery
+    const server: ServerRegistry.ServerEntry = {
+      id: "recovery-test",
+      url: "http://localhost:7635",
+      port: 7635,
+      pid: process.pid,
+      lastHeartbeat: Date.now(),
+    }
+
+    await ServerRegistry.register(server)
+    const afterRegister = await ServerRegistry.list()
+    expect(afterRegister).toHaveLength(1)
+    expect(afterRegister[0].id).toBe("recovery-test")
+  })
+
+  test("sequential register() preserves all entries", async () => {
+    // Note: Concurrent writes are not atomic across operations
+    // This tests sequential registration which is the expected usage
+    const servers = Array.from({ length: 5 }, (_, i) => ({
+      id: `sequential-${i}`,
+      url: `http://localhost:${7636 + i}`,
+      port: 7636 + i,
+      pid: process.pid,
+      lastHeartbeat: Date.now(),
+    }))
+
+    for (const server of servers) {
+      await ServerRegistry.register(server)
+    }
+
+    const result = await ServerRegistry.list()
+    expect(result).toHaveLength(5)
+
+    const ids = result.map((s) => s.id).sort()
+    expect(ids).toEqual(["sequential-0", "sequential-1", "sequential-2", "sequential-3", "sequential-4"])
+  })
+
+  test("pruneStale() preserves fresh servers", async () => {
+    const fresh1: ServerRegistry.ServerEntry = {
+      id: "fresh-1",
+      url: "http://localhost:7641",
+      port: 7641,
+      pid: process.pid,
+      lastHeartbeat: Date.now(),
+    }
+
+    const fresh2: ServerRegistry.ServerEntry = {
+      id: "fresh-2",
+      url: "http://localhost:7642",
+      port: 7642,
+      pid: process.pid,
+      lastHeartbeat: Date.now() - 10000, // 10s ago
+    }
+
+    await ServerRegistry.register(fresh1)
+    await ServerRegistry.register(fresh2)
+
+    await ServerRegistry.pruneStale()
+    const servers = await ServerRegistry.list()
+
+    expect(servers).toHaveLength(2)
+    expect(servers.map((s) => s.id).sort()).toEqual(["fresh-1", "fresh-2"])
+  })
+
+  test("pruneStale() on empty registry is no-op", async () => {
+    await ServerRegistry.pruneStale()
+    const servers = await ServerRegistry.list()
+    expect(servers).toEqual([])
+  })
 })
