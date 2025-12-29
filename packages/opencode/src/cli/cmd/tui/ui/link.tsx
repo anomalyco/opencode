@@ -1,5 +1,6 @@
 import type { JSX } from "solid-js"
 import type { RGBA } from "@opentui/core"
+import { TextAttributes } from "@opentui/core"
 import open from "open"
 
 export interface LinkProps {
@@ -18,7 +19,7 @@ export function Link(props: LinkProps) {
   return (
     <text
       fg={props.fg}
-      underline={true}
+      attributes={TextAttributes.UNDERLINE}
       onMouseUp={() => {
         open(props.href).catch(() => {})
       }}
