@@ -1292,16 +1292,25 @@ export namespace SessionPrompt {
    */
 
   async function handleUnqueue(sessionID: string) {
-    const messages = []
+    const queuedIDs: string[] = []
+    let foundPending = false
+
     for await (const msg of MessageV2.stream(sessionID)) {
-      messages.push(msg)
+      // Stop at first assistant (boundary between queued and processed)
+      if (msg.info.role === "assistant") {
+        foundPending = !msg.info.time.completed
+        break
+      }
+
+      // Collect user message IDs
+      if (msg.info.role === "user") {
+        queuedIDs.push(msg.info.id)
+      }
     }
 
-    const pending = messages.findLast((x) => x.info.role === "assistant" && !x.info.time.completed)?.info.id
-    const queued = pending ? messages.filter((x) => x.info.role === "user" && x.info.id > pending) : []
-
-    for (const msg of queued) {
-      await Session.removeMessage({ sessionID, messageID: msg.info.id })
+    // Only delete if we found an incomplete assistant
+    if (foundPending && queuedIDs.length > 0) {
+      await Promise.all(queuedIDs.map((messageID) => Session.removeMessage({ sessionID, messageID })))
     }
 
     unqueue(sessionID)
