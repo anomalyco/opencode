@@ -53,7 +53,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "sidebar">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -71,6 +71,24 @@ export namespace Plugin {
 
   export async function list() {
     return state().then((x) => x.hooks)
+  }
+
+  export async function getSidebarPanels() {
+    try {
+      const hooks = await state().then((x) => x.hooks)
+      const panels: import("@opencode-ai/plugin").SidebarPanel[] = []
+      for (const hook of hooks) {
+        const sidebar = hook.sidebar
+        if (!sidebar) continue
+        try {
+          const resolved = typeof sidebar === "function" ? sidebar() : sidebar
+          panels.push(...resolved)
+        } catch {}
+      }
+      return panels
+    } catch {
+      return []
+    }
   }
 
   export async function init() {

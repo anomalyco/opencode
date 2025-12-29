@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createResource, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { Plugin } from "@/plugin"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -62,6 +63,8 @@ export function Sidebar(props: { sessionID: string }) {
 
   const directory = useDirectory()
   const kv = useKV()
+
+  const [pluginPanels] = createResource(() => Plugin.getSidebarPanels(), { initialValue: [] })
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
@@ -263,6 +266,44 @@ export function Sidebar(props: { sessionID: string }) {
                 </Show>
               </box>
             </Show>
+            <For each={pluginPanels()}>
+              {(panel) => {
+                const items = createMemo(() =>
+                  typeof panel.items === "function" ? panel.items() : panel.items
+                )
+                return (
+                  <Show when={items().length > 0}>
+                    <box>
+                      <text fg={theme.text}>
+                        <b>{panel.title}</b>
+                      </text>
+                      <For each={items()}>
+                        {(item) => (
+                          <box flexDirection="row" gap={1} justifyContent="space-between">
+                            <text fg={theme.textMuted}>{item.label}</text>
+                            <Show when={item.value}>
+                              <text
+                                fg={
+                                  item.status === "success"
+                                    ? theme.success
+                                    : item.status === "warning"
+                                      ? theme.warning
+                                      : item.status === "error"
+                                        ? theme.error
+                                        : theme.textMuted
+                                }
+                              >
+                                {item.value}
+                              </text>
+                            </Show>
+                          </box>
+                        )}
+                      </For>
+                    </box>
+                  </Show>
+                )
+              }}
+            </For>
           </box>
         </scrollbox>
 

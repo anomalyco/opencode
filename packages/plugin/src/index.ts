@@ -31,6 +31,30 @@ export type PluginInput = {
   $: BunShell
 }
 
+/**
+ * Sidebar panel item displayed in a plugin's sidebar section
+ */
+export type SidebarPanelItem = {
+  /** Label shown on the left */
+  label: string
+  /** Optional value shown on the right */
+  value?: string
+  /** Optional status indicator for styling */
+  status?: "success" | "warning" | "error" | "info"
+}
+
+/**
+ * A sidebar panel registered by a plugin
+ */
+export type SidebarPanel = {
+  /** Unique identifier for this panel */
+  id: string
+  /** Title displayed in the sidebar section header */
+  title: string
+  /** Items to display in the panel - can be static array or getter for dynamic content */
+  items: SidebarPanelItem[] | (() => SidebarPanelItem[])
+}
+
 export type Plugin = (input: PluginInput) => Promise<Hooks>
 
 export type AuthHook = {
@@ -206,4 +230,9 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Register custom sidebar panels. Can be a static array or a getter function
+   * for dynamic content that updates on each render.
+   */
+  sidebar?: SidebarPanel[] | (() => SidebarPanel[])
 }
