@@ -41,14 +41,16 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { showToast, Toast } from "@opencode-ai/ui/toast"
+import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { Binary } from "@opencode-ai/util/binary"
 import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
-import { useCommand } from "@/context/command"
+import { DialogEditProject } from "@/components/dialog-edit-project"
+import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
 export default function Layout(props: ParentProps) {
@@ -89,6 +91,41 @@ export default function Layout(props: ParentProps) {
   const providers = useProviders()
   const dialog = useDialog()
   const command = useCommand()
+  const theme = useTheme()
+  const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
+  const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
+  const colorSchemeLabel: Record<ColorScheme, string> = {
+    system: "System",
+    light: "Light",
+    dark: "Dark",
+  }
+
+  function cycleTheme(direction = 1) {
+    const ids = availableThemeEntries().map(([id]) => id)
+    if (ids.length === 0) return
+    const currentIndex = ids.indexOf(theme.themeId())
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + direction + ids.length) % ids.length
+    const nextThemeId = ids[nextIndex]
+    theme.setTheme(nextThemeId)
+    const nextTheme = theme.themes()[nextThemeId]
+    showToast({
+      title: "Theme switched",
+      description: nextTheme?.name ?? nextThemeId,
+    })
+  }
+
+  function cycleColorScheme(direction = 1) {
+    const current = theme.colorScheme()
+    const currentIndex = colorSchemeOrder.indexOf(current)
+    const nextIndex =
+      currentIndex === -1 ? 0 : (currentIndex + direction + colorSchemeOrder.length) % colorSchemeOrder.length
+    const next = colorSchemeOrder[nextIndex]
+    theme.setColorScheme(next)
+    showToast({
+      title: "Color scheme",
+      description: colorSchemeLabel[next],
+    })
+  }
 
   onMount(async () => {
     if (platform.checkUpdate && platform.update && platform.restart) {
@@ -115,6 +152,71 @@ export default function Layout(props: ParentProps) {
         })
       }
     }
+  })
+
+  onMount(() => {
+    const seenSessions = new Set<string>()
+    const toastBySession = new Map<string, number>()
+    const unsub = globalSDK.event.listen((e) => {
+      if (e.details?.type !== "permission.updated") return
+      const directory = e.name
+      const permission = e.details.properties
+      const sessionKey = `${directory}:${permission.sessionID}`
+      if (seenSessions.has(sessionKey)) return
+      seenSessions.add(sessionKey)
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      if (directory === currentDir && permission.sessionID === currentSession) return
+      const [store] = globalSync.child(directory)
+      const session = store.session.find((s) => s.id === permission.sessionID)
+      if (directory === currentDir && session?.parentID === currentSession) return
+      const sessionTitle = session?.title ?? "New session"
+      const projectName = getFilename(directory)
+      const toastId = showToast({
+        persistent: true,
+        icon: "checklist",
+        title: "Permission required",
+        description: `${sessionTitle} in ${projectName} needs permission`,
+        actions: [
+          {
+            label: "Go to session",
+            onClick: () => {
+              navigate(`/${base64Encode(directory)}/session/${permission.sessionID}`)
+            },
+          },
+          {
+            label: "Dismiss",
+            onClick: "dismiss",
+          },
+        ],
+      })
+      toastBySession.set(sessionKey, toastId)
+    })
+    onCleanup(unsub)
+
+    createEffect(() => {
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      if (!currentDir || !currentSession) return
+      const sessionKey = `${currentDir}:${currentSession}`
+      const toastId = toastBySession.get(sessionKey)
+      if (toastId !== undefined) {
+        toaster.dismiss(toastId)
+        toastBySession.delete(sessionKey)
+        seenSessions.delete(sessionKey)
+      }
+      const [store] = globalSync.child(currentDir)
+      const childSessions = store.session.filter((s) => s.parentID === currentSession)
+      for (const child of childSessions) {
+        const childKey = `${currentDir}:${child.id}`
+        const childToastId = toastBySession.get(childKey)
+        if (childToastId !== undefined) {
+          toaster.dismiss(childToastId)
+          toastBySession.delete(childKey)
+          seenSessions.delete(childKey)
+        }
+      }
+    })
   })
 
   function sortSessions(a: Session, b: Session) {
@@ -221,57 +323,102 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  command.register(() => [
-    {
-      id: "sidebar.toggle",
-      title: "Toggle sidebar",
-      category: "View",
-      keybind: "mod+b",
-      onSelect: () => layout.sidebar.toggle(),
-    },
-    ...(platform.openDirectoryPickerDialog
-      ? [
-          {
-            id: "project.open",
-            title: "Open project",
-            category: "Project",
-            keybind: "mod+o",
-            onSelect: () => chooseProject(),
-          },
-        ]
-      : []),
-    {
-      id: "provider.connect",
-      title: "Connect provider",
-      category: "Provider",
-      onSelect: () => connectProvider(),
-    },
-    {
-      id: "session.previous",
-      title: "Previous session",
-      category: "Session",
-      keybind: "alt+arrowup",
-      onSelect: () => navigateSessionByOffset(-1),
-    },
-    {
-      id: "session.next",
-      title: "Next session",
-      category: "Session",
-      keybind: "alt+arrowdown",
-      onSelect: () => navigateSessionByOffset(1),
-    },
-    {
-      id: "session.archive",
-      title: "Archive session",
-      category: "Session",
-      keybind: "mod+shift+backspace",
-      disabled: !params.dir || !params.id,
-      onSelect: () => {
-        const session = currentSessions().find((s) => s.id === params.id)
-        if (session) archiveSession(session)
+  command.register(() => {
+    const commands: CommandOption[] = [
+      {
+        id: "sidebar.toggle",
+        title: "Toggle sidebar",
+        category: "View",
+        keybind: "mod+b",
+        onSelect: () => layout.sidebar.toggle(),
       },
-    },
-  ])
+      ...(platform.openDirectoryPickerDialog
+        ? [
+            {
+              id: "project.open",
+              title: "Open project",
+              category: "Project",
+              keybind: "mod+o",
+              onSelect: () => chooseProject(),
+            },
+          ]
+        : []),
+      {
+        id: "provider.connect",
+        title: "Connect provider",
+        category: "Provider",
+        onSelect: () => connectProvider(),
+      },
+      {
+        id: "session.previous",
+        title: "Previous session",
+        category: "Session",
+        keybind: "alt+arrowup",
+        onSelect: () => navigateSessionByOffset(-1),
+      },
+      {
+        id: "session.next",
+        title: "Next session",
+        category: "Session",
+        keybind: "alt+arrowdown",
+        onSelect: () => navigateSessionByOffset(1),
+      },
+      {
+        id: "session.archive",
+        title: "Archive session",
+        category: "Session",
+        keybind: "mod+shift+backspace",
+        disabled: !params.dir || !params.id,
+        onSelect: () => {
+          const session = currentSessions().find((s) => s.id === params.id)
+          if (session) archiveSession(session)
+        },
+      },
+      {
+        id: "theme.cycle",
+        title: "Cycle theme",
+        category: "Theme",
+        keybind: "mod+shift+t",
+        onSelect: () => cycleTheme(1),
+      },
+    ]
+
+    for (const [id, definition] of availableThemeEntries()) {
+      commands.push({
+        id: `theme.set.${id}`,
+        title: `Use theme: ${definition.name ?? id}`,
+        category: "Theme",
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewTheme(id)
+          return () => theme.cancelPreview()
+        },
+      })
+    }
+
+    commands.push({
+      id: "theme.scheme.cycle",
+      title: "Cycle color scheme",
+      category: "Theme",
+      keybind: "mod+shift+s",
+      onSelect: () => cycleColorScheme(1),
+    })
+
+    for (const scheme of colorSchemeOrder) {
+      commands.push({
+        id: `theme.scheme.${scheme}`,
+        title: `Use color scheme: ${colorSchemeLabel[scheme]}`,
+        category: "Theme",
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewColorScheme(scheme)
+          return () => theme.cancelPreview()
+        },
+      })
+    }
+
+    return commands
+  })
 
   function connectProvider() {
     dialog.show(() => <DialogSelectProvider />)
@@ -376,7 +523,7 @@ export default function Layout(props: ParentProps) {
     const notification = useNotification()
     const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-    const name = createMemo(() => getFilename(props.project.worktree))
+    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const mask = "radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px)"
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -412,7 +559,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const ProjectVisual = (props: { project: LocalProject; class?: string }): JSX.Element => {
-    const name = createMemo(() => getFilename(props.project.worktree))
+    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const current = createMemo(() => base64Decode(params.dir ?? ""))
     return (
       <Switch>
@@ -454,8 +601,20 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const hasPermissions = createMemo(() => {
+      const store = globalSync.child(props.project.worktree)[0]
+      const permissions = store.permission?.[props.session.id] ?? []
+      if (permissions.length > 0) return true
+      const childSessions = store.session.filter((s) => s.parentID === props.session.id)
+      for (const child of childSessions) {
+        const childPermissions = store.permission?.[child.id] ?? []
+        if (childPermissions.length > 0) return true
+      }
+      return false
+    })
     const isWorking = createMemo(() => {
       if (props.session.id === params.id) return false
+      if (hasPermissions()) return false
       const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
@@ -485,6 +644,9 @@ export default function Layout(props: ParentProps) {
                   <Switch>
                     <Match when={isWorking()}>
                       <Spinner class="size-2.5 mr-0.5" />
+                    </Match>
+                    <Match when={hasPermissions()}>
+                      <div class="size-1.5 mr-1.5 rounded-full bg-surface-warning-strong" />
                     </Match>
                     <Match when={hasError()}>
                       <div class="size-1.5 mr-1.5 rounded-full bg-text-diff-delete-base" />
@@ -540,7 +702,7 @@ export default function Layout(props: ParentProps) {
     const sortable = createSortable(props.project.worktree)
     const showExpanded = createMemo(() => props.mobile || layout.sidebar.opened())
     const slug = createMemo(() => base64Encode(props.project.worktree))
-    const name = createMemo(() => getFilename(props.project.worktree))
+    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const [store, setProjectStore] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session.toSorted(sortSessions))
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
@@ -586,8 +748,13 @@ export default function Layout(props: ParentProps) {
                     <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content>
+                        <DropdownMenu.Item
+                          onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}
+                        >
+                          <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
                         <DropdownMenu.Item onSelect={() => closeProject(props.project.worktree)}>
-                          <DropdownMenu.ItemLabel>Close Project</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>

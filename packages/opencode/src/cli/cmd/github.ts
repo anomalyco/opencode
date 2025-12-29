@@ -158,6 +158,29 @@ export function parseGitHubRemote(url: string): { owner: string; repo: string } 
   return { owner: match[1], repo: match[2] }
 }
 
+/**
+ * Extracts displayable text from assistant response parts.
+ * Returns null for tool-only or reasoning-only responses (signals summary needed).
+ * Throws for truly unusable responses (empty, step-start only, etc.).
+ */
+export function extractResponseText(parts: MessageV2.Part[]): string | null {
+  // Priority 1: Look for text parts
+  const textPart = parts.findLast((p) => p.type === "text")
+  if (textPart) return textPart.text
+
+  // Priority 2: Reasoning-only - return null to signal summary needed
+  const reasoningPart = parts.findLast((p) => p.type === "reasoning")
+  if (reasoningPart) return null
+
+  // Priority 3: Tool-only - return null to signal summary needed
+  const toolParts = parts.filter((p) => p.type === "tool" && p.state.status === "completed")
+  if (toolParts.length > 0) return null
+
+  // No usable parts - throw with debug info
+  const partTypes = parts.map((p) => p.type).join(", ") || "none"
+  throw new Error(`Failed to parse response. Part types found: [${partTypes}]`)
+}
+
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -890,10 +913,41 @@ export const GithubRunCommand = cmd({
           )
         }
 
-        const match = result.parts.findLast((p) => p.type === "text")
-        if (!match) throw new Error("Failed to parse the text response")
+        const text = extractResponseText(result.parts)
+        if (text) return text
 
-        return match.text
+        // No text part (tool-only or reasoning-only) - ask agent to summarize
+        console.log("Requesting summary from agent...")
+        const summary = await SessionPrompt.prompt({
+          sessionID: session.id,
+          messageID: Identifier.ascending("message"),
+          model: {
+            providerID,
+            modelID,
+          },
+          tools: { "*": false }, // Disable all tools to force text response
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: "Summarize the actions (tool calls & reasoning) you did for the user in 1-2 sentences.",
+            },
+          ],
+        })
+
+        if (summary.info.role === "assistant" && summary.info.error) {
+          console.error(summary.info)
+          throw new Error(
+            `${summary.info.error.name}: ${"message" in summary.info.error ? summary.info.error.message : ""}`,
+          )
+        }
+
+        const summaryText = extractResponseText(summary.parts)
+        if (!summaryText) {
+          throw new Error("Failed to get summary from agent")
+        }
+
+        return summaryText
       }
 
       async function getOidcToken() {
