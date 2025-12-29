@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, createResource, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createResource, For, Show, Switch, Match, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -65,7 +65,7 @@ export function Sidebar(props: { sessionID: string }) {
   const kv = useKV()
   const sdk = useSDK()
 
-  const [pluginPanels] = createResource(
+  const [pluginPanels, { refetch: refetchPluginPanels }] = createResource(
     () => props.sessionID,
     async () => {
       try {
@@ -77,6 +77,12 @@ export function Sidebar(props: { sessionID: string }) {
       }
     },
   )
+
+  // Poll plugin panels every 5 seconds for dynamic updates
+  const pluginPollInterval = setInterval(() => {
+    refetchPluginPanels()
+  }, 5000)
+  onCleanup(() => clearInterval(pluginPollInterval))
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
