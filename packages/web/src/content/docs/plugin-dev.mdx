@@ -47,7 +47,7 @@ The plugin function receives:
 
 ## Events
 
-Subscribe to events emitted by OpenCode. Events are read-only notifications - you can react to them but not modify them.
+Subscribe to events emitted by OpenCode. Events are read-only notifications—you can react to them but not modify them.
 
 ```ts title=".opencode/plugin/events.ts"
 import type { Plugin } from "@opencode-ai/plugin"
@@ -63,19 +63,647 @@ export const EventPlugin: Plugin = async (ctx) => {
 }
 ```
 
-| Event           | Description                       |
-| --------------- | --------------------------------- |
-| command.\*      | Command execution                 |
-| file.\*         | File edits and watcher updates    |
-| installation.\* | Installation updates              |
-| lsp.\*          | LSP diagnostics and updates       |
-| message.\*      | Message and part changes          |
-| permission.\*   | Permission requests and replies   |
-| server.\*       | Server connection                 |
-| session.\*      | Session lifecycle and status      |
-| todo.\*         | Todo list updates                 |
-| tool.\*         | Tool execution before/after       |
-| tui.\*          | TUI prompts, commands, and toasts |
+Events are named `{group}.{event}`, e.g. `session.idle` or `file.edited`. OpenCode emits four types of events:
+
+- **Session events** — Lifecycle and status changes for chat sessions
+- **Message events** — Updates to messages and message parts
+- **File events** — File edits and filesystem changes
+- **System events** — Server, LSP, permissions, and other system-level events
+
+---
+
+### Session events
+
+Session events track the lifecycle of chat sessions: [`session.created`](#sessioncreated), [`session.updated`](#sessionupdated), [`session.deleted`](#sessiondeleted), [`session.status`](#sessionstatus), [`session.idle`](#sessionidle), [`session.compacted`](#sessioncompacted), [`session.diff`](#sessiondiff), and [`session.error`](#sessionerror).
+
+#### Expected properties for session events
+
+| Property    | created | updated | deleted | status | idle | compacted | diff | error |
+| ----------- | ------- | ------- | ------- | ------ | ---- | --------- | ---- | ----- |
+| `sessionID` |         |         |         | ✓      | ✓    | ✓         | ✓    | ✓     |
+| `info`      | ✓       | ✓       | ✓       |        |      |           |      |       |
+| `status`    |         |         |         | ✓      |      |           |      |       |
+| `diff`      |         |         |         |        |      |           | ✓    |       |
+| `error`     |         |         |         |        |      |           |      | ✓     |
+
+#### session.created
+
+A new session was created.
+
+```json title="Example session.created event"
+{
+  "type": "session.created",
+  "properties": {
+    "info": {
+      "id": "session_01jgk...",
+      "projectID": "proj_abc123",
+      "directory": "/Users/dev/myproject",
+      "title": "New session - 2024-01-15T10:30:00.000Z",
+      "version": "0.1.0",
+      "time": {
+        "created": 1705315800000,
+        "updated": 1705315800000
+      }
+    }
+  }
+}
+```
+
+#### session.updated
+
+Session metadata was modified (title, share status, etc.).
+
+```json title="Example session.updated event"
+{
+  "type": "session.updated",
+  "properties": {
+    "info": {
+      "id": "session_01jgk...",
+      "projectID": "proj_abc123",
+      "directory": "/Users/dev/myproject",
+      "title": "Refactor authentication module",
+      "version": "0.1.0",
+      "time": {
+        "created": 1705315800000,
+        "updated": 1705316400000
+      }
+    }
+  }
+}
+```
+
+#### session.deleted
+
+A session was deleted.
+
+```json title="Example session.deleted event"
+{
+  "type": "session.deleted",
+  "properties": {
+    "info": {
+      "id": "session_01jgk...",
+      "projectID": "proj_abc123",
+      "directory": "/Users/dev/myproject",
+      "title": "Old session",
+      "version": "0.1.0",
+      "time": {
+        "created": 1705315800000,
+        "updated": 1705316400000
+      }
+    }
+  }
+}
+```
+
+#### session.status
+
+Session status changed (busy, idle, or retry).
+
+```json title="Example session.status event (busy)"
+{
+  "type": "session.status",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "status": {
+      "type": "busy"
+    }
+  }
+}
+```
+
+```json title="Example session.status event (retry)"
+{
+  "type": "session.status",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "status": {
+      "type": "retry",
+      "attempt": 2,
+      "message": "Rate limited, retrying...",
+      "next": 1705316500000
+    }
+  }
+}
+```
+
+#### session.idle
+
+Session finished processing and is now idle. This is a convenience event—you can also check for `session.status` with `status.type === "idle"`.
+
+```json title="Example session.idle event"
+{
+  "type": "session.idle",
+  "properties": {
+    "sessionID": "session_01jgk..."
+  }
+}
+```
+
+#### session.compacted
+
+Session context was compacted to reduce token usage.
+
+```json title="Example session.compacted event"
+{
+  "type": "session.compacted",
+  "properties": {
+    "sessionID": "session_01jgk..."
+  }
+}
+```
+
+#### session.diff
+
+Session file changes were calculated.
+
+```json title="Example session.diff event"
+{
+  "type": "session.diff",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "diff": [
+      {
+        "path": "src/auth.ts",
+        "status": "modified",
+        "additions": 25,
+        "deletions": 10
+      }
+    ]
+  }
+}
+```
+
+#### session.error
+
+An error occurred during session processing.
+
+```json title="Example session.error event"
+{
+  "type": "session.error",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "error": {
+      "name": "ProviderAuthError",
+      "providerID": "anthropic",
+      "message": "Invalid API key"
+    }
+  }
+}
+```
+
+---
+
+### Message events
+
+Message events track updates to messages and their parts: [`message.updated`](#messageupdated), [`message.removed`](#messageremoved), [`message.part.updated`](#messagepartupdated), and [`message.part.removed`](#messagepartremoved).
+
+#### Expected properties for message events
+
+| Property    | updated | removed | part.updated | part.removed |
+| ----------- | ------- | ------- | ------------ | ------------ |
+| `info`      | ✓       |         |              |              |
+| `sessionID` |         | ✓       |              | ✓            |
+| `messageID` |         | ✓       |              | ✓            |
+| `part`      |         |         | ✓            |              |
+| `partID`    |         |         |              | ✓            |
+| `delta`     |         |         | ✓            |              |
+
+#### message.updated
+
+A message was created or updated.
+
+```json title="Example message.updated event (user message)"
+{
+  "type": "message.updated",
+  "properties": {
+    "info": {
+      "id": "message_01abc...",
+      "sessionID": "session_01jgk...",
+      "role": "user",
+      "time": { "created": 1705315800000 },
+      "agent": "coder",
+      "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" }
+    }
+  }
+}
+```
+
+```json title="Example message.updated event (assistant message)"
+{
+  "type": "message.updated",
+  "properties": {
+    "info": {
+      "id": "message_01def...",
+      "sessionID": "session_01jgk...",
+      "role": "assistant",
+      "parentID": "message_01abc...",
+      "agent": "coder",
+      "modelID": "claude-sonnet-4-20250514",
+      "providerID": "anthropic",
+      "time": { "created": 1705315801000 },
+      "cost": 0.0023,
+      "tokens": {
+        "input": 1500,
+        "output": 250,
+        "reasoning": 0,
+        "cache": { "read": 1200, "write": 300 }
+      }
+    }
+  }
+}
+```
+
+#### message.removed
+
+A message was deleted (e.g., during revert).
+
+```json title="Example message.removed event"
+{
+  "type": "message.removed",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01def..."
+  }
+}
+```
+
+#### message.part.updated
+
+A message part was created or updated. Parts include text, tool calls, reasoning, files, and more.
+
+```json title="Example message.part.updated event (text)"
+{
+  "type": "message.part.updated",
+  "properties": {
+    "part": {
+      "id": "part_01xyz...",
+      "sessionID": "session_01jgk...",
+      "messageID": "message_01def...",
+      "type": "text",
+      "text": "I'll help you refactor that module."
+    },
+    "delta": " that module."
+  }
+}
+```
+
+```json title="Example message.part.updated event (tool)"
+{
+  "type": "message.part.updated",
+  "properties": {
+    "part": {
+      "id": "part_02abc...",
+      "sessionID": "session_01jgk...",
+      "messageID": "message_01def...",
+      "type": "tool",
+      "callID": "call_123",
+      "tool": "read",
+      "state": {
+        "status": "completed",
+        "input": { "filePath": "/src/auth.ts" },
+        "output": "// file contents...",
+        "title": "Read src/auth.ts",
+        "metadata": {},
+        "time": { "start": 1705315802000, "end": 1705315803000 }
+      }
+    }
+  }
+}
+```
+
+#### message.part.removed
+
+A message part was deleted.
+
+```json title="Example message.part.removed event"
+{
+  "type": "message.part.removed",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01def...",
+    "partID": "part_01xyz..."
+  }
+}
+```
+
+---
+
+### File events
+
+File events track filesystem changes: [`file.edited`](#fileedited) and [`file.watcher.updated`](#filewatcherupdated).
+
+#### Expected properties for file events
+
+| Property | edited | watcher.updated |
+| -------- | ------ | --------------- |
+| `file`   | ✓      | ✓               |
+| `event`  |        | ✓               |
+
+#### file.edited
+
+A file was edited by OpenCode (via the `write` or `edit` tools).
+
+```json title="Example file.edited event"
+{
+  "type": "file.edited",
+  "properties": {
+    "file": "/Users/dev/myproject/src/auth.ts"
+  }
+}
+```
+
+#### file.watcher.updated
+
+A file changed on disk (detected by the file watcher).
+
+```json title="Example file.watcher.updated event"
+{
+  "type": "file.watcher.updated",
+  "properties": {
+    "file": "/Users/dev/myproject/src/config.ts",
+    "event": "change"
+  }
+}
+```
+
+The `event` property can be `add`, `change`, or `unlink`.
+
+---
+
+### System events
+
+System events cover server state, LSP, permissions, commands, todos, and UI actions.
+
+#### server.connected
+
+The OpenCode server started and is ready.
+
+```json title="Example server.connected event"
+{
+  "type": "server.connected",
+  "properties": {}
+}
+```
+
+#### command.executed
+
+A slash command was executed.
+
+```json title="Example command.executed event"
+{
+  "type": "command.executed",
+  "properties": {
+    "name": "init",
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01abc...",
+    "arguments": ""
+  }
+}
+```
+
+#### permission.updated
+
+A permission request was created or updated.
+
+```json title="Example permission.updated event"
+{
+  "type": "permission.updated",
+  "properties": {
+    "id": "perm_01xyz...",
+    "type": "bash",
+    "sessionID": "session_01jgk...",
+    "messageID": "message_01def...",
+    "callID": "call_123",
+    "title": "Run: npm install",
+    "metadata": { "command": "npm install" },
+    "time": { "created": 1705315805000 }
+  }
+}
+```
+
+#### permission.replied
+
+A permission request was answered.
+
+```json title="Example permission.replied event"
+{
+  "type": "permission.replied",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "permissionID": "perm_01xyz...",
+    "response": "allow"
+  }
+}
+```
+
+#### todo.updated
+
+The todo list was updated.
+
+```json title="Example todo.updated event"
+{
+  "type": "todo.updated",
+  "properties": {
+    "sessionID": "session_01jgk...",
+    "todos": [
+      { "id": "1", "content": "Fix authentication bug", "status": "completed", "priority": "high" },
+      { "id": "2", "content": "Add unit tests", "status": "in_progress", "priority": "medium" }
+    ]
+  }
+}
+```
+
+#### lsp.updated
+
+LSP servers were initialized or updated.
+
+```json title="Example lsp.updated event"
+{
+  "type": "lsp.updated",
+  "properties": {}
+}
+```
+
+#### lsp.client.diagnostics
+
+LSP diagnostics were received for a file.
+
+```json title="Example lsp.client.diagnostics event"
+{
+  "type": "lsp.client.diagnostics",
+  "properties": {
+    "serverID": "typescript",
+    "path": "/Users/dev/myproject/src/auth.ts"
+  }
+}
+```
+
+#### installation.updated
+
+OpenCode was upgraded to a new version.
+
+```json title="Example installation.updated event"
+{
+  "type": "installation.updated",
+  "properties": {
+    "version": "0.2.0"
+  }
+}
+```
+
+#### installation.update-available
+
+A new version of OpenCode is available.
+
+```json title="Example installation.update-available event"
+{
+  "type": "installation.update-available",
+  "properties": {
+    "version": "0.2.0"
+  }
+}
+```
+
+#### mcp.tools.changed
+
+MCP server tools were added, removed, or updated.
+
+```json title="Example mcp.tools.changed event"
+{
+  "type": "mcp.tools.changed",
+  "properties": {
+    "server": "my-mcp-server"
+  }
+}
+```
+
+#### vcs.branch.updated
+
+The current git branch changed.
+
+```json title="Example vcs.branch.updated event"
+{
+  "type": "vcs.branch.updated",
+  "properties": {
+    "branch": "feature/new-feature"
+  }
+}
+```
+
+#### PTY events
+
+Terminal (PTY) session events for the integrated terminal:
+
+- **`pty.created`** — A new terminal session was created
+- **`pty.updated`** — Terminal session metadata was updated (e.g., title)
+- **`pty.exited`** — Terminal process exited
+- **`pty.deleted`** — Terminal session was deleted
+
+```json title="Example pty.created event"
+{
+  "type": "pty.created",
+  "properties": {
+    "info": {
+      "id": "pty_01abc...",
+      "title": "zsh",
+      "command": "/bin/zsh",
+      "args": [],
+      "cwd": "/Users/dev/myproject",
+      "status": "running",
+      "pid": 12345
+    }
+  }
+}
+```
+
+```json title="Example pty.exited event"
+{
+  "type": "pty.exited",
+  "properties": {
+    "id": "pty_01abc...",
+    "exitCode": 0
+  }
+}
+```
+
+#### tui.prompt.append
+
+Text was appended to the input prompt.
+
+```json title="Example tui.prompt.append event"
+{
+  "type": "tui.prompt.append",
+  "properties": {
+    "text": "Fix the bug in auth.ts"
+  }
+}
+```
+
+#### tui.command.execute
+
+A UI command was triggered via keybinding or menu.
+
+```json title="Example tui.command.execute event"
+{
+  "type": "tui.command.execute",
+  "properties": {
+    "command": "session.new"
+  }
+}
+```
+
+Available commands include: `session.list`, `session.new`, `session.share`, `session.interrupt`, `session.compact`, `session.page.up`, `session.page.down`, `session.half.page.up`, `session.half.page.down`, `session.first`, `session.last`, `prompt.clear`, `prompt.submit`, `agent.cycle`.
+
+#### tui.toast.show
+
+A toast notification was displayed.
+
+```json title="Example tui.toast.show event"
+{
+  "type": "tui.toast.show",
+  "properties": {
+    "title": "Success",
+    "message": "File saved",
+    "variant": "success",
+    "duration": 5000
+  }
+}
+```
+
+The `variant` property can be `info`, `success`, `warning`, or `error`.
+
+---
+
+### Property descriptions
+
+| Property       | Type   | Description                                                                                  |
+| -------------- | ------ | -------------------------------------------------------------------------------------------- |
+| `sessionID`    | String | Unique identifier for the session                                                            |
+| `messageID`    | String | Unique identifier for the message                                                            |
+| `partID`       | String | Unique identifier for the message part                                                       |
+| `callID`       | String | Unique identifier for a tool call                                                            |
+| `info`         | Object | Full session, message, or PTY object with all metadata                                       |
+| `status`       | Object | Session status: `{ type: "idle" }`, `{ type: "busy" }`, or `{ type: "retry", attempt, ... }` |
+| `error`        | Object | Error details with `name` and additional context                                             |
+| `part`         | Object | Message part (text, tool, reasoning, file, etc.)                                             |
+| `delta`        | String | Incremental text change (for streaming updates)                                              |
+| `diff`         | Array  | File changes with path, status, additions, and deletions                                     |
+| `file`         | String | Absolute file path                                                                           |
+| `event`        | String | File watcher event type: `add`, `change`, or `unlink`                                        |
+| `todos`        | Array  | List of todo items with id, content, status, and priority                                    |
+| `version`      | String | OpenCode version string                                                                      |
+| `variant`      | String | Toast variant: `info`, `success`, `warning`, or `error`                                      |
+| `server`       | String | MCP server name                                                                              |
+| `branch`       | String | Git branch name                                                                              |
+| `exitCode`     | Number | Process exit code                                                                            |
+| `serverID`     | String | LSP server identifier (e.g., `typescript`)                                                   |
+| `path`         | String | File path (for LSP diagnostics)                                                              |
+| `command`      | String | TUI command name or shell command                                                            |
+| `text`         | String | Text content (for prompt append)                                                             |
+| `name`         | String | Slash command name                                                                           |
+| `arguments`    | String | Slash command arguments                                                                      |
+| `permissionID` | String | Unique identifier for a permission request                                                   |
+| `response`     | String | Permission response: `allow` or `deny`                                                       |
 
 ---
 
