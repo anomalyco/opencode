@@ -70,7 +70,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         {
           ...project,
           ...(metadata ?? {}),
-          icon: {url: metadata?.icon?.url, color: metadata?.icon?.color},
+          icon: { url: metadata?.icon?.url, color: metadata?.icon?.color },
         },
       ]
     }
