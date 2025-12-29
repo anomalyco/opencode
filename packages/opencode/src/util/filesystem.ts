@@ -23,7 +23,24 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    // First try with resolved real paths to prevent symlink escapes
+    try {
+      const realParent = realpathSync(parent)
+      const realChild = realpathSync(child)
+      const rel = relative(realParent, realChild)
+      // On Windows, check for cross-drive paths (e.g., "D:\..." from "C:\...")
+      if (process.platform === "win32" && /^[A-Za-z]:/.test(rel)) {
+        return false
+      }
+      return !rel.startsWith("..")
+    } catch {
+      // If realpath fails (e.g., file doesn't exist yet), fall back to lexical check
+      const rel = relative(parent, child)
+      if (process.platform === "win32" && /^[A-Za-z]:/.test(rel)) {
+        return false
+      }
+      return !rel.startsWith("..")
+    }
   }
 
   export async function findUp(target: string, start: string, stop?: string) {
