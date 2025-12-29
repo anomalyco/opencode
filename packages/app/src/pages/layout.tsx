@@ -49,7 +49,8 @@ import { Header } from "@/components/header"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
-import { useCommand } from "@/context/command"
+import { DialogEditProject } from "@/components/dialog-edit-project"
+import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 
 export default function Layout(props: ParentProps) {
@@ -323,7 +324,7 @@ export default function Layout(props: ParentProps) {
   }
 
   command.register(() => {
-    const commands = [
+    const commands: CommandOption[] = [
       {
         id: "sidebar.toggle",
         title: "Toggle sidebar",
@@ -387,7 +388,11 @@ export default function Layout(props: ParentProps) {
         id: `theme.set.${id}`,
         title: `Use theme: ${definition.name ?? id}`,
         category: "Theme",
-        onSelect: () => theme.setTheme(id),
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewTheme(id)
+          return () => theme.cancelPreview()
+        },
       })
     }
 
@@ -404,7 +409,11 @@ export default function Layout(props: ParentProps) {
         id: `theme.scheme.${scheme}`,
         title: `Use color scheme: ${colorSchemeLabel[scheme]}`,
         category: "Theme",
-        onSelect: () => theme.setColorScheme(scheme),
+        onSelect: () => theme.commitPreview(),
+        onHighlight: () => {
+          theme.previewColorScheme(scheme)
+          return () => theme.cancelPreview()
+        },
       })
     }
 
@@ -514,7 +523,7 @@ export default function Layout(props: ParentProps) {
     const notification = useNotification()
     const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
-    const name = createMemo(() => getFilename(props.project.worktree))
+    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const mask = "radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px)"
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -550,7 +559,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const ProjectVisual = (props: { project: LocalProject; class?: string }): JSX.Element => {
-    const name = createMemo(() => getFilename(props.project.worktree))
+    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const current = createMemo(() => base64Decode(params.dir ?? ""))
     return (
       <Switch>
@@ -693,7 +702,7 @@ export default function Layout(props: ParentProps) {
     const sortable = createSortable(props.project.worktree)
     const showExpanded = createMemo(() => props.mobile || layout.sidebar.opened())
     const slug = createMemo(() => base64Encode(props.project.worktree))
-    const name = createMemo(() => getFilename(props.project.worktree))
+    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const [store, setProjectStore] = globalSync.child(props.project.worktree)
     const sessions = createMemo(() => store.session.toSorted(sortSessions))
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
@@ -739,6 +748,11 @@ export default function Layout(props: ParentProps) {
                     <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content>
+                        <DropdownMenu.Item
+                          onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}
+                        >
+                          <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
                         <DropdownMenu.Item onSelect={() => closeProject(props.project.worktree)}>
                           <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
@@ -902,7 +916,7 @@ export default function Layout(props: ParentProps) {
         </div>
         <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
           <Switch>
-            <Match when={!providers.paid().length && expanded()}>
+            <Match when={providers.all().length > 0 && !providers.paid().length && expanded()}>
               <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                 <div class="p-3 flex flex-col gap-2">
                   <div class="text-12-medium text-text-strong">Getting started</div>
@@ -921,7 +935,7 @@ export default function Layout(props: ParentProps) {
                 </Tooltip>
               </div>
             </Match>
-            <Match when={true}>
+            <Match when={providers.all().length > 0}>
               <Tooltip placement="right" value="Connect provider" inactive={expanded()}>
                 <Button
                   class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
