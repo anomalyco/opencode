@@ -3,10 +3,29 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { BusEvent } from "./bus-event"
 import { GlobalBus } from "./global"
+import { Config } from "../config/config"
+import { EventStore } from "../event-store"
+import { Global } from "../global"
+import path from "path"
 
 export namespace Bus {
   const log = Log.create({ service: "bus" })
   type Subscription = (event: any) => void
+
+  /**
+   * Lazy singleton EventStore for durable streaming.
+   * Initialized on first publish when experimental.durableStreams is enabled.
+   */
+  let eventStore: EventStore | null = null
+
+  function getEventStore(): EventStore {
+    if (!eventStore) {
+      const dbPath = path.join(Global.Path.state, "events.db")
+      eventStore = EventStore.create(dbPath)
+      log.info("initialized EventStore", { dbPath })
+    }
+    return eventStore
+  }
 
   export const InstanceDisposed = BusEvent.define(
     "server.instance.disposed",
@@ -35,6 +54,13 @@ export namespace Bus {
       for (const sub of [...wildcard]) {
         sub(event)
       }
+
+      // Close EventStore on instance disposal
+      if (eventStore) {
+        eventStore.close()
+        eventStore = null
+        log.info("closed EventStore on instance disposal")
+      }
     },
   )
 
@@ -49,6 +75,20 @@ export namespace Bus {
     log.info("publishing", {
       type: def.type,
     })
+
+    // Persist to EventStore if durable streaming is enabled
+    const config = await Config.get()
+    if (config.experimental?.durableStreams) {
+      const store = getEventStore()
+      const sessionId = Instance.directory
+      const offset = store.append(sessionId, payload)
+      log.debug("persisted event to EventStore", {
+        sessionId,
+        offset,
+        type: def.type,
+      })
+    }
+
     const pending = []
     for (const key of [def.type, "*"]) {
       const match = state().subscriptions.get(key)

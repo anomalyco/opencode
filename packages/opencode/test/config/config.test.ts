@@ -627,8 +627,6 @@ test("compaction config can disable both auto and prune", async () => {
     },
   })
 })
-})
-
 test("experimental.durableStreams defaults to undefined when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
