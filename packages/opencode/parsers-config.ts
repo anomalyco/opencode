@@ -222,6 +222,16 @@ export default {
       },
     },
     {
+      // TODO: Replace with official gleam-lang/tree-sitter-gleam when they publish WASM releases
+      // See: https://github.com/gleam-lang/tree-sitter-gleam/issues/136
+      filetype: "gleam",
+      wasm: "https://github.com/anntnzrb/tree-sitter-gleam/releases/download/v0.1.0/tree-sitter-gleam.wasm",
+      queries: {
+        highlights: ["https://raw.githubusercontent.com/gleam-lang/tree-sitter-gleam/main/queries/highlights.scm"],
+        locals: ["https://raw.githubusercontent.com/gleam-lang/tree-sitter-gleam/main/queries/locals.scm"],
+      },
+    },
+    {
       filetype: "swift",
       wasm: "https://github.com/alex-pinkus/tree-sitter-swift/releases/download/0.7.1/tree-sitter-swift.wasm",
       queries: {
