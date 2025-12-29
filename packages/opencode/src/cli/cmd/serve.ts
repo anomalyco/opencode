@@ -1,6 +1,7 @@
 import { Server } from "../../server/server"
 import { ServerRegistry } from "../../server/registry"
 import { Config } from "../../config/config"
+import { Instance } from "../../project/instance"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { randomBytes } from "crypto"
@@ -15,8 +16,13 @@ export const ServeCommand = cmd({
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
     // Self-registration if durableStreams is enabled
-    const config = await Config.get()
-    const shouldRegister = config.experimental?.durableStreams ?? false
+    const shouldRegister = await Instance.provide({
+      directory: process.cwd(),
+      fn: async () => {
+        const config = await Config.get()
+        return config.experimental?.durableStreams ?? false
+      },
+    })
 
     let heartbeatInterval: Timer | undefined
     const serverId = randomBytes(8).toString("hex")
