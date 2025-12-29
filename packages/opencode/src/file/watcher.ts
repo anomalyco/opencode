@@ -9,10 +9,13 @@ import path from "path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
+import { withTimeout } from "@/util/timeout"
 import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
 import { Flag } from "@/flag/flag"
 import { readdir } from "fs/promises"
+
+const SUBSCRIBE_TIMEOUT_MS = 10_000
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -64,12 +67,16 @@ export namespace FileWatcher {
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-        subs.push(
-          await watcher().subscribe(Instance.directory, subscribe, {
-            ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
-            backend,
-          }),
-        )
+        const pending = watcher().subscribe(Instance.directory, subscribe, {
+          ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
+          backend,
+        })
+        const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+          log.error("failed to subscribe to Instance.directory", { error: err })
+          pending.then((s) => s.unsubscribe()).catch(() => {})
+          return undefined
+        })
+        if (sub) subs.push(sub)
       }
 
       const vcsDir = await $`git rev-parse --git-dir`
@@ -81,12 +88,16 @@ export namespace FileWatcher {
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         const gitDirContents = await readdir(vcsDir).catch(() => [])
         const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
-        subs.push(
-          await watcher().subscribe(vcsDir, subscribe, {
-            ignore: ignoreList,
-            backend,
-          }),
-        )
+        const pending = watcher().subscribe(vcsDir, subscribe, {
+          ignore: ignoreList,
+          backend,
+        })
+        const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+          log.error("failed to subscribe to vcsDir", { error: err })
+          pending.then((s) => s.unsubscribe()).catch(() => {})
+          return undefined
+        })
+        if (sub) subs.push(sub)
       }
 
       return { subs }
