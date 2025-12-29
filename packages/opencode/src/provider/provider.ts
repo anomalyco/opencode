@@ -325,7 +325,7 @@ export namespace Provider {
           // Conservative max_tokens to avoid premature rate limiting.
           // Cerebras rate limiter estimates token consumption using max_completion_tokens upfront,
           // so requesting the model maximum reserves that quota even if actual usage is low.
-          maxCompletionTokens: 8192,
+          maxCompletionTokens: 16384,
           headers: {
             "X-Cerebras-3rd-Party-Integration": "opencode",
           },
