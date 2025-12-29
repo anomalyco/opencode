@@ -539,7 +539,7 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(result.filter((msg) => msg.parts.length > 0))
+    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
