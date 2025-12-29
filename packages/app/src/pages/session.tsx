@@ -201,6 +201,21 @@ export default function Page() {
   )
 
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
+
+  createEffect(
+    on(
+      () => status().type,
+      (type) => {
+        if (type !== "idle") return
+        batch(() => {
+          setStore("userInteracted", false)
+          setStore("stepsExpanded", false)
+        })
+      },
+      { defer: true },
+    ),
+  )
+
   const working = createMemo(() => status().type !== "idle" && activeMessage()?.id === lastUserMessage()?.id)
 
   createRenderEffect((prev) => {
