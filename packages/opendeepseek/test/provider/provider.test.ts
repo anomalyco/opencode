@@ -1,4 +1,4 @@
-import { test, expect } from "bun:test"
+import { test, expect } from "vitest"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
@@ -8,7 +8,7 @@ import { Env } from "../../src/env"
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await (globalThis as any).NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -34,7 +34,7 @@ test("provider loaded from env variable", async () => {
 test("provider loaded from config with apiKey option", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -61,7 +61,7 @@ test("provider loaded from config with apiKey option", async () => {
 test("disabled_providers excludes provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -85,7 +85,7 @@ test("disabled_providers excludes provider", async () => {
 test("enabled_providers restricts to only listed providers", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -111,7 +111,7 @@ test("enabled_providers restricts to only listed providers", async () => {
 test("model whitelist filters models for provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -142,7 +142,7 @@ test("model whitelist filters models for provider", async () => {
 test("model blacklist excludes specific models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -172,7 +172,7 @@ test("model blacklist excludes specific models", async () => {
 test("custom model alias via config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -207,7 +207,7 @@ test("custom model alias via config", async () => {
 test("custom provider with npm package", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -250,7 +250,7 @@ test("custom provider with npm package", async () => {
 test("env variable takes precedence, config merges options", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -282,7 +282,7 @@ test("env variable takes precedence, config merges options", async () => {
 test("getModel returns model for valid provider/model", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -309,7 +309,7 @@ test("getModel returns model for valid provider/model", async () => {
 test("getModel throws ModelNotFoundError for invalid model", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -323,7 +323,7 @@ test("getModel throws ModelNotFoundError for invalid model", async () => {
       Env.set("ANTHROPIC_API_KEY", "test-api-key")
     },
     fn: async () => {
-      expect(Provider.getModel("anthropic", "nonexistent-model")).rejects.toThrow()
+      await expect(Provider.getModel("anthropic", "nonexistent-model")).rejects.toThrow()
     },
   })
 })
@@ -331,7 +331,7 @@ test("getModel throws ModelNotFoundError for invalid model", async () => {
 test("getModel throws ModelNotFoundError for invalid provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -342,7 +342,7 @@ test("getModel throws ModelNotFoundError for invalid provider", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      expect(Provider.getModel("nonexistent-provider", "some-model")).rejects.toThrow()
+      await expect(Provider.getModel("nonexistent-provider", "some-model")).rejects.toThrow()
     },
   })
 })
@@ -362,7 +362,7 @@ test("parseModel handles model IDs with slashes", () => {
 test("defaultModel returns first available model when no config set", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -386,7 +386,7 @@ test("defaultModel returns first available model when no config set", async () =
 test("defaultModel respects config model setting", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -411,7 +411,7 @@ test("defaultModel respects config model setting", async () => {
 test("provider with baseURL from config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -450,7 +450,7 @@ test("provider with baseURL from config", async () => {
 test("model cost defaults to zero when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -491,7 +491,7 @@ test("model cost defaults to zero when not specified", async () => {
 test("model options are merged from existing model", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -526,7 +526,7 @@ test("model options are merged from existing model", async () => {
 test("provider removed when all models filtered out", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -554,7 +554,7 @@ test("provider removed when all models filtered out", async () => {
 test("closest finds model by partial match", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -579,7 +579,7 @@ test("closest finds model by partial match", async () => {
 test("closest returns undefined for nonexistent provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -599,7 +599,7 @@ test("closest returns undefined for nonexistent provider", async () => {
 test("getModel uses realIdByKey for aliased models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -637,7 +637,7 @@ test("getModel uses realIdByKey for aliased models", async () => {
 test("provider api field sets model api.url", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -676,7 +676,7 @@ test("provider api field sets model api.url", async () => {
 test("explicit baseURL overrides api field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -715,7 +715,7 @@ test("explicit baseURL overrides api field", async () => {
 test("model inherits properties from existing database model", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -751,7 +751,7 @@ test("model inherits properties from existing database model", async () => {
 test("disabled_providers prevents loading even with env var", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -775,7 +775,7 @@ test("disabled_providers prevents loading even with env var", async () => {
 test("enabled_providers with empty array allows no providers", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -800,7 +800,7 @@ test("enabled_providers with empty array allows no providers", async () => {
 test("whitelist and blacklist can be combined", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -833,7 +833,7 @@ test("whitelist and blacklist can be combined", async () => {
 test("model modalities default correctly", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -870,7 +870,7 @@ test("model modalities default correctly", async () => {
 test("model with custom cost values", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -915,7 +915,7 @@ test("model with custom cost values", async () => {
 test("getSmallModel returns appropriate small model", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -939,7 +939,7 @@ test("getSmallModel returns appropriate small model", async () => {
 test("getSmallModel respects config small_model override", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -980,7 +980,7 @@ test("provider.sort prioritizes preferred models", () => {
 test("multiple providers can be configured simultaneously", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1015,7 +1015,7 @@ test("multiple providers can be configured simultaneously", async () => {
 test("provider with custom npm package", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1057,7 +1057,7 @@ test("provider with custom npm package", async () => {
 test("model alias name defaults to alias key when id differs", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1090,7 +1090,7 @@ test("model alias name defaults to alias key when id differs", async () => {
 test("provider with multiple env var options only includes apiKey when single env", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1132,7 +1132,7 @@ test("provider with multiple env var options only includes apiKey when single en
 test("provider with single env var includes apiKey automatically", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1174,7 +1174,7 @@ test("provider with single env var includes apiKey automatically", async () => {
 test("model cost overrides existing cost values", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1211,7 +1211,7 @@ test("model cost overrides existing cost values", async () => {
 test("completely new provider not in database can be configured", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1261,7 +1261,7 @@ test("completely new provider not in database can be configured", async () => {
 test("disabled_providers and enabled_providers interaction", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1295,7 +1295,7 @@ test("disabled_providers and enabled_providers interaction", async () => {
 test("model with tool_call false", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1330,7 +1330,7 @@ test("model with tool_call false", async () => {
 test("model defaults tool_call to true when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1365,7 +1365,7 @@ test("model defaults tool_call to true when not specified", async () => {
 test("model headers are preserved", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1408,7 +1408,7 @@ test("model headers are preserved", async () => {
 test("provider env fallback - second env var used if first missing", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1448,7 +1448,7 @@ test("provider env fallback - second env var used if first missing", async () =>
 test("getModel returns consistent results", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1474,7 +1474,7 @@ test("getModel returns consistent results", async () => {
 test("provider name defaults to id when not in database", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1509,7 +1509,7 @@ test("provider name defaults to id when not in database", async () => {
 test("ModelNotFoundError includes suggestions for typos", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1537,7 +1537,7 @@ test("ModelNotFoundError includes suggestions for typos", async () => {
 test("ModelNotFoundError for provider includes suggestions", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1565,7 +1565,7 @@ test("ModelNotFoundError for provider includes suggestions", async () => {
 test("getProvider returns undefined for nonexistent provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1585,7 +1585,7 @@ test("getProvider returns undefined for nonexistent provider", async () => {
 test("getProvider returns provider info", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1609,7 +1609,7 @@ test("getProvider returns provider info", async () => {
 test("closest returns undefined when no partial match found", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1632,7 +1632,7 @@ test("closest returns undefined when no partial match found", async () => {
 test("closest checks multiple query terms in order", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1657,7 +1657,7 @@ test("closest checks multiple query terms in order", async () => {
 test("model limit defaults to zero when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1694,7 +1694,7 @@ test("model limit defaults to zero when not specified", async () => {
 test("provider options are deeply merged", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1731,7 +1731,7 @@ test("provider options are deeply merged", async () => {
 test("custom model inherits npm package from models.dev provider config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1767,7 +1767,7 @@ test("custom model inherits npm package from models.dev provider config", async 
 test("custom model inherits api.url from models.dev provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
+      await NodeShim.write(
         path.join(dir, "opendeepseek.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
@@ -1807,3 +1807,4 @@ test("custom model inherits api.url from models.dev provider", async () => {
     },
   })
 })
+

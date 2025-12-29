@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "vitest"
 import path from "path"
 import { PatchTool } from "../../src/tool/patch"
 import { Instance } from "../../src/project/instance"
@@ -22,7 +22,7 @@ describe("tool.patch", () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
-        expect(patchTool.execute({ patchText: "" }, ctx)).rejects.toThrow("patchText is required")
+        await expect(patchTool.execute({ patchText: "" }, ctx)).rejects.toThrow("patchText is required")
       },
     })
   })
@@ -31,7 +31,7 @@ describe("tool.patch", () => {
     await Instance.provide({
       directory: "/tmp",
       fn: async () => {
-        expect(patchTool.execute({ patchText: "invalid patch" }, ctx)).rejects.toThrow("Failed to parse patch")
+        await expect(patchTool.execute({ patchText: "invalid patch" }, ctx)).rejects.toThrow("Failed to parse patch")
       },
     })
   })
@@ -43,7 +43,7 @@ describe("tool.patch", () => {
         const emptyPatch = `*** Begin Patch
 *** End Patch`
 
-        expect(patchTool.execute({ patchText: emptyPatch }, ctx)).rejects.toThrow("No file changes found in patch")
+        await expect(patchTool.execute({ patchText: emptyPatch }, ctx)).rejects.toThrow("No file changes found in patch")
       },
     })
   })
@@ -193,6 +193,9 @@ describe("tool.patch", () => {
 *** End Patch`
 
         await patchTool.execute({ patchText: patchText1 }, ctx)
+
+        // Small delay to avoid racy filesystem timestamp on some platforms
+        await new Promise((res) => setTimeout(res, 10))
 
         // Now create an update patch
         const patchText2 = `*** Begin Patch
