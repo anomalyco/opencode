@@ -12,6 +12,7 @@ import { lazy } from "@/util/lazy"
 import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
 import { Flag } from "@/flag/flag"
+import { readdir } from "fs/promises"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -78,9 +79,11 @@ export namespace FileWatcher {
         .text()
         .then((x) => path.resolve(Instance.worktree, x.trim()))
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
+        const gitDirContents = await readdir(vcsDir).catch(() => [])
+        const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
         subs.push(
           await watcher().subscribe(vcsDir, subscribe, {
-            ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
+            ignore: ignoreList,
             backend,
           }),
         )
