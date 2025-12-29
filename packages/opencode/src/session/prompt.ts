@@ -227,6 +227,18 @@ export namespace SessionPrompt {
     return
   }
 
+  export function unqueue(sessionID: string) {
+    log.info("unqueue", { sessionID })
+    const s = state()
+    const match = s[sessionID]
+    if (!match) return
+
+    for (const callback of match.callbacks) {
+      callback.reject()
+    }
+    match.callbacks = []
+  }
+
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const abort = start(sessionID)
     if (!abort) {
@@ -1279,8 +1291,48 @@ export namespace SessionPrompt {
    * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
    */
 
+  async function handleUnqueue(sessionID: string) {
+    const messages = []
+    for await (const msg of MessageV2.stream(sessionID)) {
+      messages.push(msg)
+    }
+
+    const pending = messages.findLast((x) => x.info.role === "assistant" && !x.info.time.completed)?.info.id
+    const queued = pending ? messages.filter((x) => x.info.role === "user" && x.info.id > pending) : []
+
+    for (const msg of queued) {
+      await Session.removeMessage({ sessionID, messageID: msg.info.id })
+    }
+
+    unqueue(sessionID)
+
+    return {
+      info: {
+        id: "",
+        sessionID,
+        role: "assistant" as const,
+        parentID: "",
+        mode: "",
+        time: { created: 0 },
+        agent: "",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        path: { cwd: "", root: "" },
+        modelID: "",
+        providerID: "",
+      },
+      parts: [],
+    }
+  }
+
   export async function command(input: CommandInput) {
     log.info("command", input)
+
+    // Special handling for unqueue command
+    if (input.command === "unqueue") {
+      return await handleUnqueue(input.sessionID)
+    }
+
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
