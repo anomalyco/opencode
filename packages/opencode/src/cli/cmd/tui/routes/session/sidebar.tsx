@@ -21,7 +21,7 @@ export function Sidebar(props: { sessionID: string }) {
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
-  const [expanded, setExpanded] = createStore({
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({
     mcp: true,
     diff: true,
     todo: true,
@@ -66,7 +66,7 @@ export function Sidebar(props: { sessionID: string }) {
   const sdk = useSDK()
 
   const [pluginPanels] = createResource(
-    () => sync.data.session,
+    () => props.sessionID,
     async () => {
       try {
         const result = await sdk.client.plugin.sidebar()
@@ -279,37 +279,57 @@ export function Sidebar(props: { sessionID: string }) {
               </box>
             </Show>
             <For each={pluginPanels() ?? []}>
-              {(panel) => (
-                <Show when={panel.items.length > 0}>
-                  <box>
-                    <text fg={theme.text}>
-                      <b>{panel.title}</b>
-                    </text>
-                    <For each={panel.items}>
-                      {(item) => (
-                        <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted}>{item.label}</text>
-                          <Show when={item.value}>
-                            <text
-                              fg={
-                                item.status === "success"
-                                  ? theme.success
-                                  : item.status === "warning"
-                                    ? theme.warning
-                                    : item.status === "error"
-                                      ? theme.error
-                                      : theme.textMuted
-                              }
-                            >
-                              {item.value}
-                            </text>
+              {(panel) => {
+                const panelKey = `plugin_${panel.id}`
+                const isExpanded = () => expanded[panelKey] ?? true
+                return (
+                  <Show when={panel.items.length > 0}>
+                    <box>
+                      <box
+                        flexDirection="row"
+                        gap={1}
+                        onMouseDown={() => panel.items.length > 2 && setExpanded(panelKey, !isExpanded())}
+                      >
+                        <Show when={panel.items.length > 2}>
+                          <text fg={theme.text}>{isExpanded() ? "▼" : "▶"}</text>
+                        </Show>
+                        <text fg={theme.text}>
+                          <b>{panel.title}</b>
+                          <Show when={!isExpanded()}>
+                            <span style={{ fg: theme.textMuted }}> ({panel.items.length} items)</span>
                           </Show>
-                        </box>
-                      )}
-                    </For>
-                  </box>
-                </Show>
-              )}
+                        </text>
+                      </box>
+                      <Show when={panel.items.length <= 2 || isExpanded()}>
+                        <For each={panel.items}>
+                          {(item) => (
+                            <box flexDirection="row" gap={1} justifyContent="space-between">
+                              <text fg={theme.textMuted}>{item.label}</text>
+                              <Show when={item.value}>
+                                <text
+                                  fg={
+                                    item.status === "success"
+                                      ? theme.success
+                                      : item.status === "warning"
+                                        ? theme.warning
+                                        : item.status === "error"
+                                          ? theme.error
+                                          : item.status === "info"
+                                            ? theme.info
+                                            : theme.textMuted
+                                  }
+                                >
+                                  {item.value}
+                                </text>
+                              </Show>
+                            </box>
+                          )}
+                        </For>
+                      </Show>
+                    </box>
+                  </Show>
+                )
+              }}
             </For>
           </box>
         </scrollbox>

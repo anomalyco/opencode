@@ -79,13 +79,20 @@ export namespace Plugin {
 
   export async function getSidebarPanels() {
     const { hooks } = await state()
-    const panels: import("@opencode-ai/plugin").SidebarPanel[] = []
+    const panels: Array<{
+      id: string
+      title: string
+      items: Array<{ label: string; value?: string; status?: "success" | "warning" | "error" | "info" }>
+    }> = []
     for (const hook of hooks) {
       const sidebar = hook.sidebar
       if (!sidebar) continue
       try {
         const resolved = typeof sidebar === "function" ? sidebar() : sidebar
-        panels.push(...resolved)
+        for (const panel of resolved) {
+          const items = typeof panel.items === "function" ? panel.items() : panel.items
+          panels.push({ id: panel.id, title: panel.title, items })
+        }
       } catch (e) {
         log.warn("sidebar panel failed", { error: e })
       }
