@@ -149,6 +149,7 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
+        useThread: true, // Enable threaded rendering to avoid blocking the JS event loop
         useKittyKeyboard: {},
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
