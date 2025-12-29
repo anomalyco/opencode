@@ -205,9 +205,9 @@ export function Prompt(props: PromptProps) {
       local.model.set(msg.model)
     }
 
-    // Set effort from last message
-    if (msg.thinking?.effort) {
-      local.effort.set(msg.thinking.effort)
+    // Set variant from last message
+    if (msg.variant) {
+      local.variant.set(msg.variant)
     }
   })
 
@@ -589,7 +589,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
-    const thinking = showEffort() ? { effort: local.effort.current() } : undefined
+    const variant = local.variant.current()
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -618,7 +618,7 @@ export function Prompt(props: PromptProps) {
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
-        thinking,
+        variant,
       })
     } else {
       sdk.client.session.prompt({
@@ -627,7 +627,7 @@ export function Prompt(props: PromptProps) {
         messageID,
         agent: local.agent.current().name,
         model: selectedModel,
-        thinking,
+        variant,
         parts: [
           {
             id: Identifier.ascending("part"),
@@ -748,19 +748,11 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(local.agent.current().name)
   })
 
-  const showEffort = createMemo(() => {
-    if (!local.model.parsed().reasoning) return false
-    if (local.effort.current() === "default") return false
-    const modelID = local.model.current()?.modelID?.toLowerCase() ?? ""
-    // until models.dev has better reasoning constructs, let's just blacklist models that cant have toggled reasoning
-    if (
-      modelID.includes("deepseek") ||
-      modelID.includes("minimax") ||
-      modelID.includes("glm") ||
-      modelID.includes("big-pickle")
-    )
-      return false
-    return true
+  const showVariant = createMemo(() => {
+    const variants = local.variant.list()
+    if (variants.length === 0) return false
+    const current = local.variant.current()
+    return !!current
   })
 
   const spinnerDef = createMemo(() => {
@@ -888,10 +880,10 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
-                if (keybind.match("effort_cycle", e)) {
+                if (keybind.match("variant_cycle", e)) {
                   e.preventDefault()
-                  if (!local.model.parsed().reasoning) return
-                  local.effort.cycle()
+                  if (local.variant.list().length === 0) return
+                  local.variant.cycle()
                   return
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
@@ -1009,10 +1001,10 @@ export function Prompt(props: PromptProps) {
                     {local.model.parsed().model}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <Show when={showEffort()}>
+                  <Show when={showVariant()}>
                     <text fg={theme.textMuted}>·</text>
                     <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.effort.current()}</span>
+                      <span style={{ fg: theme.warning, bold: true }}>{local.variant.current()}</span>
                     </text>
                   </Show>
                 </box>

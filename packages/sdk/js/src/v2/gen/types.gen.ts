@@ -90,9 +90,7 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
-  thinking?: {
-    effort: "default" | "medium" | "high"
-  }
+  variant?: string
 }
 
 export type ProviderAuthError = {
@@ -973,9 +971,9 @@ export type KeybindsConfig = {
    */
   agent_cycle_reverse?: string
   /**
-   * Cycle thinking effort level
+   * Cycle model variants
    */
-  effort_cycle?: string
+  variant_cycle?: string
   /**
    * Clear input field
    */
@@ -1719,6 +1717,11 @@ export type Command = {
   subtask?: boolean
 }
 
+export type Variant = {
+  disabled: boolean
+  [key: string]: unknown | boolean
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -1782,6 +1785,9 @@ export type Model = {
     [key: string]: string
   }
   release_date: string
+  variants?: {
+    [key: string]: Variant
+  }
 }
 
 export type Provider = {
@@ -2951,9 +2957,7 @@ export type SessionPromptData = {
       [key: string]: boolean
     }
     system?: string
-    thinking?: {
-      effort: "default" | "medium" | "high"
-    }
+    variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3137,9 +3141,7 @@ export type SessionPromptAsyncData = {
       [key: string]: boolean
     }
     system?: string
-    thinking?: {
-      effort: "default" | "medium" | "high"
-    }
+    variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3183,9 +3185,7 @@ export type SessionCommandData = {
     model?: string
     arguments: string
     command: string
-    thinking?: {
-      effort: "default" | "medium" | "high"
-    }
+    variant?: string
   }
   path: {
     /**

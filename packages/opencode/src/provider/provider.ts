@@ -543,6 +543,7 @@ export namespace Provider {
         interleaved: model.interleaved ?? false,
       },
       release_date: model.release_date,
+      variants: {},
     }
 
     m.variants = mapValues(ProviderTransform.variants(m), (v) => ({ disabled: false, ...v }))

@@ -51,25 +51,72 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
-    const effort = iife(() => {
-      const [effortStore, setEffortStore] = createStore<{
-        current: "default" | "medium" | "high"
+    const variant = iife(() => {
+      // Store variant selection per model (providerID/modelID)
+      const [variantStore, setVariantStore] = createStore<{
+        model: Record<string, string | undefined>
       }>({
-        current: "default",
+        model: {},
       })
+
+      const file = Bun.file(path.join(Global.Path.state, "variant.json"))
+
+      function save() {
+        Bun.write(file, JSON.stringify(variantStore.model))
+      }
+
+      file
+        .json()
+        .then((x) => {
+          if (typeof x === "object" && x !== null) {
+            setVariantStore("model", x)
+          }
+        })
+        .catch(() => {})
+
+      function modelKey() {
+        const m = model.current()
+        return m ? `${m.providerID}/${m.modelID}` : undefined
+      }
+
+      function list() {
+        const m = model.current()
+        if (!m) return []
+        const provider = sync.data.provider.find((x) => x.id === m.providerID)
+        const info = provider?.models[m.modelID]
+        if (!info?.variants) return []
+        return Object.entries(info.variants)
+          .filter(([_, v]) => !v.disabled)
+          .map(([name]) => name)
+      }
 
       return {
         current() {
-          return effortStore.current
+          const key = modelKey()
+          return key ? variantStore.model[key] : undefined
         },
-        set(value: "default" | "medium" | "high") {
-          setEffortStore("current", value)
+        list,
+        set(value: string | undefined) {
+          const key = modelKey()
+          if (!key) return
+          setVariantStore("model", key, value)
+          save()
         },
         cycle() {
-          const levels: Array<"default" | "medium" | "high"> = ["default", "medium", "high"]
-          const currentIndex = levels.indexOf(effortStore.current)
-          const nextIndex = (currentIndex + 1) % levels.length
-          setEffortStore("current", levels[nextIndex])
+          const variants = list()
+          if (variants.length === 0) return
+          const current = this.current()
+          if (!current) {
+            this.set(variants[0])
+            return
+          }
+          const index = variants.indexOf(current)
+          if (index === -1 || index === variants.length - 1) {
+            // Not found or at end - clear selection
+            this.set(undefined)
+            return
+          }
+          this.set(variants[index + 1])
         },
       }
     })
@@ -358,7 +405,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
-      effort,
+      variant,
     }
     return result
   },

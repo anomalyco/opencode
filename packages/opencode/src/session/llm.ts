@@ -74,12 +74,13 @@ export namespace LLM {
     }
 
     const provider = await Provider.getProvider(input.model.providerID)
+    const variant = input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : undefined
     const options = pipe(
       ProviderTransform.options(input.model, input.sessionID, provider.options),
       mergeDeep(input.small ? ProviderTransform.smallOptions(input.model) : {}),
       mergeDeep(input.model.options),
       mergeDeep(input.agent.options),
-      mergeDeep(input.user.thinking ? ProviderTransform.thinking(input.model, input.user.thinking) : {}),
+      mergeDeep(variant && !variant.disabled ? variant : {}),
     )
 
     const params = await Plugin.trigger(

@@ -250,6 +250,9 @@ export namespace ProviderTransform {
   export function variants(model: Provider.Model) {
     if (!model.capabilities.reasoning) return {}
 
+    const id = model.id.toLowerCase()
+    if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
+
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
         if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("grok-4")) return {}
@@ -272,9 +275,9 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/azure":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
-        if (model.id === "o1-mini") return {}
+        if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
-        if (model.id.includes("gpt-5")) {
+        if (id.includes("gpt-5")) {
           azureEfforts.unshift("minimal")
         }
         return Object.fromEntries(
@@ -289,7 +292,7 @@ export namespace ProviderTransform {
         )
       case "@ai-sdk/openai":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
-        if (model.id === "gpt-5-pro") return {}
+        if (id === "gpt-5-pro") return {}
         const openaiEfforts = ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
         if (model.release_date >= "2025-11-13") {
           openaiEfforts.unshift("none")
@@ -343,7 +346,7 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
       case "@ai-sdk/google":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
-        if (model.id.includes("2.5")) {
+        if (id.includes("2.5")) {
           return {
             high: {
               thinkingConfig: {

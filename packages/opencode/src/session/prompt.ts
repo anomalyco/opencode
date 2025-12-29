@@ -90,7 +90,7 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     system: z.string().optional(),
-    thinking: MessageV2.Thinking.optional(),
+    variant: z.string().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -728,7 +728,7 @@ export namespace SessionPrompt {
       agent: agent.name,
       model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
       system: input.system,
-      thinking: input.thinking,
+      variant: input.variant,
     }
 
     const parts = await Promise.all(
@@ -1269,7 +1269,7 @@ export namespace SessionPrompt {
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
-    thinking: MessageV2.Thinking.optional(),
+    variant: z.string().optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
@@ -1372,7 +1372,7 @@ export namespace SessionPrompt {
       model,
       agent: agentName,
       parts,
-      thinking: input.thinking,
+      variant: input.variant,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {
