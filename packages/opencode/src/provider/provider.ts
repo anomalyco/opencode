@@ -169,7 +169,7 @@ export namespace Provider {
       const awsProfile = Env.get("AWS_PROFILE")
       const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
       const awsRegion = Env.get("AWS_REGION")
-      
+
       const awsBearerToken = iife(() => {
         const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
         if (envToken) return envToken
@@ -179,7 +179,7 @@ export namespace Provider {
         }
         return undefined
       })
-          
+
       if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
       const defaultRegion = awsRegion ?? "us-east-1"
