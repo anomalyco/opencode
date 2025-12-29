@@ -569,6 +569,13 @@ export namespace SessionPrompt {
     return Provider.defaultModel()
   }
 
+  async function lastAgent(sessionID: string) {
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role === "user" && item.info.agent) return item.info.agent
+    }
+    return Agent.defaultAgent()
+  }
+
   async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
@@ -715,7 +722,7 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+    const agent = await Agent.get(input.agent ?? (await lastAgent(input.sessionID)))
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
