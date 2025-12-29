@@ -8,6 +8,7 @@ import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { spawn } from "node:child_process"
+import { randomBytes } from "node:crypto"
 
 type GitHubAuthor = {
   login: string
@@ -231,11 +232,13 @@ function createOpencode() {
   const host = "127.0.0.1"
   const port = 4096
   const url = `http://${host}:${port}`
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])
+  // Generate a random token for secure communication with the local server
+  const serverToken = randomBytes(32).toString('hex')
+  const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`, `--auth-token=${serverToken}`])
   const client = createOpencodeClient({ baseUrl: url })
 
   return {
-    server: { url, close: () => proc.kill() },
+    server: { url, token: serverToken, close: () => proc.kill() },
     client,
   }
 }
@@ -506,7 +509,13 @@ async function subscribeSessionEvents() {
     websearch: ["Search", "\x1b[2m\x1b[1m"],
   }
 
-  const response = await fetch(`${server.url}/event`)
+  // Validate server URL to prevent SSRF attacks
+  const eventUrl = new URL("/event", server.url)
+  const response = await fetch(eventUrl.toString(), {
+    headers: {
+      Authorization: `Bearer ${server.token}`,
+    },
+  })
   if (!response.body) throw new Error("No response body")
 
   const reader = response.body.getReader()
