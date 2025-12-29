@@ -1,0 +1,437 @@
+---
+title: Hooks
+description: Hook into OpenCode events and customize behavior.
+---
+
+Hooks allow plugins to intercept and modify OpenCode's behavior at various points. Each hook receives input parameters and can modify output parameters. For information on creating plugins, see [Plugins](/docs/plugins/).
+
+| Hook                                      | Description                                                 |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| [Event hooks](#event-hooks)               | React to session, file, message, and tool events            |
+| [Tool hooks](#tool-hooks)                 | Intercept tool execution and add custom tools               |
+| [Chat hooks](#chat-hooks)                 | Modify messages and LLM parameters                          |
+| [Permission hooks](#permission-hooks)     | Override permission decisions                               |
+| [Config hook](#config-hook)               | Modify configuration at startup                             |
+| [Auth hook](#auth-hook)                   | Add custom authentication flows for providers               |
+| [Experimental hooks](#experimental-hooks) | Customize compaction, transform messages and system prompts |
+
+---
+
+## Event hooks
+
+Subscribe to events emitted by OpenCode. The `event` hook receives all events and lets you react to them.
+
+```ts title=".opencode/plugin/events.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const EventPlugin: Plugin = async (ctx) => {
+  return {
+    event: async ({ event }) => {
+      if (event.type === "session.idle") {
+        // Session finished processing
+      }
+    },
+  }
+}
+```
+
+**Available events:**
+
+- **Command**: `command.executed`
+- **File**: `file.edited`, `file.watcher.updated`
+- **Installation**: `installation.updated`
+- **LSP**: `lsp.client.diagnostics`, `lsp.updated`
+- **Message**: `message.part.removed`, `message.part.updated`, `message.removed`, `message.updated`
+- **Permission**: `permission.replied`, `permission.updated`
+- **Server**: `server.connected`
+- **Session**: `session.created`, `session.compacted`, `session.deleted`, `session.diff`, `session.error`, `session.idle`, `session.status`, `session.updated`
+- **Todo**: `todo.updated`
+- **Tool**: `tool.execute.after`, `tool.execute.before`
+- **TUI**: `tui.prompt.append`, `tui.command.execute`, `tui.toast.show`
+
+---
+
+## Tool hooks
+
+Intercept tool execution before or after it runs, or add custom tools.
+
+**`tool.execute.before`** — Modify tool arguments or prevent execution by throwing an error.
+
+```ts title=".opencode/plugin/tool-before.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ToolBeforePlugin: Plugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      // input: { tool: string, sessionID: string, callID: string }
+      // output: { args: any }
+
+      // Prevent reading .env files
+      if (input.tool === "read" && output.args.filePath.includes(".env")) {
+        throw new Error("Cannot read .env files")
+      }
+
+      // Modify arguments
+      if (input.tool === "bash") {
+        output.args.timeout = 30000
+      }
+    },
+  }
+}
+```
+
+**`tool.execute.after`** — Modify tool output after execution.
+
+```ts title=".opencode/plugin/tool-after.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ToolAfterPlugin: Plugin = async (ctx) => {
+  return {
+    "tool.execute.after": async (input, output) => {
+      // input: { tool: string, sessionID: string, callID: string }
+      // output: { title: string, output: string, metadata: any }
+
+      // Redact sensitive data from output
+      output.output = output.output.replace(/API_KEY=\w+/g, "API_KEY=***")
+    },
+  }
+}
+```
+
+**`tool`** — Add custom tools that the AI can call.
+
+```ts title=".opencode/plugin/custom-tools.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolsPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "This is a custom tool",
+        args: {
+          foo: tool.schema.string(),
+        },
+        async execute(args, ctx) {
+          return `Hello ${args.foo}!`
+        },
+      }),
+    },
+  }
+}
+```
+
+The `tool` helper creates a custom tool with:
+
+- `description`: What the tool does (shown to the AI)
+- `args`: Zod schema for the tool's arguments
+- `execute`: Function that runs when the tool is called
+
+---
+
+## Chat hooks
+
+**`chat.message`** — Modify user messages before they're sent to the AI.
+
+```ts title=".opencode/plugin/chat-message.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ChatMessagePlugin: Plugin = async (ctx) => {
+  return {
+    "chat.message": async (input, output) => {
+      // input: { sessionID, agent?, model?, messageID? }
+      // output: { message: UserMessage, parts: Part[] }
+
+      // Add context to every message
+      output.parts.push({
+        type: "text",
+        text: "\n\nRemember to follow our coding standards.",
+      })
+    },
+  }
+}
+```
+
+**`chat.params`** — Modify LLM parameters like temperature before requests.
+
+```ts title=".opencode/plugin/chat-params.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ChatParamsPlugin: Plugin = async (ctx) => {
+  return {
+    "chat.params": async (input, output) => {
+      // input: { sessionID, agent, model, provider, message }
+      // output: { temperature, topP, topK, options }
+
+      output.temperature = 0.2
+      output.options.maxTokens = 4096
+    },
+  }
+}
+```
+
+---
+
+## Permission hooks
+
+**`permission.ask`** — Override permission decisions for tool execution.
+
+```ts title=".opencode/plugin/permission.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const PermissionPlugin: Plugin = async (ctx) => {
+  return {
+    "permission.ask": async (input, output) => {
+      // input: Permission object with tool, args, etc.
+      // output: { status: "ask" | "deny" | "allow" }
+
+      // Auto-allow read operations
+      if (input.tool === "read") {
+        output.status = "allow"
+      }
+
+      // Auto-deny dangerous operations
+      if (input.tool === "bash" && input.args.command.includes("rm -rf")) {
+        output.status = "deny"
+      }
+    },
+  }
+}
+```
+
+---
+
+## Config hook
+
+Modify the OpenCode configuration at startup.
+
+```ts title=".opencode/plugin/config.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ConfigPlugin: Plugin = async (ctx) => {
+  return {
+    config: async (config) => {
+      // Modify config in place
+      config.disabled_tools = [...(config.disabled_tools ?? []), "bash"]
+    },
+  }
+}
+```
+
+---
+
+## Auth hook
+
+Add custom authentication flows for LLM providers. This is useful for enterprise identity providers, custom OAuth flows, or self-hosted LLM services.
+
+```ts title=".opencode/plugin/auth.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const AuthPlugin: Plugin = async (ctx) => {
+  return {
+    auth: {
+      provider: "my-provider",
+      methods: [
+        {
+          type: "oauth",
+          label: "Sign in with SSO",
+          async authorize() {
+            return {
+              url: "https://auth.example.com/authorize?client_id=...",
+              instructions: "Complete sign-in in your browser",
+              method: "auto",
+              async callback() {
+                const token = await pollForToken()
+                return {
+                  type: "success",
+                  access: token.access_token,
+                  refresh: token.refresh_token,
+                  expires: Date.now() + token.expires_in * 1000,
+                }
+              },
+            }
+          },
+        },
+        {
+          type: "api",
+          label: "Enter API key",
+        },
+      ],
+    },
+  }
+}
+```
+
+The `auth` hook registers a custom authentication flow that appears in the `/connect` command.
+
+**Authentication methods:**
+
+- **`oauth`**: Browser-based OAuth 2.0 flow
+- **`api`**: Direct API key entry
+
+**OAuth callback methods:**
+
+- **`auto`**: Plugin polls/waits for the callback automatically
+- **`code`**: User pastes an authorization code
+
+```ts title=".opencode/plugin/oauth-code.ts"
+{
+  type: "oauth",
+  label: "Sign in",
+  async authorize() {
+    return {
+      url: "https://auth.example.com/authorize",
+      instructions: "Copy the code after signing in",
+      method: "code",
+      async callback(code) {
+        const response = await fetch("https://auth.example.com/token", {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        })
+        const data = await response.json()
+        return { type: "success", key: data.api_key }
+      },
+    }
+  },
+}
+```
+
+**Custom prompts** — Collect additional information before authentication:
+
+```ts title=".opencode/plugin/auth-prompts.ts"
+{
+  type: "api",
+  label: "Enter API key",
+  prompts: [
+    {
+      type: "select",
+      key: "region",
+      message: "Select region",
+      options: [
+        { label: "US East", value: "us-east-1" },
+        { label: "EU West", value: "eu-west-1" },
+      ],
+    },
+    {
+      type: "text",
+      key: "endpoint",
+      message: "Custom endpoint",
+      placeholder: "https://api.example.com",
+      condition: (inputs) => inputs.region === "custom",
+    },
+  ],
+  async authorize(inputs) {
+    // inputs: { region: "us-east-1", endpoint: "..." }
+    return { type: "success", key: inputs.apiKey }
+  },
+}
+```
+
+**Credential loader** — Transform stored credentials before use:
+
+```ts title=".opencode/plugin/auth-loader.ts"
+{
+  auth: {
+    provider: "my-provider",
+    async loader(getAuth, providerInfo) {
+      const auth = await getAuth()
+      if (auth?.type === "oauth" && auth.expires < Date.now()) {
+        const newToken = await refreshToken(auth.refresh)
+        return { apiKey: newToken.access_token }
+      }
+      return { apiKey: auth?.access }
+    },
+    methods: [/* ... */],
+  },
+}
+```
+
+---
+
+## Experimental hooks
+
+These hooks may change in future versions.
+
+**`experimental.session.compacting`** — Customize the context included when a session is compacted.
+
+```ts title=".opencode/plugin/compaction.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CompactionPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.session.compacting": async (input, output) => {
+      // input: { sessionID: string }
+      // output: { context: string[], prompt?: string }
+
+      output.context.push(`
+## Custom Context
+
+Include any state that should persist across compaction:
+- Current task status
+- Important decisions made
+`)
+    },
+  }
+}
+```
+
+Set `output.prompt` to replace the entire compaction prompt:
+
+```ts
+output.prompt = `
+You are generating a continuation prompt.
+Summarize the current task and next steps.
+`
+```
+
+**`experimental.chat.messages.transform`** — Transform the message history before sending to the LLM.
+
+```ts title=".opencode/plugin/messages-transform.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MessagesTransformPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.chat.messages.transform": async (input, output) => {
+      // output: { messages: Array<{ info: Message, parts: Part[] }> }
+
+      // Filter or modify messages
+      output.messages = output.messages.filter(
+        (m) => !m.parts.some((p) => p.type === "text" && p.text.includes("SECRET")),
+      )
+    },
+  }
+}
+```
+
+**`experimental.chat.system.transform`** — Transform the system prompt before sending to the LLM.
+
+```ts title=".opencode/plugin/system-transform.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const SystemTransformPlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.chat.system.transform": async (input, output) => {
+      // output: { system: string[] }
+
+      output.system.push("Always respond in formal English.")
+    },
+  }
+}
+```
+
+**`experimental.text.complete`** — Modify text completion output.
+
+```ts title=".opencode/plugin/text-complete.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const TextCompletePlugin: Plugin = async (ctx) => {
+  return {
+    "experimental.text.complete": async (input, output) => {
+      // input: { sessionID, messageID, partID }
+      // output: { text: string }
+
+      // Post-process AI output
+      output.text = output.text.trim()
+    },
+  }
+}
+```

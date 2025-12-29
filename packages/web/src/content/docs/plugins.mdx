@@ -66,8 +66,7 @@ Duplicate npm packages with the same name and version are loaded once. However, 
 
 ## Create a plugin
 
-A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
-functions. Each function receives a context object and returns a hooks object.
+A plugin is a **JavaScript/TypeScript module** that exports one or more plugin functions. Each function receives a context object and returns a [hooks](/docs/hooks/) object.
 
 ---
 
@@ -89,7 +88,7 @@ The plugin function receives:
 - `directory`: The current working directory.
 - `worktree`: The git worktree path.
 - `client`: An opencode SDK client for interacting with the AI.
-- `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) for executing commands.
+- `$`: Bun's [shell API](https://bun.sh/docs/runtime/shell) for executing commands.
 
 ---
 
@@ -109,75 +108,9 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ---
 
-### Events
-
-Plugins can subscribe to events as seen below in the Examples section. Here is a list of the different events available.
-
-#### Command Events
-
-- `command.executed`
-
-#### File Events
-
-- `file.edited`
-- `file.watcher.updated`
-
-#### Installation Events
-
-- `installation.updated`
-
-#### LSP Events
-
-- `lsp.client.diagnostics`
-- `lsp.updated`
-
-#### Message Events
-
-- `message.part.removed`
-- `message.part.updated`
-- `message.removed`
-- `message.updated`
-
-#### Permission Events
-
-- `permission.replied`
-- `permission.updated`
-
-#### Server Events
-
-- `server.connected`
-
-#### Session Events
-
-- `session.created`
-- `session.compacted`
-- `session.deleted`
-- `session.diff`
-- `session.error`
-- `session.idle`
-- `session.status`
-- `session.updated`
-
-#### Todo Events
-
-- `todo.updated`
-
-#### Tool Events
-
-- `tool.execute.after`
-- `tool.execute.before`
-
-#### TUI Events
-
-- `tui.prompt.append`
-- `tui.command.execute`
-- `tui.toast.show`
-
----
-
 ## Examples
 
-Here are some examples of plugins you can use to extend opencode.
+Here are some examples of plugins you can use to extend OpenCode.
 
 ---
 
@@ -204,7 +137,7 @@ We are using `osascript` to run AppleScript on macOS. Here we are using it to se
 
 ### .env protection
 
-Prevent opencode from reading `.env` files:
+Prevent OpenCode from reading `.env` files:
 
 ```javascript title=".opencode/plugin/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -222,7 +155,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Custom tools
 
-Plugins can also add custom tools to opencode:
+Plugins can also add custom tools to OpenCode:
 
 ```ts title=".opencode/plugin/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -244,65 +177,16 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-The `tool` helper creates a custom tool that opencode can call. It takes a Zod schema function and returns a tool definition with:
+The `tool` helper creates a custom tool that OpenCode can call. It takes a Zod schema function and returns a tool definition with:
 
 - `description`: What the tool does
 - `args`: Zod schema for the tool's arguments
 - `execute`: Function that runs when the tool is called
 
-Your custom tools will be available to opencode alongside built-in tools.
+Your custom tools will be available to OpenCode alongside built-in tools.
 
 ---
 
-### Compaction hooks
+## Next steps
 
-Customize the context included when a session is compacted:
-
-```ts title=".opencode/plugin/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
-
-export const CompactionPlugin: Plugin = async (ctx) => {
-  return {
-    "experimental.session.compacting": async (input, output) => {
-      // Inject additional context into the compaction prompt
-      output.context.push(`
-## Custom Context
-
-Include any state that should persist across compaction:
-- Current task status
-- Important decisions made
-- Files being actively worked on
-`)
-    },
-  }
-}
-```
-
-The `experimental.session.compacting` hook fires before the LLM generates a continuation summary. Use it to inject domain-specific context that the default compaction prompt would miss.
-
-You can also replace the compaction prompt entirely by setting `output.prompt`:
-
-```ts title=".opencode/plugin/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
-
-export const CustomCompactionPlugin: Plugin = async (ctx) => {
-  return {
-    "experimental.session.compacting": async (input, output) => {
-      // Replace the entire compaction prompt
-      output.prompt = `
-You are generating a continuation prompt for a multi-agent swarm session.
-
-Summarize:
-1. The current task and its status
-2. Which files are being modified and by whom
-3. Any blockers or dependencies between agents
-4. The next steps to complete the work
-
-Format as a structured prompt that a new agent can use to resume work.
-`
-    },
-  }
-}
-```
-
-When `output.prompt` is set, it completely replaces the default compaction prompt. The `output.context` array is ignored in this case.
+Learn about all the available [hooks](/docs/hooks/) you can use in your plugins.
