@@ -195,25 +195,33 @@ export function SessionTurn(
 
   const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? [])
   const permissionCount = createMemo(() => permissions().length)
+  const nextPermission = createMemo(() => {
+    const items = permissions()
+    return items.reduce(
+      (result, perm) => {
+        if (!result) return perm
+        if (perm.id < result.id) return perm
+        return result
+      },
+      undefined as ReturnType<typeof permissions>[number] | undefined,
+    )
+  })
 
   const permissionParts = createMemo(() => {
     if (props.stepsExpanded) return [] as { part: ToolPart; message: AssistantMessage }[]
 
-    const items = permissions()
-    if (!items.length) return [] as { part: ToolPart; message: AssistantMessage }[]
-
-    const ids = new Set(items.map((perm) => perm.callID))
-    const result: { part: ToolPart; message: AssistantMessage }[] = []
+    const next = nextPermission()
+    if (!next) return [] as { part: ToolPart; message: AssistantMessage }[]
 
     for (const message of assistantMessages()) {
       const parts = data.store.part[message.id] ?? []
       for (const part of parts) {
         if (part?.type !== "tool") continue
         const tool = part as ToolPart
-        if (ids.has(tool.callID)) result.push({ part: tool, message })
+        if (tool.callID === next.callID) return [{ part: tool, message }]
       }
     }
-    return result
+    return [] as { part: ToolPart; message: AssistantMessage }[]
   })
 
   const shellModePart = createMemo(() => {
