@@ -1,6 +1,6 @@
 [data-component="toast-region"] {
   position: fixed;
-  bottom: 32px;
+  bottom: 48px;
   right: 32px;
   z-index: 1000;
   display: flex;
