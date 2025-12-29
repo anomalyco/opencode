@@ -106,11 +106,17 @@ async function main() {
   await $`git push https://x-access-token:${token}@github.com/${FORK_REPO}.git ${branchName}`
 
   console.log(`📬 Creating pull request...`)
-  const prUrl =
+  const prResult =
     await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Updating OpenCode extension to v${cleanVersion}"`
       .env({ GH_TOKEN: token })
-      .text()
+      .nothrow()
 
+  if (prResult.exitCode !== 0) {
+    console.error("stderr:", prResult.stderr.toString())
+    throw new Error(`Failed with exit code ${prResult.exitCode}`)
+  }
+
+  const prUrl = prResult.stdout.toString().trim()
   console.log(`✅ Pull request created: ${prUrl}`)
   console.log(`🎉 Done!`)
 }
