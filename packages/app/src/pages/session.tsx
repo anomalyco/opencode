@@ -167,14 +167,18 @@ export default function Page() {
     ),
   )
 
-  createEffect(() => {
-    params.id
-    const status = sync.data.session_status[params.id ?? ""] ?? { type: "idle" }
-    batch(() => {
-      setStore("userInteracted", false)
-      setStore("stepsExpanded", status.type !== "idle")
-    })
-  })
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        const status = sync.data.session_status[id ?? ""] ?? { type: "idle" }
+        batch(() => {
+          setStore("userInteracted", false)
+          setStore("stepsExpanded", status.type !== "idle")
+        })
+      },
+    ),
+  )
 
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? { type: "idle" })
   const working = createMemo(() => status().type !== "idle" && activeMessage()?.id === lastUserMessage()?.id)
