@@ -168,10 +168,22 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
+      const config = await Config.get()
+      const providerConfig = config.provider?.["amazon-bedrock"]
+
       const auth = await Auth.get("amazon-bedrock")
-      const awsProfile = Env.get("AWS_PROFILE")
+
+      // Region precedence: 1) config file, 2) env var, 3) default
+      const configRegion = providerConfig?.options?.region
+      const envRegion = Env.get("AWS_REGION")
+      const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
+
+      // Profile: config file takes precedence over env var
+      const configProfile = providerConfig?.options?.profile
+      const envProfile = Env.get("AWS_PROFILE")
+      const profile = configProfile ?? envProfile
+
       const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
-      const awsRegion = Env.get("AWS_REGION")
 
       const awsBearerToken = iife(() => {
         const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
@@ -183,17 +195,26 @@ export namespace Provider {
         return undefined
       })
 
-      if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
-
-      const defaultRegion = awsRegion ?? "us-east-1"
+      if (!profile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+
+      // Build credential provider options (only pass profile if specified)
+      const credentialProviderOptions = profile ? { profile } : {}
+
+      const providerOptions: any = {
+        region: defaultRegion,
+        credentialProvider: fromNodeProviderChain(credentialProviderOptions),
+      }
+
+      // Add endpoint if specified in config
+      if (providerConfig?.options?.endpoint) {
+        providerOptions.endpoint = providerConfig.options.endpoint
+      }
+
       return {
         autoload: true,
-        options: {
-          region: defaultRegion,
-          credentialProvider: fromNodeProviderChain(),
-        },
+        options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has global prefix
           if (modelID.startsWith("global.")) {
