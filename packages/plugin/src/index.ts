@@ -207,3 +207,103 @@ export interface Hooks {
     output: { text: string },
   ) => Promise<void>
 }
+
+// View primitive types for plugins
+export type TreeNode = {
+  id: string
+  label: string
+  icon?: string
+  children: TreeNode[]
+  expanded?: boolean
+  metadata?: Record<string, any>
+}
+
+export type TreeView = {
+  type: "tree"
+  id: string
+  title: string
+  nodes: TreeNode[]
+  selectedID?: string
+}
+
+export type ListItem = {
+  id: string
+  label: string
+  description?: string
+  icon?: string
+  metadata?: Record<string, any>
+}
+
+export type ListView = {
+  type: "list"
+  id: string
+  title: string
+  items: ListItem[]
+  searchable?: boolean
+  selectedID?: string
+}
+
+export type TextView = {
+  type: "text"
+  id: string
+  title: string
+  content: string
+  filetype?: string
+}
+
+export type FormField =
+  | { id: string; type: "text"; label: string; value?: string; placeholder?: string }
+  | { id: string; type: "toggle"; label: string; value?: boolean }
+  | { id: string; type: "select"; label: string; options: string[]; value?: string }
+  | { id: string; type: "number"; label: string; value?: number; min?: number; max?: number }
+
+export type FormView = {
+  type: "form"
+  id: string
+  title: string
+  fields: FormField[]
+}
+
+export type PluginView = TreeView | ListView | TextView | FormView
+
+// Window API for plugins
+export type WindowAPI = {
+  // Window operations
+  createSplit(options: { direction: "horizontal" | "vertical"; size?: number; viewID: string }): string
+  closeWindow(windowID?: string): boolean
+  focusWindow(windowID: string): void
+  getCurrentWindow(): { id: string; viewID: string } | undefined
+  getAllWindows(): Array<{ id: string; viewID: string }>
+
+  // View operations
+  registerView(view: PluginView): void
+  updateView(viewID: string, view: Partial<PluginView>): void
+  unregisterView(viewID: string): void
+
+  // Float operations
+  openFloat(options: { viewID: string; x?: number; y?: number; width: number; height: number }): string
+  closeFloat(floatID: string): void
+}
+
+// Keybind registration for plugins
+export type KeybindAPI = {
+  register(options: { key: string; description: string; scope?: "global" | "window"; handler: () => void }): () => void
+}
+
+// Extended plugin input with window API
+export type PluginInputWithWindow = PluginInput & {
+  window: WindowAPI
+  keybind: KeybindAPI
+}
+
+// Extended hooks with window events
+export interface WindowHooks {
+  "window.focused"?: (input: { windowID: string; viewID: string }) => Promise<void>
+  "window.closed"?: (input: { windowID: string }) => Promise<void>
+  "view.action"?: (input: {
+    viewID: string
+    action: string
+    itemID?: string
+    data?: Record<string, any>
+  }) => Promise<void>
+}
