@@ -1,0 +1,156 @@
+import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { EventStore } from "./index"
+import { unlinkSync } from "fs"
+
+describe("EventStore", () => {
+  const testDbPath = ":memory:"
+  let store: EventStore
+
+  beforeEach(() => {
+    store = EventStore.create(testDbPath)
+  })
+
+  afterEach(() => {
+    store.close()
+  })
+
+  describe("append", () => {
+    test("appends event and returns ULID offset", () => {
+      const sessionId = "test-session-1"
+      const event = { type: "test.event", data: { foo: "bar" } }
+
+      const offset1 = store.append(sessionId, event)
+      const offset2 = store.append(sessionId, event)
+
+      // ULID offsets should be lexicographically sortable
+      expect(offset1.localeCompare(offset2)).toBeLessThan(0)
+      expect(offset1).toMatch(/^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/)
+      expect(offset2).toMatch(/^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}$/)
+    })
+
+    test("appends events to different sessions independently", () => {
+      const event = { type: "test.event", data: {} }
+
+      const offset1 = store.append("session-1", event)
+      const offset2 = store.append("session-2", event)
+
+      expect(offset1).not.toBe(offset2)
+    })
+  })
+
+  describe("query", () => {
+    test("returns all events when fromOffset is '-1'", () => {
+      const sessionId = "test-session"
+      const event1 = { type: "event.1", data: { n: 1 } }
+      const event2 = { type: "event.2", data: { n: 2 } }
+      const event3 = { type: "event.3", data: { n: 3 } }
+
+      store.append(sessionId, event1)
+      store.append(sessionId, event2)
+      store.append(sessionId, event3)
+
+      const events = store.query(sessionId, "-1")
+
+      expect(events).toHaveLength(3)
+      expect(events[0].event).toEqual(event1)
+      expect(events[1].event).toEqual(event2)
+      expect(events[2].event).toEqual(event3)
+    })
+
+    test("returns events from specified offset onwards", () => {
+      const sessionId = "test-session"
+      const event1 = { type: "event.1", data: { n: 1 } }
+      const event2 = { type: "event.2", data: { n: 2 } }
+      const event3 = { type: "event.3", data: { n: 3 } }
+
+      store.append(sessionId, event1)
+      const offset2 = store.append(sessionId, event2)
+      store.append(sessionId, event3)
+
+      const events = store.query(sessionId, offset2)
+
+      expect(events).toHaveLength(2)
+      expect(events[0].event).toEqual(event2)
+      expect(events[1].event).toEqual(event3)
+    })
+
+    test("returns empty array for unknown session", () => {
+      const events = store.query("unknown-session", "-1")
+      expect(events).toEqual([])
+    })
+
+    test("returns empty array when offset is after all events", () => {
+      const sessionId = "test-session"
+      store.append(sessionId, { type: "event.1", data: {} })
+
+      const events = store.query(sessionId, "Z" + "9".repeat(25))
+      expect(events).toEqual([])
+    })
+
+    test("returns events in lexicographic order", () => {
+      const sessionId = "test-session"
+      const offsets: string[] = []
+
+      for (let i = 0; i < 10; i++) {
+        offsets.push(store.append(sessionId, { type: `event.${i}`, data: { i } }))
+      }
+
+      const events = store.query(sessionId, "-1")
+
+      for (let i = 0; i < events.length - 1; i++) {
+        expect(events[i].offset.localeCompare(events[i + 1].offset)).toBeLessThan(0)
+      }
+    })
+  })
+
+  describe("getLatestOffset", () => {
+    test("returns latest offset for session with events", () => {
+      const sessionId = "test-session"
+
+      store.append(sessionId, { type: "event.1", data: {} })
+      store.append(sessionId, { type: "event.2", data: {} })
+      const lastOffset = store.append(sessionId, { type: "event.3", data: {} })
+
+      const latest = store.getLatestOffset(sessionId)
+      expect(latest).toBe(lastOffset)
+    })
+
+    test("returns null for session with no events", () => {
+      const latest = store.getLatestOffset("unknown-session")
+      expect(latest).toBeNull()
+    })
+
+    test("handles multiple sessions independently", () => {
+      const offset1 = store.append("session-1", { type: "event", data: {} })
+      const offset2 = store.append("session-2", { type: "event", data: {} })
+
+      expect(store.getLatestOffset("session-1")).toBe(offset1)
+      expect(store.getLatestOffset("session-2")).toBe(offset2)
+    })
+  })
+
+  describe("persistence", () => {
+    test("persists events across store instances (file db)", () => {
+      const dbPath = "/tmp/test-event-store.db"
+
+      try {
+        unlinkSync(dbPath)
+      } catch {}
+
+      const store1 = EventStore.create(dbPath)
+      const sessionId = "test-session"
+      const event = { type: "test.event", data: { foo: "bar" } }
+      const offset = store1.append(sessionId, event)
+      store1.close()
+
+      const store2 = EventStore.create(dbPath)
+      const events = store2.query(sessionId, "-1")
+      expect(events).toHaveLength(1)
+      expect(events[0].offset).toBe(offset)
+      expect(events[0].event).toEqual(event)
+      store2.close()
+
+      unlinkSync(dbPath)
+    })
+  })
+})
