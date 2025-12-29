@@ -398,7 +398,7 @@ export namespace Config {
       tools: z.record(z.string(), z.boolean()).optional(),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
-      mode: z.enum(["subagent", "primary", "all"]).optional(),
+      mode: z.enum(["subagent", "primary", "all", "fork"]).optional(),
       color: z
         .string()
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
