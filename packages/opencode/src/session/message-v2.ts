@@ -287,9 +287,6 @@ export namespace MessageV2 {
     sessionID: z.string(),
   })
 
-  export const Thinking = z.object({ effort: z.enum(["default", "medium", "high"]) })
-  export type Thinking = z.infer<typeof Thinking>
-
   export const User = Base.extend({
     role: z.literal("user"),
     time: z.object({
@@ -309,7 +306,7 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
-    thinking: Thinking.optional(),
+    variant: z.record(z.string(), z.any()).optional(),
   }).meta({
     ref: "UserMessage",
   })
