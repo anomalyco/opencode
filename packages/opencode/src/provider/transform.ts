@@ -317,7 +317,7 @@ export namespace ProviderTransform {
       }
     }
     if (model.providerID === "openrouter" && model.api.id.includes("google")) {
-      options["reasoning"] = { effort: undefined, max_tokens: 0 }
+      options["reasoning"] = { enabled: false }
     }
 
     return options
