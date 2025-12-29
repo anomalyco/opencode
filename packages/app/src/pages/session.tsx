@@ -60,6 +60,8 @@ import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { StatusBar } from "@/components/status-bar"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
+import { usePermission } from "@/context/permission"
+import { showToast } from "@opencode-ai/ui/toast"
 
 export default function Page() {
   const layout = useLayout()
@@ -74,6 +76,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
 
+  const permission = usePermission()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
@@ -311,6 +314,22 @@ export default function Page() {
       category: "Agent",
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
+    },
+    {
+      id: "permissions.autoaccept",
+      title: params.id && permission.isAutoAccepting(params.id) ? "Stop auto-accepting edits" : "Auto-accept edits",
+      category: "Permissions",
+      disabled: !params.id,
+      onSelect: () => {
+        if (!params.id) return
+        permission.toggleAutoAccept(params.id)
+        showToast({
+          title: permission.isAutoAccepting(params.id) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(params.id)
+            ? "Edit and write permissions will be automatically approved"
+            : "Edit and write permissions will require approval",
+        })
+      },
     },
     {
       id: "session.undo",
