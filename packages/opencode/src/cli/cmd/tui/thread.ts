@@ -43,6 +43,10 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("disable-mouse", {
+        type: "boolean",
+        describe: "disable mouse capture to allow terminal's native right-click paste",
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
@@ -94,6 +98,7 @@ export const TuiThreadCommand = cmd({
         model: args.model,
         prompt,
       },
+      disableMouse: args["disable-mouse"],
       onExit: async () => {
         await client.call("shutdown", undefined)
       },

@@ -593,6 +593,10 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    disable_mouse: z
+      .boolean()
+      .optional()
+      .describe("Disable mouse capture to allow terminal's native right-click paste (useful for Linux terminals with PuTTY-style paste)"),
   })
 
   export const Server = z

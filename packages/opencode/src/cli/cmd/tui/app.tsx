@@ -96,13 +96,26 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
+export function tui(input: { url: string; args: Args; onExit?: () => Promise<void>; disableMouse?: boolean }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
     const onExit = async () => {
       await input.onExit?.()
       resolve()
+    }
+
+    // Disable mouse tracking if requested (for terminals with PuTTY-style right-click paste)
+    if (input.disableMouse) {
+      // Disable mouse tracking after render initializes
+      // These escape sequences disable various mouse tracking modes:
+      // ?1000l - Disable button press/release tracking
+      // ?1002l - Disable button motion tracking  
+      // ?1003l - Disable all motion tracking
+      // ?1006l - Disable SGR extended mouse mode
+      process.nextTick(() => {
+        process.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
+      })
     }
 
     render(
@@ -194,9 +207,19 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [mouseDisabled, setMouseDisabled] = createSignal(false)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
+  })
+
+  createEffect(() => {
+    if (mouseDisabled()) return
+    const tui = sync.data.config.tui
+    if (tui?.disable_mouse) {
+      process.stdout.write("\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l")
+      setMouseDisabled(true)
+    }
   })
 
   // Update terminal window title based on current route and session

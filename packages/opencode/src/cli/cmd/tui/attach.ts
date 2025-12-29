@@ -19,12 +19,17 @@ export const AttachCommand = cmd({
         alias: ["s"],
         type: "string",
         describe: "session id to continue",
+      })
+      .option("disable-mouse", {
+        type: "boolean",
+        describe: "disable mouse capture to allow terminal's native right-click paste",
       }),
   handler: async (args) => {
     if (args.dir) process.chdir(args.dir)
     await tui({
       url: args.url,
       args: { sessionID: args.session },
+      disableMouse: args["disable-mouse"],
     })
   },
 })
