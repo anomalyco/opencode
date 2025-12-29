@@ -57,6 +57,33 @@ opencode agent [command]
 
 ---
 
+### attach
+
+Attach a terminal to an already running OpenCode backend server started via `serve` or `web` commands.
+
+```bash
+opencode attach [url]
+```
+
+This allows using the TUI with a remote OpenCode backend. For example:
+
+```bash
+# Start the backend server for web/mobile access
+opencode web --port 4096 --hostname 0.0.0.0
+
+# In another terminal, attach the TUI to the running backend
+opencode attach http://10.20.30.40:4096
+```
+
+#### Flags
+
+| Flag        | Short | Description                       |
+| ----------- | ----- | --------------------------------- |
+| `--dir`     |       | Working directory to start TUI in |
+| `--session` | `-s`  | Session ID to continue            |
+
+---
+
 #### create
 
 Create a new agent with custom configuration.
@@ -325,7 +352,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Start a headless opencode server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
+Start a headless OpenCode server for API access. Check out the [server docs](/docs/server) for the full HTTP interface.
 
 ```bash
 opencode serve
