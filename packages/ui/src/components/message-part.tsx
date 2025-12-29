@@ -807,19 +807,19 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={props.metadata.filediff}>
+        <Show when={props.metadata.filediff?.path || props.input.filePath}>
           <div data-component="edit-content">
             <Dynamic
               component={diffComponent}
               before={{
-                name: props.metadata.filediff.path,
-                contents: props.metadata.filediff.before,
-                cacheKey: checksum(props.metadata.filediff.before),
+                name: props.metadata?.filediff?.file || props.input.filePath,
+                contents: props.metadata?.filediff?.before || props.input.oldString,
+                cacheKey: checksum(props.metadata?.filediff?.before || props.input.oldString),
               }}
               after={{
-                name: props.metadata.filediff.path,
-                contents: props.metadata.filediff.after,
-                cacheKey: checksum(props.metadata.filediff.after),
+                name: props.metadata?.filediff?.file || props.input.filePath,
+                contents: props.metadata?.filediff?.after || props.input.newString,
+                cacheKey: checksum(props.metadata?.filediff?.after || props.input.newString),
               }}
             />
           </div>

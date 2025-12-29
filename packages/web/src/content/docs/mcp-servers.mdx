@@ -354,11 +354,20 @@ If you have a large number of MCP servers you may want to only enable them per a
 
 #### Glob patterns
 
-The glob pattern uses simple regex globbing patterns.
+The glob pattern uses simple regex globbing patterns:
 
-- `*` matches zero or more of any character
+- `*` matches zero or more of any character (e.g., `"my-mcp*"` matches `my-mcp_search`, `my-mcp_list`, etc.)
 - `?` matches exactly one character
 - All other characters match literally
+
+:::note
+MCP server tools are registered with server name as prefix, so to diable all tools for a server simply use:
+
+```
+"mymcpservername_*": false
+```
+
+:::
 
 ---
 
