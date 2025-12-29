@@ -1350,7 +1350,7 @@ export namespace SessionPrompt {
     const agent = await Agent.get(agentName)
 
     const parts =
-      (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
+      ((agent.mode === "subagent" || agent.mode === "fork") && command.subtask !== false) || command.subtask === true
         ? [
             {
               type: "subtask" as const,

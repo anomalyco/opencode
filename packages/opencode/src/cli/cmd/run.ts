@@ -236,11 +236,11 @@ export const RunCommand = cmd({
           )
           return undefined
         }
-        if (agent.mode === "subagent") {
+        if (agent.mode === "subagent" || agent.mode === "fork") {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,
-            `agent "${args.agent}" is a subagent, not a primary agent. Falling back to default agent`,
+            `agent "${args.agent}" is a ${agent.mode}, not a primary agent. Falling back to default agent`,
           )
           return undefined
         }

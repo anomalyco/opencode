@@ -37,6 +37,14 @@ export const TaskTool = Tool.define("task", async () => {
           if (found) return found
         }
 
+        if (agent.mode === "fork") {
+          const forked = await Session.fork({ sessionID: ctx.sessionID })
+          await Session.update(forked.id, (draft) => {
+            draft.title = params.description + ` (@${agent.name} fork)`
+          })
+          return forked
+        }
+
         return await Session.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,

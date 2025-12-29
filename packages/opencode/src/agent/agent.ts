@@ -266,7 +266,8 @@ export namespace Agent {
       }
     }
 
-    const hasPrimaryAgents = Object.values(result).filter((a) => a.mode !== "subagent" && !a.hidden).length > 0
+    const hasPrimaryAgents =
+      Object.values(result).filter((a) => a.mode !== "subagent" && a.mode !== "fork" && !a.hidden).length > 0
     if (!hasPrimaryAgents) {
       throw new Config.InvalidError({
         path: "config",
