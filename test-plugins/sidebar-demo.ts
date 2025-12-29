@@ -1,33 +1,11 @@
 import type { PluginInput, Hooks, SidebarPanel } from "@opencode-ai/plugin"
 
 let counter = 0
-let pluginLoaded = false
 
-export default async function sidebarDemoPlugin(input: PluginInput): Promise<Hooks> {
-  console.log("[sidebar-demo] Plugin loaded!")
-  pluginLoaded = true
-
+export default async function sidebarDemoPlugin(_input: PluginInput): Promise<Hooks> {
   return {
-    event: ({ event }: { event: { type: string; properties?: unknown } }) => {
-      if (event.type === "session.created") {
-        console.log("[sidebar-demo] Session created - showing toast")
-        const props = event.properties as { info?: { parentID?: string } } | undefined
-        if (props?.info?.parentID) return
-
-        setTimeout(async () => {
-          try {
-            await input.$`osascript -e ${'display notification "Sidebar Demo Plugin Loaded!" with title "Hello World"'}`
-            console.log("[sidebar-demo] Toast shown successfully")
-          } catch (e) {
-            console.log("[sidebar-demo] Toast failed:", e)
-          }
-        }, 500)
-      }
-    },
-
     sidebar: () => {
       counter++
-      console.log("[sidebar-demo] sidebar() called, counter:", counter)
 
       const panels: SidebarPanel[] = [
         {

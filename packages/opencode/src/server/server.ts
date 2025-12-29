@@ -2602,7 +2602,7 @@ export namespace Server {
           },
         }),
         async (c) => {
-          return c.json(Plugin.getSidebarPanels())
+          return c.json(await Plugin.getSidebarPanels())
         },
       )
       .get(

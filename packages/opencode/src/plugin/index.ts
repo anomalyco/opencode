@@ -81,7 +81,8 @@ export namespace Plugin {
     return state().then((x) => x.hooks)
   }
 
-  export function getSidebarPanels() {
+  export async function getSidebarPanels() {
+    await pluginsLoaded
     const panels: import("@opencode-ai/plugin").SidebarPanel[] = []
     for (const hook of loadedHooks) {
       const sidebar = hook.sidebar
@@ -89,7 +90,9 @@ export namespace Plugin {
       try {
         const resolved = typeof sidebar === "function" ? sidebar() : sidebar
         panels.push(...resolved)
-      } catch {}
+      } catch (e) {
+        log.warn("sidebar panel failed", { error: e })
+      }
     }
     return panels
   }

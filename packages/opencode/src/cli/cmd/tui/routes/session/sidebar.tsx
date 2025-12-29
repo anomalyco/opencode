@@ -65,13 +65,14 @@ export function Sidebar(props: { sessionID: string }) {
   const kv = useKV()
   const sdk = useSDK()
 
-  const [pluginPanels] = createResource(
-    () => sync.data.session,
-    async () => {
+  const [pluginPanels] = createResource(async () => {
+    try {
       const result = await sdk.client.plugin.sidebar()
       return result.data ?? []
-    },
-  )
+    } catch {
+      return []
+    }
+  })
 
   const hasProviders = createMemo(() =>
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
