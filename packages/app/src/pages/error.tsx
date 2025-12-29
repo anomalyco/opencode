@@ -194,7 +194,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           readOnly
           copyable
           multiline
-          class="max-h-96 w-full font-mono text-xs no-scrollbar whitespace-pre"
+          class="max-h-96 w-full font-mono text-xs no-scrollbar"
           label="Error Details"
           hideLabel
         />
