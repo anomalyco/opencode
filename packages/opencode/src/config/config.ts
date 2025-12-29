@@ -191,6 +191,10 @@ export namespace Config {
         cwd: dir,
       },
     ).catch(() => {})
+
+    // Install any additional dependencies defined in the package.json
+    // This allows local plugins and custom tools to use external packages
+    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
