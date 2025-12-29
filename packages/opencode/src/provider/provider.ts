@@ -165,12 +165,19 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      const [awsProfile, awsAccessKeyId, awsBearerToken, awsRegion] = await Promise.all([
-        Env.get("AWS_PROFILE"),
-        Env.get("AWS_ACCESS_KEY_ID"),
-        Env.get("AWS_BEARER_TOKEN_BEDROCK"),
-        Env.get("AWS_REGION"),
-      ])
+      const auth = await Auth.get("amazon-bedrock")
+      const awsProfile = Env.get("AWS_PROFILE")
+      const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
+      const awsRegion = Env.get("AWS_REGION")
+      const awsBearerToken = (() => {
+        const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
+        if (envToken) return envToken
+        if (auth?.type === "api") {
+          Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+          return auth.key
+        }
+        return undefined
+      })()
       if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
       const defaultRegion = awsRegion ?? "us-east-1"

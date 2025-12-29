@@ -4,6 +4,8 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
+import { Global } from "../../src/global"
 
 test("Bedrock: config region takes precedence over AWS_REGION env var", async () => {
   await using tmp = await tmpdir({
@@ -182,6 +184,53 @@ test("Bedrock: respects config region for different instances", async () => {
     fn: async () => {
       const providers2 = await Provider.list()
       expect(providers2["amazon-bedrock"].options?.region).toBe("us-west-2")
+    },
+  })
+})
+
+test("Bedrock: loads when bearer token from auth.json is present", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "eu-west-1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  // Setup auth.json with bearer token for amazon-bedrock
+  const authPath = path.join(Global.Path.data, "auth.json")
+  await Bun.write(
+    authPath,
+    JSON.stringify({
+      "amazon-bedrock": {
+        type: "api",
+        key: "test-bearer-token",
+      },
+    }),
+  )
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Clear env vars so only auth.json should trigger autoload
+      Env.set("AWS_PROFILE", "")
+      Env.set("AWS_ACCESS_KEY_ID", "")
+      Env.set("AWS_BEARER_TOKEN_BEDROCK", "")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["amazon-bedrock"]).toBeDefined()
+      expect(providers["amazon-bedrock"].options?.region).toBe("eu-west-1")
     },
   })
 })
