@@ -3,7 +3,6 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
-import type { MessageV2 } from "@/session/message-v2"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
