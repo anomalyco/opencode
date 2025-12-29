@@ -364,16 +364,10 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const permission = createMemo(() => {
     const sessionID = props.message.sessionID
     const permissions = data.store.permission?.[sessionID] ?? []
-    const next = permissions.reduce(
-      (result, perm) => {
-        if (!result) return perm
-        if (perm.id < result.id) return perm
-        return result
-      },
-      undefined as (typeof permissions)[number] | undefined,
-    )
+    const next = permissions[0]
     if (!next) return undefined
-    return next.callID === part.callID ? next : undefined
+    if (next.callID !== part.callID) return undefined
+    return next
   })
 
   const [forceOpen, setForceOpen] = createSignal(false)
@@ -632,14 +626,7 @@ ToolRegistry.register({
       const sessionId = childSessionId()
       if (!sessionId) return undefined
       const permissions = data.store.permission?.[sessionId] ?? []
-      return permissions.reduce(
-        (result, perm) => {
-          if (!result) return perm
-          if (perm.id < result.id) return perm
-          return result
-        },
-        undefined as (typeof permissions)[number] | undefined,
-      )
+      return permissions[0]
     })
 
     const childToolPart = createMemo(() => {

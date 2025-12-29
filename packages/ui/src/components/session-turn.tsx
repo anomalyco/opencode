@@ -111,13 +111,23 @@ export function SessionTurn(
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? [])
 
-  const message = createMemo(() => {
+  const messageIndex = createMemo(() => {
     const messages = allMessages()
     const result = Binary.search(messages, props.messageID, (m) => m.id)
-    if (!result.found) return undefined
+    if (!result.found) return -1
 
     const msg = messages[result.index]
-    if (msg.role !== "user") return undefined
+    if (msg.role !== "user") return -1
+
+    return result.index
+  })
+
+  const message = createMemo(() => {
+    const index = messageIndex()
+    if (index < 0) return undefined
+
+    const msg = allMessages()[index]
+    if (!msg || msg.role !== "user") return undefined
 
     return msg
   })
@@ -139,13 +149,6 @@ export function SessionTurn(
     const msg = message()
     if (!msg) return []
     return data.store.part[msg.id] ?? []
-  })
-
-  const messageIndex = createMemo(() => {
-    const messages = allMessages()
-    const result = Binary.search(messages, props.messageID, (m) => m.id)
-    if (!result.found) return -1
-    return result.index
   })
 
   const assistantMessages = createMemo(() => {
@@ -195,17 +198,7 @@ export function SessionTurn(
 
   const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? [])
   const permissionCount = createMemo(() => permissions().length)
-  const nextPermission = createMemo(() => {
-    const items = permissions()
-    return items.reduce(
-      (result, perm) => {
-        if (!result) return perm
-        if (perm.id < result.id) return perm
-        return result
-      },
-      undefined as ReturnType<typeof permissions>[number] | undefined,
-    )
-  })
+  const nextPermission = createMemo(() => permissions()[0])
 
   const permissionParts = createMemo(() => {
     if (props.stepsExpanded) return [] as { part: ToolPart; message: AssistantMessage }[]
