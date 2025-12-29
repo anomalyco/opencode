@@ -1,4 +1,15 @@
-import { Component, createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import {
+  Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  Show,
+  Switch,
+  onCleanup,
+  type JSX,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
   AssistantMessage,
@@ -14,6 +25,7 @@ import {
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
+import { useDialog } from "../context/dialog"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
@@ -22,6 +34,7 @@ import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
+import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createAutoScroll } from "../hooks"
@@ -79,6 +92,41 @@ export interface MessagePartProps {
 export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
+
+const TEXT_RENDER_THROTTLE_MS = 250
+
+function createThrottledValue(getValue: () => string) {
+  const [value, setValue] = createSignal(getValue())
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  let last = 0
+
+  createEffect(() => {
+    const next = getValue()
+    const now = Date.now()
+    const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
+    if (remaining <= 0) {
+      if (timeout) {
+        clearTimeout(timeout)
+        timeout = undefined
+      }
+      last = now
+      setValue(next)
+      return
+    }
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(() => {
+      last = Date.now()
+      setValue(next)
+      timeout = undefined
+    }, remaining)
+  })
+
+  onCleanup(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+
+  return value
+}
 
 function relativizeProjectPaths(text: string, directory?: string) {
   if (!text) return ""
@@ -218,6 +266,8 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+  const dialog = useDialog()
+
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
@@ -240,13 +290,26 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     }),
   )
 
+  const openImagePreview = (url: string, alt?: string) => {
+    dialog.show(() => <ImagePreview src={url} alt={alt} />)
+  }
+
   return (
     <div data-component="user-message">
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
             {(file) => (
-              <div data-slot="user-message-attachment" data-type={file.mime.startsWith("image/") ? "image" : "file"}>
+              <div
+                data-slot="user-message-attachment"
+                data-type={file.mime.startsWith("image/") ? "image" : "file"}
+                data-clickable={file.mime.startsWith("image/") && !!file.url}
+                onClick={() => {
+                  if (file.mime.startsWith("image/") && file.url) {
+                    openImagePreview(file.url, file.filename)
+                  }
+                }}
+              >
                 <Show
                   when={file.mime.startsWith("image/") && file.url}
                   fallback={
@@ -364,7 +427,10 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const permission = createMemo(() => {
     const sessionID = props.message.sessionID
     const permissions = data.store.permission?.[sessionID] ?? []
-    return permissions.find((p) => p.callID === part.callID)
+    const next = permissions[0]
+    if (!next) return undefined
+    if (next.callID !== part.callID) return undefined
+    return next
   })
 
   const [forceOpen, setForceOpen] = createSignal(false)
@@ -461,11 +527,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const part = props.part as TextPart
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
+  const throttledText = createThrottledValue(displayText)
 
   return (
-    <Show when={displayText()}>
+    <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={displayText()} />
+        <Markdown text={throttledText()} />
       </div>
     </Show>
   )
@@ -473,10 +540,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
+  const text = () => part.text.trim()
+  const throttledText = createThrottledValue(text)
+
   return (
-    <Show when={part.text.trim()}>
+    <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={part.text.trim()} />
+        <Markdown text={throttledText()} />
       </div>
     </Show>
   )
@@ -623,7 +693,7 @@ ToolRegistry.register({
       const sessionId = childSessionId()
       if (!sessionId) return undefined
       const permissions = data.store.permission?.[sessionId] ?? []
-      return permissions.toSorted((a, b) => a.id.localeCompare(b.id))[0]
+      return permissions[0]
     })
 
     const childToolPart = createMemo(() => {
