@@ -27,6 +27,12 @@ export namespace ModelsDev {
             field: z.enum(["reasoning_content", "reasoning_details"]),
           })
           .strict(),
+        z
+          .object({
+            tagName: z.string(),
+            startWithReasoning: z.boolean().optional(),
+          })
+          .strict(),
       ])
       .optional(),
     cost: z

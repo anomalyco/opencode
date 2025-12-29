@@ -439,6 +439,10 @@ export namespace Provider {
           z.object({
             field: z.enum(["reasoning_content", "reasoning_details"]),
           }),
+          z.object({
+            tagName: z.string(),
+            startWithReasoning: z.boolean().optional(),
+          }),
         ]),
       }),
       cost: z.object({

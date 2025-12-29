@@ -1807,3 +1807,90 @@ test("custom model inherits api.url from models.dev provider", async () => {
     },
   })
 })
+
+test("model with interleaved tagName for think tag extraction", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "think-provider": {
+              name: "Think Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "think-model": {
+                  name: "Think Model",
+                  tool_call: true,
+                  reasoning: true,
+                  limit: { context: 128000, output: 65536 },
+                  interleaved: {
+                    tagName: "think",
+                  },
+                },
+              },
+              options: { apiKey: "test" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["think-provider"]).toBeDefined()
+      const model = providers["think-provider"].models["think-model"]
+      expect(model.capabilities.interleaved).toEqual({ tagName: "think" })
+      expect(model.capabilities.reasoning).toBe(true)
+    },
+  })
+})
+
+test("model with interleaved tagName and startWithReasoning", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "reasoning-provider": {
+              name: "Reasoning Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "reasoning-model": {
+                  name: "Reasoning Model",
+                  tool_call: true,
+                  reasoning: true,
+                  limit: { context: 128000, output: 65536 },
+                  interleaved: {
+                    tagName: "think",
+                    startWithReasoning: true,
+                  },
+                },
+              },
+              options: { apiKey: "test" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["reasoning-provider"]).toBeDefined()
+      const model = providers["reasoning-provider"].models["reasoning-model"]
+      expect(model.capabilities.interleaved).toEqual({
+        tagName: "think",
+        startWithReasoning: true,
+      })
+    },
+  })
+})

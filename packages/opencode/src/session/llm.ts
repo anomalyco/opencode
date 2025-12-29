@@ -1,6 +1,15 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { streamText, wrapLanguageModel, type ModelMessage, type StreamTextResult, type Tool, type ToolSet } from "ai"
+import {
+  extractReasoningMiddleware,
+  streamText,
+  wrapLanguageModel,
+  type LanguageModelMiddleware,
+  type ModelMessage,
+  type StreamTextResult,
+  type Tool,
+  type ToolSet,
+} from "ai"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -171,20 +180,36 @@ export namespace LLM {
       ],
       model: wrapLanguageModel({
         model: language,
-        middleware: [
-          {
-            async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model)
-              }
-              return args.params
-            },
-          },
-        ],
+        middleware: buildMiddleware(input.model),
       }),
       experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
     })
+  }
+
+  function buildMiddleware(model: Provider.Model): LanguageModelMiddleware[] {
+    const middleware: LanguageModelMiddleware[] = [
+      {
+        async transformParams(args) {
+          if (args.type === "stream") {
+            // @ts-expect-error
+            args.params.prompt = ProviderTransform.message(args.params.prompt, model)
+          }
+          return args.params
+        },
+      },
+    ]
+
+    const interleaved = model.capabilities.interleaved
+    if (typeof interleaved === "object" && "tagName" in interleaved) {
+      middleware.push(
+        extractReasoningMiddleware({
+          tagName: interleaved.tagName,
+          startWithReasoning: interleaved.startWithReasoning,
+        }),
+      )
+    }
+
+    return middleware
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {

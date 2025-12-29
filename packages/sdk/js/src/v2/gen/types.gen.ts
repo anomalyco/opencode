@@ -1273,6 +1273,10 @@ export type ProviderConfig = {
         | {
             field: "reasoning_content" | "reasoning_details"
           }
+        | {
+            tagName: string
+            startWithReasoning?: boolean
+          }
       cost?: {
         input: number
         output: number
@@ -1745,6 +1749,10 @@ export type Model = {
       | boolean
       | {
           field: "reasoning_content" | "reasoning_details"
+        }
+      | {
+          tagName: string
+          startWithReasoning?: boolean
         }
   }
   cost: {
@@ -3449,6 +3457,10 @@ export type ProviderListResponses = {
             | true
             | {
                 field: "reasoning_content" | "reasoning_details"
+              }
+            | {
+                tagName: string
+                startWithReasoning?: boolean
               }
           cost?: {
             input: number

@@ -77,6 +77,7 @@ export namespace ProviderTransform {
     if (
       model.capabilities.interleaved &&
       typeof model.capabilities.interleaved === "object" &&
+      "field" in model.capabilities.interleaved &&
       model.capabilities.interleaved.field === "reasoning_content"
     ) {
       return msgs.map((msg) => {

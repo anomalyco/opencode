@@ -3098,6 +3098,19 @@
                                       },
                                       "required": ["field"],
                                       "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "tagName": {
+                                          "type": "string"
+                                        },
+                                        "startWithReasoning": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      "required": ["tagName"],
+                                      "additionalProperties": false
                                     }
                                   ]
                                 },
@@ -7925,6 +7938,19 @@
                       },
                       "required": ["field"],
                       "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tagName": {
+                          "type": "string"
+                        },
+                        "startWithReasoning": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["tagName"],
+                      "additionalProperties": false
                     }
                   ]
                 },
@@ -9015,6 +9041,18 @@
                       }
                     },
                     "required": ["field"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "tagName": {
+                        "type": "string"
+                      },
+                      "startWithReasoning": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["tagName"]
                   }
                 ]
               }
