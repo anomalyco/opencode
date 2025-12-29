@@ -710,6 +710,17 @@ export namespace ACP {
             continue
           }
           
+          // Check if this is a text-based file that can be decoded
+          const isTextBased =
+            mime.startsWith("text/") ||
+            mime === "application/json" ||
+            mime === "application/xml" ||
+            mime === "application/javascript" ||
+            mime === "application/typescript"
+          
+          // Skip binary non-image files (PDFs, etc.) - ACP resource blocks only support text
+          if (!isTextBased) continue
+          
           // Send as ACP resource block
           const text = Buffer.from(base64Data, "base64").toString("utf-8")
           await this.connection
