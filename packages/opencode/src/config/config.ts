@@ -607,6 +607,64 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+
+    // Component-specific settings
+    messages: z
+      .object({
+        padding: z.number().int().min(0).optional().describe("Padding around messages"),
+        gap: z.number().int().min(0).optional().describe("Gap between messages"),
+      })
+      .optional()
+      .describe("Message display settings"),
+
+    sidebar: z
+      .object({
+        padding: z.number().int().min(0).optional().describe("Padding inside sidebar"),
+        width: z.number().int().min(10).optional().describe("Sidebar width in characters"),
+        visible: z.boolean().optional().describe("Show sidebar by default"),
+      })
+      .optional()
+      .describe("Sidebar settings"),
+
+    header: z
+      .object({
+        padding: z.number().int().min(0).optional().describe("Padding inside header"),
+        visible: z.boolean().optional().describe("Show header"),
+        show_title: z.boolean().optional().describe("Show session title"),
+        show_context: z.boolean().optional().describe("Show context info"),
+        show_cost: z.boolean().optional().describe("Show cost information"),
+        show_tokens: z.boolean().optional().describe("Show token count"),
+      })
+      .optional()
+      .describe("Header settings"),
+
+    footer: z
+      .object({
+        padding: z.number().int().min(0).optional().describe("Padding inside footer"),
+        visible: z.boolean().optional().describe("Show footer"),
+        show_directory: z.boolean().optional().describe("Show current directory"),
+        show_lsp_status: z.boolean().optional().describe("Show LSP status"),
+        show_mcp_status: z.boolean().optional().describe("Show MCP status"),
+        show_version: z.boolean().optional().describe("Show version"),
+        show_keybind_hints: z.boolean().optional().describe("Show keybind hints"),
+      })
+      .optional()
+      .describe("Footer settings"),
+
+    prompt: z
+      .object({
+        padding: z.number().int().min(0).optional().describe("Padding around prompt"),
+      })
+      .optional()
+      .describe("Prompt settings"),
+
+    window: z
+      .object({
+        padding: z.number().int().min(0).optional().describe("Padding inside windows"),
+        border: z.boolean().optional().describe("Show window borders"),
+      })
+      .optional()
+      .describe("Window settings"),
   })
 
   export const Server = z
