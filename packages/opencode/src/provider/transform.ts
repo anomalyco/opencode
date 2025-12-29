@@ -302,25 +302,22 @@ export namespace ProviderTransform {
   }
 
   export function smallOptions(model: Provider.Model) {
-    const options: Record<string, any> = {}
-
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
       if (model.api.id.includes("5.")) {
-        options["reasoningEffort"] = "low"
-      } else {
-        options["reasoningEffort"] = "minimal"
+        return { reasoningEffort: "low" }
       }
+      return { reasoningEffort: "minimal" }
     }
     if (model.providerID === "google") {
-      options["thinkingConfig"] = {
-        thinkingBudget: 0,
+      return { thinkingConfig: { thinkingBudget: 0 } }
+    }
+    if (model.providerID === "openrouter") {
+      if (model.api.id.includes("google")) {
+        return { reasoning: { enabled: false } }
       }
+      return { reasoningEffort: "minimal" }
     }
-    if (model.providerID === "openrouter" && model.api.id.includes("google")) {
-      options["reasoning"] = { enabled: false }
-    }
-
-    return options
+    return {}
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
