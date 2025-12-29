@@ -1,9 +1,33 @@
 ---
-title: Hooks
-description: Hook into OpenCode events and customize behavior.
+title: Plugin Development
+description: Create plugins to extend OpenCode.
 ---
 
-Hooks allow plugins to intercept and modify OpenCode's behavior at various points. Each hook receives input parameters and can modify output parameters. For information on creating plugins, see [Plugins](/docs/plugins/).
+A plugin is a JavaScript or TypeScript module that exports one or more plugin functions. Each function receives a context object and returns hooks and extensions.
+
+```ts title=".opencode/plugin/example.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
+  return {
+    // Hooks and extensions go here
+  }
+}
+```
+
+The plugin function receives:
+
+- `project`: The current project information
+- `directory`: The current working directory
+- `worktree`: The git worktree path
+- `client`: An OpenCode SDK client for interacting with the AI
+- `$`: Bun's [shell API](https://bun.sh/docs/runtime/shell) for executing commands
+
+---
+
+## Hooks
+
+Hooks intercept and modify OpenCode's behavior. Each hook receives input parameters and can modify output parameters.
 
 | Hook                                      | Description                                                 |
 | ----------------------------------------- | ----------------------------------------------------------- |
@@ -18,7 +42,7 @@ Hooks allow plugins to intercept and modify OpenCode's behavior at various point
 
 ## Extensions
 
-Plugins can also extend OpenCode with new capabilities.
+Extensions add new capabilities to OpenCode.
 
 | Extension                     | Description                 |
 | ----------------------------- | --------------------------- |
@@ -304,47 +328,105 @@ export const AuthPlugin: Plugin = async (ctx) => {
     auth: {
       provider: "my-provider",
       methods: [
-        {
-          type: "oauth",
-          label: "Sign in with SSO",
-          async authorize() {
-            return {
-              url: "https://auth.example.com/authorize?client_id=...",
-              instructions: "Complete sign-in in your browser",
-              method: "auto",
-              async callback() {
-                const token = await pollForToken()
-                return {
-                  type: "success",
-                  access: token.access_token,
-                  refresh: token.refresh_token,
-                  expires: Date.now() + token.expires_in * 1000,
-                }
-              },
-            }
-          },
-        },
-        {
-          type: "api",
-          label: "Enter API key",
-        },
+        /* ... */
       ],
+      loader: async (getAuth, provider) => {
+        /* ... */
+      },
     },
   }
 }
 ```
 
-**Method types:**
+The `auth` extension has three parts:
 
-- **`oauth`** — Browser-based OAuth 2.0 flow with `authorize()` returning a URL
-- **`api`** — Direct API key entry (no `authorize` needed)
+| Property   | Description                                           |
+| ---------- | ----------------------------------------------------- |
+| `provider` | Provider ID this auth flow applies to                 |
+| `methods`  | Array of authentication methods (oauth or api)        |
+| `loader`   | Optional function to transform credentials before use |
 
-**OAuth callback methods:**
+---
 
-- **`auto`** — Plugin polls/waits for the callback automatically
-- **`code`** — User pastes an authorization code
+### Methods
 
-```ts title=".opencode/plugin/oauth-code.ts"
+Each method defines how users can authenticate. You can provide multiple methods to give users options.
+
+#### API key method
+
+The simplest method - users enter an API key directly.
+
+```ts
+{
+  type: "api",
+  label: "Enter API key",
+}
+```
+
+The `label` appears in the `/connect` menu. OpenCode handles prompting for and storing the key.
+
+To customize what happens after the user enters their key, add an `authorize` function:
+
+```ts
+{
+  type: "api",
+  label: "Enter API key",
+  async authorize(inputs) {
+    // inputs.apiKey contains the entered key
+    // Validate or transform the key
+    const isValid = await validateKey(inputs.apiKey)
+    if (!isValid) {
+      return { type: "failed" }
+    }
+    return { type: "success", key: inputs.apiKey }
+  },
+}
+```
+
+#### OAuth method
+
+Browser-based authentication flow.
+
+```ts
+{
+  type: "oauth",
+  label: "Sign in with SSO",
+  async authorize() {
+    return {
+      url: "https://auth.example.com/authorize?client_id=...",
+      instructions: "Complete sign-in in your browser",
+      method: "auto",
+      async callback() {
+        const token = await pollForToken()
+        return {
+          type: "success",
+          access: token.access_token,
+          refresh: token.refresh_token,
+          expires: Date.now() + token.expires_in * 1000,
+        }
+      },
+    }
+  },
+}
+```
+
+The `authorize` function returns:
+
+| Property       | Description                                  |
+| -------------- | -------------------------------------------- |
+| `url`          | URL to open in the browser                   |
+| `instructions` | Text shown to the user while authenticating  |
+| `method`       | How to complete auth: `"auto"` or `"code"`   |
+| `callback`     | Function called to get the final credentials |
+
+**Callback methods:**
+
+- **`auto`** — Your plugin handles the callback automatically (e.g., polling a server, running a local callback server). The `callback()` function takes no arguments.
+
+- **`code`** — User copies a code from the browser and pastes it into OpenCode. The `callback(code)` function receives the code as an argument.
+
+```ts
+// Code-based callback
 {
   type: "oauth",
   label: "Sign in",
@@ -366,12 +448,36 @@ export const AuthPlugin: Plugin = async (ctx) => {
 }
 ```
 
-**Custom prompts** — Collect additional information before authentication:
+**Callback return values:**
 
-```ts title=".opencode/plugin/auth-prompts.ts"
+The callback must return one of:
+
+```ts
+// API key credential
+{ type: "success", key: "sk-..." }
+
+// OAuth tokens (for token refresh support)
+{
+  type: "success",
+  access: "access_token",
+  refresh: "refresh_token",
+  expires: 1234567890000,  // Unix timestamp in milliseconds
+}
+
+// Authentication failed
+{ type: "failed" }
+```
+
+---
+
+### Prompts
+
+Collect additional information before authentication using `prompts`. Both `oauth` and `api` methods support prompts.
+
+```ts
 {
   type: "api",
-  label: "Enter API key",
+  label: "Connect to custom endpoint",
   prompts: [
     {
       type: "select",
@@ -380,41 +486,110 @@ export const AuthPlugin: Plugin = async (ctx) => {
       options: [
         { label: "US East", value: "us-east-1" },
         { label: "EU West", value: "eu-west-1" },
+        { label: "Custom", value: "custom" },
       ],
     },
     {
       type: "text",
       key: "endpoint",
-      message: "Custom endpoint",
+      message: "Custom endpoint URL",
       placeholder: "https://api.example.com",
       condition: (inputs) => inputs.region === "custom",
     },
   ],
   async authorize(inputs) {
-    // inputs: { region: "us-east-1", endpoint: "..." }
+    // inputs: { region: "us-east-1", endpoint: "...", apiKey: "..." }
     return { type: "success", key: inputs.apiKey }
   },
 }
 ```
 
-**Credential loader** — Transform stored credentials before use:
+**Text prompt:**
 
-```ts title=".opencode/plugin/auth-loader.ts"
+| Property      | Description                                            |
+| ------------- | ------------------------------------------------------ |
+| `type`        | `"text"`                                               |
+| `key`         | Key in the inputs object                               |
+| `message`     | Prompt message shown to user                           |
+| `placeholder` | Optional placeholder text                              |
+| `validate`    | Optional function returning error message or undefined |
+| `condition`   | Optional function to conditionally show this prompt    |
+
+**Select prompt:**
+
+| Property    | Description                                         |
+| ----------- | --------------------------------------------------- |
+| `type`      | `"select"`                                          |
+| `key`       | Key in the inputs object                            |
+| `message`   | Prompt message shown to user                        |
+| `options`   | Array of `{ label, value, hint? }`                  |
+| `condition` | Optional function to conditionally show this prompt |
+
+Prompt values are passed to the `authorize` function as the `inputs` object.
+
+---
+
+### Loader
+
+The `loader` function transforms stored credentials before they're used. This is useful for:
+
+- Refreshing expired OAuth tokens
+- Adding custom headers or options
+- Validating credentials before use
+
+```ts
 {
   auth: {
     provider: "my-provider",
-    async loader(getAuth, providerInfo) {
+    async loader(getAuth, provider) {
       const auth = await getAuth()
-      if (auth?.type === "oauth" && auth.expires < Date.now()) {
-        const newToken = await refreshToken(auth.refresh)
-        return { apiKey: newToken.access_token }
+
+      // No stored credentials
+      if (!auth) return {}
+
+      // API key credential
+      if (auth.type === "api") {
+        return { apiKey: auth.key }
       }
-      return { apiKey: auth?.access }
+
+      // OAuth credential - check if expired
+      if (auth.type === "oauth") {
+        if (auth.expires < Date.now()) {
+          // Refresh the token
+          const newToken = await refreshToken(auth.refresh)
+          return { apiKey: newToken.access_token }
+        }
+        return { apiKey: auth.access }
+      }
+
+      return {}
     },
     methods: [/* ... */],
   },
 }
 ```
+
+The `loader` receives:
+
+| Parameter  | Description                                    |
+| ---------- | ---------------------------------------------- |
+| `getAuth`  | Async function that returns stored credentials |
+| `provider` | Provider info object                           |
+
+The `getAuth()` function returns one of:
+
+```ts
+// OAuth tokens
+{ type: "oauth", access: string, refresh: string, expires: number }
+
+// API key
+{ type: "api", key: string }
+
+// No credentials stored
+undefined
+```
+
+The loader should return an object with credentials to pass to the provider (e.g., `{ apiKey: "..." }`).
 
 ---
 

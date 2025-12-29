@@ -1,32 +1,15 @@
 ---
 title: Plugins
-description: Write your own plugins to extend OpenCode.
+description: Add plugins to extend OpenCode.
 ---
 
-Plugins allow you to extend OpenCode by hooking into various events and customizing behavior. You can create plugins to add new features, integrate with external services, or modify OpenCode's default behavior.
+Plugins extend OpenCode with new features, integrations, and customizations.
 
-For examples, check out the [plugins](/docs/ecosystem#plugins) created by the community.
-
----
-
-## Use a plugin
-
-There are two ways to load plugins.
+Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 ---
 
-### From local files
-
-Place JavaScript or TypeScript files in the plugin directory.
-
-- `.opencode/plugin/` - Project-level plugins
-- `~/.config/opencode/plugin/` - Global plugins
-
-Files in these directories are automatically loaded at startup.
-
----
-
-### From npm
+## From npm
 
 Specify npm packages in your config file.
 
@@ -37,23 +20,24 @@ Specify npm packages in your config file.
 }
 ```
 
-Both regular and scoped npm packages are supported.
-
-Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
+Both regular and scoped npm packages are supported. Packages are installed automatically using Bun at startup and cached in `~/.cache/opencode/node_modules/`.
 
 ---
 
-### How plugins are installed
+## From local files
 
-**npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
+Place JavaScript or TypeScript files in the plugin directory.
 
-**Local plugins** are loaded directly from the plugin directory. Dependencies are not installed automatically. If your local plugin requires external packages, publish it to npm instead and add it to your config.
+- `.opencode/plugin/` - Project-level plugins
+- `~/.config/opencode/plugin/` - Global plugins
+
+Files in these directories are automatically loaded at startup. Dependencies are not installed automatically - if your local plugin requires external packages, publish it to npm instead.
 
 ---
 
-### Load order
+## Load order
 
-Plugins are loaded from all sources and all hooks run in sequence. The load order is:
+Plugins are loaded from all sources and hooks run in sequence:
 
 1. Global config (`~/.config/opencode/opencode.json`)
 2. Project config (`opencode.json`)
@@ -64,129 +48,6 @@ Duplicate npm packages with the same name and version are loaded once. However, 
 
 ---
 
-## Create a plugin
+## Creating plugins
 
-A plugin is a **JavaScript/TypeScript module** that exports one or more plugin functions. Each function receives a context object and returns a [hooks](/docs/hooks/) object.
-
----
-
-### Basic structure
-
-```js title=".opencode/plugin/example.js"
-export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
-  console.log("Plugin initialized!")
-
-  return {
-    // Hook implementations go here
-  }
-}
-```
-
-The plugin function receives:
-
-- `project`: The current project information.
-- `directory`: The current working directory.
-- `worktree`: The git worktree path.
-- `client`: An opencode SDK client for interacting with the AI.
-- `$`: Bun's [shell API](https://bun.sh/docs/runtime/shell) for executing commands.
-
----
-
-### TypeScript support
-
-For TypeScript plugins, you can import types from the plugin package:
-
-```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
-
-export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
-  return {
-    // Type-safe hook implementations
-  }
-}
-```
-
----
-
-## Examples
-
-Here are some examples of plugins you can use to extend OpenCode.
-
----
-
-### Send notifications
-
-Send notifications when certain events occur:
-
-```js title=".opencode/plugin/notification.js"
-export const NotificationPlugin = async ({ project, client, $, directory, worktree }) => {
-  return {
-    event: async ({ event }) => {
-      // Send notification on session completion
-      if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
-      }
-    },
-  }
-}
-```
-
-We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
-
----
-
-### .env protection
-
-Prevent OpenCode from reading `.env` files:
-
-```javascript title=".opencode/plugin/env-protection.js"
-export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
-  return {
-    "tool.execute.before": async (input, output) => {
-      if (input.tool === "read" && output.args.filePath.includes(".env")) {
-        throw new Error("Do not read .env files")
-      }
-    },
-  }
-}
-```
-
----
-
-### Custom tools
-
-Plugins can also add custom tools to OpenCode:
-
-```ts title=".opencode/plugin/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
-
-export const CustomToolsPlugin: Plugin = async (ctx) => {
-  return {
-    tool: {
-      mytool: tool({
-        description: "This is a custom tool",
-        args: {
-          foo: tool.schema.string(),
-        },
-        async execute(args, ctx) {
-          return `Hello ${args.foo}!`
-        },
-      }),
-    },
-  }
-}
-```
-
-The `tool` helper creates a custom tool that OpenCode can call. It takes a Zod schema function and returns a tool definition with:
-
-- `description`: What the tool does
-- `args`: Zod schema for the tool's arguments
-- `execute`: Function that runs when the tool is called
-
-Your custom tools will be available to OpenCode alongside built-in tools.
-
----
-
-## Next steps
-
-Learn about all the available [hooks](/docs/hooks/) you can use in your plugins.
+See [Plugin Development](/docs/plugin-dev/) to learn how to create your own plugins.
