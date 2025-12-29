@@ -63,6 +63,12 @@ import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
 
+function same<T>(a: readonly T[], b: readonly T[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
@@ -82,13 +88,22 @@ export default function Page() {
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
-  const userMessages = createMemo(() => messages().filter((m) => m.role === "user"))
-  const visibleUserMessages = createMemo(() => {
-    const revert = revertMessageID()
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  })
-  const lastUserMessage = createMemo(() => visibleUserMessages()?.at(-1))
+  const emptyUserMessages: UserMessage[] = []
+  const userMessages = createMemo(
+    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    emptyUserMessages,
+    { equals: same },
+  )
+  const visibleUserMessages = createMemo(
+    () => {
+      const revert = revertMessageID()
+      if (!revert) return userMessages()
+      return userMessages().filter((m) => m.id < revert)
+    },
+    emptyUserMessages,
+    { equals: same },
+  )
+  const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
   createEffect(
     on(
@@ -170,16 +185,22 @@ export default function Page() {
     ),
   )
 
-  createEffect(() => {
-    params.id
-    const status = sync.data.session_status[params.id ?? ""] ?? { type: "idle" }
-    batch(() => {
-      setStore("userInteracted", false)
-      setStore("stepsExpanded", status.type !== "idle")
-    })
-  })
+  const idle = { type: "idle" as const }
 
-  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? { type: "idle" })
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        const status = sync.data.session_status[id ?? ""] ?? idle
+        batch(() => {
+          setStore("userInteracted", false)
+          setStore("stepsExpanded", status.type !== "idle")
+        })
+      },
+    ),
+  )
+
+  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
   const working = createMemo(() => status().type !== "idle" && activeMessage()?.id === lastUserMessage()?.id)
 
   createRenderEffect((prev) => {
