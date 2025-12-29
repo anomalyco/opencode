@@ -175,7 +175,15 @@ export namespace Provider {
         if (auth?.type === "api") {
           Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
           return auth.key
+      const awsBearerToken = iife(() => {
+        const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
+        if (envToken) return envToken
+        if (auth?.type === "api") {
+          Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+          return auth.key
         }
+        return undefined
+      })
         return undefined
       })()
       if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
