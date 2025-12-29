@@ -1,0 +1,496 @@
+---
+title: "Durable streaming"
+description: "Enable persistent event streams with automatic catch-up and reconnection"
+icon: "rotate"
+---
+
+<Warning>
+This is an **EXPERIMENTAL** feature. The API may change in future releases. Enable with `experimental.durableStreams: true` in your OpenCode configuration.
+</Warning>
+
+OpenCode's durable streaming architecture provides HTTP-based, append-only event streams with offset-based resumability. This enables AI agent conversations to reliably stream events with automatic reconnection and catch-up semantics.
+
+## Why durable streams?
+
+Traditional Server-Sent Events (SSE) and WebSockets are connection-oriented—if a client disconnects, they lose events that occurred during the disconnection. Durable streams solve this by persisting events to an append-only log with monotonic offsets, enabling clients to resume from exactly where they left off.
+
+**Key differences:**
+
+- **SSE/WebSockets**: Transport layer (connection)
+- **Durable Streams**: Persistent log layer (data durability + offset tracking)
+- **Combined**: SSE for last-mile delivery, durable log semantics for reliability
+
+## Use cases
+
+<CardGroup cols={2}>
+<Card title="AI conversations" icon="comments">
+Stream LLM tokens with resume across reconnections. Never lose partial responses.
+</Card>
+
+<Card title="Agent tool outputs" icon="wrench">
+Stream tool execution events with full replay. Debug agent behavior after the fact.
+</Card>
+
+<Card title="Multi-server coordination" icon="server">
+Discover and stream events from multiple OpenCode servers running in parallel.
+</Card>
+
+<Card title="Event sourcing" icon="timeline">
+Build event-sourced architectures with client replay and audit trails.
+</Card>
+</CardGroup>
+
+## Enable durable streams
+
+Add the experimental flag to your OpenCode configuration:
+
+<Tabs>
+<Tab title="opencode.jsonc">
+```jsonc
+{
+  "experimental": {
+    "durableStreams": true
+  }
+}
+```
+</Tab>
+
+<Tab title="opencode.json">
+```json
+{
+  "experimental": {
+    "durableStreams": true
+  }
+}
+```
+</Tab>
+</Tabs>
+
+<Info>
+Configuration files can be placed in `.opencode/opencode.jsonc` (project-level) or `~/.config/opencode/opencode.jsonc` (global).
+</Info>
+
+## Architecture
+
+### EventStore
+
+SQLite-backed event persistence with ULID offsets. Provides:
+
+- **append(sessionId, event)**: Store event and return ULID offset
+- **query(sessionId, fromOffset)**: Retrieve events from offset onwards (catch-up)
+- **getLatestOffset(sessionId)**: Get most recent offset for session
+
+Offsets are ULIDs (Universally Unique Lexicographically Sortable Identifiers):
+
+- Lexicographically sortable (can compare for ordering)
+- Monotonically increasing within the same session
+- Timestamp-based prefix enables chronological sorting
+- Special offset `"-1"` represents stream start
+
+### ServerRegistry
+
+JSON file-based multi-server discovery. Servers self-register with:
+
+- **Unique ID**: Server identifier (generated on startup)
+- **URL and port**: Server endpoint for client connections
+- **PID**: Process ID for health checks
+- **Heartbeat**: 15-second heartbeat for liveness detection
+- **Metadata**: Optional server-specific metadata
+
+Stale servers (>30s without heartbeat) are automatically pruned.
+
+## API endpoints
+
+### Stream events
+
+Stream session events with catch-up and live modes.
+
+<ParamField query="sessionId" type="string" required>
+Session identifier to stream events for.
+</ParamField>
+
+<ParamField query="offset" type="string" default="-1">
+Starting offset. Use `"-1"` for stream start, or a ULID offset from a previous response.
+</ParamField>
+
+<ParamField query="live" type="boolean" default="false">
+Enable live SSE streaming with real-time events. When `false`, returns JSON array (catch-up mode).
+</ParamField>
+
+#### Catch-up mode (JSON)
+
+Returns all events from offset onwards as a JSON array.
+
+<RequestExample>
+```bash cURL
+curl 'http://localhost:3721/stream/events?sessionId=abc123&offset=-1'
+```
+</RequestExample>
+
+<ResponseExample>
+```json Success
+[
+  {
+    "offset": "01JGXY123456789ABCDEFGHIJK",
+    "event": {
+      "type": "message",
+      "role": "assistant",
+      "content": "Hello! How can I help you?"
+    }
+  },
+  {
+    "offset": "01JGXY234567890BCDEFGHIJKL",
+    "event": {
+      "type": "tool_call",
+      "tool": "read",
+      "args": { "filePath": "/path/to/file.ts" }
+    }
+  }
+]
+```
+</ResponseExample>
+
+**Response headers:**
+
+<ResponseField name="Stream-Next-Offset" type="string">
+Latest offset in the stream. Use this value to resume from this point.
+</ResponseField>
+
+<ResponseField name="Stream-Up-To-Date" type="boolean">
+`true` when response includes all available events (no new events pending).
+</ResponseField>
+
+#### Live mode (SSE)
+
+Returns an SSE stream with catch-up events followed by real-time subscription.
+
+<RequestExample>
+```bash cURL
+curl 'http://localhost:3721/stream/events?sessionId=abc123&offset=-1&live=true'
+```
+</RequestExample>
+
+<ResponseExample>
+```text SSE Stream
+data: {"offset":"01JGXY123456789ABCDEFGHIJK","event":{"type":"message","role":"assistant","content":"Hello!"}}
+
+data: {"offset":"01JGXY234567890BCDEFGHIJKL","event":{"type":"tool_call","tool":"read","args":{"filePath":"/path/to/file.ts"}}}
+
+event: catch-up-complete
+data: {"offset":"01JGXY234567890BCDEFGHIJKL","upToDate":true}
+
+event: heartbeat
+data: {"timestamp":1672531200000}
+```
+</ResponseExample>
+
+**SSE event types:**
+
+- `data` (default): Event with offset and payload
+- `catch-up-complete`: Marks end of catch-up phase, includes latest offset
+- `heartbeat`: Keep-alive signal (every 30 seconds)
+
+### Server discovery
+
+Manage multi-server registry for distributed setups.
+
+#### List servers
+
+<RequestExample>
+```bash cURL
+curl http://localhost:3721/servers
+```
+</RequestExample>
+
+<ResponseExample>
+```json Success
+[
+  {
+    "id": "server-abc123",
+    "url": "http://localhost:3721",
+    "port": 3721,
+    "pid": 12345,
+    "lastHeartbeat": 1672531200000,
+    "metadata": {
+      "version": "1.0.0",
+      "hostname": "macbook-pro"
+    }
+  }
+]
+```
+</ResponseExample>
+
+#### Register server
+
+<RequestExample>
+```bash cURL
+curl -X POST http://localhost:3721/servers \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "id": "server-xyz789",
+    "url": "http://localhost:3722",
+    "port": 3722,
+    "pid": 67890,
+    "lastHeartbeat": 1672531200000
+  }'
+```
+</RequestExample>
+
+<ResponseExample>
+```json Success
+true
+```
+</ResponseExample>
+
+#### Unregister server
+
+<RequestExample>
+```bash cURL
+curl -X DELETE http://localhost:3721/servers/server-abc123
+```
+</RequestExample>
+
+<ResponseExample>
+```json Success
+true
+```
+</ResponseExample>
+
+## Offset semantics
+
+Offsets are **opaque strings** from the client's perspective. Always use the `Stream-Next-Offset` header from responses for resumption.
+
+<Warning>
+Do NOT parse or construct offsets manually. The server may encode chunk IDs or use different offset schemes in the future.
+</Warning>
+
+**Offset guarantees:**
+
+1. **Lexicographically sortable**: `offsetA < offsetB` means `offsetA` occurred before `offsetB`
+2. **Monotonically increasing**: New events always get higher offsets
+3. **Resumable**: Query from any offset to get all subsequent events
+4. **Special sentinel**: `"-1"` always means "start from beginning"
+
+## Catch-up semantics
+
+When a client reconnects after a disconnection:
+
+<Steps>
+<Step title="Store last offset">
+Persist the `Stream-Next-Offset` from the last successful response.
+
+```javascript
+let lastOffset = "-1"
+
+function handleResponse(response) {
+  lastOffset = response.headers.get("Stream-Next-Offset")
+  // Process events...
+}
+```
+</Step>
+
+<Step title="Resume with stored offset">
+On reconnection, pass the stored offset to resume from that point.
+
+```javascript
+const url = `http://localhost:3721/stream/events?sessionId=${sessionId}&offset=${lastOffset}&live=true`
+const response = await fetch(url)
+```
+</Step>
+
+<Step title="Receive catch-up events">
+The server sends all events that occurred since the stored offset, followed by the `catch-up-complete` event.
+
+```javascript
+const stream = response.body
+  .pipeThrough(new TextDecoderStream())
+  .pipeThrough(new EventSourceParserStream())
+
+for await (const message of stream) {
+  if (message.event === "catch-up-complete") {
+    console.log("Caught up! Switching to live mode.")
+    continue
+  }
+  
+  const { offset, event } = JSON.parse(message.data)
+  handleEvent(event)
+  lastOffset = offset // Update stored offset
+}
+```
+
+<Check>
+The client is now synchronized and receiving real-time events.
+</Check>
+</Step>
+</Steps>
+
+## Client implementation example
+
+Here's a complete example using the browser's `EventSource` API wrapper:
+
+```typescript TypeScript Client
+import { EventSourceParserStream } from "eventsource-parser/stream"
+
+class DurableStreamClient {
+  private lastOffset = "-1"
+  private sessionId: string
+  private baseUrl: string
+  private abortController?: AbortController
+
+  constructor(sessionId: string, baseUrl = "http://localhost:3721") {
+    this.sessionId = sessionId
+    this.baseUrl = baseUrl
+  }
+
+  async connect(onEvent: (event: unknown) => void) {
+    this.abortController = new AbortController()
+
+    const url = `${this.baseUrl}/stream/events?sessionId=${this.sessionId}&offset=${this.lastOffset}&live=true`
+
+    const response = await fetch(url, {
+      signal: this.abortController.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`)
+    }
+
+    const stream = response.body!
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(new EventSourceParserStream())
+
+    const reader = stream.getReader()
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        if (value.event === "catch-up-complete") {
+          const data = JSON.parse(value.data)
+          this.lastOffset = data.offset
+          console.log("Catch-up complete, switching to live mode")
+          continue
+        }
+
+        if (value.event === "heartbeat") {
+          console.log("Heartbeat received")
+          continue
+        }
+
+        const { offset, event } = JSON.parse(value.data)
+        this.lastOffset = offset
+        onEvent(event)
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
+  disconnect() {
+    this.abortController?.abort()
+  }
+
+  getLastOffset(): string {
+    return this.lastOffset
+  }
+}
+
+// Usage
+const client = new DurableStreamClient("my-session-123")
+
+await client.connect((event) => {
+  console.log("Received event:", event)
+})
+
+// On disconnect, the lastOffset is preserved
+// Reconnect will automatically catch up
+```
+
+## Server self-registration
+
+OpenCode servers automatically register themselves when started with the `serve` command (requires `experimental.durableStreams: true`):
+
+<Steps>
+<Step title="Server startup">
+Server generates a unique ID and registers with the registry:
+
+```bash
+opencode serve --port 3721
+```
+
+```text Output
+Server registered: server-abc123
+URL: http://localhost:3721
+Heartbeat: 15s interval
+```
+</Step>
+
+<Step title="Heartbeat">
+Server sends heartbeat every 15 seconds to maintain liveness.
+</Step>
+
+<Step title="Auto-pruning">
+The registry automatically removes servers with >30s stale heartbeats.
+</Step>
+</Steps>
+
+<Info>
+Manual registration is also supported via `POST /servers` for external servers or custom setups.
+</Info>
+
+## Error handling
+
+All durable streaming endpoints return consistent error responses when the feature is disabled:
+
+<ResponseExample>
+```json Feature Disabled
+{
+  "error": "DurableStreamsDisabled",
+  "message": "Enable experimental.durableStreams in config to use this endpoint"
+}
+```
+</ResponseExample>
+
+**Status code:** `400 Bad Request`
+
+## Limitations and roadmap
+
+<AccordionGroup>
+<Accordion title="Current limitations">
+- **No real-time event subscription**: Live mode currently only sends catch-up events, then heartbeats. Real-time event broadcast requires EventBus integration (TODO).
+- **Single-server focus**: While multi-server discovery exists, event replication across servers is not yet implemented.
+- **No retention policies**: Events persist indefinitely in SQLite. Automatic pruning/archiving not yet implemented.
+- **No CDN caching**: Offset-based URLs are cacheable by design, but CDN integration not yet documented.
+</Accordion>
+
+<Accordion title="Planned features">
+- **EventBus integration**: Real-time event broadcast to live SSE connections
+- **Event replication**: Sync events across multiple servers for high availability
+- **Retention policies**: Automatic pruning of old events, configurable TTLs
+- **State protocol**: Higher-level abstraction with insert/update/delete semantics
+- **CDN optimization**: Request collapsing and edge caching for massive fan-out
+</Accordion>
+
+<Accordion title="Migration from plain SSE">
+If you're currently using plain SSE, here's how to migrate:
+
+1. **Enable durable streams**: Add `experimental.durableStreams: true` to config
+2. **Add offset tracking**: Persist `Stream-Next-Offset` from responses
+3. **Implement catch-up**: Use stored offset in reconnection requests
+4. **Handle catch-up-complete**: Switch to live mode after catch-up phase
+5. **Test reconnection**: Verify clients resume correctly after disconnection
+</Accordion>
+</AccordionGroup>
+
+## Learn more
+
+<CardGroup cols={2}>
+<Card title="Durable Streams Protocol" icon="book" href="https://durable.stream">
+Full protocol specification with offset semantics, CDN caching, and state protocol.
+</Card>
+
+<Card title="ULID Spec" icon="fingerprint" href="https://github.com/ulid/spec">
+Universally Unique Lexicographically Sortable Identifiers for monotonic offsets.
+</Card>
+</CardGroup>
