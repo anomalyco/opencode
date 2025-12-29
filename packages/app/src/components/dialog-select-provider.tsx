@@ -24,7 +24,7 @@ export const DialogSelectProvider: Component = () => {
         sortBy={(a, b) => {
           if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
             return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
-          return a.name.localeCompare(b.name)
+          return (a.name ?? "").localeCompare(b.name ?? "")
         }}
         sortGroupsBy={(a, b) => {
           if (a.category === "Popular" && b.category !== "Popular") return -1

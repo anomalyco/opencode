@@ -48,7 +48,7 @@ const getModelsInfo = query(async (workspaceID: string) => {
 
           const modelAName = Array.isArray(modelA) ? modelA[0].name : modelA.name
           const modelBName = Array.isArray(modelB) ? modelB[0].name : modelB.name
-          return modelAName.localeCompare(modelBName)
+          return (modelAName ?? "").localeCompare(modelBName ?? "")
         })
         .map(([id, model]) => ({ id, name: Array.isArray(model) ? model[0].name : model.name })),
       disabled: await Model.listDisabled(),

@@ -71,7 +71,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                 sortBy={(a, b) => {
                   if (popularProviders.includes(a.id) && popularProviders.includes(b.id))
                     return popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id)
-                  return a.name.localeCompare(b.name)
+                  return (a.name ?? "").localeCompare(b.name ?? "")
                 }}
                 onSelect={(x) => {
                   if (!x) return

@@ -41,7 +41,7 @@ export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
         items={models}
         current={local.model.current()}
         filterKeys={["provider.name", "name", "id"]}
-        sortBy={(a, b) => a.name.localeCompare(b.name)}
+        sortBy={(a, b) => (a.name ?? "").localeCompare(b.name ?? "")}
         groupBy={(x) => x.provider.name}
         sortGroupsBy={(a, b) => {
           if (a.category === "Recent" && b.category !== "Recent") return -1

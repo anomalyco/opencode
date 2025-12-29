@@ -56,7 +56,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 const result = Binary.search(messages, input.messageID, (m) => m.id)
                 messages.splice(result.index, 0, message)
               }
-              draft.part[input.messageID] = input.parts.slice().sort((a, b) => a.id.localeCompare(b.id))
+              draft.part[input.messageID] = input.parts.slice().sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
             }),
           )
         },
@@ -89,7 +89,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 (messages.data ?? [])
                   .map((x) => x.info)
                   .slice()
-                  .sort((a, b) => a.id.localeCompare(b.id)),
+                  .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? "")),
                 { key: "id" },
               ),
             )
@@ -99,7 +99,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 "part",
                 message.info.id,
                 reconcile(
-                  message.parts.slice().sort((a, b) => a.id.localeCompare(b.id)),
+                  message.parts.slice().sort((a, b) => (a.id ?? "").localeCompare(b.id ?? "")),
                   { key: "id" },
                 ),
               )
@@ -113,7 +113,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           await sdk.client.session.list().then((x) => {
             const sessions = (x.data ?? [])
               .slice()
-              .sort((a, b) => a.id.localeCompare(b.id))
+              .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""))
               .slice(0, store.limit)
             setStore("session", reconcile(sessions, { key: "id" }))
           })

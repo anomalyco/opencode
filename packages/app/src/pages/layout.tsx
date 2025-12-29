@@ -226,7 +226,7 @@ export default function Layout(props: ParentProps) {
     const bUpdated = b.time.updated ?? b.time.created
     const aRecent = aUpdated > oneMinuteAgo
     const bRecent = bUpdated > oneMinuteAgo
-    if (aRecent && bRecent) return a.id.localeCompare(b.id)
+    if (aRecent && bRecent) return (a.id ?? "").localeCompare(b.id ?? "")
     if (aRecent && !bRecent) return -1
     if (!aRecent && bRecent) return 1
     return bUpdated - aUpdated

@@ -13,7 +13,7 @@ export const DialogSelectMcp: Component = () => {
   const items = createMemo(() =>
     Object.entries(sync.data.mcp ?? {})
       .map(([name, status]) => ({ name, status: status.status }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
+      .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")),
   )
 
   const toggle = async (name: string) => {
@@ -41,7 +41,7 @@ export const DialogSelectMcp: Component = () => {
         key={(x) => x?.name ?? ""}
         items={items}
         filterKeys={["name", "status"]}
-        sortBy={(a, b) => a.name.localeCompare(b.name)}
+        sortBy={(a, b) => (a.name ?? "").localeCompare(b.name ?? "")}
         onSelect={(x) => {
           if (x) toggle(x.name)
         }}
