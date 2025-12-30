@@ -23,6 +23,13 @@ export function serverDisplayName(url: string) {
     .split("/")[0]
 }
 
+function projectsKey(url: string) {
+  if (!url) return ""
+  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+  if (host === "localhost" || host === "127.0.0.1") return "local"
+  return url
+}
+
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   init: (props: { defaultUrl: string }) => {
@@ -100,7 +107,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       onCleanup(() => clearInterval(interval))
     })
 
-    const projectsList = createMemo(() => store.projects[active()] ?? [])
+    const origin = createMemo(() => projectsKey(active()))
+    const projectsList = createMemo(() => store.projects[origin()] ?? [])
 
     return {
       ready: isReady,
@@ -120,46 +128,46 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       projects: {
         list: projectsList,
         open(directory: string) {
-          const url = active()
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           if (current.find((x) => x.worktree === directory)) return
-          setStore("projects", url, [{ worktree: directory, expanded: true }, ...current])
+          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
         },
         close(directory: string) {
-          const url = active()
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           setStore(
             "projects",
-            url,
+            key,
             current.filter((x) => x.worktree !== directory),
           )
         },
         expand(directory: string) {
-          const url = active()
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", url, index, "expanded", true)
+          if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
         collapse(directory: string) {
-          const url = active()
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", url, index, "expanded", false)
+          if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
-          const url = active()
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           const fromIndex = current.findIndex((x) => x.worktree === directory)
           if (fromIndex === -1 || fromIndex === toIndex) return
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
-          setStore("projects", url, result)
+          setStore("projects", key, result)
         },
       },
     }
