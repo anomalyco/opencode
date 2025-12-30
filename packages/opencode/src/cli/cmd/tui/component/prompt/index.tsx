@@ -277,6 +277,18 @@ export function Prompt(props: PromptProps) {
     if (!props.disabled) input.cursorColor = theme.text
   })
 
+  // Resize textarea when placeholder changes (e.g., when switching sessions or when placeholder index changes)
+  createEffect(() => {
+    const placeholderText = props.sessionID ? undefined : PLACEHOLDERS[store.placeholder]
+    // Track both the placeholder text and sessionID changes
+    if (input) {
+      setTimeout(() => {
+        input.getLayoutNode().markDirty()
+        renderer.requestRender()
+      }, 0)
+    }
+  })
+
   const lastUserMessage = createMemo(() => {
     if (!props.sessionID) return undefined
     const messages = sync.data.message[props.sessionID]
