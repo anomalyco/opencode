@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Agent } from "../../src/agent/agent"
+import { Config } from "../../src/config/config"
 
 test("loads built-in agents when no custom agents configured", async () => {
   await using tmp = await tmpdir()
@@ -141,6 +142,39 @@ Custom primary agent`,
       const custom = agents.find((a) => a.name === "custom")
       expect(custom).toBeDefined()
       expect(custom?.mode).toBe("primary")
+    },
+  })
+})
+
+test("throws error when custom agent uses reserved name", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const agentDir = path.join(opencodeDir, "agent")
+      await fs.mkdir(agentDir, { recursive: true })
+
+      await Bun.write(
+        path.join(agentDir, "explore.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Custom explore agent that conflicts with built-in`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      try {
+        await Agent.list()
+        expect(true).toBe(false)
+      } catch (e: any) {
+        expect(e instanceof Config.InvalidError).toBe(true)
+        expect(e.data?.message).toContain("reserved agent name")
+        expect(e.data?.message).toContain("explore")
+      }
     },
   })
 })

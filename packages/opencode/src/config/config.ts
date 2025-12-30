@@ -22,6 +22,8 @@ import { ConfigMarkdown } from "./markdown"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  export const RESERVED_AGENT_NAMES = ["build", "plan", "general", "explore", "compaction", "title", "summary"] as const
+
   // Custom merge function that concatenates plugin arrays instead of replacing them
   function mergeConfigWithPlugins(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
@@ -261,6 +263,13 @@ export namespace Config {
         const relativePath = agentFolderPath.replace(".md", "")
         const pathParts = relativePath.split("/")
         agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
+      }
+
+      if (RESERVED_AGENT_NAMES.includes(agentName as (typeof RESERVED_AGENT_NAMES)[number])) {
+        throw new InvalidError({
+          path: item,
+          message: `"${agentName}" is a reserved agent name. Reserved names: ${RESERVED_AGENT_NAMES.join(", ")}. Choose a different name for your custom agent.`,
+        })
       }
 
       const config = {
