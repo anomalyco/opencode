@@ -83,7 +83,7 @@
       [data-slot="dialog-description"] {
         display: flex;
         padding: 16px;
-        padding-left: 20px;
+        padding-left: 24px;
         padding-top: 0;
         margin-top: -8px;
         justify-content: space-between;

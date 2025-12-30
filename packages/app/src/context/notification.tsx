@@ -2,7 +2,9 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
+import { usePlatform } from "@/context/platform"
 import { Binary } from "@opencode-ai/util/binary"
+import { base64Encode } from "@opencode-ai/util/encode"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { makeAudioPlayer } from "@solid-primitives/audio"
 import idleSound from "@opencode-ai/ui/audio/staplebops-01.aac"
@@ -43,6 +45,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
+    const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
       "notification.v1",
@@ -64,8 +67,8 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const sessionID = event.properties.sessionID
           const [syncStore] = globalSync.child(directory)
           const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
-          const isChild = match.found && syncStore.session[match.index].parentID
-          if (isChild) break
+          const session = match.found ? syncStore.session[match.index] : undefined
+          if (session?.parentID) break
           try {
             idlePlayer?.play()
           } catch {}
@@ -74,25 +77,29 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             type: "turn-complete",
             session: sessionID,
           })
+          const href = `/${base64Encode(directory)}/session/${sessionID}`
+          void platform.notify("Response ready", session?.title ?? sessionID, href)
           break
         }
         case "session.error": {
           const sessionID = event.properties.sessionID
-          if (sessionID) {
-            const [syncStore] = globalSync.child(directory)
-            const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
-            const isChild = match.found && syncStore.session[match.index].parentID
-            if (isChild) break
-          }
+          const [syncStore] = globalSync.child(directory)
+          const match = sessionID ? Binary.search(syncStore.session, sessionID, (s) => s.id) : undefined
+          const session = sessionID && match?.found ? syncStore.session[match.index] : undefined
+          if (session?.parentID) break
           try {
             errorPlayer?.play()
           } catch {}
+          const error = "error" in event.properties ? event.properties.error : undefined
           setStore("list", store.list.length, {
             ...base,
             type: "error",
             session: sessionID ?? "global",
-            error: "error" in event.properties ? event.properties.error : undefined,
+            error,
           })
+          const description = session?.title ?? (typeof error === "string" ? error : "An error occurred")
+          const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+          void platform.notify("Session error", description, href)
           break
         }
       }
