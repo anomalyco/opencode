@@ -818,18 +818,6 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Maximum file entries per session in FileTime cache (default: 500)"),
-          pruneStepInterval: z
-            .number()
-            .int()
-            .positive()
-            .optional()
-            .describe("Run pruning every N steps during long sessions (default: 50)"),
-          pruneMessageThreshold: z
-            .number()
-            .int()
-            .positive()
-            .optional()
-            .describe("Run pruning when messages exceed this count (default: 200)"),
           maxQueuedCallbacks: z
             .number()
             .int()

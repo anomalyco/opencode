@@ -50,8 +50,6 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
-  const PRUNE_STEP_INTERVAL = 50
-  const PRUNE_MESSAGE_THRESHOLD = 200
   const MAX_QUEUED_CALLBACKS = 10
 
   const state = Instance.state(
@@ -251,10 +249,6 @@ export namespace SessionPrompt {
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
-
-      if (step > 0 && (step % PRUNE_STEP_INTERVAL === 0 || msgs.length > PRUNE_MESSAGE_THRESHOLD)) {
-        await SessionCompaction.prune({ sessionID })
-      }
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
