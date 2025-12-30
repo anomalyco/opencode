@@ -94,7 +94,7 @@ export function Header() {
               <ContextInfo context={context} cost={cost} />
             </box>
           </Match>
-          <Match when={true}>
+          <Match when={session()}>
             <box flexDirection="row" justifyContent="space-between" gap={1}>
               <Title session={session} />
               <ContextInfo context={context} cost={cost} />
@@ -103,9 +103,9 @@ export function Header() {
               <box flexDirection="row" justifyContent="space-between" gap={1}>
                 <box flexGrow={1} flexShrink={1}>
                   <Switch>
-                    <Match when={session().share?.url}>
+                    <Match when={session()?.share?.url}>
                       <text fg={theme.textMuted} wrapMode="word">
-                        {session().share!.url}
+                        {session()!.share!.url}
                       </text>
                     </Match>
                     <Match when={true}>
