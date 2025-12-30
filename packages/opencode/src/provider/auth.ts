@@ -3,9 +3,14 @@ import { Plugin } from "../plugin"
 import { map, filter, pipe, fromEntries, mapValues } from "remeda"
 import z from "zod"
 import { fn } from "@/util/fn"
-import type { AuthOuathResult, Hooks } from "@opencode-ai/plugin"
+import type { AuthOuathResult } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import { Auth } from "@/auth"
+
+interface PendingAuth {
+  result: AuthOuathResult
+  accountName: string
+}
 
 export namespace ProviderAuth {
   const state = Instance.state(async () => {
@@ -15,7 +20,7 @@ export namespace ProviderAuth {
       map((x) => [x.auth!.provider, x.auth!] as const),
       fromEntries(),
     )
-    return { methods, pending: {} as Record<string, AuthOuathResult> }
+    return { methods, pending: {} as Record<string, PendingAuth> }
   })
 
   export const Method = z
@@ -55,13 +60,15 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       method: z.number(),
+      accountName: z.string().optional(),
     }),
     async (input): Promise<Authorization | undefined> => {
       const auth = await state().then((s) => s.methods[input.providerID])
       const method = auth.methods[input.method]
       if (method.type === "oauth") {
         const result = await method.authorize()
-        await state().then((s) => (s.pending[input.providerID] = result))
+        const accountName = input.accountName ?? "default"
+        await state().then((s) => (s.pending[input.providerID] = { result, accountName }))
         return {
           url: result.url,
           method: result.method,
@@ -76,10 +83,14 @@ export namespace ProviderAuth {
       providerID: z.string(),
       method: z.number(),
       code: z.string().optional(),
+      accountName: z.string().optional(),
     }),
     async (input) => {
-      const match = await state().then((s) => s.pending[input.providerID])
-      if (!match) throw new OauthMissing({ providerID: input.providerID })
+      const pending = await state().then((s) => s.pending[input.providerID])
+      if (!pending) throw new OauthMissing({ providerID: input.providerID })
+
+      const { result: match, accountName: pendingAccountName } = pending
+      const accountName = input.accountName ?? pendingAccountName
       let result
 
       if (match.method === "code") {
@@ -93,13 +104,13 @@ export namespace ProviderAuth {
 
       if (result?.type === "success") {
         if ("key" in result) {
-          await Auth.set(input.providerID, {
+          await Auth.setAccount(input.providerID, accountName, {
             type: "api",
             key: result.key,
           })
         }
         if ("refresh" in result) {
-          await Auth.set(input.providerID, {
+          await Auth.setAccount(input.providerID, accountName, {
             type: "oauth",
             access: result.access,
             refresh: result.refresh,
@@ -117,9 +128,11 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       key: z.string(),
+      accountName: z.string().optional(),
     }),
     async (input) => {
-      await Auth.set(input.providerID, {
+      const accountName = input.accountName ?? "default"
+      await Auth.setAccount(input.providerID, accountName, {
         type: "api",
         key: input.key,
       })

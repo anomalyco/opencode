@@ -8,6 +8,13 @@ import type {
   AppLogErrors,
   AppLogResponses,
   Auth as Auth2,
+  AuthAccountsListResponses,
+  AuthAccountsRemoveErrors,
+  AuthAccountsRemoveResponses,
+  AuthAccountsSetActiveErrors,
+  AuthAccountsSetActiveResponses,
+  AuthAccountsSetErrors,
+  AuthAccountsSetResponses,
   AuthSetErrors,
   AuthSetResponses,
   CommandListResponses,
@@ -1672,6 +1679,7 @@ export class Oauth extends HeyApiClient {
       providerID: string
       directory?: string
       method?: number
+      accountName?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1683,6 +1691,7 @@ export class Oauth extends HeyApiClient {
             { in: "path", key: "providerID" },
             { in: "query", key: "directory" },
             { in: "body", key: "method" },
+            { in: "body", key: "accountName" },
           ],
         },
       ],
@@ -1714,6 +1723,7 @@ export class Oauth extends HeyApiClient {
       directory?: string
       method?: number
       code?: string
+      accountName?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1726,6 +1736,7 @@ export class Oauth extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "method" },
             { in: "body", key: "code" },
+            { in: "body", key: "accountName" },
           ],
         },
       ],
@@ -2028,6 +2039,147 @@ export class App extends HeyApiClient {
   }
 }
 
+export class Accounts extends HeyApiClient {
+  /**
+   * List accounts
+   *
+   * List all accounts for a provider
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AuthAccountsListResponses, unknown, ThrowOnError>({
+      url: "/auth/{providerID}/accounts",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove account
+   *
+   * Remove a named account from a provider
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      accountName: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "accountName" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<AuthAccountsRemoveResponses, AuthAccountsRemoveErrors, ThrowOnError>(
+      {
+        url: "/auth/{providerID}/accounts/{accountName}",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Set account credentials
+   *
+   * Set authentication credentials for a named account
+   */
+  public set<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      accountName: string
+      directory?: string
+      auth?: Auth2
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "accountName" },
+            { in: "query", key: "directory" },
+            { key: "auth", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<AuthAccountsSetResponses, AuthAccountsSetErrors, ThrowOnError>({
+      url: "/auth/{providerID}/accounts/{accountName}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set active account
+   *
+   * Set the active account for a provider
+   */
+  public setActive<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      accountName: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "accountName" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      AuthAccountsSetActiveResponses,
+      AuthAccountsSetActiveErrors,
+      ThrowOnError
+    >({
+      url: "/auth/{providerID}/accounts/{accountName}/active",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Auth extends HeyApiClient {
   /**
    * Remove MCP OAuth
@@ -2194,6 +2346,8 @@ export class Auth extends HeyApiClient {
       },
     })
   }
+
+  accounts = new Accounts({ client: this.client })
 }
 
 export class Mcp extends HeyApiClient {

@@ -1947,6 +1947,12 @@ export type WellKnownAuth = {
 
 export type Auth = OAuth | ApiAuth | WellKnownAuth
 
+export type AccountInfo = {
+  name: string
+  type: "oauth" | "api" | "wellknown"
+  active: boolean
+}
+
 export type GlobalHealthData = {
   body?: never
   path?: never
@@ -3519,6 +3525,10 @@ export type ProviderOauthAuthorizeData = {
      * Auth method index
      */
     method: number
+    /**
+     * Account name for multi-account support
+     */
+    accountName?: string
   }
   path: {
     /**
@@ -3560,6 +3570,10 @@ export type ProviderOauthCallbackData = {
      * OAuth authorization code
      */
     code?: string
+    /**
+     * Account name for multi-account support
+     */
+    accountName?: string
   }
   path: {
     /**
@@ -4339,6 +4353,116 @@ export type AuthSetResponses = {
 }
 
 export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
+
+export type AuthAccountsListData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/auth/{providerID}/accounts"
+}
+
+export type AuthAccountsListResponses = {
+  /**
+   * List of accounts
+   */
+  200: Array<AccountInfo>
+}
+
+export type AuthAccountsListResponse = AuthAccountsListResponses[keyof AuthAccountsListResponses]
+
+export type AuthAccountsRemoveData = {
+  body?: never
+  path: {
+    providerID: string
+    accountName: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/auth/{providerID}/accounts/{accountName}"
+}
+
+export type AuthAccountsRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthAccountsRemoveError = AuthAccountsRemoveErrors[keyof AuthAccountsRemoveErrors]
+
+export type AuthAccountsRemoveResponses = {
+  /**
+   * Successfully removed account
+   */
+  200: boolean
+}
+
+export type AuthAccountsRemoveResponse = AuthAccountsRemoveResponses[keyof AuthAccountsRemoveResponses]
+
+export type AuthAccountsSetData = {
+  body?: Auth
+  path: {
+    providerID: string
+    accountName: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/auth/{providerID}/accounts/{accountName}"
+}
+
+export type AuthAccountsSetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthAccountsSetError = AuthAccountsSetErrors[keyof AuthAccountsSetErrors]
+
+export type AuthAccountsSetResponses = {
+  /**
+   * Successfully set account credentials
+   */
+  200: boolean
+}
+
+export type AuthAccountsSetResponse = AuthAccountsSetResponses[keyof AuthAccountsSetResponses]
+
+export type AuthAccountsSetActiveData = {
+  body?: never
+  path: {
+    providerID: string
+    accountName: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/auth/{providerID}/accounts/{accountName}/active"
+}
+
+export type AuthAccountsSetActiveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthAccountsSetActiveError = AuthAccountsSetActiveErrors[keyof AuthAccountsSetActiveErrors]
+
+export type AuthAccountsSetActiveResponses = {
+  /**
+   * Successfully set active account
+   */
+  200: boolean
+}
+
+export type AuthAccountsSetActiveResponse = AuthAccountsSetActiveResponses[keyof AuthAccountsSetActiveResponses]
 
 export type EventSubscribeData = {
   body?: never

@@ -1704,14 +1704,16 @@ export namespace Server {
           "json",
           z.object({
             method: z.number().meta({ description: "Auth method index" }),
+            accountName: z.string().optional().meta({ description: "Account name for multi-account support" }),
           }),
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          const { method } = c.req.valid("json")
+          const { method, accountName } = c.req.valid("json")
           const result = await ProviderAuth.authorize({
             providerID,
             method,
+            accountName,
           })
           return c.json(result)
         },
@@ -1745,15 +1747,17 @@ export namespace Server {
           z.object({
             method: z.number().meta({ description: "Auth method index" }),
             code: z.string().optional().meta({ description: "OAuth authorization code" }),
+            accountName: z.string().optional().meta({ description: "Account name for multi-account support" }),
           }),
         ),
         async (c) => {
           const providerID = c.req.valid("param").providerID
-          const { method, code } = c.req.valid("json")
+          const { method, code, accountName } = c.req.valid("json")
           await ProviderAuth.callback({
             providerID,
             method,
             code,
+            accountName,
           })
           return c.json(true)
         },
@@ -2567,6 +2571,130 @@ export namespace Server {
           const info = c.req.valid("json")
           await Auth.set(providerID, info)
           return c.json(true)
+        },
+      )
+      .get(
+        "/auth/:providerID/accounts",
+        describeRoute({
+          summary: "List accounts",
+          description: "List all accounts for a provider",
+          operationId: "auth.accounts.list",
+          responses: {
+            200: {
+              description: "List of accounts",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(Auth.AccountInfo)),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            providerID: z.string(),
+          }),
+        ),
+        async (c) => {
+          const providerID = c.req.valid("param").providerID
+          const accounts = await Auth.listAccounts(providerID)
+          return c.json(accounts)
+        },
+      )
+      .put(
+        "/auth/:providerID/accounts/:accountName",
+        describeRoute({
+          summary: "Set account credentials",
+          description: "Set authentication credentials for a named account",
+          operationId: "auth.accounts.set",
+          responses: {
+            200: {
+              description: "Successfully set account credentials",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            providerID: z.string(),
+            accountName: z.string(),
+          }),
+        ),
+        validator("json", Auth.Info),
+        async (c) => {
+          const { providerID, accountName } = c.req.valid("param")
+          const info = c.req.valid("json")
+          await Auth.setAccount(providerID, accountName, info)
+          return c.json(true)
+        },
+      )
+      .post(
+        "/auth/:providerID/accounts/:accountName/active",
+        describeRoute({
+          summary: "Set active account",
+          description: "Set the active account for a provider",
+          operationId: "auth.accounts.setActive",
+          responses: {
+            200: {
+              description: "Successfully set active account",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            providerID: z.string(),
+            accountName: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { providerID, accountName } = c.req.valid("param")
+          const success = await Auth.setActive(providerID, accountName)
+          return c.json(success)
+        },
+      )
+      .delete(
+        "/auth/:providerID/accounts/:accountName",
+        describeRoute({
+          summary: "Remove account",
+          description: "Remove a named account from a provider",
+          operationId: "auth.accounts.remove",
+          responses: {
+            200: {
+              description: "Successfully removed account",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            providerID: z.string(),
+            accountName: z.string(),
+          }),
+        ),
+        async (c) => {
+          const { providerID, accountName } = c.req.valid("param")
+          const success = await Auth.removeAccount(providerID, accountName)
+          return c.json(success)
         },
       )
       .get(

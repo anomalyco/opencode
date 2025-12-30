@@ -20,6 +20,145 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   openrouter: 5,
 }
 
+interface AccountInfo {
+  name: string
+  type: "oauth" | "api" | "wellknown"
+  active: boolean
+}
+
+function DialogAccounts(props: { providerID: string; providerName: string }) {
+  const sdk = useSDK()
+  const dialog = useDialog()
+  const sync = useSync()
+  const [accounts, setAccounts] = createSignal<AccountInfo[]>([])
+
+  onMount(async () => {
+    const result = await sdk.client.auth.accounts.list({ providerID: props.providerID })
+    if (result.data) setAccounts(result.data)
+  })
+
+  const options = createMemo(() => {
+    const accountOptions = accounts().map((account) => ({
+      title: account.name,
+      value: account.name,
+      description: account.active ? "(Active)" : undefined,
+      async onSelect() {
+        if (account.active) {
+          dialog.replace(() => <DialogModel providerID={props.providerID} />)
+          return
+        }
+        await sdk.client.auth.accounts.setActive({
+          providerID: props.providerID,
+          accountName: account.name,
+        })
+        await sdk.client.instance.dispose()
+        await sync.bootstrap()
+        dialog.replace(() => <DialogModel providerID={props.providerID} />)
+      },
+    }))
+
+    return [
+      ...accountOptions,
+      {
+        title: "+ Add account",
+        value: "__add__",
+        async onSelect() {
+          dialog.replace(() => <DialogAccountName providerID={props.providerID} providerName={props.providerName} />)
+        },
+      },
+    ]
+  })
+
+  return <DialogSelect title={`${props.providerName} accounts`} options={options()} />
+}
+
+function DialogAccountName(props: { providerID: string; providerName: string }) {
+  const dialog = useDialog()
+
+  return (
+    <DialogPrompt
+      title="Account name"
+      placeholder="e.g. personal, work"
+      onConfirm={async (value) => {
+        const accountName = value?.trim() || "default"
+        dialog.replace(() => (
+          <DialogAuthMethod providerID={props.providerID} providerName={props.providerName} accountName={accountName} />
+        ))
+      }}
+    />
+  )
+}
+
+function DialogAuthMethod(props: { providerID: string; providerName: string; accountName: string }) {
+  const sync = useSync()
+  const dialog = useDialog()
+  const sdk = useSDK()
+
+  const methods = createMemo(() => {
+    return sync.data.provider_auth[props.providerID] ?? [{ type: "api", label: "API key" }]
+  })
+
+  onMount(async () => {
+    const m = methods()
+    if (m.length === 1) {
+      await startAuth(0, m[0])
+    }
+  })
+
+  async function startAuth(index: number, method: { type: string; label: string }) {
+    if (method.type === "oauth") {
+      const result = await sdk.client.provider.oauth.authorize({
+        providerID: props.providerID,
+        method: index,
+        accountName: props.accountName,
+      })
+      if (result.data?.method === "code") {
+        dialog.replace(() => (
+          <CodeMethod
+            providerID={props.providerID}
+            title={method.label}
+            index={index}
+            authorization={result.data!}
+            accountName={props.accountName}
+          />
+        ))
+      }
+      if (result.data?.method === "auto") {
+        dialog.replace(() => (
+          <AutoMethod
+            providerID={props.providerID}
+            title={method.label}
+            index={index}
+            authorization={result.data!}
+            accountName={props.accountName}
+          />
+        ))
+      }
+    }
+    if (method.type === "api") {
+      dialog.replace(() => (
+        <ApiMethod providerID={props.providerID} title={method.label} accountName={props.accountName} />
+      ))
+    }
+  }
+
+  const options = createMemo(() =>
+    methods().map((method, index) => ({
+      title: method.label,
+      value: index,
+      async onSelect() {
+        await startAuth(index, method)
+      },
+    })),
+  )
+
+  return (
+    <Show when={methods().length > 1} fallback={null}>
+      <DialogSelect title="Select auth method" options={options()} />
+    </Show>
+  )
+}
+
 export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
@@ -37,51 +176,15 @@ export function createDialogProviderOptions() {
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
-          const methods = sync.data.provider_auth[provider.id] ?? [
-            {
-              type: "api",
-              label: "API key",
-            },
-          ]
-          let index: number | null = 0
-          if (methods.length > 1) {
-            index = await new Promise<number | null>((resolve) => {
-              dialog.replace(
-                () => (
-                  <DialogSelect
-                    title="Select auth method"
-                    options={methods.map((x, index) => ({
-                      title: x.label,
-                      value: index,
-                    }))}
-                    onSelect={(option) => resolve(option.value)}
-                  />
-                ),
-                () => resolve(null),
-              )
-            })
+          const accountsResult = await sdk.client.auth.accounts.list({ providerID: provider.id })
+          const accounts = accountsResult.data ?? []
+
+          if (accounts.length > 0) {
+            dialog.replace(() => <DialogAccounts providerID={provider.id} providerName={provider.name} />)
+            return
           }
-          if (index == null) return
-          const method = methods[index]
-          if (method.type === "oauth") {
-            const result = await sdk.client.provider.oauth.authorize({
-              providerID: provider.id,
-              method: index,
-            })
-            if (result.data?.method === "code") {
-              dialog.replace(() => (
-                <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
-              ))
-            }
-            if (result.data?.method === "auto") {
-              dialog.replace(() => (
-                <AutoMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />
-              ))
-            }
-          }
-          if (method.type === "api") {
-            return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
-          }
+
+          dialog.replace(() => <DialogAccountName providerID={provider.id} providerName={provider.name} />)
         },
       })),
     )
@@ -99,6 +202,7 @@ interface AutoMethodProps {
   providerID: string
   title: string
   authorization: ProviderAuthAuthorization
+  accountName: string
 }
 function AutoMethod(props: AutoMethodProps) {
   const { theme } = useTheme()
@@ -110,6 +214,7 @@ function AutoMethod(props: AutoMethodProps) {
     const result = await sdk.client.provider.oauth.callback({
       providerID: props.providerID,
       method: props.index,
+      accountName: props.accountName,
     })
     if (result.error) {
       dialog.clear()
@@ -142,6 +247,7 @@ interface CodeMethodProps {
   title: string
   providerID: string
   authorization: ProviderAuthAuthorization
+  accountName: string
 }
 function CodeMethod(props: CodeMethodProps) {
   const { theme } = useTheme()
@@ -159,6 +265,7 @@ function CodeMethod(props: CodeMethodProps) {
           providerID: props.providerID,
           method: props.index,
           code: value,
+          accountName: props.accountName,
         })
         if (!error) {
           await sdk.client.instance.dispose()
@@ -184,6 +291,7 @@ function CodeMethod(props: CodeMethodProps) {
 interface ApiMethodProps {
   providerID: string
   title: string
+  accountName: string
 }
 function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
@@ -209,8 +317,9 @@ function ApiMethod(props: ApiMethodProps) {
       }
       onConfirm={async (value) => {
         if (!value) return
-        sdk.client.auth.set({
+        await sdk.client.auth.accounts.set({
           providerID: props.providerID,
+          accountName: props.accountName,
           auth: {
             type: "api",
             key: value,

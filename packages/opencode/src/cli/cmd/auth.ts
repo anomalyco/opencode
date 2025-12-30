@@ -14,11 +14,7 @@ import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
-/**
- * Handle plugin-based authentication flow.
- * Returns true if auth was handled, false if it should fall through to default handling.
- */
-async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string): Promise<boolean> {
+async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, accountName: string): Promise<boolean> {
   let index = 0
   if (plugin.auth.methods.length > 1) {
     const method = await prompts.select({
@@ -35,7 +31,6 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   }
   const method = plugin.auth.methods[index]
 
-  // Handle prompts for all auth types
   await new Promise((resolve) => setTimeout(resolve, 10))
   const inputs: Record<string, string> = {}
   if (method.prompts) {
@@ -83,7 +78,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          await Auth.setAccount(saveProvider, accountName, {
             type: "oauth",
             refresh,
             access,
@@ -92,7 +87,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          await Auth.setAccount(saveProvider, accountName, {
             type: "api",
             key: result.key,
           })
@@ -115,7 +110,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          await Auth.setAccount(saveProvider, accountName, {
             type: "oauth",
             refresh,
             access,
@@ -124,7 +119,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          await Auth.setAccount(saveProvider, accountName, {
             type: "api",
             key: result.key,
           })
@@ -145,7 +140,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
-        await Auth.set(saveProvider, {
+        await Auth.setAccount(saveProvider, accountName, {
           type: "api",
           key: result.key,
         })
@@ -170,24 +165,33 @@ export const AuthCommand = cmd({
 export const AuthListCommand = cmd({
   command: "list",
   aliases: ["ls"],
-  describe: "list providers",
+  describe: "list providers and accounts",
   async handler() {
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
+
+    const providers = await Auth.allProviders()
     const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
+    let totalAccounts = 0
+    for (const [providerID, provider] of Object.entries(providers)) {
       const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      const accountCount = Object.keys(provider.accounts).length
+      totalAccounts += accountCount
+
+      prompts.log.info(`${name}`)
+      for (const [accountName, auth] of Object.entries(provider.accounts)) {
+        const isActive = accountName === provider.active
+        const activeIndicator = isActive ? " (active)" : ""
+        prompts.log.message(`  ${accountName}${activeIndicator} ${UI.Style.TEXT_DIM}${auth.type}`)
+      }
     }
 
-    prompts.outro(`${results.length} credentials`)
+    prompts.outro(`${Object.keys(providers).length} provider(s), ${totalAccounts} account(s)`)
 
-    // Environment variables section
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
     for (const [providerID, provider] of Object.entries(database)) {
@@ -218,10 +222,16 @@ export const AuthLoginCommand = cmd({
   command: "login [url]",
   describe: "log in to a provider",
   builder: (yargs) =>
-    yargs.positional("url", {
-      describe: "opencode auth provider",
-      type: "string",
-    }),
+    yargs
+      .positional("url", {
+        describe: "opencode auth provider",
+        type: "string",
+      })
+      .option("account", {
+        describe: "account name",
+        type: "string",
+        alias: "a",
+      }),
   async handler(args) {
     await Instance.provide({
       directory: process.cwd(),
@@ -229,6 +239,7 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
+          const accountName = args.account ?? "default"
           const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
@@ -242,12 +253,12 @@ export const AuthLoginCommand = cmd({
             return
           }
           const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.setAccount(args.url, accountName, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success(`Logged into ${args.url} as "${accountName}"`)
           prompts.outro("Done")
           return
         }
@@ -306,9 +317,24 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
+        const existingAccounts = await Auth.listAccounts(provider)
+        let accountName = args.account
+        if (!accountName) {
+          if (existingAccounts.length > 0) {
+            prompts.log.info(`Existing accounts: ${existingAccounts.map((a) => a.name).join(", ")}`)
+          }
+          const inputName = await prompts.text({
+            message: "Account name",
+            placeholder: existingAccounts.length === 0 ? "default" : "e.g. work, personal",
+            defaultValue: existingAccounts.length === 0 ? "default" : undefined,
+          })
+          if (prompts.isCancel(inputName)) throw new UI.CancelledError()
+          accountName = inputName?.trim() || "default"
+        }
+
         const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+          const handled = await handlePluginAuth({ auth: plugin.auth }, provider, accountName)
           if (handled) return
         }
 
@@ -321,10 +347,9 @@ export const AuthLoginCommand = cmd({
           provider = provider.replace(/^@ai-sdk\//, "")
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-          // Check if a plugin provides auth for this custom provider
           const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
           if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, accountName)
             if (handled) return
           }
 
@@ -354,11 +379,12 @@ export const AuthLoginCommand = cmd({
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
-        await Auth.set(provider, {
+        await Auth.setAccount(provider, accountName, {
           type: "api",
           key,
         })
 
+        prompts.log.success(`Logged in as "${accountName}"`)
         prompts.outro("Done")
       },
     })
@@ -367,25 +393,44 @@ export const AuthLoginCommand = cmd({
 
 export const AuthLogoutCommand = cmd({
   command: "logout",
-  describe: "log out from a configured provider",
+  describe: "log out from a configured provider or account",
   async handler() {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
+    const providers = await Auth.allProviders()
     prompts.intro("Remove credential")
-    if (credentials.length === 0) {
+
+    if (Object.keys(providers).length === 0) {
       prompts.log.error("No credentials found")
       return
     }
+
     const database = await ModelsDev.get()
-    const providerID = await prompts.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
+
+    type AccountOption = { providerID: string; accountName: string }
+    const options: Array<{ label: string; value: AccountOption }> = []
+
+    for (const [providerID, provider] of Object.entries(providers)) {
+      const name = database[providerID]?.name || providerID
+      for (const [accountName, auth] of Object.entries(provider.accounts)) {
+        const isActive = accountName === provider.active
+        const activeIndicator = isActive ? " (active)" : ""
+        options.push({
+          label: `${name} / ${accountName}${activeIndicator} ${UI.Style.TEXT_DIM}(${auth.type})`,
+          value: { providerID, accountName },
+        })
+      }
+    }
+
+    const selected = await prompts.select({
+      message: "Select account to remove",
+      options,
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
-    prompts.outro("Logout successful")
+    if (prompts.isCancel(selected)) throw new UI.CancelledError()
+
+    await Auth.removeAccount(selected.providerID, selected.accountName)
+    prompts.log.success(
+      `Removed ${selected.accountName} from ${database[selected.providerID]?.name || selected.providerID}`,
+    )
+    prompts.outro("Done")
   },
 })
