@@ -50,6 +50,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
@@ -353,6 +354,12 @@ export default function Layout(props: ParentProps) {
         onSelect: () => connectProvider(),
       },
       {
+        id: "server.switch",
+        title: "Switch server",
+        category: "Server",
+        onSelect: () => openServer(),
+      },
+      {
         id: "session.previous",
         title: "Previous session",
         category: "Session",
@@ -425,6 +432,10 @@ export default function Layout(props: ParentProps) {
 
   function connectProvider() {
     dialog.show(() => <DialogSelectProvider />)
+  }
+
+  function openServer() {
+    dialog.show(() => <DialogSelectServer />)
   }
 
   function navigateToProject(directory: string | undefined) {
