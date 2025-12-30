@@ -30,6 +30,8 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
+import { useWindowID } from "../../context/window-id"
+import { WindowFocusRegistry } from "../../window-focus-registry"
 
 export type PromptProps = {
   sessionID?: string
@@ -126,6 +128,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const windowID = useWindowID()
 
   function promptModelWarning() {
     toast.show({
@@ -350,6 +353,11 @@ export function Prompt(props: PromptProps) {
 
   onMount(() => {
     promptPartTypeId = input.extmarks.registerType("prompt-part")
+    // Register with window focus system if in a window context
+    if (windowID) {
+      const unregister = WindowFocusRegistry.register(windowID, { focus: () => input.focus() })
+      onCleanup(unregister)
+    }
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {

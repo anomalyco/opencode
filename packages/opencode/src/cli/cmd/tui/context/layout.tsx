@@ -4,6 +4,7 @@ import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { Layout } from "../layout/types"
 import { LayoutOps } from "../layout/operations"
+import { WindowFocusRegistry } from "../window-focus-registry"
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
@@ -39,6 +40,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             Object.assign(draft, result)
           }),
         )
+        WindowFocusRegistry.focus(newID)
         return newID
       },
 
@@ -53,6 +55,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             Object.assign(draft, result)
           }),
         )
+        WindowFocusRegistry.focus(newID)
         return newID
       },
 
@@ -78,15 +81,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
       focusWindow(windowID: string) {
         setLayout("focusedID", windowID)
+        WindowFocusRegistry.focus(windowID)
       },
 
       focusDirection(direction: "left" | "right" | "up" | "down") {
-        setLayout(
-          produce((draft) => {
-            const result = LayoutOps.focusDirection(draft, direction)
-            draft.focusedID = result.focusedID
-          }),
-        )
+        const result = LayoutOps.focusDirection(layout, direction)
+        if (result.focusedID !== layout.focusedID) {
+          setLayout("focusedID", result.focusedID)
+          WindowFocusRegistry.focus(result.focusedID)
+        }
       },
 
       resizeWindow(delta: number, dimension: "width" | "height") {

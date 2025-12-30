@@ -10,6 +10,7 @@ import { View } from "../view/types"
 // Built-in view components
 import { Session } from "../routes/session"
 import { Home } from "../routes/home"
+import { WindowIDProvider } from "../context/window-id"
 
 function parseViewID(viewID: string): { type: string; sessionID?: string } {
   const idx = viewID.indexOf(":")
@@ -166,10 +167,12 @@ const WindowRenderer: Component<{
     <box
       width={props.width}
       height={props.height}
-      border={focused() ? ["left", "right", "top", "bottom"] : undefined}
+      border={["left", "right", "top", "bottom"]}
       borderColor={focused() ? theme.borderActive : theme.border}
     >
-      <ViewRenderer viewID={props.window.viewID} />
+      <WindowIDProvider windowID={props.window.id}>
+        <ViewRenderer viewID={props.window.viewID} />
+      </WindowIDProvider>
     </box>
   )
 }
