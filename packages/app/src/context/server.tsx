@@ -48,6 +48,19 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     function setActive(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
+      setActiveRaw(url)
+    }
+
+    function add(input: string) {
+      const url = normalizeServerUrl(input)
+      if (!url) return
+
+      const fallback = normalizeServerUrl(props.defaultUrl)
+      if (fallback && url === fallback) {
+        setActiveRaw(url)
+        return
+      }
+
       batch(() => {
         if (!store.list.includes(url)) {
           setStore("list", store.list.length, url)
@@ -71,15 +84,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     createEffect(() => {
       if (!ready()) return
+      if (active()) return
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
-
-      batch(() => {
-        if (!store.list.includes(url)) {
-          setStore("list", store.list.length, url)
-        }
-        setActiveRaw(url)
-      })
+      setActiveRaw(url)
     })
 
     const isReady = createMemo(() => ready() && !!active())
@@ -123,7 +131,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         return store.list
       },
       setActive,
-      add: setActive,
+      add,
       remove,
       projects: {
         list: projectsList,
