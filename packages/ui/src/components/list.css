@@ -197,12 +197,11 @@
             }
           }
           [data-slot="list-item-active-icon"] {
-            display: inline-flex;
+            display: none;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
             aspect-ratio: 1/1;
-            display: none;
             [data-component="icon"] {
               color: var(--icon-strong-base);
             }

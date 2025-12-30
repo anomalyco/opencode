@@ -5,27 +5,12 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Button } from "@opencode-ai/ui/button"
-import { useServer } from "@/context/server"
+import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
 
 type ServerStatus = { healthy: boolean; version?: string }
-
-function displayName(url: string) {
-  return url
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .split("/")[0]
-}
-
-function normalize(input: string) {
-  const trimmed = input.trim()
-  if (!trimmed) return
-  const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
-  const cleaned = withProtocol.replace(/\/+$/, "")
-  return cleaned.replace(/^(https?:\/\/[^/]+).*/, "$1")
-}
 
 async function checkHealth(url: string, fetch?: typeof globalThis.fetch): Promise<ServerStatus> {
   const sdk = createOpencodeClient({
@@ -87,7 +72,7 @@ export function DialogSelectServer() {
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
-    const value = normalize(store.url)
+    const value = normalizeServerUrl(store.url)
     if (!value) return
 
     setStore("adding", true)
@@ -131,7 +116,7 @@ export function DialogSelectServer() {
                   "bg-border-weak-base": store.status[i] === undefined,
                 }}
               />
-              <span class="truncate">{displayName(i)}</span>
+              <span class="truncate">{serverDisplayName(i)}</span>
               <span class="text-text-weak">{store.status[i]?.version}</span>
             </div>
           )}
