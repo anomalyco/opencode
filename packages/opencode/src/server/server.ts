@@ -57,6 +57,12 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace Server {
   const log = Log.create({ service: "server" })
 
+  let _url: URL | undefined
+
+  export function url(): URL {
+    return _url ?? new URL("http://localhost:4096")
+  }
+
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
     Disposed: BusEvent.define("global.disposed", z.object({})),
@@ -2665,6 +2671,8 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+    _url = server.url
 
     const shouldPublishMDNS =
       opts.mdns &&

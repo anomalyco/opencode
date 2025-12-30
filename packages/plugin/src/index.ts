@@ -28,6 +28,7 @@ export type PluginInput = {
   project: Project
   directory: string
   worktree: string
+  serverUrl: URL
   $: BunShell
 }
 

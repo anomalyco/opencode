@@ -24,6 +24,7 @@ export namespace Plugin {
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
+      serverUrl: Server.url(),
       $: Bun.$,
     }
     const plugins = [...(config.plugin ?? [])]
