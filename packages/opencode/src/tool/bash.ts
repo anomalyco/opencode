@@ -326,7 +326,7 @@ ${DESCRIPTION.replace(/\$\{shellName\} command/g, `${shellName} command`)
       }
 
       if (timedOut) {
-        resultMetadata.push(`bash tool terminated commmand after exceeding timeout ${timeout} ms`)
+        resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
 
       if (aborted) {

@@ -31,19 +31,16 @@ declare global {
   }
 }
 
-const serverDefaults = iife(() => {
+const defaultServerUrl = iife(() => {
   const param = new URLSearchParams(document.location.search).get("url")
-  if (param) return { url: param, forced: true }
+  if (param) return param
 
-  if (location.hostname.includes("opencode.ai")) return { url: "http://localhost:4096", forced: false }
-  if (window.__OPENCODE__) return { url: `http://127.0.0.1:${window.__OPENCODE__.port}`, forced: false }
+  if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+  if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
   if (import.meta.env.DEV)
-    return {
-      url: `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`,
-      forced: false,
-    }
+    return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
-  return { url: window.location.origin, forced: false }
+  return window.location.origin
 })
 
 function ServerKey(props: ParentProps) {
@@ -65,7 +62,7 @@ export function App() {
             <MarkedProvider>
               <DiffComponentProvider component={Diff}>
                 <CodeComponentProvider component={Code}>
-                  <ServerProvider defaultUrl={serverDefaults.url} forceUrl={serverDefaults.forced}>
+                  <ServerProvider defaultUrl={defaultServerUrl}>
                     <ServerKey>
                       <GlobalSDKProvider>
                         <GlobalSyncProvider>
