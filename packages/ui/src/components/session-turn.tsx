@@ -1,9 +1,17 @@
-import { AssistantMessage, Part as PartType, TextPart, ToolPart } from "@opencode-ai/sdk/v2/client"
+import {
+  AssistantMessage,
+  Message as MessageType,
+  Part as PartType,
+  type Permission,
+  TextPart,
+  ToolPart,
+} from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
-import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { Binary } from "@opencode-ai/util/binary"
+import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -60,26 +68,38 @@ function computeStatusFromPart(part: PartType | undefined): string | undefined {
   return undefined
 }
 
+function same<T>(a: readonly T[], b: readonly T[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
 function AssistantMessageItem(props: {
   message: AssistantMessage
-  summary: string | undefined
-  response: string | undefined
-  lastTextPartId: string | undefined
-  working: boolean
+  responsePartId: string | undefined
+  hideResponsePart: boolean
 }) {
   const data = useData()
-  const msgParts = createMemo(() => data.store.part[props.message.id] ?? [])
-  const lastTextPart = createMemo(() =>
-    msgParts()
-      .filter((p) => p?.type === "text")
-      .at(-1),
-  )
+  const emptyParts: PartType[] = []
+  const msgParts = createMemo(() => data.store.part[props.message.id] ?? emptyParts)
+  const lastTextPart = createMemo(() => {
+    const parts = msgParts()
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i]
+      if (part?.type === "text") return part as TextPart
+    }
+    return undefined
+  })
 
   const filteredParts = createMemo(() => {
-    if (!props.working && !props.summary && props.response && props.lastTextPartId === lastTextPart()?.id) {
-      return msgParts().filter((p) => p?.id !== lastTextPart()?.id)
-    }
-    return msgParts()
+    const parts = msgParts()
+    if (!props.hideResponsePart) return parts
+
+    const responsePartId = props.responsePartId
+    if (!responsePartId) return parts
+    if (responsePartId !== lastTextPart()?.id) return parts
+
+    return parts.filter((part) => part?.id !== responsePartId)
   })
 
   return <Message message={props.message} parts={filteredParts()} />
@@ -89,6 +109,7 @@ export function SessionTurn(
   props: ParentProps<{
     sessionID: string
     messageID: string
+    lastUserMessageID?: string
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
@@ -102,27 +123,76 @@ export function SessionTurn(
   const data = useData()
   const diffComponent = useDiffComponent()
 
-  const allMessages = createMemo(() => data.store.message[props.sessionID] ?? [])
-  const userMessages = createMemo(() =>
-    allMessages()
-      .filter((m) => m.role === "user")
-      .sort((a, b) => a.id.localeCompare(b.id)),
-  )
+  const emptyMessages: MessageType[] = []
+  const emptyParts: PartType[] = []
+  const emptyAssistant: AssistantMessage[] = []
+  const emptyPermissions: Permission[] = []
+  const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const idle = { type: "idle" as const }
 
-  const message = createMemo(() => userMessages().find((m) => m.id === props.messageID))
-  const isLastUserMessage = createMemo(() => message()?.id === userMessages().at(-1)?.id)
+  const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
+
+  const messageIndex = createMemo(() => {
+    const messages = allMessages()
+    const result = Binary.search(messages, props.messageID, (m) => m.id)
+    if (!result.found) return -1
+
+    const msg = messages[result.index]
+    if (msg.role !== "user") return -1
+
+    return result.index
+  })
+
+  const message = createMemo(() => {
+    const index = messageIndex()
+    if (index < 0) return undefined
+
+    const msg = allMessages()[index]
+    if (!msg || msg.role !== "user") return undefined
+
+    return msg
+  })
+
+  const lastUserMessageID = createMemo(() => {
+    if (props.lastUserMessageID) return props.lastUserMessageID
+
+    const messages = allMessages()
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg?.role === "user") return msg.id
+    }
+    return undefined
+  })
+
+  const isLastUserMessage = createMemo(() => props.messageID === lastUserMessageID())
 
   const parts = createMemo(() => {
     const msg = message()
-    if (!msg) return []
-    return data.store.part[msg.id] ?? []
+    if (!msg) return emptyParts
+    return data.store.part[msg.id] ?? emptyParts
   })
 
-  const assistantMessages = createMemo(() => {
-    const msg = message()
-    if (!msg) return [] as AssistantMessage[]
-    return allMessages().filter((m) => m.role === "assistant" && m.parentID === msg.id) as AssistantMessage[]
-  })
+  const assistantMessages = createMemo(
+    () => {
+      const msg = message()
+      if (!msg) return emptyAssistant
+
+      const messages = allMessages()
+      const index = messageIndex()
+      if (index < 0) return emptyAssistant
+
+      const result: AssistantMessage[] = []
+      for (let i = index + 1; i < messages.length; i++) {
+        const item = messages[i]
+        if (!item) continue
+        if (item.role === "user") break
+        if (item.role === "assistant" && item.parentID === msg.id) result.push(item as AssistantMessage)
+      }
+      return result
+    },
+    emptyAssistant,
+    { equals: same },
+  )
 
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
 
@@ -131,7 +201,7 @@ export function SessionTurn(
   const lastTextPart = createMemo(() => {
     const msgs = assistantMessages()
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = data.store.part[msgs[mi].id] ?? []
+      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
       for (let pi = msgParts.length - 1; pi >= 0; pi--) {
         const part = msgParts[pi]
         if (part?.type === "text") return part as TextPart
@@ -151,20 +221,25 @@ export function SessionTurn(
     return false
   })
 
-  const permissionParts = createMemo(() => {
-    const result: { part: ToolPart; message: AssistantMessage }[] = []
-    const permissions = data.store.permission?.[props.sessionID] ?? []
-    if (!permissions.length) return result
+  const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
+  const permissionCount = createMemo(() => permissions().length)
+  const nextPermission = createMemo(() => permissions()[0])
 
-    for (const m of assistantMessages()) {
-      const msgParts = data.store.part[m.id] ?? []
-      for (const p of msgParts) {
-        if (p?.type === "tool" && permissions.some((perm) => perm.callID === (p as ToolPart).callID)) {
-          result.push({ part: p as ToolPart, message: m })
-        }
+  const permissionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyPermissionParts
+
+    const next = nextPermission()
+    if (!next) return emptyPermissionParts
+
+    for (const message of assistantMessages()) {
+      const parts = data.store.part[message.id] ?? emptyParts
+      for (const part of parts) {
+        if (part?.type !== "tool") continue
+        const tool = part as ToolPart
+        if (tool.callID === next.callID) return [{ part: tool, message }]
       }
     }
-    return result
+    return emptyPermissionParts
   })
 
   const shellModePart = createMemo(() => {
@@ -174,7 +249,7 @@ export function SessionTurn(
     const msgs = assistantMessages()
     if (msgs.length !== 1) return
 
-    const msgParts = data.store.part[msgs[0].id] ?? []
+    const msgParts = data.store.part[msgs[0].id] ?? emptyParts
     if (msgParts.length !== 1) return
 
     const assistantPart = msgParts[0]
@@ -189,7 +264,7 @@ export function SessionTurn(
     let currentTask: ToolPart | undefined
 
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = data.store.part[msgs[mi].id] ?? []
+      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
       for (let pi = msgParts.length - 1; pi >= 0; pi--) {
         const part = msgParts[pi]
         if (!part) continue
@@ -216,12 +291,12 @@ export function SessionTurn(
         : undefined
 
     if (taskSessionId) {
-      const taskMessages = data.store.message[taskSessionId] ?? []
+      const taskMessages = data.store.message[taskSessionId] ?? emptyMessages
       for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
         const msg = taskMessages[mi]
         if (!msg || msg.role !== "assistant") continue
 
-        const msgParts = data.store.part[msg.id] ?? []
+        const msgParts = data.store.part[msg.id] ?? emptyParts
         for (let pi = msgParts.length - 1; pi >= 0; pi--) {
           const part = msgParts[pi]
           if (part) return computeStatusFromPart(part)
@@ -232,12 +307,7 @@ export function SessionTurn(
     return computeStatusFromPart(last)
   })
 
-  const status = createMemo(
-    () =>
-      data.store.session_status[props.sessionID] ?? {
-        type: "idle",
-      },
-  )
+  const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
   const retry = createMemo(() => {
     const s = status()
@@ -245,12 +315,11 @@ export function SessionTurn(
     return s
   })
 
-  const summary = () => message()?.summary?.body
-  const response = () => {
-    const part = lastTextPart()
-    return part?.type === "text" ? (part as TextPart).text : undefined
-  }
-  const hasDiffs = () => message()?.summary?.diffs?.length
+  const summary = createMemo(() => message()?.summary?.body)
+  const response = createMemo(() => lastTextPart()?.text)
+  const responsePartId = createMemo(() => lastTextPart()?.id)
+  const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
+  const hideResponsePart = createMemo(() => !working() && !summary() && !!responsePartId())
 
   function duration() {
     const msg = message()
@@ -328,11 +397,13 @@ export function SessionTurn(
     }
   })
 
-  createEffect(() => {
-    if (permissionParts().length > 0) {
+  createEffect(
+    on(permissionCount, (count, prev) => {
+      if (!count) return
+      if (prev !== undefined && count <= prev) return
       autoScroll.forceScrollToBottom()
-    }
-  })
+    }),
+  )
 
   createEffect(() => {
     if (working() || !isLastUserMessage()) return
@@ -341,6 +412,12 @@ export function SessionTurn(
     if (!diffs?.length) return
     if (summary()) return
     if (store.summaryWaitTimedOut) return
+
+    const completed = lastAssistantMessage()?.time.completed
+    if (completed && Date.now() - completed > 2000) {
+      setStore("summaryWaitTimedOut", true)
+      return
+    }
 
     const timer = setTimeout(() => {
       setStore("summaryWaitTimedOut", true)
@@ -477,10 +554,8 @@ export function SessionTurn(
                           {(assistantMessage) => (
                             <AssistantMessageItem
                               message={assistantMessage}
-                              summary={summary()}
-                              response={response()}
-                              lastTextPartId={lastTextPart()?.id}
-                              working={working()}
+                              responsePartId={responsePartId()}
+                              hideResponsePart={hideResponsePart()}
                             />
                           )}
                         </For>

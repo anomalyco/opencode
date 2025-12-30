@@ -19,36 +19,86 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let autoScrollTimeout: ReturnType<typeof setTimeout> | undefined
   let isMouseDown = false
   let cleanupListeners: (() => void) | undefined
+  let scheduledScroll = false
+  let scheduledForce = false
 
-  function scrollToBottom() {
-    if (!scrollRef || store.userScrolled || !options.working()) return
+  function distanceFromBottom() {
+    if (!scrollRef) return 0
+    return scrollRef.scrollHeight - scrollRef.clientHeight - scrollRef.scrollTop
+  }
 
+  function startAutoScroll() {
     isAutoScrolling = true
     if (autoScrollTimeout) clearTimeout(autoScrollTimeout)
     autoScrollTimeout = setTimeout(() => {
       isAutoScrolling = false
     }, 1000)
+  }
 
+  function scrollToBottomNow() {
+    if (!scrollRef || store.userScrolled || !options.working()) return
+
+    const distance = distanceFromBottom()
+    if (distance < 2) return
+
+    const behavior = distance > 96 ? "auto" : "smooth"
+    startAutoScroll()
     scrollRef.scrollTo({
       top: scrollRef.scrollHeight,
-      behavior: "smooth",
+      behavior,
     })
   }
 
-  function forceScrollToBottom() {
+  function forceScrollToBottomNow() {
     if (!scrollRef) return
 
-    setStore("userScrolled", false)
-    isAutoScrolling = true
-    if (autoScrollTimeout) clearTimeout(autoScrollTimeout)
-    autoScrollTimeout = setTimeout(() => {
-      isAutoScrolling = false
-    }, 1000)
+    if (store.userScrolled) setStore("userScrolled", false)
 
+    const distance = distanceFromBottom()
+    if (distance < 2) return
+
+    startAutoScroll()
     scrollRef.scrollTo({
       top: scrollRef.scrollHeight,
-      behavior: "smooth",
+      behavior: "auto",
     })
+  }
+
+  function scheduleScrollToBottom(force = false) {
+    if (typeof requestAnimationFrame === "undefined") {
+      if (force) {
+        forceScrollToBottomNow()
+        return
+      }
+      scrollToBottomNow()
+      return
+    }
+
+    if (force) scheduledForce = true
+    if (scheduledScroll) return
+
+    scheduledScroll = true
+    requestAnimationFrame(() => {
+      scheduledScroll = false
+
+      const shouldForce = scheduledForce
+      scheduledForce = false
+
+      if (shouldForce) {
+        forceScrollToBottomNow()
+        return
+      }
+
+      scrollToBottomNow()
+    })
+  }
+
+  function scrollToBottom() {
+    scheduleScrollToBottom(false)
+  }
+
+  function forceScrollToBottom() {
+    scheduleScrollToBottom(true)
   }
 
   function handleScroll() {
@@ -130,6 +180,20 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (!options.working()) {
       setStore("userScrolled", false)
     }
+  })
+
+  // Ensure pinned-to-bottom stays pinned during heavy DOM updates
+  createEffect(() => {
+    const el = store.contentRef
+    if (!el) return
+
+    const observer = new MutationObserver(() => {
+      if (store.userScrolled) return
+      if (!options.working()) return
+      scheduleScrollToBottom(false)
+    })
+    observer.observe(el, { childList: true, subtree: true, characterData: true })
+    onCleanup(() => observer.disconnect())
   })
 
   // Handle content resize
