@@ -124,46 +124,6 @@ export namespace LayoutOps {
     root: Layout.Root.Info,
     direction: "left" | "right" | "up" | "down",
   ): Layout.Root.Info {
-    const windows = getAllWindows(root)
-    const currentIndex = windows.findIndex((w) => w.id === root.focusedID)
-    if (currentIndex === -1) return root
-
-    function findParentSplit(node: Layout.Node, targetID: string): Layout.Split.SplitInfo | null {
-      if (node.type === "window") return null
-      for (const child of node.children) {
-        if (child.type === "window" && child.id === targetID) return node
-        const found = findParentSplit(child, targetID)
-        if (found) return found
-      }
-      return null
-    }
-
-    function findSiblingInDirection(
-      split: Layout.Split.SplitInfo,
-      currentID: string,
-      dir: "left" | "right" | "up" | "down",
-    ): string | null {
-      const isHorizontal = split.direction === "horizontal"
-      const isVertical = split.direction === "vertical"
-
-      const currentIdx = split.children.findIndex((c) => c.type === "window" && c.id === currentID)
-      if (currentIdx === -1) return null
-
-      if ((dir === "down" && isHorizontal) || (dir === "right" && isVertical)) {
-        const next = split.children[currentIdx + 1]
-        if (next?.type === "window") return next.id
-        if (next?.type === "split") return getFirstWindow(next)
-      }
-
-      if ((dir === "up" && isHorizontal) || (dir === "left" && isVertical)) {
-        const prev = split.children[currentIdx - 1]
-        if (prev?.type === "window") return prev.id
-        if (prev?.type === "split") return getLastWindow(prev)
-      }
-
-      return null
-    }
-
     function getFirstWindow(node: Layout.Node): string | null {
       if (node.type === "window") return node.id
       if (node.children.length === 0) return null
@@ -176,16 +136,63 @@ export namespace LayoutOps {
       return getLastWindow(node.children[node.children.length - 1])
     }
 
-    const parent = findParentSplit(root.root, root.focusedID)
-    if (!parent) return root
-
-    const newFocusedID = findSiblingInDirection(parent, root.focusedID, direction)
-    if (!newFocusedID) return root
-
-    return {
-      ...root,
-      focusedID: newFocusedID,
+    // Find path from root to target window
+    function findPath(node: Layout.Node, targetID: string, path: Layout.Node[] = []): Layout.Node[] | null {
+      if (node.type === "window") {
+        return node.id === targetID ? [...path, node] : null
+      }
+      for (const child of node.children) {
+        const found = findPath(child, targetID, [...path, node])
+        if (found) return found
+      }
+      return null
     }
+
+    // Check if direction matches split orientation
+    function directionMatchesSplit(dir: "left" | "right" | "up" | "down", split: Layout.Split.SplitInfo): boolean {
+      if (split.direction === "vertical") return dir === "left" || dir === "right"
+      return dir === "up" || dir === "down"
+    }
+
+    // Get sibling in direction within a split
+    function getSiblingInSplit(
+      split: Layout.Split.SplitInfo,
+      childNode: Layout.Node,
+      dir: "left" | "right" | "up" | "down",
+    ): Layout.Node | null {
+      const idx = split.children.indexOf(childNode)
+      if (idx === -1) return null
+
+      const goForward = dir === "right" || dir === "down"
+      const nextIdx = goForward ? idx + 1 : idx - 1
+
+      if (nextIdx < 0 || nextIdx >= split.children.length) return null
+      return split.children[nextIdx]
+    }
+
+    const path = findPath(root.root, root.focusedID)
+    if (!path || path.length === 0) return root
+
+    // Walk up the path to find a split where we can move in the desired direction
+    for (let i = path.length - 2; i >= 0; i--) {
+      const node = path[i]
+      if (node.type !== "split") continue
+
+      if (!directionMatchesSplit(direction, node)) continue
+
+      const childInPath = path[i + 1]
+      const sibling = getSiblingInSplit(node, childInPath, direction)
+
+      if (sibling) {
+        const goForward = direction === "right" || direction === "down"
+        const newFocusedID = goForward ? getFirstWindow(sibling) : getLastWindow(sibling)
+        if (newFocusedID) {
+          return { ...root, focusedID: newFocusedID }
+        }
+      }
+    }
+
+    return root
   }
 
   export function resizeWindow(
