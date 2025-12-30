@@ -10,6 +10,8 @@ import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { DialogSelectServer } from "@/components/dialog-select-server"
+import { useServer } from "@/context/server"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -17,6 +19,7 @@ export default function Home() {
   const platform = usePlatform()
   const dialog = useDialog()
   const navigate = useNavigate()
+  const server = useServer()
   const homedir = createMemo(() => sync.data.path.home)
 
   function openProject(directory: string) {
@@ -52,6 +55,21 @@ export default function Home() {
   return (
     <div class="mx-auto mt-55">
       <Logo class="w-xl opacity-12" />
+      <Button
+        size="large"
+        variant="ghost"
+        class="mt-4 mx-auto text-14-regular text-text-weak"
+        onClick={() => dialog.show(() => <DialogSelectServer />)}
+      >
+        <div
+          classList={{
+            "size-2 rounded-full": true,
+            "bg-icon-success-base": server.healthy(),
+            "bg-icon-critical-base": !server.healthy(),
+          }}
+        />
+        {server.name}
+      </Button>
       <Switch>
         <Match when={sync.data.project.length > 0}>
           <div class="mt-20 w-full flex flex-col gap-4">
