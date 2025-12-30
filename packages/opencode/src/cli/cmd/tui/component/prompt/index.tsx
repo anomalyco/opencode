@@ -877,12 +877,6 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
-                if (keybind.match("variant_cycle", e)) {
-                  e.preventDefault()
-                  if (local.model.variant.list().length === 0) return
-                  local.model.variant.cycle()
-                  return
-                }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
                   if (
