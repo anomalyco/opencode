@@ -34,6 +34,36 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
   bun dev
   ```
 
+### Running against a different directory
+
+By default, `bun dev` runs OpenCode in the `packages/opencode` directory. To run it against a different directory or repository:
+
+```bash
+bun dev <directory>
+```
+
+To run OpenCode in the root of the opencode repo itself:
+
+```bash
+bun dev .
+```
+
+### Building a "localcode"
+
+To compile a standalone executable:
+
+```bash
+./packages/opencode/script/build.ts --single
+```
+
+Then run it with:
+
+```bash
+./packages/opencode/dist/opencode-<platform>/bin/opencode
+```
+
+Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
+
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
   - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
