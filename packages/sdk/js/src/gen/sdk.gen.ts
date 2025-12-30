@@ -73,6 +73,9 @@ import type {
   SessionAbortData,
   SessionAbortResponses,
   SessionAbortErrors,
+  SessionUnqueueData,
+  SessionUnqueueResponses,
+  SessionUnqueueErrors,
   SessionUnshareData,
   SessionUnshareResponses,
   SessionUnshareErrors,
@@ -551,6 +554,16 @@ class Session extends _HeyApiClient {
   public abort<ThrowOnError extends boolean = false>(options: Options<SessionAbortData, ThrowOnError>) {
     return (options.client ?? this._client).post<SessionAbortResponses, SessionAbortErrors, ThrowOnError>({
       url: "/session/{id}/abort",
+      ...options,
+    })
+  }
+
+  /**
+   * Remove queued messages from session
+   */
+  public unqueue<ThrowOnError extends boolean = false>(options: Options<SessionUnqueueData, ThrowOnError>) {
+    return (options.client ?? this._client).post<SessionUnqueueResponses, SessionUnqueueErrors, ThrowOnError>({
+      url: "/session/{id}/unqueue",
       ...options,
     })
   }

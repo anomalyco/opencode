@@ -458,6 +458,7 @@ export namespace Config {
       session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
+      session_unqueue: z.string().optional().default("none").describe("Remove queued messages"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
       messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
       messages_page_down: z.string().optional().default("pagedown").describe("Scroll messages down by one page"),

@@ -949,6 +949,34 @@ export namespace Server {
         },
       )
       .post(
+        "/session/:sessionID/unqueue",
+        describeRoute({
+          description: "Remove queued messages from session",
+          operationId: "session.unqueue",
+          responses: {
+            200: {
+              description: "Removed queued messages",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: z.string(),
+          }),
+        ),
+        async (c) => {
+          await SessionPrompt.removeQueued(c.req.valid("param").sessionID)
+          return c.json(true)
+        },
+      )
+      .post(
         "/session/:sessionID/share",
         describeRoute({
           summary: "Share session",
@@ -2461,6 +2489,7 @@ export namespace Server {
               session_new: "session.new",
               session_share: "session.share",
               session_interrupt: "session.interrupt",
+              session_unqueue: "session.unqueue",
               session_compact: "session.compact",
               messages_page_up: "session.page.up",
               messages_page_down: "session.page.down",

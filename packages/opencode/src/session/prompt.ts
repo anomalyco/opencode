@@ -227,8 +227,8 @@ export namespace SessionPrompt {
     return
   }
 
-  export function unqueue(sessionID: string) {
-    log.info("unqueue", { sessionID })
+  export function clearQueue(sessionID: string) {
+    log.info("clearQueue", { sessionID })
     const s = state()
     const match = s[sessionID]
     if (!match) return
@@ -1291,7 +1291,7 @@ export namespace SessionPrompt {
    * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
    */
 
-  async function handleUnqueue(sessionID: string) {
+  export async function removeQueued(sessionID: string) {
     const queued: string[] = []
 
     // MessageV2.stream yields newest->oldest, so queued messages appear first
@@ -1309,7 +1309,11 @@ export namespace SessionPrompt {
       }
     }
 
-    unqueue(sessionID)
+    clearQueue(sessionID)
+  }
+
+  async function handleUnqueue(sessionID: string) {
+    await removeQueued(sessionID)
 
     return {
       info: {

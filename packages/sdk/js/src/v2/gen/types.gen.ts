@@ -874,6 +874,10 @@ export type KeybindsConfig = {
    */
   session_interrupt?: string
   /**
+   * Remove queued messages
+   */
+  session_unqueue?: string
+  /**
    * Compact the session
    */
   session_compact?: string
@@ -2747,6 +2751,39 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionUnqueueData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/unqueue"
+}
+
+export type SessionUnqueueErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionUnqueueError = SessionUnqueueErrors[keyof SessionUnqueueErrors]
+
+export type SessionUnqueueResponses = {
+  /**
+   * Removed queued messages
+   */
+  200: boolean
+}
+
+export type SessionUnqueueResponse = SessionUnqueueResponses[keyof SessionUnqueueResponses]
 
 export type SessionUnshareData = {
   body?: never

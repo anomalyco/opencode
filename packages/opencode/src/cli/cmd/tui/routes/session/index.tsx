@@ -396,6 +396,16 @@ export function Session() {
       },
     },
     {
+      title: "Remove queued messages",
+      value: "session.unqueue",
+      keybind: "session_unqueue",
+      category: "Session",
+      onSelect: (dialog) => {
+        sdk.client.session.unqueue({ sessionID: route.sessionID })
+        dialog.clear()
+      },
+    },
+    {
       title: "Unshare session",
       value: "session.unshare",
       keybind: "session_unshare",
