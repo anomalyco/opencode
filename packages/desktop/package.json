@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
-  "version": "1.0.204",
+  "version": "1.0.209",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo -b",

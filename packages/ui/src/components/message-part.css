@@ -40,6 +40,10 @@
       border-color: var(--border-strong-base);
     }
 
+    &[data-clickable="true"] {
+      cursor: pointer;
+    }
+
     &[data-type="image"] {
       width: 48px;
       height: 48px;
@@ -137,6 +141,9 @@
 
   [data-slot="message-part-tool-error-message"] {
     color: var(--text-on-critical-weak);
+    max-height: 240px;
+    overflow-y: auto;
+    word-break: break-word;
   }
 }
 
@@ -242,6 +249,14 @@
 
 [data-component="edit-content"] {
   border-top: 1px solid var(--border-weaker-base);
+  max-height: 420px;
+  overflow-y: auto;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 [data-component="write-content"] {
@@ -367,9 +382,9 @@
 
   &[data-permission="true"] {
     position: sticky;
-    top: var(--sticky-header-height, 80px);
+    top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
-    z-index: 10;
+    z-index: 20;
     border-radius: 6px;
     border: none;
     box-shadow: var(--shadow-xs-border-base);
@@ -380,6 +395,7 @@
       content: "";
       position: absolute;
       inset: -1.5px;
+      top: -5px;
       border-radius: 7.5px;
       border: 1.5px solid transparent;
       background:
@@ -387,12 +403,12 @@
         conic-gradient(
             from var(--border-angle),
             transparent 0deg,
-            transparent 270deg,
+            transparent 0deg,
             var(--border-warning-strong, var(--border-warning-selected)) 300deg,
             var(--border-warning-base) 360deg
           )
           border-box;
-      animation: chase-border 1.5s linear infinite;
+      animation: chase-border 2.5s linear infinite;
       pointer-events: none;
       z-index: -1;
     }

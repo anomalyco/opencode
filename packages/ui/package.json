@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.204",
+  "version": "1.0.209",
   "type": "module",
   "exports": {
     "./*": "./src/components/*.tsx",
@@ -11,6 +11,9 @@
     "./context/*": "./src/context/*.tsx",
     "./styles": "./src/styles/index.css",
     "./styles/tailwind": "./src/styles/tailwind/index.css",
+    "./theme": "./src/theme/index.ts",
+    "./theme/*": "./src/theme/*.ts",
+    "./theme/context": "./src/theme/context.tsx",
     "./icons/provider": "./src/components/provider-icons/types.ts",
     "./icons/file-type": "./src/components/file-icons/types.ts",
     "./fonts/*": "./src/assets/fonts/*",
@@ -22,15 +25,16 @@
     "generate:tailwind": "bun run script/tailwind.ts"
   },
   "devDependencies": {
-    "@types/bun": "catalog:",
-    "@types/luxon": "catalog:",
+    "@tailwindcss/vite": "catalog:",
     "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/katex": "0.16.7",
+    "@types/luxon": "catalog:",
+    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-icons-spritesheet": "3.0.1",
-    "vite-plugin-solid": "catalog:",
-    "tailwindcss": "catalog:",
-    "@tailwindcss/vite": "catalog:"
+    "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
@@ -43,8 +47,10 @@
     "@solidjs/meta": "catalog:",
     "@typescript/native-preview": "catalog:",
     "fuzzysort": "catalog:",
+    "katex": "0.16.27",
     "luxon": "catalog:",
     "marked": "catalog:",
+    "marked-katex-extension": "5.1.6",
     "marked-shiki": "catalog:",
     "remeda": "catalog:",
     "shiki": "catalog:",

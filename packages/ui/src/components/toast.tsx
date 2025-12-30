@@ -92,7 +92,6 @@ export type ToastVariant = "default" | "success" | "error" | "loading"
 export interface ToastAction {
   label: string
   onClick: "dismiss" | (() => void)
-  dismissAfter?: boolean
 }
 
 export interface ToastOptions {
@@ -132,10 +131,8 @@ export function showToast(options: ToastOptions | string) {
                 onClick={() => {
                   if (typeof action.onClick === "function") {
                     action.onClick()
-                    if (action.dismissAfter) toaster.dismiss(props.toastId)
-                  } else {
-                    toaster.dismiss(props.toastId)
                   }
+                  toaster.dismiss(props.toastId)
                 }}
               >
                 {action.label}

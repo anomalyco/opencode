@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-app",
-  "version": "1.0.204",
+  "version": "1.0.209",
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit",
