@@ -256,7 +256,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const uniq = uniqueBy([next, ...modelStore.recent], (x) => x.providerID + x.modelID)
           const limit = sync.data.config.tui?.recent_models_count ?? 10
           if (uniq.length > limit) uniq.pop()
-          setModelStore("recent", uniq)
+          setModelStore(
+            "recent",
+            uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+          )
           save()
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
@@ -274,7 +277,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
               const limit = sync.data.config.tui?.recent_models_count ?? 10
               if (uniq.length > limit) uniq.pop()
-              setModelStore("recent", uniq)
+              setModelStore(
+                "recent",
+                uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+              )
               save()
             }
           })
@@ -295,7 +301,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const next = exists
               ? modelStore.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
               : [model, ...modelStore.favorite]
-            setModelStore("favorite", next)
+            setModelStore(
+              "favorite",
+              next.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+            )
             save()
           })
         },

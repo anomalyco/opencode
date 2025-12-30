@@ -11,12 +11,12 @@ export default defineConfig({
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
   esbuild: {
-    // Improves production stack traces (less "kQ@..." noise)
+    // Improves production stack traces
     keepNames: true,
   },
-  build: {
-    sourcemap: true,
-  },
+  // build: {
+  // sourcemap: true,
+  // },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,
