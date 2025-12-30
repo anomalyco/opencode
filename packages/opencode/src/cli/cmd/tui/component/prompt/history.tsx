@@ -61,11 +61,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     })
 
     return {
-      move(direction: 1 | -1, input: string) {
+      move(direction: 1 | -1, input: string): PromptInfo | undefined {
         if (!store.history.length) return undefined
         const current = store.history.at(store.index)
         if (!current) return undefined
-        if (current.input !== input && input.length) return
+        if (current.input !== input && input.length) return undefined
         setStore(
           produce((draft) => {
             const next = store.index + direction
@@ -74,11 +74,12 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
             draft.index = next
           }),
         )
-        if (store.index === 0)
+        if (store.index === 0) {
           return {
             input: "",
             parts: [],
           }
+        }
         return store.history.at(store.index)
       },
       append(item: PromptInfo) {

@@ -886,7 +886,7 @@ export function Prompt(props: PromptProps) {
                     const direction = keybind.match("history_previous", e) ? -1 : 1
                     const item = history.move(direction, input.plainText)
 
-                    if (item) {
+                    if (item && typeof item.input === "string" && Array.isArray(item.parts)) {
                       input.setText(item.input)
                       setStore("prompt", item)
                       setStore("mode", item.mode ?? "normal")
