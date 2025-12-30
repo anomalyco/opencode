@@ -257,16 +257,44 @@ export const AuthLoginCommand = cmd({
 
         const disabled = new Set(config.disabled_providers ?? [])
         const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
+        const allowed = (key: string) => (enabled ? enabled.has(key) : true) && !disabled.has(key)
 
-        const providers = await ModelsDev.get().then((x) => {
-          const filtered: Record<string, (typeof x)[string]> = {}
-          for (const [key, value] of Object.entries(x)) {
-            if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
-              filtered[key] = value
+        const plugins = await Plugin.list()
+        const modelsDevProviders = await ModelsDev.get()
+
+        const providers: Record<string, (typeof modelsDevProviders)[string]> = {}
+
+        // models.dev
+        for (const [key, value] of Object.entries(modelsDevProviders)) {
+          if (allowed(key)) providers[key] = value
+        }
+
+        // providers from config
+        for (const [key, value] of Object.entries(config.provider ?? {})) {
+          if (!providers[key] && allowed(key)) {
+            providers[key] = {
+              id: key,
+              name: value.name ?? key,
+              env: value.env ?? [],
+              models: {},
             }
           }
-          return filtered
-        })
+        }
+
+        // providers from auth plugins
+        for (const plugin of plugins) {
+          if (!plugin.auth?.provider) continue
+
+          const key = plugin.auth.provider
+          if (!providers[key] && allowed(key)) {
+            providers[key] = {
+              id: key,
+              name: key,
+              env: [],
+              models: {},
+            }
+          }
+        }
 
         const priority: Record<string, number> = {
           opencode: 0,
@@ -306,7 +334,7 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+        const plugin = plugins.find((x) => x.auth?.provider === provider)
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
           if (handled) return
@@ -322,7 +350,7 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
           // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
+          const customPlugin = plugins.find((x) => x.auth?.provider === provider)
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
             if (handled) return
