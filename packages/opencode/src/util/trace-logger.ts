@@ -41,44 +41,61 @@ export namespace TraceLogger {
     sessionID: string
     requestID: string
     providerID: string
-    modelID: string
     agent: string
     request: {
-      messages: any[]
-      tools: Record<string, any>
-      parameters: {
-        temperature?: number
-        topP?: number
-        topK?: number
-        maxOutputTokens?: number
-        options?: any
+      model: string
+      messages: Array<{
+        role: string
+        content: string | any[]
+        tool_calls?: any[]
+        tool_call_id?: string
+        reasoning_content?: string
+      }>
+      temperature?: number
+      top_p?: number
+      stream?: boolean
+      stream_options?: {
+        include_usage?: boolean
       }
+      tools?: any[]
+      max_tokens?: number
     }
     response?: {
-      finishReason?: string
+      id?: string
+      object?: string
+      created?: number
+      model?: string
+      choices?: Array<{
+        index: number
+        message: {
+          role: string
+          content: string | null
+          tool_calls?: any[]
+          reasoning_content?: string
+          refusal?: string | null
+        }
+        finish_reason: string
+        logprobs?: any
+      }>
       usage?: {
-        inputTokens: number
-        outputTokens: number
-        totalTokens: number
-        cacheReadTokens?: number
-        cacheWriteTokens?: number
-      }
-      content?: {
-        text?: string[]
-        toolCalls?: Array<{
-          id: string
-          name: string
-          input: any
-        }>
-        reasoning?: string[]
-      }
-      error?: {
-        name: string
-        message: string
-        stack?: string
+        prompt_tokens: number
+        total_tokens: number
+        completion_tokens: number
+        cache_read_tokens?: number
+        cache_write_tokens?: number
       }
     }
-    duration?: number
+    error?: {
+      name: string
+      message: string
+      stack?: string
+    }
+    system?: {
+      hostname?: string
+      platform?: string
+      release?: string
+      nodeVersion?: string
+    }
   }
 
   /**
@@ -93,7 +110,7 @@ export namespace TraceLogger {
       // Ensure the trace directory exists
       await fs.mkdir(traceDir, { recursive: true })
 
-      // Create a filename with timestamp and request ID
+      // Create a filename with timestamp, session ID, and request ID
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
       const filename = `${timestamp}_${entry.sessionID}_${entry.requestID}.json`
       const filepath = path.join(traceDir, filename)
@@ -117,32 +134,42 @@ export namespace TraceLogger {
     agent: string
     system: string[]
     messages: any[]
-    tools: Record<string, any>
+    tools: any[]
     parameters: {
       temperature?: number
       topP?: number
       topK?: number
       maxOutputTokens?: number
+      stream?: boolean
       options?: any
     }
   }): TraceEntry {
     // Merge system prompts into messages array as role "system"
     const systemMessages = input.system.map((content) => ({
-      role: "system" as const,
+      role: "system",
       content,
     }))
+
+    // Format tools array if provided
+    const formattedTools = input.tools?.length > 0 ? input.tools : undefined
 
     return {
       timestamp: new Date().toISOString(),
       sessionID: input.sessionID,
       requestID: generateRequestID(),
       providerID: input.providerID,
-      modelID: input.modelID,
       agent: input.agent,
       request: {
+        model: input.modelID,
         messages: [...systemMessages, ...input.messages],
-        tools: input.tools,
-        parameters: input.parameters,
+        temperature: input.parameters.temperature,
+        top_p: input.parameters.topP,
+        stream: input.parameters.stream ?? true,
+        stream_options: {
+          include_usage: true,
+        },
+        tools: formattedTools,
+        max_tokens: input.parameters.maxOutputTokens,
       },
     }
   }
@@ -162,6 +189,7 @@ export namespace TraceLogger {
   export function updateTraceWithResponse(
     entry: TraceEntry,
     response: {
+      id?: string
       finishReason?: string
       usage?: any
       content?: {
@@ -174,29 +202,81 @@ export namespace TraceLogger {
         reasoning?: string[]
       }
       error?: Error
-      duration: number
     },
   ): void {
-    entry.duration = response.duration
+    if (response.error) {
+      entry.error = {
+        name: response.error.name,
+        message: response.error.message,
+        stack: response.error.stack,
+      }
+      // Add system information even on error
+      entry.system = {
+        hostname: process.env.HOSTNAME,
+        platform: process.platform,
+        release: process.release?.name,
+        nodeVersion: process.version,
+      }
+      return
+    }
+
+    // Build message content
+    let messageContent: string | null = null
+    const toolCalls: any[] = []
+
+    if (response.content?.text && response.content.text.length > 0) {
+      messageContent = response.content.text.join("")
+    }
+
+    if (response.content?.toolCalls && response.content.toolCalls.length > 0) {
+      response.content.toolCalls.forEach((tc) => {
+        toolCalls.push({
+          id: tc.id,
+          type: "function",
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.input),
+          },
+        })
+      })
+    }
+
     entry.response = {
-      finishReason: response.finishReason,
+      id: response.id || `chatcmpl-${Date.now().toString(36)}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: entry.request.model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: messageContent,
+            tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+            reasoning_content: response.content?.reasoning?.join("") || undefined,
+            refusal: null,
+          },
+          finish_reason: response.finishReason || "stop",
+          logprobs: null,
+        },
+      ],
       usage: response.usage
         ? {
-            inputTokens: response.usage.promptTokens || 0,
-            outputTokens: response.usage.completionTokens || 0,
-            totalTokens: response.usage.totalTokens || 0,
-            cacheReadTokens: response.usage.cacheReadTokens,
-            cacheWriteTokens: response.usage.cacheCreationTokens,
+            prompt_tokens: response.usage.inputTokens || response.usage.promptTokens || 0,
+            total_tokens: response.usage.totalTokens || 0,
+            completion_tokens: response.usage.outputTokens || response.usage.completionTokens || 0,
+            cache_read_tokens: response.usage.cachedInputTokens || response.usage.cacheReadTokens,
+            cache_write_tokens: response.usage.cacheCreationTokens,
           }
         : undefined,
-      content: response.content,
-      error: response.error
-        ? {
-            name: response.error.name,
-            message: response.error.message,
-            stack: response.error.stack,
-          }
-        : undefined,
+    }
+
+    // Add system information
+    entry.system = {
+      hostname: process.env.HOSTNAME,
+      platform: process.platform,
+      release: process.release?.name,
+      nodeVersion: process.version,
     }
   }
 }

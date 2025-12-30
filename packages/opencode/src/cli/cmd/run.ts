@@ -11,7 +11,6 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
-import { TraceLogger } from "../../util/trace-logger"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -88,17 +87,8 @@ export const RunCommand = cmd({
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
       })
-      .option("trace-dir", {
-        type: "string",
-        describe: "directory to save request-response trace logs (also configurable via OPENCODE_TRACE_DIR env variable)",
-      })
   },
   handler: async (args) => {
-    // Initialize trace logger if trace-dir is provided
-    if (args.traceDir) {
-      TraceLogger.init(args.traceDir)
-    }
-
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")

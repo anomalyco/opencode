@@ -58,6 +58,10 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("trace-dir", {
+    describe: "directory to save request-response trace logs (also configurable via OPENCODE_TRACE_DIR env variable)",
+    type: "string",
+  })
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
@@ -72,9 +76,8 @@ const cli = yargs(hideBin(process.argv))
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
 
-    // Initialize trace logger from environment variable if set
-    // (individual commands can override with --trace-dir option)
-    TraceLogger.init()
+    // Initialize trace logger from CLI option or environment variable
+    TraceLogger.init(opts.traceDir as string | undefined)
 
     Log.Default.info("opencode", {
       version: Installation.VERSION,

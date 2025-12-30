@@ -223,16 +223,18 @@ export namespace LLM {
 
       // Collect response data as stream progresses
       const responseData: {
-        text: string[]
+        text: string
         toolCalls: Array<{ id: string; name: string; input: any }>
         reasoning: string[]
         finishReason?: string
         usage?: any
       } = {
-        text: [],
+        text: "",
         toolCalls: [],
         reasoning: [],
       }
+
+      let currentReasoning = ""
 
       // Wrap fullStream to collect data
       const wrappedStream = (async function* () {
@@ -242,26 +244,36 @@ export namespace LLM {
             if ("type" in chunk) {
               switch (chunk.type) {
                 case "text-delta":
-                  if ("textDelta" in chunk && chunk.textDelta && typeof chunk.textDelta === "string") {
-                    if (responseData.text.length === 0) {
-                      responseData.text.push(chunk.textDelta)
-                    } else {
-                      responseData.text[responseData.text.length - 1] += chunk.textDelta
-                    }
+                  if ("text" in chunk && chunk.text && typeof chunk.text === "string") {
+                    responseData.text += chunk.text
+                  }
+                  break
+                case "reasoning-start":
+                  currentReasoning = ""
+                  break
+                case "reasoning-delta":
+                  if ("text" in chunk && chunk.text && typeof chunk.text === "string") {
+                    currentReasoning += chunk.text
+                  }
+                  break
+                case "reasoning-end":
+                  if (currentReasoning) {
+                    responseData.reasoning.push(currentReasoning)
+                    currentReasoning = ""
                   }
                   break
                 case "tool-call":
-                  if ("toolCallId" in chunk && "toolName" in chunk && "args" in chunk) {
+                  if ("toolCallId" in chunk && "toolName" in chunk && "input" in chunk) {
                     responseData.toolCalls.push({
-                      id: chunk.toolCallId,
-                      name: chunk.toolName,
-                      input: chunk.args,
+                      id: chunk.toolCallId as string,
+                      name: chunk.toolName as string,
+                      input: chunk.input,
                     })
                   }
                   break
-                case "finish":
+                case "finish-step":
                   if ("finishReason" in chunk) {
-                    responseData.finishReason = chunk.finishReason
+                    responseData.finishReason = chunk.finishReason as string
                   }
                   if ("usage" in chunk) {
                     responseData.usage = chunk.usage
@@ -271,7 +283,7 @@ export namespace LLM {
                     finishReason: responseData.finishReason,
                     usage: responseData.usage,
                     content: {
-                      text: responseData.text.length > 0 ? responseData.text : undefined,
+                      text: responseData.text ? [responseData.text] : undefined,
                       toolCalls: responseData.toolCalls.length > 0 ? responseData.toolCalls : undefined,
                       reasoning: responseData.reasoning.length > 0 ? responseData.reasoning : undefined,
                     },
@@ -296,9 +308,15 @@ export namespace LLM {
         }
       })()
 
-      // Replace the fullStream with wrapped version
-      // @ts-expect-error - We're wrapping the stream to add logging
-      streamResult.fullStream = wrappedStream
+      // Create a proxy to wrap the stream result with our traced fullStream
+      return new Proxy(streamResult, {
+        get(target, prop) {
+          if (prop === "fullStream") {
+            return wrappedStream
+          }
+          return Reflect.get(target, prop)
+        },
+      })
     }
 
     return streamResult
