@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/enterprise",
-  "version": "1.0.209",
+  "version": "1.0.212",
   "private": true,
   "type": "module",
   "scripts": {
