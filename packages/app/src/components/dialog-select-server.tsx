@@ -46,6 +46,25 @@ export function DialogSelectServer() {
 
   const current = createMemo(() => items().find((x) => x === server.url) ?? items()[0])
 
+  const sortedItems = createMemo(() => {
+    const list = items()
+    if (!list.length) return list
+    const active = current()
+    const order = new Map(list.map((url, index) => [url, index] as const))
+    const rank = (value?: ServerStatus) => {
+      if (value?.healthy === true) return 0
+      if (value?.healthy === false) return 2
+      return 1
+    }
+    return list.slice().sort((a, b) => {
+      if (a === active) return -1
+      if (b === active) return 1
+      const diff = rank(store.status[a]) - rank(store.status[b])
+      if (diff !== 0) return diff
+      return (order.get(a) ?? 0) - (order.get(b) ?? 0)
+    })
+  })
+
   async function refreshHealth() {
     const results: Record<string, ServerStatus> = {}
     await Promise.all(
@@ -63,9 +82,14 @@ export function DialogSelectServer() {
     onCleanup(() => clearInterval(interval))
   })
 
-  function select(value: string) {
-    if (store.status[value]?.healthy === false) return
+  function select(value: string, persist?: boolean) {
+    if (!persist && store.status[value]?.healthy === false) return
     dialog.close()
+    if (persist) {
+      server.add(value)
+      navigate("/")
+      return
+    }
     server.setActive(value)
     navigate("/")
   }
@@ -87,7 +111,7 @@ export function DialogSelectServer() {
     }
 
     setStore("url", "")
-    select(value)
+    select(value, true)
   }
 
   return (
@@ -96,7 +120,7 @@ export function DialogSelectServer() {
         <List
           search={{ placeholder: "Search servers", autofocus: true }}
           emptyMessage="No servers yet"
-          items={items}
+          items={sortedItems}
           key={(x) => x}
           current={current()}
           onSelect={(x) => {
