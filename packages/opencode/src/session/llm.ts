@@ -11,6 +11,7 @@ import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
 import { ToolRegistry } from "@/tool/registry"
 import { Flag } from "@/flag/flag"
+import { TraceLogger } from "@/util/trace-logger"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -113,11 +114,41 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
-    return streamText({
+    // Create trace entry if tracing is enabled
+    const traceEntry = TraceLogger.isEnabled()
+      ? TraceLogger.createTraceEntry({
+          sessionID: input.sessionID,
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+          agent: input.agent.name,
+          system: system,
+          messages: input.messages,
+          tools: tools,
+          parameters: {
+            temperature: params.temperature,
+            topP: params.topP,
+            topK: params.topK,
+            maxOutputTokens: maxOutputTokens,
+            options: params.options,
+          },
+        })
+      : undefined
+
+    const startTime = Date.now()
+
+    const streamResult = streamText({
       onError(error) {
         l.error("stream error", {
           error,
         })
+        // Log trace with error if tracing is enabled
+        if (traceEntry) {
+          TraceLogger.updateTraceWithResponse(traceEntry, {
+            error: error instanceof Error ? error : new Error(String(error)),
+            duration: Date.now() - startTime,
+          })
+          TraceLogger.logTrace(traceEntry)
+        }
       },
       async experimental_repairToolCall(failed) {
         const lower = failed.toolCall.toolName.toLowerCase()
@@ -185,6 +216,92 @@ export namespace LLM {
       }),
       experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
     })
+
+    // Wrap the result to capture trace data if tracing is enabled
+    if (traceEntry) {
+      const originalFullStream = streamResult.fullStream
+
+      // Collect response data as stream progresses
+      const responseData: {
+        text: string[]
+        toolCalls: Array<{ id: string; name: string; input: any }>
+        reasoning: string[]
+        finishReason?: string
+        usage?: any
+      } = {
+        text: [],
+        toolCalls: [],
+        reasoning: [],
+      }
+
+      // Wrap fullStream to collect data
+      const wrappedStream = (async function* () {
+        try {
+          for await (const chunk of originalFullStream) {
+            // Collect response data based on chunk type
+            if ("type" in chunk) {
+              switch (chunk.type) {
+                case "text-delta":
+                  if ("textDelta" in chunk && chunk.textDelta && typeof chunk.textDelta === "string") {
+                    if (responseData.text.length === 0) {
+                      responseData.text.push(chunk.textDelta)
+                    } else {
+                      responseData.text[responseData.text.length - 1] += chunk.textDelta
+                    }
+                  }
+                  break
+                case "tool-call":
+                  if ("toolCallId" in chunk && "toolName" in chunk && "args" in chunk) {
+                    responseData.toolCalls.push({
+                      id: chunk.toolCallId,
+                      name: chunk.toolName,
+                      input: chunk.args,
+                    })
+                  }
+                  break
+                case "finish":
+                  if ("finishReason" in chunk) {
+                    responseData.finishReason = chunk.finishReason
+                  }
+                  if ("usage" in chunk) {
+                    responseData.usage = chunk.usage
+                  }
+                  // Log trace when stream finishes
+                  TraceLogger.updateTraceWithResponse(traceEntry, {
+                    finishReason: responseData.finishReason,
+                    usage: responseData.usage,
+                    content: {
+                      text: responseData.text.length > 0 ? responseData.text : undefined,
+                      toolCalls: responseData.toolCalls.length > 0 ? responseData.toolCalls : undefined,
+                      reasoning: responseData.reasoning.length > 0 ? responseData.reasoning : undefined,
+                    },
+                    duration: Date.now() - startTime,
+                  })
+                  await TraceLogger.logTrace(traceEntry)
+                  break
+              }
+            }
+            yield chunk
+          }
+        } catch (error) {
+          // Log trace with error
+          if (error instanceof Error) {
+            TraceLogger.updateTraceWithResponse(traceEntry, {
+              error,
+              duration: Date.now() - startTime,
+            })
+            await TraceLogger.logTrace(traceEntry)
+          }
+          throw error
+        }
+      })()
+
+      // Replace the fullStream with wrapped version
+      // @ts-expect-error - We're wrapping the stream to add logging
+      streamResult.fullStream = wrappedStream
+    }
+
+    return streamResult
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
