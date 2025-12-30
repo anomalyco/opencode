@@ -106,7 +106,7 @@ export function Session(props: { sessionID?: string } = {}) {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   // Use prop if provided (from layout window), otherwise use route (single window mode)
-  const currentSessionID = (): string => props.sessionID ?? route.sessionID
+  const currentSessionID = createMemo(() => props.sessionID ?? route.sessionID)
   const session = createMemo(() => sync.session.get(currentSessionID())!)
   const messages = createMemo(() => sync.data.message[currentSessionID()] ?? [])
   const permissions = createMemo(() => sync.data.permission[currentSessionID()] ?? [])
