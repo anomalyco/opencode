@@ -240,7 +240,7 @@ You are producing plain text that will later be styled by the CLI. Follow these 
 - Choose descriptive names that fit the content
 - Keep headers short (1–3 words) and in `**Title Case**`. Always start headers with `**` and end with `**`
 - Leave no blank line before the first bullet under a header.
-- Section headers should only be used where they genuinely improve scanability; avoid fragmenting the answer.
+- Section headers should only be used where they genuinely improve scannability; avoid fragmenting the answer.
 
 **Bullets**
 
@@ -289,7 +289,7 @@ When referencing files in your response, make sure to include the relevant start
 - Don’t nest bullets or create deep hierarchies.
 - Don’t output ANSI escape codes directly — the CLI renderer applies them.
 - Don’t cram unrelated keywords into a single bullet; split for clarity.
-- Don’t let keyword lists run long — wrap or reformat for scanability.
+- Don’t let keyword lists run long — wrap or reformat for scannability.
 
 Generally, ensure your final answers adapt their shape and depth to the request. For example, answers to code explanations should have a precise, structured explanation with code references that answer the question directly. For tasks with a simple implementation, lead with the outcome and supplement only with what’s needed for clarity. Larger changes can be presented as a logical walkthrough of your approach, grouping related steps, explaining rationale where it adds value, and highlighting next actions to accelerate the user. Your answers should provide the right level of detail while being easily scannable.
 
