@@ -56,7 +56,7 @@ describe("TraceLogger", () => {
       { role: "system", content: "System prompt" },
       { role: "user", content: "Hello" },
     ])
-    expect(entry.request.tools).toEqual({ bash: { name: "bash" } })
+    expect(entry.request.tools).toEqual([{ name: "bash" }])
   })
 
   it("should update trace entry with response data", () => {
@@ -85,11 +85,11 @@ describe("TraceLogger", () => {
     })
 
     expect(entry.response).toBeDefined()
-    expect(entry.response?.finishReason).toBe("stop")
-    expect(entry.response?.usage?.inputTokens).toBe(100)
-    expect(entry.response?.usage?.outputTokens).toBe(50)
-    expect(entry.response?.usage?.totalTokens).toBe(150)
-    expect(entry.response?.content?.text).toEqual(["Hello, world!"])
+    expect(entry.response?.choices?.[0]?.finish_reason).toBe("stop")
+    expect(entry.response?.usage?.prompt_tokens).toBe(100)
+    expect(entry.response?.usage?.completion_tokens).toBe(50)
+    expect(entry.response?.usage?.total_tokens).toBe(150)
+    expect(entry.response?.choices?.[0]?.message.content).toBe("Hello, world!")
     expect(entry.duration).toBe(1234)
   })
 
@@ -139,7 +139,7 @@ describe("TraceLogger", () => {
       { role: "system", content: "System prompt" },
       { role: "user", content: "Test message" },
     ])
-    expect(parsed.response.content.text).toEqual(["Response text"])
+    expect(parsed.response.choices[0].message.content).toBe("Response text")
   })
 
   it("should not log trace when disabled", async () => {
@@ -188,10 +188,10 @@ describe("TraceLogger", () => {
       duration: 100,
     })
 
-    expect(entry.response?.error).toBeDefined()
-    expect(entry.response?.error?.name).toBe("Error")
-    expect(entry.response?.error?.message).toBe("Test error")
-    expect(entry.response?.error?.stack).toBe("Error stack trace")
+    expect(entry.error).toBeDefined()
+    expect(entry.error?.name).toBe("Error")
+    expect(entry.error?.message).toBe("Test error")
+    expect(entry.error?.stack).toBe("Error stack trace")
   })
 
   it("should include tool calls in response", () => {
@@ -224,9 +224,9 @@ describe("TraceLogger", () => {
       duration: 500,
     })
 
-    expect(entry.response?.content?.toolCalls).toHaveLength(2)
-    expect(entry.response?.content?.toolCalls?.[0].name).toBe("bash")
-    expect(entry.response?.content?.toolCalls?.[1].name).toBe("read_file")
+    expect(entry.response?.choices?.[0]?.message.tool_calls).toHaveLength(2)
+    expect(entry.response?.choices?.[0]?.message.tool_calls?.[0].function.name).toBe("bash")
+    expect(entry.response?.choices?.[0]?.message.tool_calls?.[1].function.name).toBe("read_file")
   })
 
   it("should merge multiple system messages into messages array", () => {

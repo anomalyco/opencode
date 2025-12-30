@@ -41,7 +41,9 @@ export namespace TraceLogger {
     sessionID: string
     requestID: string
     providerID: string
+    modelID: string
     agent: string
+    duration?: number
     request: {
       model: string
       messages: Array<{
@@ -83,6 +85,10 @@ export namespace TraceLogger {
         completion_tokens: number
         cache_read_tokens?: number
         cache_write_tokens?: number
+      }
+      error?: Error
+      content?: {
+        text?: string[]
       }
     }
     error?: {
@@ -134,7 +140,7 @@ export namespace TraceLogger {
     agent: string
     system: string[]
     messages: any[]
-    tools: any[]
+    tools: any[] | Record<string, any>
     parameters: {
       temperature?: number
       topP?: number
@@ -150,14 +156,23 @@ export namespace TraceLogger {
       content,
     }))
 
-    // Format tools array if provided
-    const formattedTools = input.tools?.length > 0 ? input.tools : undefined
+    // Format tools - convert Record to array if needed
+    let formattedTools: any[] | undefined = undefined
+    if (input.tools) {
+      if (Array.isArray(input.tools)) {
+        formattedTools = input.tools.length > 0 ? input.tools : undefined
+      } else {
+        const toolsArray = Object.values(input.tools)
+        formattedTools = toolsArray.length > 0 ? toolsArray : undefined
+      }
+    }
 
     return {
       timestamp: new Date().toISOString(),
       sessionID: input.sessionID,
       requestID: generateRequestID(),
       providerID: input.providerID,
+      modelID: input.modelID,
       agent: input.agent,
       request: {
         model: input.modelID,
@@ -202,8 +217,14 @@ export namespace TraceLogger {
         reasoning?: string[]
       }
       error?: Error
+      duration?: number
     },
   ): void {
+    // Store duration if provided
+    if (response.duration !== undefined) {
+      entry.duration = response.duration
+    }
+
     if (response.error) {
       entry.error = {
         name: response.error.name,
