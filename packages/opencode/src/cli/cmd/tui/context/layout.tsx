@@ -176,6 +176,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             updateNode(draft.root)
           }),
         )
+        // Focus the window's prompt after view change
+        WindowFocusRegistry.focus(windowID)
       },
     }
   },
