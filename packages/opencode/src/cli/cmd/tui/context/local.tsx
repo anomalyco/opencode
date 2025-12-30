@@ -319,9 +319,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const provider = sync.data.provider.find((x) => x.id === m.providerID)
             const info = provider?.models[m.modelID]
             if (!info?.variants) return []
-            return Object.entries(info.variants)
-              .filter(([_, v]) => !v.disabled)
-              .map(([name]) => name)
+            return Object.keys(info.variants)
           },
           set(value: string | undefined) {
             const m = currentModel()
