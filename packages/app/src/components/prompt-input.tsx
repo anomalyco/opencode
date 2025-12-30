@@ -134,6 +134,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
+    killBuffer: string
   }>({
     popover: null,
     historyIndex: -1,
@@ -143,6 +144,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
+    killBuffer: "",
   })
 
   const MAX_HISTORY = 100
@@ -648,6 +650,77 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
   }
 
+  const setSelectionOffsets = (start: number, end: number) => {
+    const selection = window.getSelection()
+    if (!selection) return false
+
+    const length = promptLength(prompt.current())
+    const a = Math.max(0, Math.min(start, length))
+    const b = Math.max(0, Math.min(end, length))
+    const rangeStart = Math.min(a, b)
+    const rangeEnd = Math.max(a, b)
+
+    const range = document.createRange()
+    range.selectNodeContents(editorRef)
+
+    const setEdge = (edge: "start" | "end", offset: number) => {
+      let remaining = offset
+      const nodes = Array.from(editorRef.childNodes)
+
+      for (const node of nodes) {
+        const length = getNodeLength(node)
+        const isText = node.nodeType === Node.TEXT_NODE
+        const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+        const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
+
+        if (isText && remaining <= length) {
+          if (edge === "start") range.setStart(node, remaining)
+          if (edge === "end") range.setEnd(node, remaining)
+          return
+        }
+
+        if ((isFile || isBreak) && remaining <= length) {
+          if (edge === "start" && remaining === 0) range.setStartBefore(node)
+          if (edge === "start" && remaining > 0) range.setStartAfter(node)
+          if (edge === "end" && remaining === 0) range.setEndBefore(node)
+          if (edge === "end" && remaining > 0) range.setEndAfter(node)
+          return
+        }
+
+        remaining -= length
+      }
+
+      const last = editorRef.lastChild
+      if (!last) {
+        if (edge === "start") range.setStart(editorRef, 0)
+        if (edge === "end") range.setEnd(editorRef, 0)
+        return
+      }
+      if (edge === "start") range.setStartAfter(last)
+      if (edge === "end") range.setEndAfter(last)
+    }
+
+    setEdge("start", rangeStart)
+    setEdge("end", rangeEnd)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    return true
+  }
+
+  const replaceOffsets = (start: number, end: number, content: string) => {
+    if (!setSelectionOffsets(start, end)) return false
+    addPart({ type: "text", content, start: 0, end: 0 })
+    return true
+  }
+
+  const killText = (start: number, end: number) => {
+    if (start === end) return
+    const current = prompt.current()
+    if (!current.every((part) => part.type === "text")) return
+    const text = current.map((part) => part.content).join("")
+    setStore("killBuffer", text.slice(start, end))
+  }
+
   const abort = () =>
     sdk.client.session
       .abort({
@@ -766,6 +839,164 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
       event.preventDefault()
       return
+    }
+
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+    const alt = event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey
+
+    if (ctrl && event.code === "KeyG") {
+      if (store.popover) {
+        setStore("popover", null)
+        event.preventDefault()
+        return
+      }
+      if (working()) {
+        abort()
+        event.preventDefault()
+      }
+      return
+    }
+
+    if (ctrl || alt) {
+      const { collapsed, cursorPosition, textLength } = getCaretState()
+      if (collapsed) {
+        const current = prompt.current()
+        const text = current.map((part) => ("content" in part ? part.content : "")).join("")
+
+        if (ctrl) {
+          if (event.code === "KeyA") {
+            const pos = text.lastIndexOf("\n", cursorPosition - 1) + 1
+            setCursorPosition(editorRef, pos)
+            event.preventDefault()
+            queueScroll()
+            return
+          }
+
+          if (event.code === "KeyE") {
+            const next = text.indexOf("\n", cursorPosition)
+            const pos = next === -1 ? textLength : next
+            setCursorPosition(editorRef, pos)
+            event.preventDefault()
+            queueScroll()
+            return
+          }
+
+          if (event.code === "KeyB") {
+            const pos = Math.max(0, cursorPosition - 1)
+            setCursorPosition(editorRef, pos)
+            event.preventDefault()
+            queueScroll()
+            return
+          }
+
+          if (event.code === "KeyF") {
+            const pos = Math.min(textLength, cursorPosition + 1)
+            setCursorPosition(editorRef, pos)
+            event.preventDefault()
+            queueScroll()
+            return
+          }
+
+          if (event.code === "KeyD") {
+            if (store.mode === "shell" && cursorPosition === 0 && textLength === 0) {
+              setStore("mode", "normal")
+              event.preventDefault()
+              return
+            }
+            if (cursorPosition >= textLength) return
+            replaceOffsets(cursorPosition, cursorPosition + 1, "")
+            event.preventDefault()
+            return
+          }
+
+          if (event.code === "KeyK") {
+            const next = text.indexOf("\n", cursorPosition)
+            const lineEnd = next === -1 ? textLength : next
+            const end = lineEnd === cursorPosition && lineEnd < textLength ? lineEnd + 1 : lineEnd
+            if (end === cursorPosition) return
+            killText(cursorPosition, end)
+            replaceOffsets(cursorPosition, end, "")
+            event.preventDefault()
+            return
+          }
+
+          if (event.code === "KeyU") {
+            const start = text.lastIndexOf("\n", cursorPosition - 1) + 1
+            if (start === cursorPosition) return
+            killText(start, cursorPosition)
+            replaceOffsets(start, cursorPosition, "")
+            event.preventDefault()
+            return
+          }
+
+          if (event.code === "KeyW") {
+            let start = cursorPosition
+            while (start > 0 && /\s/.test(text[start - 1])) start -= 1
+            while (start > 0 && !/\s/.test(text[start - 1])) start -= 1
+            if (start === cursorPosition) return
+            killText(start, cursorPosition)
+            replaceOffsets(start, cursorPosition, "")
+            event.preventDefault()
+            return
+          }
+
+          if (event.code === "KeyY") {
+            if (!store.killBuffer) return
+            addPart({ type: "text", content: store.killBuffer, start: 0, end: 0 })
+            event.preventDefault()
+            return
+          }
+
+          if (event.code === "KeyT") {
+            if (!current.every((part) => part.type === "text")) return
+            if (textLength < 2) return
+            if (cursorPosition === 0) return
+
+            const atEnd = cursorPosition === textLength
+            const first = atEnd ? cursorPosition - 2 : cursorPosition - 1
+            const second = atEnd ? cursorPosition - 1 : cursorPosition
+
+            if (text[first] === "\n" || text[second] === "\n") return
+
+            replaceOffsets(first, second + 1, `${text[second]}${text[first]}`)
+            event.preventDefault()
+            return
+          }
+        }
+
+        if (alt) {
+          if (event.code === "KeyB") {
+            let pos = cursorPosition
+            while (pos > 0 && /\s/.test(text[pos - 1])) pos -= 1
+            while (pos > 0 && !/\s/.test(text[pos - 1])) pos -= 1
+            setCursorPosition(editorRef, pos)
+            event.preventDefault()
+            queueScroll()
+            return
+          }
+
+          if (event.code === "KeyF") {
+            let pos = cursorPosition
+            while (pos < textLength && /\s/.test(text[pos])) pos += 1
+            while (pos < textLength && !/\s/.test(text[pos])) pos += 1
+            setCursorPosition(editorRef, pos)
+            event.preventDefault()
+            queueScroll()
+            return
+          }
+
+          if (event.code === "KeyD") {
+            let end = cursorPosition
+            while (end < textLength && /\s/.test(text[end])) end += 1
+            while (end < textLength && !/\s/.test(text[end])) end += 1
+            if (end === cursorPosition) return
+            killText(cursorPosition, end)
+            replaceOffsets(cursorPosition, end, "")
+            event.preventDefault()
+            return
+          }
+        }
+      }
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {

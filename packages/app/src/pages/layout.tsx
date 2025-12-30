@@ -50,8 +50,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -161,27 +163,33 @@ export default function Layout(props: ParentProps) {
       if (e.details?.type !== "permission.updated") return
       const directory = e.name
       const permission = e.details.properties
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      const [store] = globalSync.child(directory)
+      const session = store.session.find((s) => s.id === permission.sessionID)
+      const sessionTitle = session?.title ?? "New session"
+      const projectName = getFilename(directory)
+      const description = `${sessionTitle} in ${projectName} needs permission`
+      const href = `/${base64Encode(directory)}/session/${permission.sessionID}`
+      void platform.notify("Permission required", description, href)
+
+      if (directory === currentDir && permission.sessionID === currentSession) return
+      if (directory === currentDir && session?.parentID === currentSession) return
+
       const sessionKey = `${directory}:${permission.sessionID}`
       if (seenSessions.has(sessionKey)) return
       seenSessions.add(sessionKey)
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
-      const currentSession = params.id
-      if (directory === currentDir && permission.sessionID === currentSession) return
-      const [store] = globalSync.child(directory)
-      const session = store.session.find((s) => s.id === permission.sessionID)
-      if (directory === currentDir && session?.parentID === currentSession) return
-      const sessionTitle = session?.title ?? "New session"
-      const projectName = getFilename(directory)
+
       const toastId = showToast({
         persistent: true,
         icon: "checklist",
         title: "Permission required",
-        description: `${sessionTitle} in ${projectName} needs permission`,
+        description,
         actions: [
           {
             label: "Go to session",
             onClick: () => {
-              navigate(`/${base64Encode(directory)}/session/${permission.sessionID}`)
+              navigate(href)
             },
           },
           {
@@ -332,22 +340,24 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
       },
-      ...(platform.openDirectoryPickerDialog
-        ? [
-            {
-              id: "project.open",
-              title: "Open project",
-              category: "Project",
-              keybind: "mod+o",
-              onSelect: () => chooseProject(),
-            },
-          ]
-        : []),
+      {
+        id: "project.open",
+        title: "Open project",
+        category: "Project",
+        keybind: "mod+o",
+        onSelect: () => chooseProject(),
+      },
       {
         id: "provider.connect",
         title: "Connect provider",
         category: "Provider",
         onSelect: () => connectProvider(),
+      },
+      {
+        id: "server.switch",
+        title: "Switch server",
+        category: "Server",
+        onSelect: () => openServer(),
       },
       {
         id: "session.previous",
@@ -424,6 +434,10 @@ export default function Layout(props: ParentProps) {
     dialog.show(() => <DialogSelectProvider />)
   }
 
+  function openServer() {
+    dialog.show(() => <DialogSelectServer />)
+  }
+
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
     const lastSession = store.lastSession[directory]
@@ -451,17 +465,28 @@ export default function Layout(props: ParentProps) {
   }
 
   async function chooseProject() {
-    const result = await platform.openDirectoryPickerDialog?.({
-      title: "Open project",
-      multiple: true,
-    })
-    if (Array.isArray(result)) {
-      for (const directory of result) {
-        openProject(directory, false)
+    function resolve(result: string | string[] | null) {
+      if (Array.isArray(result)) {
+        for (const directory of result) {
+          openProject(directory, false)
+        }
+        navigateToProject(result[0])
+      } else if (result) {
+        openProject(result)
       }
-      navigateToProject(result[0])
-    } else if (result) {
-      openProject(result)
+    }
+
+    if (platform.openDirectoryPickerDialog) {
+      const result = await platform.openDirectoryPickerDialog?.({
+        title: "Open project",
+        multiple: true,
+      })
+      resolve(result)
+    } else {
+      dialog.show(
+        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+        () => resolve(null),
+      )
     }
   }
 
@@ -949,30 +974,28 @@ export default function Layout(props: ParentProps) {
               </Tooltip>
             </Match>
           </Switch>
-          <Show when={platform.openDirectoryPickerDialog}>
-            <Tooltip
-              placement="right"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Open project</span>
-                  <Show when={!sidebarProps.mobile}>
-                    <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
-                  </Show>
-                </div>
-              }
-              inactive={expanded()}
+          <Tooltip
+            placement="right"
+            value={
+              <div class="flex items-center gap-2">
+                <span>Open project</span>
+                <Show when={!sidebarProps.mobile}>
+                  <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
+                </Show>
+              </div>
+            }
+            inactive={expanded()}
+          >
+            <Button
+              class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
+              variant="ghost"
+              size="large"
+              icon="folder-add-left"
+              onClick={chooseProject}
             >
-              <Button
-                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
-                variant="ghost"
-                size="large"
-                icon="folder-add-left"
-                onClick={chooseProject}
-              >
-                <Show when={expanded()}>Open project</Show>
-              </Button>
-            </Tooltip>
-          </Show>
+              <Show when={expanded()}>Open project</Show>
+            </Button>
+          </Tooltip>
           <Tooltip placement="right" value="Share feedback" inactive={expanded()}>
             <Button
               as={"a"}

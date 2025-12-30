@@ -11,6 +11,12 @@ await fs.mkdir(dir, { recursive: true })
 afterAll(() => {
   fsSync.rmSync(dir, { recursive: true, force: true })
 })
+// Set test home directory to isolate tests from user's actual home directory
+// This prevents tests from picking up real user configs/skills from ~/.claude/skills
+const testHome = path.join(dir, "home")
+await fs.mkdir(testHome, { recursive: true })
+process.env["OPENCODE_TEST_HOME"] = testHome
+
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
