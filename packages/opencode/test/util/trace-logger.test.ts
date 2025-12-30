@@ -52,8 +52,10 @@ describe("TraceLogger", () => {
     expect(entry.providerID).toBe("openai")
     expect(entry.modelID).toBe("gpt-4")
     expect(entry.agent).toBe("default")
-    expect(entry.request.system).toEqual(["System prompt"])
-    expect(entry.request.messages).toEqual([{ role: "user", content: "Hello" }])
+    expect(entry.request.messages).toEqual([
+      { role: "system", content: "System prompt" },
+      { role: "user", content: "Hello" },
+    ])
     expect(entry.request.tools).toEqual({ bash: { name: "bash" } })
   })
 
@@ -133,6 +135,10 @@ describe("TraceLogger", () => {
     expect(parsed.sessionID).toBe("test-session")
     expect(parsed.providerID).toBe("openai")
     expect(parsed.modelID).toBe("gpt-4")
+    expect(parsed.request.messages).toEqual([
+      { role: "system", content: "System prompt" },
+      { role: "user", content: "Test message" },
+    ])
     expect(parsed.response.content.text).toEqual(["Response text"])
   })
 
@@ -221,5 +227,31 @@ describe("TraceLogger", () => {
     expect(entry.response?.content?.toolCalls).toHaveLength(2)
     expect(entry.response?.content?.toolCalls?.[0].name).toBe("bash")
     expect(entry.response?.content?.toolCalls?.[1].name).toBe("read_file")
+  })
+
+  it("should merge multiple system messages into messages array", () => {
+    const entry = TraceLogger.createTraceEntry({
+      sessionID: "test-session",
+      providerID: "openai",
+      modelID: "gpt-4",
+      agent: "default",
+      system: ["System prompt 1", "System prompt 2", "System prompt 3"],
+      messages: [
+        { role: "user", content: "User message 1" },
+        { role: "assistant", content: "Assistant response" },
+        { role: "user", content: "User message 2" },
+      ],
+      tools: {},
+      parameters: {},
+    })
+
+    // Verify system messages are at the beginning
+    expect(entry.request.messages).toHaveLength(6)
+    expect(entry.request.messages[0]).toEqual({ role: "system", content: "System prompt 1" })
+    expect(entry.request.messages[1]).toEqual({ role: "system", content: "System prompt 2" })
+    expect(entry.request.messages[2]).toEqual({ role: "system", content: "System prompt 3" })
+    expect(entry.request.messages[3]).toEqual({ role: "user", content: "User message 1" })
+    expect(entry.request.messages[4]).toEqual({ role: "assistant", content: "Assistant response" })
+    expect(entry.request.messages[5]).toEqual({ role: "user", content: "User message 2" })
   })
 })

@@ -44,7 +44,6 @@ export namespace TraceLogger {
     modelID: string
     agent: string
     request: {
-      system: string[]
       messages: any[]
       tools: Record<string, any>
       parameters: {
@@ -127,6 +126,12 @@ export namespace TraceLogger {
       options?: any
     }
   }): TraceEntry {
+    // Merge system prompts into messages array as role "system"
+    const systemMessages = input.system.map((content) => ({
+      role: "system" as const,
+      content,
+    }))
+
     return {
       timestamp: new Date().toISOString(),
       sessionID: input.sessionID,
@@ -135,8 +140,7 @@ export namespace TraceLogger {
       modelID: input.modelID,
       agent: input.agent,
       request: {
-        system: input.system,
-        messages: input.messages,
+        messages: [...systemMessages, ...input.messages],
         tools: input.tools,
         parameters: input.parameters,
       },
