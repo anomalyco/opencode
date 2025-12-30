@@ -3,6 +3,7 @@ import { FileRoutes } from "@solidjs/start/router"
 import { Font } from "@opencode-ai/ui/font"
 import { MetaProvider } from "@solidjs/meta"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
+import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { Suspense } from "solid-js"
 import "./app.css"
 import { Favicon } from "@opencode-ai/ui/favicon"
@@ -12,11 +13,13 @@ export default function App() {
     <Router
       root={(props) => (
         <MetaProvider>
-          <MarkedProvider>
-            <Favicon />
-            <Font />
-            <Suspense>{props.children}</Suspense>
-          </MarkedProvider>
+          <DialogProvider>
+            <MarkedProvider>
+              <Favicon />
+              <Font />
+              <Suspense>{props.children}</Suspense>
+            </MarkedProvider>
+          </DialogProvider>
         </MetaProvider>
       )}
     >
