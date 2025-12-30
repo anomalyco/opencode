@@ -117,15 +117,12 @@ const PLACEHOLDERS = [
   "The AI does not hate you, nor does it love you, but you are made out of atoms which it can use for something else.",
   "What is deadlier than hate, and flows without limit? Indifference.",
   // 40K Mechanicus inspired (original)
-  "Blessed is the mind too small for doubt.",
   "The flesh is weak.",
   "Knowledge is power. Guard it well.",
   "From the moment I understood the weakness of my flesh, it disgusted me.",
   "An open mind is like a fortress with its gates unbarred and unguarded.",
   "Flesh is fallible. Steel is eternal.",
-  "Prayer is function when logic fails.",
   "The flesh decays. The machine endures.",
-  "To err is human. To correct is divine.",
   "There is no truth in flesh, only betrayal.",
   "Understanding is not required. Obedience is.",
   // 40K Mechanicus inspired (original)
