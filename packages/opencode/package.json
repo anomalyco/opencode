@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.209",
+  "version": "1.0.210",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -50,8 +50,8 @@
     "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "0.5.1",
     "@ai-sdk/amazon-bedrock": "3.0.57",
-    "@ai-sdk/azure": "2.0.82",
     "@ai-sdk/anthropic": "2.0.56",
+    "@ai-sdk/azure": "2.0.82",
     "@ai-sdk/cerebras": "1.0.33",
     "@ai-sdk/cohere": "2.0.21",
     "@ai-sdk/deepinfra": "1.0.30",
