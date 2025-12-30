@@ -831,6 +831,18 @@ export namespace Config {
             .max(1)
             .optional()
             .describe("For collapse mode: fraction of newest tokens to use as reference context (default: 0.15)"),
+          summaryMaxTokens: z
+            .number()
+            .min(1000)
+            .max(50000)
+            .optional()
+            .describe("For collapse mode: target token count for the summary output (default: 10000)"),
+          previousSummaries: z
+            .number()
+            .min(0)
+            .max(10)
+            .optional()
+            .describe("For collapse mode: number of previous summaries to include for context merging (default: 3)"),
         })
         .optional(),
       experimental: z

@@ -35,6 +35,8 @@ export namespace SessionCompaction {
     trigger: 0.85, // Trigger at 85% of usable context to leave headroom
     extractRatio: 0.65,
     recentRatio: 0.15,
+    summaryMaxTokens: 10000, // Target token count for collapse summary
+    previousSummaries: 3, // Number of previous summaries to include in collapse
   }
 
   /**
@@ -277,11 +279,18 @@ export namespace SessionCompaction {
     const config = await Config.get()
     const extractRatio = config.compaction?.extractRatio ?? DEFAULTS.extractRatio
     const recentRatio = config.compaction?.recentRatio ?? DEFAULTS.recentRatio
+    const summaryMaxTokens = config.compaction?.summaryMaxTokens ?? DEFAULTS.summaryMaxTokens
+    const previousSummariesLimit = config.compaction?.previousSummaries ?? DEFAULTS.previousSummaries
+
+    // Fetch previous summaries from this session (unfiltered, to get all historical summaries)
+    const previousSummaries = await getPreviousSummaries(input.sessionID, previousSummariesLimit)
 
     log.debug("collapse", {
       messages: input.messages.length,
       extractRatio,
       recentRatio,
+      summaryMaxTokens,
+      previousSummaries: previousSummaries.length,
     })
 
     // Calculate token counts for messages
@@ -426,11 +435,27 @@ export namespace SessionCompaction {
       { context: [], prompt: undefined },
     )
 
+    // Build previous summaries section if available
+    const previousSummariesSection =
+      previousSummaries.length > 0
+        ? `## Previous Session Summaries
+
+The following summaries contain critical context from earlier compactions in this session.
+You MUST merge and consolidate all relevant information from these summaries into your new summary.
+Do not lose any important details - treat previous summaries as authoritative historical record.
+
+${previousSummaries.map((summary, i) => `### Previous Summary ${i + 1}\n\n${summary}`).join("\n\n---\n\n")}
+
+---
+
+`
+        : ""
+
     const collapsePrompt = `You are creating a comprehensive context restoration document from a collapsed conversation segment. This document will serve as the foundation for continued work - it must preserve critical knowledge that would otherwise be lost.
 
 ## Output Structure
 
-Create a detailed summary (target: 600-800 lines, approximately 8,000-12,000 tokens) with the following sections:
+Create a detailed summary (target: approximately ${summaryMaxTokens} tokens) with the following sections:
 
 ### 1. Current Task State
 - What is actively being worked on
@@ -492,8 +517,9 @@ Requirements and decisions that emerged from the conversation but aren't documen
 - If something was hard-won through iteration, document the full journey
 - User directives are sacred - never omit explicit user preferences
 - This document should allow work to continue seamlessly as if the conversation never broke
+${previousSummaries.length > 0 ? "- MERGE all information from previous summaries - do not lose historical context\n- Consolidate duplicate information but preserve all unique details" : ""}
 
-## Extracted Context (to distill)
+${previousSummariesSection}## Extracted Context (to distill)
 
 ${markdownContent}
 
@@ -693,5 +719,34 @@ Generate the context restoration document now:`
     }
 
     return lines.join("\n")
+  }
+
+  /**
+   * Extract summary text from a compaction summary message's parts
+   */
+  function extractSummaryText(msg: MessageV2.WithParts): string {
+    return msg.parts
+      .filter((p): p is MessageV2.TextPart => p.type === "text" && !p.synthetic)
+      .map((p) => p.text)
+      .join("\n")
+  }
+
+  /**
+   * Fetch previous compaction summaries from the session (unfiltered)
+   */
+  async function getPreviousSummaries(sessionID: string, limit: number): Promise<string[]> {
+    const allMessages = await Session.messages({ sessionID })
+
+    return allMessages
+      .filter(
+        (m): m is MessageV2.WithParts & { info: MessageV2.Assistant } =>
+          m.info.role === "assistant" &&
+          (m.info as MessageV2.Assistant).summary === true &&
+          (m.info as MessageV2.Assistant).finish !== undefined,
+      )
+      .sort((a, b) => a.info.time.created - b.info.time.created) // oldest first
+      .slice(-limit) // take the N most recent
+      .map((m) => extractSummaryText(m))
+      .filter((text) => text.trim().length > 0)
   }
 }
