@@ -1,5 +1,5 @@
 // packages/opencode/src/cli/cmd/tui/layout/renderer.tsx
-import { For, Match, Show, Switch, createMemo, type Component } from "solid-js"
+import { For, Match, Show, Switch, createMemo, type Component, Index } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTheme } from "../context/theme"
 import { useLayout } from "../context/layout"
@@ -135,7 +135,9 @@ const ViewRenderer: Component<{ viewID: string }> = (props) => {
         <Home />
       </Match>
       <Match when={parsed().type === "session" && parsed().sessionID}>
-        <Session sessionID={parsed().sessionID!} />
+        <Show when={parsed().sessionID} keyed>
+          {(sessionID) => <Session sessionID={sessionID} />}
+        </Show>
       </Match>
       <Match when={view()?.type === "tree"}>
         <TreeViewRenderer view={view() as View.Tree.Info} />
