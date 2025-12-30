@@ -39,6 +39,33 @@ export namespace SessionCompaction {
     previousSummaries: 3, // Number of previous summaries to include in collapse
   }
 
+  // Static portion of collapse prompt template for token estimation
+  const COLLAPSE_PROMPT_TEMPLATE = `You are creating a comprehensive context restoration document from a collapsed conversation segment. This document will serve as the foundation for continued work - it must preserve critical knowledge that would otherwise be lost.
+
+## Output Structure
+
+Create a detailed summary with the following sections:
+
+### 1. Current Task State
+### 2. Resolved Code & Lessons Learned
+### 3. User Directives
+### 4. Custom Utilities & Commands
+### 5. Design Decisions & Derived Requirements
+### 6. Technical Facts
+
+## Critical Rules
+
+- PRESERVE working code verbatim in fenced blocks
+- INCLUDE failed approaches with explanations
+- Be specific: exact paths, line numbers, function names, config values
+- Capture the "why" behind decisions, not just the "what"
+- User directives are sacred - never omit explicit user preferences
+
+## Extracted Context (to distill)
+## Recent Context (for reference)
+
+Generate the context restoration document now:`
+
   /**
    * Get the compaction method.
    * Priority: TUI toggle (kv.json) > config file > default
@@ -282,18 +309,14 @@ export namespace SessionCompaction {
     const summaryMaxTokens = config.compaction?.summaryMaxTokens ?? DEFAULTS.summaryMaxTokens
     const previousSummariesLimit = config.compaction?.previousSummaries ?? DEFAULTS.previousSummaries
 
-    // Fetch previous summaries from this session (unfiltered, to get all historical summaries)
-    const previousSummaries = await getPreviousSummaries(input.sessionID, previousSummariesLimit)
+    // Get the user message to determine which model we'll use
+    const originalUserMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    const agent = await Agent.get("compaction")
+    const model = agent.model
+      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+      : await Provider.getModel(originalUserMessage.model.providerID, originalUserMessage.model.modelID)
 
-    log.debug("collapse", {
-      messages: input.messages.length,
-      extractRatio,
-      recentRatio,
-      summaryMaxTokens,
-      previousSummaries: previousSummaries.length,
-    })
-
-    // Calculate token counts for messages
+    // Calculate token counts for messages first
     const messageTokens: number[] = []
     let totalTokens = 0
     for (const msg of input.messages) {
@@ -350,8 +373,17 @@ export namespace SessionCompaction {
     const markdownContent = messagesToMarkdown(extractedMessages)
     const recentContext = messagesToMarkdown(recentReferenceMessages)
 
-    // Get the original compaction user message (placeholder created by create())
-    const originalUserMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    // Build base prompt (without previous summaries) to calculate token budget
+    const markdownTokens = Token.estimate(markdownContent)
+    const recentTokensEstimate = Token.estimate(recentContext)
+    const templateTokens = Token.estimate(COLLAPSE_PROMPT_TEMPLATE)
+    const basePromptTokens = markdownTokens + recentTokensEstimate + templateTokens
+    const contextLimit = model.limit.context
+    const outputReserve = SessionPrompt.OUTPUT_TOKEN_MAX
+    const previousSummaryBudget = Math.max(0, contextLimit - outputReserve - basePromptTokens)
+
+    // Fetch previous summaries that fit within budget
+    const previousSummaries = await getPreviousSummaries(input.sessionID, previousSummariesLimit, previousSummaryBudget)
 
     // Get the last extracted message to determine breakpoint position
     const lastExtractedMessage = extractedMessages[extractedMessages.length - 1]
@@ -385,11 +417,6 @@ export namespace SessionCompaction {
       type: "compaction",
       auto: input.auto,
     })
-
-    const agent = await Agent.get("compaction")
-    const model = agent.model
-      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      : await Provider.getModel(originalUserMessage.model.providerID, originalUserMessage.model.modelID)
 
     // Create assistant summary message positioned right after the compaction user message
     // Use compactionUserId as reference (not lastExtractedId) to ensure assistant sorts immediately after user
@@ -435,101 +462,60 @@ export namespace SessionCompaction {
       { context: [], prompt: undefined },
     )
 
-    // Build previous summaries section if available
-    const previousSummariesSection =
-      previousSummaries.length > 0
-        ? `## Previous Session Summaries
+    // Build prompt sections - only include what we have
+    const sections: string[] = []
 
-The following summaries contain critical context from earlier compactions in this session.
-You MUST merge and consolidate all relevant information from these summaries into your new summary.
-Do not lose any important details - treat previous summaries as authoritative historical record.
+    // Instructions
+    sections.push(`You are creating a comprehensive context restoration document. This document will serve as the foundation for continued work - it must preserve critical knowledge that would otherwise be lost.
 
-${previousSummaries.map((summary, i) => `### Previous Summary ${i + 1}\n\n${summary}`).join("\n\n---\n\n")}
+Create a detailed summary (target: approximately ${summaryMaxTokens} tokens) with these sections:
+1. Current Task State - what is being worked on, next steps, blockers
+2. Resolved Code & Lessons Learned - working code verbatim, failed approaches, insights
+3. User Directives - explicit preferences, style rules, things to always/never do
+4. Custom Utilities & Commands - scripts, aliases, debugging commands
+5. Design Decisions & Derived Requirements - architecture decisions, API contracts, patterns
+6. Technical Facts - file paths, function names, config values, environment details
 
----
+Critical rules:
+- PRESERVE working code verbatim in fenced blocks
+- INCLUDE failed approaches with explanations
+- Be specific with paths, line numbers, function names
+- Capture the "why" behind decisions
+- User directives are sacred - never omit them`)
 
-`
-        : ""
+    // Previous summaries
+    if (previousSummaries.length > 0) {
+      sections.push(`<previous_summaries>
+IMPORTANT: Merge all information from these previous summaries into your new summary. Do not lose any historical context.
 
-    const collapsePrompt = `You are creating a comprehensive context restoration document from a collapsed conversation segment. This document will serve as the foundation for continued work - it must preserve critical knowledge that would otherwise be lost.
+${previousSummaries.map((summary, i) => `--- Summary ${i + 1} ---\n${summary}`).join("\n\n")}
+</previous_summaries>`)
+    }
 
-## Output Structure
-
-Create a detailed summary (target: approximately ${summaryMaxTokens} tokens) with the following sections:
-
-### 1. Current Task State
-- What is actively being worked on
-- Immediate next steps
-- Any blockers or open questions
-
-### 2. Resolved Code & Lessons Learned
-For each complex or highly iterative area of focus, include:
-- The actual working code in markdown fences (this is critical - preserve it verbatim)
-- What approaches failed and why
-- What finally worked and why
-- Insights that would help if revisiting this area
-- Any edge cases or gotchas discovered
-
-Format example:
-\`\`\`typescript
-// Solution for X problem
-// Failed approaches: tried A (failed because...), tried B (failed because...)
-// Working solution: C works because...
-// Gotcha: watch out for Y when Z
-<actual working code here>
-\`\`\`
-
-### 3. User Directives
-Bullet points of explicit or implicit user preferences:
-- Things they want you to always do
-- Things they want you to never do
-- Coding style preferences
-- Communication preferences
-- Project-specific rules they've established
-
-### 4. Custom Utilities & Commands
-- Any custom scripts, commands, or workflows established
-- Special tool configurations or aliases
-- Debugging commands that proved useful
-- Project-specific shortcuts or patterns
-
-### 5. Design Decisions & Derived Requirements
-Requirements and decisions that emerged from the conversation but aren't documented elsewhere:
-- Architecture decisions made and their rationale
-- API contracts or interfaces agreed upon
-- Naming conventions established
-- File organization patterns
-- Integration patterns discovered
-
-### 6. Technical Facts
-- Key file paths and their purposes
-- Important function/class names and what they do
-- Configuration values that matter
-- Environment specifics
-- Dependencies or version constraints
-
-## Critical Rules
-
-- PRESERVE working code verbatim in fenced blocks - this is essential context that prevents re-solving solved problems
-- INCLUDE failed approaches with explanations - this prevents repeating the same mistakes
-- Be specific: exact paths, line numbers, function names, config values
-- Capture the "why" behind decisions, not just the "what"
-- If something was hard-won through iteration, document the full journey
-- User directives are sacred - never omit explicit user preferences
-- This document should allow work to continue seamlessly as if the conversation never broke
-${previousSummaries.length > 0 ? "- MERGE all information from previous summaries - do not lose historical context\n- Consolidate duplicate information but preserve all unique details" : ""}
-
-${previousSummariesSection}## Extracted Context (to distill)
+    // Extracted content
+    sections.push(`<extracted_context>
+The following conversation content needs to be distilled into the summary:
 
 ${markdownContent}
+</extracted_context>`)
 
-## Recent Context (for reference - shows current state)
+    // Recent context
+    sections.push(`<recent_context>
+The following is recent context for reference (shows current state):
 
 ${recentContext}
+</recent_context>`)
 
-${compacting.context.length > 0 ? "\n## Additional Context\n\n" + compacting.context.join("\n\n") : ""}
+    // Additional plugin context
+    if (compacting.context.length > 0) {
+      sections.push(`<additional_context>
+${compacting.context.join("\n\n")}
+</additional_context>`)
+    }
 
-Generate the context restoration document now:`
+    sections.push("Generate the context restoration document now.")
+
+    const collapsePrompt = sections.join("\n\n")
 
     const result = await processor.process({
       user: originalUserMessage,
@@ -732,12 +718,13 @@ Generate the context restoration document now:`
   }
 
   /**
-   * Fetch previous compaction summaries from the session (unfiltered)
+   * Fetch previous compaction summaries from the session (unfiltered).
+   * Respects token budget to avoid overflowing context window.
    */
-  async function getPreviousSummaries(sessionID: string, limit: number): Promise<string[]> {
+  async function getPreviousSummaries(sessionID: string, limit: number, tokenBudget: number): Promise<string[]> {
     const allMessages = await Session.messages({ sessionID })
 
-    return allMessages
+    const summaryMessages = allMessages
       .filter(
         (m): m is MessageV2.WithParts & { info: MessageV2.Assistant } =>
           m.info.role === "assistant" &&
@@ -746,7 +733,23 @@ Generate the context restoration document now:`
       )
       .sort((a, b) => a.info.time.created - b.info.time.created) // oldest first
       .slice(-limit) // take the N most recent
-      .map((m) => extractSummaryText(m))
-      .filter((text) => text.trim().length > 0)
+
+    // Include summaries only if they fit within token budget
+    // Start from most recent (end of array) since those are most relevant
+    const result: string[] = []
+    let tokensUsed = 0
+
+    for (let i = summaryMessages.length - 1; i >= 0; i--) {
+      const text = extractSummaryText(summaryMessages[i])
+      if (!text.trim()) continue
+
+      const estimate = Token.estimate(text)
+      if (tokensUsed + estimate > tokenBudget) break
+
+      result.unshift(text) // prepend to maintain chronological order
+      tokensUsed += estimate
+    }
+
+    return result
   }
 }
