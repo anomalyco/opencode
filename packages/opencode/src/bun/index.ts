@@ -64,17 +64,25 @@ export namespace BunProc {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 
-    const mod = path.join(Global.Path.cache, "node_modules", pkg)
+    // Check if this is a git dependency (github:, git://, git+https://, etc.)
+    const isGitDep = pkg.startsWith("github:") || pkg.startsWith("git://") || pkg.startsWith("git+")
+
+    // For git deps, extract the package name from the URL for the module path
+    // e.g., "github:user/repo#branch" -> "repo"
+    const pkgName = isGitDep ? (pkg.split("/").pop()?.split("#")[0] ?? pkg) : pkg
+    const mod = path.join(Global.Path.cache, "node_modules", pkgName)
+
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
     const parsed = await pkgjson.json().catch(async () => {
       const result = { dependencies: {} }
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
       return result
     })
-    if (parsed.dependencies[pkg] === version) return mod
+    if (parsed.dependencies[pkgName] === pkg) return mod
 
-    // Build command arguments
-    const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkg + "@" + version]
+    // Build command arguments - don't append @version for git dependencies
+    const pkgSpec = isGitDep ? pkg : pkg + "@" + version
+    const args = ["add", "--force", "--exact", "--cwd", Global.Path.cache, pkgSpec]
 
     // Let Bun handle registry resolution:
     // - If .npmrc files exist, Bun will use them automatically
@@ -98,8 +106,8 @@ export namespace BunProc {
 
     // Resolve actual version from installed package when using "latest"
     // This ensures subsequent starts use the cached version until explicitly updated
-    let resolvedVersion = version
-    if (version === "latest") {
+    let resolvedVersion: string = isGitDep ? pkg : version
+    if (!isGitDep && version === "latest") {
       const installedPkgJson = Bun.file(path.join(mod, "package.json"))
       const installedPkg = await installedPkgJson.json().catch(() => null)
       if (installedPkg?.version) {
@@ -107,7 +115,7 @@ export namespace BunProc {
       }
     }
 
-    parsed.dependencies[pkg] = resolvedVersion
+    parsed.dependencies[pkgName] = resolvedVersion
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
   }
