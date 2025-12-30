@@ -10,7 +10,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
   name: "Layout",
   init: () => {
     const [layout, setLayout] = createStore<Layout.Root.Info>({
-      root: Layout.Window.create({ id: "win-main", viewID: "session" }),
+      root: Layout.Window.create({ id: "win-main", viewID: "home" }),
       floats: [],
       focusedID: "win-main",
     })

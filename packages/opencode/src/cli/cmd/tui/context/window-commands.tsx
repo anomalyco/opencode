@@ -31,19 +31,13 @@ export const { use: useWindowCommands, provider: WindowCommandsProvider } = crea
         return
       }
 
-      // Split commands
+      // Split commands - new windows always start with home view
       if (keybind.match("window_split_horizontal", evt)) {
-        const focused = layout.focusedWindow
-        if (focused) {
-          layout.splitHorizontal(focused.viewID)
-        }
+        layout.splitHorizontal("home")
         return
       }
       if (keybind.match("window_split_vertical", evt)) {
-        const focused = layout.focusedWindow
-        if (focused) {
-          layout.splitVertical(focused.viewID)
-        }
+        layout.splitVertical("home")
         return
       }
 
