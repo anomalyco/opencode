@@ -64,8 +64,9 @@ export default function Home() {
         <div
           classList={{
             "size-2 rounded-full": true,
-            "bg-icon-success-base": server.healthy(),
-            "bg-icon-critical-base": !server.healthy(),
+            "bg-icon-success-base": server.healthy() === true,
+            "bg-icon-critical-base": server.healthy() === false,
+            "bg-border-weak-base": server.healthy() === undefined,
           }}
         />
         {server.name}

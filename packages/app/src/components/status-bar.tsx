@@ -34,10 +34,12 @@ export function StatusBar(props: ParentProps) {
             <div
               classList={{
                 "size-1.5 rounded-full": true,
-                "bg-icon-success-base": server.healthy(),
-                "bg-icon-critical-base": !server.healthy(),
+                "bg-icon-success-base": server.healthy() === true,
+                "bg-icon-critical-base": server.healthy() === false,
+                "bg-border-weak-base": server.healthy() === undefined,
               }}
             />
+
             <span class="text-12-regular text-text-weak">{server.name}</span>
           </Button>
         </div>

@@ -7,7 +7,7 @@ import { persisted } from "@/utils/persist"
 
 type StoredProject = { worktree: string; expanded: boolean }
 
-function normalize(input: string) {
+export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
   if (!trimmed) return
   const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
@@ -15,7 +15,8 @@ function normalize(input: string) {
   return cleaned.replace(/^(https?:\/\/[^/]+).*/, "$1")
 }
 
-function displayName(url: string) {
+export function serverDisplayName(url: string) {
+  if (!url) return ""
   return url
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "")
@@ -26,7 +27,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
   name: "Server",
   init: (props: { defaultUrl: string; forceUrl?: boolean }) => {
     const platform = usePlatform()
-    const fallback = () => normalize(props.defaultUrl)
+    const fallback = () => normalizeServerUrl(props.defaultUrl)
     const [forced, setForced] = createSignal(props.forceUrl ?? false)
 
     const [store, setStore, _, ready] = persisted(
@@ -39,7 +40,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
 
     function setActive(input: string) {
-      const url = normalize(input)
+      const url = normalizeServerUrl(input)
       if (!url) return
       batch(() => {
         if (!store.list.includes(url)) {
@@ -50,7 +51,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     function remove(input: string) {
-      const url = normalize(input)
+      const url = normalizeServerUrl(input)
       if (!url) return
 
       const list = store.list.filter((x) => x !== url)
@@ -96,9 +97,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const isReady = createMemo(() => ready() && !!store.active)
 
     const [healthy, { refetch }] = createResource(
-      () => store.active,
+      () => store.active || undefined,
       async (url) => {
-        if (!url) return true
+        if (!url) return
 
         const sdk = createOpencodeClient({
           baseUrl: url,
@@ -110,7 +111,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           .then((x) => x.data?.healthy === true)
           .catch(() => false)
       },
-      { initialValue: true },
     )
 
     createEffect(() => {
@@ -128,7 +128,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         return store.active
       },
       get name() {
-        return displayName(store.active)
+        return serverDisplayName(store.active)
       },
       get list() {
         return store.list
