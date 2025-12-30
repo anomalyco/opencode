@@ -8,6 +8,7 @@ import {
   createResource,
   createMemo,
   createEffect,
+  createSignal,
   on,
   createRenderEffect,
   batch,
@@ -20,6 +21,7 @@ import { PromptInput } from "@/components/prompt-input"
 import { DateTime } from "luxon"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -579,6 +581,71 @@ export default function Page() {
     )
   }
 
+  const FileTabContent = (props: { path: string; codeComponent: typeof codeComponent }): JSX.Element => {
+    const [file] = createResource(
+      () => props.path,
+      async (path) => local.file.node(path),
+    )
+    const content = createMemo(() => file()?.content)
+    const isImage = createMemo(
+      () => content()?.encoding === "base64" && content()?.mimeType?.startsWith("image/"),
+    )
+    const isSvg = createMemo(() => content()?.mimeType === "image/svg+xml")
+    const [showCode, setShowCode] = createSignal(false)
+    const decodedContent = createMemo(() => {
+      const c = content()
+      if (c?.encoding === "base64" && c.content) {
+        return atob(c.content)
+      }
+      return c?.content ?? ""
+    })
+    return (
+      <Switch>
+        <Match when={isImage() && !showCode() && file()}>
+          {(f) => (
+            <div class="flex flex-col h-full">
+              <Show when={isSvg()}>
+                <div class="flex justify-end p-2 border-b border-border-base">
+                  <Button size="small" icon="code" onClick={() => setShowCode(true)}>
+                    View code
+                  </Button>
+                </div>
+              </Show>
+              <div class="flex items-center justify-center flex-1 p-4">
+                <img
+                  src={`data:${f().content!.mimeType};base64,${f().content!.content}`}
+                  alt={f().path}
+                  class="max-w-full max-h-[80vh] object-contain"
+                />
+              </div>
+            </div>
+          )}
+        </Match>
+        <Match when={content()?.content != null}>
+          <div class="flex flex-col h-full">
+            <Show when={isSvg()}>
+              <div class="flex justify-end p-2 border-b border-border-base">
+                <Button size="small" icon="photo" onClick={() => setShowCode(false)}>
+                  View image
+                </Button>
+              </div>
+            </Show>
+            <Dynamic
+              component={props.codeComponent}
+              file={{
+                name: file()?.path ?? props.path,
+                contents: decodedContent(),
+                cacheKey: checksum(decodedContent()),
+              }}
+              overflow="scroll"
+              class="select-text pb-40"
+            />
+          </div>
+        </Match>
+      </Switch>
+    )
+  }
+
   const SortableTab = (props: {
     tab: string
     onTabClick: (tab: string) => void
@@ -874,33 +941,14 @@ export default function Page() {
                 </Show>
                 <For each={tabs().all()}>
                   {(tab) => {
-                    const [file] = createResource(
-                      () => tab,
-                      async (tab) => {
-                        if (tab.startsWith("file://")) {
-                          return local.file.node(tab.replace("file://", ""))
-                        }
-                        return undefined
-                      },
-                    )
+                    const path = tab.startsWith("file://") ? tab.replace("file://", "") : undefined
+                    // Trigger the file load
+                    if (path) local.file.init(path)
                     return (
                       <Tabs.Content value={tab} class="mt-3">
-                        <Switch>
-                          <Match when={file()}>
-                            {(f) => (
-                              <Dynamic
-                                component={codeComponent}
-                                file={{
-                                  name: f().path,
-                                  contents: f().content?.content ?? "",
-                                  cacheKey: checksum(f().content?.content ?? ""),
-                                }}
-                                overflow="scroll"
-                                class="select-text pb-40"
-                              />
-                            )}
-                          </Match>
-                        </Switch>
+                        <Show when={path}>
+                          <FileTabContent path={path!} codeComponent={codeComponent} />
+                        </Show>
                       </Tabs.Content>
                     )
                   }}
