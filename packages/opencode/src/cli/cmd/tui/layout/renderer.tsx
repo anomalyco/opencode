@@ -134,8 +134,8 @@ const ViewRenderer: Component<{ viewID: string }> = (props) => {
       <Match when={parsed().type === "home"}>
         <Home />
       </Match>
-      <Match when={parsed().type === "session"}>
-        <Session />
+      <Match when={parsed().type === "session" && parsed().sessionID}>
+        <Session sessionID={parsed().sessionID!} />
       </Match>
       <Match when={view()?.type === "tree"}>
         <TreeViewRenderer view={view() as View.Tree.Info} />

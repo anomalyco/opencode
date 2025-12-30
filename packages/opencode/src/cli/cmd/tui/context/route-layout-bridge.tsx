@@ -9,12 +9,21 @@ export const { use: useRouteLayoutBridge, provider: RouteLayoutBridgeProvider } 
     const route = useRoute()
     const layout = useLayout()
 
+    // Sync window→route: when focused window changes, update route to match
+    // (Disabled: route→window sync was overwriting window views on focus change)
     createEffect(() => {
       const focused = layout.focusedWindow
       if (!focused) return
-      const viewID = route.data.type === "home" ? "home" : `session:${route.data.sessionID}`
-      if (focused.viewID !== viewID) {
-        layout.setWindowView(focused.id, viewID)
+      // Update route to reflect what the focused window is showing
+      if (focused.viewID === "home") {
+        if (route.data.type !== "home") {
+          route.navigate({ type: "home" })
+        }
+      } else if (focused.viewID.startsWith("session:")) {
+        const sessionID = focused.viewID.slice(8)
+        if (route.data.type !== "session" || route.data.sessionID !== sessionID) {
+          route.navigate({ type: "session", sessionID })
+        }
       }
     })
 

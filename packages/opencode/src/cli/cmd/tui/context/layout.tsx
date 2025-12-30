@@ -158,6 +158,25 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           }),
         )
       },
+
+      // Navigate the focused window to a new view
+      navigateFocusedWindow(viewID: string) {
+        const windowID = layout.focusedID
+        setLayout(
+          produce((draft) => {
+            function updateNode(node: Layout.Node): void {
+              if (node.type === "window" && node.id === windowID) {
+                node.viewID = viewID
+                return
+              }
+              if (node.type === "split") {
+                node.children.forEach(updateNode)
+              }
+            }
+            updateNode(draft.root)
+          }),
+        )
+      },
     }
   },
 })
