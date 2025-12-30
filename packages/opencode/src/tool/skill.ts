@@ -17,9 +17,6 @@ export const SkillTool: Tool.Info<typeof parameters> = {
   async init(ctx) {
     const skills = await Skill.all()
 
-    // Single pass: build accessible list (for description) + permission map (for O(1) lookup in execute)
-    // - accessibleSkills: only non-denied skills (shown to LLM)
-    // - permissionMap: all skills with their permission (null when no agent = all allowed)
     const { accessibleSkills, permissionMap } = ctx?.agent
       ? skills.reduce(
           (acc, skill) => {
