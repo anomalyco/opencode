@@ -2,6 +2,8 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { Installation } from "../installation"
+import { Provider } from "../provider/provider"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -15,7 +17,6 @@ import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_CODEX_INSTRUCTIONS from "./prompt/codex_header.txt"
-import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
 
 export namespace SystemPrompt {
@@ -26,6 +27,12 @@ export namespace SystemPrompt {
 
   export function instructions() {
     return PROMPT_CODEX_INSTRUCTIONS.trim()
+  }
+
+  export async function assistantInfo(model?: Provider.Model) {
+    if (!model) return `You are running in OpenCode v${Installation.VERSION}, the best coding agent on the planet.`
+    const provider = await Provider.getProvider(model.providerID)
+    return `You are ${model.name} (${provider.name}: ${model.id}) running in OpenCode v${Installation.VERSION}, the best coding agent on the planet.`
   }
 
   export function provider(model: Provider.Model) {
