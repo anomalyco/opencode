@@ -5,25 +5,9 @@ import { createStore, produce } from "solid-js/store"
 import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile, writeFile } from "fs/promises"
-import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import { moveHistory, type PromptInfo } from "./history-core"
 
-export type PromptInfo = {
-  input: string
-  mode?: "normal" | "shell"
-  parts: (
-    | Omit<FilePart, "id" | "messageID" | "sessionID">
-    | Omit<AgentPart, "id" | "messageID" | "sessionID">
-    | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
-        source?: {
-          text: {
-            start: number
-            end: number
-            value: string
-          }
-        }
-      })
-  )[]
-}
+export type { PromptInfo }
 
 const MAX_HISTORY_ENTRIES = 50
 
@@ -62,25 +46,9 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
     return {
       move(direction: 1 | -1, input: string): PromptInfo | undefined {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
-        if (!current) return undefined
-        if (current.input !== input && input.length) return undefined
-        setStore(
-          produce((draft) => {
-            const next = store.index + direction
-            if (Math.abs(next) > store.history.length) return
-            if (next > 0) return
-            draft.index = next
-          }),
-        )
-        if (store.index === 0) {
-          return {
-            input: "",
-            parts: [],
-          }
-        }
-        return store.history.at(store.index)
+        const { nextIndex, result } = moveHistory(store.history, store.index, direction, input)
+        setStore("index", nextIndex)
+        return result
       },
       append(item: PromptInfo) {
         const entry = clone(item)
