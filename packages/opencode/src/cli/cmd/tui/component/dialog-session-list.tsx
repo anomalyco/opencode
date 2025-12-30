@@ -9,6 +9,7 @@ import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
+import { useLayout } from "../context/layout"
 import "opentui-spinner/solid"
 
 export function DialogSessionList() {
@@ -18,6 +19,7 @@ export function DialogSessionList() {
   const route = useRoute()
   const sdk = useSDK()
   const kv = useKV()
+  const layout = useLayout()
 
   const [toDelete, setToDelete] = createSignal<string>()
 
@@ -74,10 +76,8 @@ export function DialogSessionList() {
         setToDelete(undefined)
       }}
       onSelect={(option) => {
-        route.navigate({
-          type: "session",
-          sessionID: option.value,
-        })
+        // Update window view (layout system handles route sync via bridge)
+        layout.navigateFocusedWindow(`session:${option.value}`)
         dialog.clear()
       }}
       keybind={[

@@ -20,7 +20,7 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
-import { LayoutProvider } from "@tui/context/layout"
+import { LayoutProvider, useLayout } from "@tui/context/layout"
 import { WindowCommandsProvider } from "@tui/context/window-commands"
 import { RouteLayoutBridgeProvider } from "@tui/context/route-layout-bridge"
 import { LayoutRenderer } from "@tui/layout/renderer"
@@ -187,6 +187,7 @@ function App() {
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
+  const layout = useLayout()
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
@@ -245,10 +246,7 @@ function App() {
         local.model.set({ providerID, modelID }, { recent: true })
       }
       if (args.sessionID) {
-        route.navigate({
-          type: "session",
-          sessionID: args.sessionID,
-        })
+        layout.navigateFocusedWindow(`session:${args.sessionID}`)
       }
     })
   })
@@ -262,7 +260,7 @@ function App() {
       .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
-      route.navigate({ type: "session", sessionID: match })
+      layout.navigateFocusedWindow(`session:${match}`)
     }
   })
 
@@ -299,6 +297,7 @@ function App() {
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
         const currentPrompt = current?.current?.input ? current.current : undefined
+        layout.navigateFocusedWindow("home")
         route.navigate({
           type: "home",
           initialPrompt: currentPrompt,
@@ -537,7 +536,7 @@ function App() {
 
   sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
+      layout.navigateFocusedWindow("home")
       toast.show({
         variant: "info",
         message: "The current session was deleted",

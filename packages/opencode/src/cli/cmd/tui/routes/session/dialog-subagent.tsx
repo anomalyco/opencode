@@ -1,8 +1,8 @@
 import { DialogSelect } from "@tui/ui/dialog-select"
-import { useRoute } from "@tui/context/route"
+import { useLayout } from "../../context/layout"
 
 export function DialogSubagent(props: { sessionID: string }) {
-  const route = useRoute()
+  const layout = useLayout()
 
   return (
     <DialogSelect
@@ -13,10 +13,7 @@ export function DialogSubagent(props: { sessionID: string }) {
           value: "subagent.view",
           description: "the subagent's session",
           onSelect: (dialog) => {
-            route.navigate({
-              type: "session",
-              sessionID: props.sessionID,
-            })
+            layout.navigateFocusedWindow(`session:${props.sessionID}`)
             dialog.clear()
           },
         },

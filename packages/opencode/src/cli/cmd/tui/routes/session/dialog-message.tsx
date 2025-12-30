@@ -5,6 +5,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import { useLayout } from "../../context/layout"
 
 export function DialogMessage(props: {
   messageID: string
@@ -15,6 +16,7 @@ export function DialogMessage(props: {
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
+  const layout = useLayout()
 
   return (
     <DialogSelect
@@ -95,8 +97,11 @@ export function DialogMessage(props: {
                 { input: "", parts: [] as PromptInfo["parts"] },
               )
             })()
+            // Update window view first, then route for initialPrompt state
+            const newSessionID = result.data!.id
+            layout.navigateFocusedWindow(`session:${newSessionID}`)
             route.navigate({
-              sessionID: result.data!.id,
+              sessionID: newSessionID,
               type: "session",
               initialPrompt,
             })

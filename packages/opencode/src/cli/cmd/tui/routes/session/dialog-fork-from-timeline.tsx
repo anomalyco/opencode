@@ -7,12 +7,14 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import { useLayout } from "../../context/layout"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
   const route = useRoute()
+  const layout = useLayout()
 
   onMount(() => {
     dialog.setSize("large")
@@ -47,8 +49,11 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             },
             { input: "", parts: [] as PromptInfo["parts"] },
           )
+          // Update window view first, then route for initialPrompt state
+          const newSessionID = forked.data!.id
+          layout.navigateFocusedWindow(`session:${newSessionID}`)
           route.navigate({
-            sessionID: forked.data!.id,
+            sessionID: newSessionID,
             type: "session",
             initialPrompt,
           })
