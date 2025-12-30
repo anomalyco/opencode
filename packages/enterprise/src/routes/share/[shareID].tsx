@@ -25,7 +25,7 @@ import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/
 import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
 import { type IconName } from "@opencode-ai/ui/icons/provider"
-import { Meta } from "@solidjs/meta"
+import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 
 const ClientOnlyDiff = clientOnly(() => import("@opencode-ai/ui/diff").then((m) => ({ default: m.Diff })))
@@ -202,6 +202,9 @@ export default function () {
 
           return (
             <>
+              <Show when={info().title}>
+                <Title>{info().title} | OpenCode</Title>
+              </Show>
               <Meta name="description" content="opencode - The AI coding agent built for the terminal." />
               <Meta property="og:image" content={ogImage()} />
               <Meta name="twitter:image" content={ogImage()} />

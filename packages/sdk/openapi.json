@@ -2048,6 +2048,9 @@
                   "system": {
                     "type": "string"
                   },
+                  "variant": {
+                    "type": "string"
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -2420,6 +2423,9 @@
                   "system": {
                     "type": "string"
                   },
+                  "variant": {
+                    "type": "string"
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -2540,6 +2546,9 @@
                     "type": "string"
                   },
                   "command": {
+                    "type": "string"
+                  },
+                  "variant": {
                     "type": "string"
                   }
                 },
@@ -2875,6 +2884,43 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.respond({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission": {
+      "get": {
+        "operationId": "permission.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List pending permissions",
+        "description": "Get all pending permission requests across all sessions.",
+        "responses": {
+          "200": {
+            "description": "List of pending permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Permission"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.list({\n  ...\n})"
           }
         ]
       }
@@ -3519,10 +3565,27 @@
               "type": "string",
               "enum": ["true", "false"]
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": ["file", "directory"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
           }
         ],
         "summary": "Find files",
-        "description": "Search for files by name or pattern in the project directory.",
+        "description": "Search for files or directories by name or pattern in the project directory.",
         "responses": {
           "200": {
             "description": "File paths",
@@ -5228,6 +5291,9 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "variant": {
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"]
@@ -7459,6 +7525,11 @@
             "default": "shift+tab",
             "type": "string"
           },
+          "variant_cycle": {
+            "description": "Cycle model variants",
+            "default": "ctrl+t",
+            "type": "string"
+          },
           "input_clear": {
             "description": "Clear input field",
             "default": "ctrl+c",
@@ -7683,6 +7754,32 @@
             "description": "Toggle tips on home screen",
             "default": "<leader>h",
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LogLevel": {
+        "description": "Log level",
+        "type": "string",
+        "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
+      },
+      "ServerConfig": {
+        "description": "Server configuration for opencode serve and web commands",
+        "type": "object",
+        "properties": {
+          "port": {
+            "description": "Port to listen on",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "hostname": {
+            "description": "Hostname to listen on",
+            "type": "string"
+          },
+          "mdns": {
+            "description": "Enable mDNS service discovery",
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -8143,6 +8240,9 @@
           "keybinds": {
             "$ref": "#/components/schemas/KeybindsConfig"
           },
+          "logLevel": {
+            "$ref": "#/components/schemas/LogLevel"
+          },
           "tui": {
             "description": "TUI specific settings",
             "type": "object",
@@ -8169,6 +8269,9 @@
                 "enum": ["auto", "stacked"]
               }
             }
+          },
+          "server": {
+            "$ref": "#/components/schemas/ServerConfig"
           },
           "command": {
             "description": "Command configuration, see https://opencode.ai/docs/commands",
@@ -8534,6 +8637,19 @@
               }
             }
           },
+          "compaction": {
+            "type": "object",
+            "properties": {
+              "auto": {
+                "description": "Enable automatic compaction when context is full (default: true)",
+                "type": "boolean"
+              },
+              "prune": {
+                "description": "Enable pruning of old tool outputs (default: true)",
+                "type": "boolean"
+              }
+            }
+          },
           "experimental": {
             "type": "object",
             "properties": {
@@ -8832,6 +8948,16 @@
         },
         "required": ["name", "template"]
       },
+      "Variant": {
+        "type": "object",
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          }
+        },
+        "required": ["disabled"],
+        "additionalProperties": {}
+      },
       "Model": {
         "type": "object",
         "properties": {
@@ -9021,6 +9147,15 @@
           },
           "release_date": {
             "type": "string"
+          },
+          "variants": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Variant"
+            }
           }
         },
         "required": [

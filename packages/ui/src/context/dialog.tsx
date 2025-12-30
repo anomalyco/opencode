@@ -1,6 +1,5 @@
 import {
   createContext,
-  createEffect,
   createSignal,
   getOwner,
   Owner,
@@ -33,10 +32,6 @@ function init() {
     },
     close() {
       active()?.onClose?.()
-      if (!active()?.onClose) {
-        const promptInput = document.querySelector("[data-component=prompt-input]") as HTMLElement
-        promptInput?.focus()
-      }
       setActive(undefined)
     },
     show(element: DialogElement, owner: Owner, onClose?: () => void) {
@@ -74,9 +69,6 @@ function init() {
 
 export function DialogProvider(props: ParentProps) {
   const ctx = init()
-  createEffect(() => {
-    console.log("active", ctx.active)
-  })
   return (
     <Context.Provider value={ctx}>
       {props.children}

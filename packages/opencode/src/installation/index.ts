@@ -166,6 +166,7 @@ export namespace Installation {
 
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
+
     if (detectedMethod === "brew") {
       const formula = await getBrewFormula()
       if (formula === "opencode") {
@@ -178,19 +179,26 @@ export namespace Installation {
       }
     }
 
-    const registry = await iife(async () => {
-      const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
-      const reg = r || "https://registry.npmjs.org"
-      return reg.endsWith("/") ? reg.slice(0, -1) : reg
-    })
-    const [major] = VERSION.split(".").map((x) => Number(x))
-    // const channel = CHANNEL === "latest" ? `latest-${major}` : CHANNEL
-    const channel = CHANNEL
-    return fetch(`${registry}/opencode-ai/${channel}`)
+    if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
+      const registry = await iife(async () => {
+        const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
+        const reg = r || "https://registry.npmjs.org"
+        return reg.endsWith("/") ? reg.slice(0, -1) : reg
+      })
+      const channel = CHANNEL
+      return fetch(`${registry}/opencode-ai/${channel}`)
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json()
+        })
+        .then((data: any) => data.version)
+    }
+
+    return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()
       })
-      .then((data: any) => data.version)
+      .then((data: any) => data.tag_name.replace(/^v/, ""))
   }
 }

@@ -155,8 +155,18 @@ if [ -z "$requested_version" ]; then
         exit 1
     fi
 else
+    # Strip leading 'v' if present
+    requested_version="${requested_version#v}"
     url="https://github.com/sst/opencode/releases/download/v${requested_version}/$filename"
     specific_version=$requested_version
+    
+    # Verify the release exists before downloading
+    http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/sst/opencode/releases/tag/v${requested_version}")
+    if [ "$http_status" = "404" ]; then
+        echo -e "${RED}Error: Release v${requested_version} not found${NC}"
+        echo -e "${MUTED}Available releases: https://github.com/sst/opencode/releases${NC}"
+        exit 1
+    fi
 fi
 
 print_message() {

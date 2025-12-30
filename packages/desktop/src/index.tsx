@@ -12,7 +12,10 @@ import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { invoke } from "@tauri-apps/api/core"
+import { getCurrentWindow } from "@tauri-apps/api/window"
+import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
+import pkg from "../package.json"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -25,6 +28,7 @@ let update: Update | null = null
 
 const platform: Platform = {
   platform: "tauri",
+  version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
     const result = await open({
@@ -90,6 +94,33 @@ const platform: Platform = {
   restart: async () => {
     await invoke("kill_sidecar")
     await relaunch()
+  },
+
+  notify: async (title, description, href) => {
+    const granted = await isPermissionGranted().catch(() => false)
+    const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
+    if (permission !== "granted") return
+
+    const win = getCurrentWindow()
+    const focused = await win.isFocused().catch(() => document.hasFocus())
+    if (focused) return
+
+    await Promise.resolve()
+      .then(() => {
+        const notification = new Notification(title, { body: description ?? "" })
+        notification.onclick = () => {
+          const win = getCurrentWindow()
+          void win.show().catch(() => undefined)
+          void win.unminimize().catch(() => undefined)
+          void win.setFocus().catch(() => undefined)
+          if (href) {
+            window.history.pushState(null, "", href)
+            window.dispatchEvent(new PopStateEvent("popstate"))
+          }
+          notification.close()
+        }
+      })
+      .catch(() => undefined)
   },
 
   // @ts-expect-error

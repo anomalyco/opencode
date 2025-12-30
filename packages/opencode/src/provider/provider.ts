@@ -34,6 +34,7 @@ import { createCohere } from "@ai-sdk/cohere"
 import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
+import { ProviderTransform } from "./transform"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -165,28 +166,43 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      const [awsProfile, awsAccessKeyId, awsBearerToken, awsRegion] = await Promise.all([
-        Env.get("AWS_PROFILE"),
-        Env.get("AWS_ACCESS_KEY_ID"),
-        Env.get("AWS_BEARER_TOKEN_BEDROCK"),
-        Env.get("AWS_REGION"),
-      ])
+      const auth = await Auth.get("amazon-bedrock")
+      const awsProfile = Env.get("AWS_PROFILE")
+      const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
+      const awsRegion = Env.get("AWS_REGION")
+
+      const awsBearerToken = iife(() => {
+        const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
+        if (envToken) return envToken
+        if (auth?.type === "api") {
+          Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+          return auth.key
+        }
+        return undefined
+      })
+
       if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
-      const region = awsRegion ?? "us-east-1"
+      const defaultRegion = awsRegion ?? "us-east-1"
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
         autoload: true,
         options: {
-          region,
+          region: defaultRegion,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has global prefix
           if (modelID.startsWith("global.")) {
             return sdk.languageModel(modelID)
           }
+
+          // Region resolution precedence (highest to lowest):
+          // 1. options.region from opencode.json provider config
+          // 2. defaultRegion from AWS_REGION environment variable
+          // 3. Default "us-east-1" (baked into defaultRegion)
+          const region = options?.region ?? defaultRegion
 
           let regionPrefix = region.split("-")[0]
 
@@ -389,6 +405,16 @@ export namespace Provider {
     },
   }
 
+  export const Variant = z
+    .object({
+      disabled: z.boolean(),
+    })
+    .catchall(z.any())
+    .meta({
+      ref: "Variant",
+    })
+  export type Variant = z.infer<typeof Variant>
+
   export const Model = z
     .object({
       id: z.string(),
@@ -452,6 +478,7 @@ export namespace Provider {
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
+      variants: z.record(z.string(), Variant).optional(),
     })
     .meta({
       ref: "Model",
@@ -474,7 +501,7 @@ export namespace Provider {
   export type Info = z.infer<typeof Info>
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
-    return {
+    const m: Model = {
       id: model.id,
       providerID: provider.id,
       name: model.name,
@@ -531,7 +558,12 @@ export namespace Provider {
         interleaved: model.interleaved ?? false,
       },
       release_date: model.release_date,
+      variants: {},
     }
+
+    m.variants = mapValues(ProviderTransform.variants(m), (v) => ({ disabled: false, ...v }))
+
+    return m
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {

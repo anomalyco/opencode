@@ -196,13 +196,14 @@ export namespace LSPServer {
         }
         await fs.rename(extractedPath, finalPath)
 
-        await $`npm install`.cwd(finalPath).quiet()
-        await $`npm run compile`.cwd(finalPath).quiet()
+        const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm"
+        await $`${npmCmd} install`.cwd(finalPath).quiet()
+        await $`${npmCmd} run compile`.cwd(finalPath).quiet()
 
         log.info("installed VS Code ESLint server", { serverPath })
       }
 
-      const proc = spawn(BunProc.which(), ["--max-old-space-size=8192", serverPath, "--stdio"], {
+      const proc = spawn(BunProc.which(), [serverPath, "--stdio"], {
         cwd: root,
         env: {
           ...process.env,
@@ -1175,7 +1176,7 @@ export namespace LSPServer {
             case "linux":
               return "config_linux"
             case "win32":
-              return "config_windows"
+              return "config_win"
             default:
               return "config_linux"
           }
@@ -1889,6 +1890,24 @@ export namespace LSPServer {
 
       return {
         process: spawn(bin, { cwd: root }),
+      }
+    },
+  }
+
+  export const HLS: Info = {
+    id: "haskell-language-server",
+    extensions: [".hs", ".lhs"],
+    root: NearestRoot(["stack.yaml", "cabal.project", "hie.yaml", "*.cabal"]),
+    async spawn(root) {
+      const bin = Bun.which("haskell-language-server-wrapper")
+      if (!bin) {
+        log.info("haskell-language-server-wrapper not found, please install haskell-language-server")
+        return
+      }
+      return {
+        process: spawn(bin, ["--lsp"], {
+          cwd: root,
+        }),
       }
     },
   }

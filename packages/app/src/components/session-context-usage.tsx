@@ -3,7 +3,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { useSync } from "@/context/sync"
 import { useParams } from "@solidjs/router"
-import { AssistantMessage } from "@opencode-ai/sdk/v2"
+import { AssistantMessage } from "@opencode-ai/sdk/v2/client"
 
 export function SessionContextUsage() {
   const sync = useSync()
@@ -34,28 +34,21 @@ export function SessionContextUsage() {
     <Show when={context?.()}>
       {(ctx) => (
         <Tooltip
-          openDelay={300}
           value={
-            <div class="flex flex-col gap-1 p-2">
-              <div class="flex justify-between gap-4">
-                <span class="text-text-weaker">Tokens</span>
-                <span class="text-text-strong">{ctx().tokens}</span>
-              </div>
-              <div class="flex justify-between gap-4">
-                <span class="text-text-weaker">Usage</span>
-                <span class="text-text-strong">{ctx().percentage ?? 0}%</span>
-              </div>
-              <div class="flex justify-between gap-4">
-                <span class="text-text-weaker">Cost</span>
-                <span class="text-text-strong">{cost()}</span>
-              </div>
+            <div class="grid grid-cols-2 gap-x-3 gap-y-1">
+              <span class="opacity-70 text-right">Tokens</span>
+              <span class="text-left">{ctx().tokens}</span>
+              <span class="opacity-70 text-right">Usage</span>
+              <span class="text-left">{ctx().percentage ?? 0}%</span>
+              <span class="opacity-70 text-right">Cost</span>
+              <span class="text-left">{cost()}</span>
             </div>
           }
           placement="top"
         >
-          <div class="flex items-center gap-1">
-            <span class="text-12-medium text-text-weak">{`${ctx().percentage ?? 0}%`}</span>
+          <div class="flex items-center gap-1.5">
             <ProgressCircle size={16} strokeWidth={2} percentage={ctx().percentage ?? 0} />
+            {/* <span class="text-12-medium text-text-weak">{`${ctx().percentage ?? 0}%`}</span> */}
           </div>
         </Tooltip>
       )}

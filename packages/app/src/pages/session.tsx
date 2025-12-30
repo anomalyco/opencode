@@ -49,6 +49,7 @@ import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
+import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -56,6 +57,17 @@ import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
+import { StatusBar } from "@/components/status-bar"
+import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
+import { SessionLspIndicator } from "@/components/session-lsp-indicator"
+import { usePermission } from "@/context/permission"
+import { showToast } from "@opencode-ai/ui/toast"
+
+function same<T>(a: readonly T[], b: readonly T[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
 
 export default function Page() {
   const layout = useLayout()
@@ -70,22 +82,40 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
 
+  const permission = usePermission()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
-  const userMessages = createMemo(() =>
-    messages()
-      .filter((m) => m.role === "user")
-      .sort((a, b) => a.id.localeCompare(b.id)),
+  const emptyUserMessages: UserMessage[] = []
+  const userMessages = createMemo(
+    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    emptyUserMessages,
+    { equals: same },
   )
-  const visibleUserMessages = createMemo(() => {
-    const revert = revertMessageID()
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  })
-  const lastUserMessage = createMemo(() => visibleUserMessages()?.at(-1))
+  const visibleUserMessages = createMemo(
+    () => {
+      const revert = revertMessageID()
+      if (!revert) return userMessages()
+      return userMessages().filter((m) => m.id < revert)
+    },
+    emptyUserMessages,
+    { equals: same },
+  )
+  const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
+
+  createEffect(
+    on(
+      () => lastUserMessage()?.id,
+      () => {
+        const msg = lastUserMessage()
+        if (!msg) return
+        if (msg.agent) local.agent.set(msg.agent)
+        if (msg.model) local.model.set(msg.model)
+      },
+    ),
+  )
 
   const [store, setStore] = createStore({
     clickTimer: undefined as number | undefined,
@@ -155,16 +185,37 @@ export default function Page() {
     ),
   )
 
-  createEffect(() => {
-    params.id
-    const status = sync.data.session_status[params.id ?? ""] ?? { type: "idle" }
-    batch(() => {
-      setStore("userInteracted", false)
-      setStore("stepsExpanded", status.type !== "idle")
-    })
-  })
+  const idle = { type: "idle" as const }
 
-  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? { type: "idle" })
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        const status = sync.data.session_status[id ?? ""] ?? idle
+        batch(() => {
+          setStore("userInteracted", false)
+          setStore("stepsExpanded", status.type !== "idle")
+        })
+      },
+    ),
+  )
+
+  const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
+
+  createEffect(
+    on(
+      () => status().type,
+      (type) => {
+        if (type !== "idle") return
+        batch(() => {
+          setStore("userInteracted", false)
+          setStore("stepsExpanded", false)
+        })
+      },
+      { defer: true },
+    ),
+  )
+
   const working = createMemo(() => status().type !== "idle" && activeMessage()?.id === lastUserMessage()?.id)
 
   createRenderEffect((prev) => {
@@ -226,8 +277,7 @@ export default function Page() {
       title: "Toggle review",
       description: "Show or hide the review panel",
       category: "View",
-      keybind: "mod+b",
-      slash: "review",
+      keybind: "mod+shift+r",
       onSelect: () => layout.review.toggle(),
     },
     {
@@ -276,6 +326,15 @@ export default function Page() {
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
+      id: "mcp.toggle",
+      title: "Toggle MCPs",
+      description: "Toggle MCPs",
+      category: "MCP",
+      keybind: "mod+;",
+      slash: "mcp",
+      onSelect: () => dialog.show(() => <DialogSelectMcp />),
+    },
+    {
       id: "agent.cycle",
       title: "Cycle agent",
       description: "Switch to the next agent",
@@ -291,6 +350,22 @@ export default function Page() {
       category: "Agent",
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
+    },
+    {
+      id: "permissions.autoaccept",
+      title: params.id && permission.isAutoAccepting(params.id) ? "Stop auto-accepting edits" : "Auto-accept edits",
+      category: "Permissions",
+      disabled: !params.id,
+      onSelect: () => {
+        if (!params.id) return
+        permission.toggleAutoAccept(params.id)
+        showToast({
+          title: permission.isAutoAccepting(params.id) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(params.id)
+            ? "Edit and write permissions will be automatically approved"
+            : "Edit and write permissions will require approval",
+        })
+      },
     },
     {
       id: "session.undo",
@@ -563,6 +638,7 @@ export default function Page() {
             <SessionTurn
               sessionID={params.id!}
               messageID={message.id}
+              lastUserMessageID={lastUserMessage()?.id}
               stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
               onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
               onUserInteracted={() => setStore("userInteracted", true)}
@@ -619,6 +695,7 @@ export default function Page() {
             <SessionTurn
               sessionID={params.id!}
               messageID={activeMessage()!.id}
+              lastUserMessageID={lastUserMessage()?.id}
               stepsExpanded={store.stepsExpanded}
               onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
               onUserInteracted={() => setStore("userInteracted", true)}
@@ -922,6 +999,10 @@ export default function Page() {
           </DragDropProvider>
         </div>
       </Show>
+      <StatusBar>
+        <SessionLspIndicator />
+        <SessionMcpIndicator />
+      </StatusBar>
     </div>
   )
 }
