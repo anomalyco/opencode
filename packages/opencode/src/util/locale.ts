@@ -11,7 +11,7 @@ export namespace Locale {
   export function datetime(input: number): string {
     const date = new Date(input)
     const localTime = time(input)
-    const localDate = date.toLocaleDateString()
+    const localDate = date.toLocaleDateString("en-CA")
     return `${localTime} · ${localDate}`
   }
 
