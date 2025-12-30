@@ -1015,7 +1015,7 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative flex-1 min-h-0 flex flex-col">
+    <div class="relative flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <Header
         navigateToProject={navigateToProject}
         navigateToSession={navigateToSession}

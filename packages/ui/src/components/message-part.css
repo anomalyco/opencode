@@ -377,6 +377,18 @@
   }
 }
 
+[data-component="user-message"] [data-slot="user-message-text"],
+[data-component="text-part"],
+[data-component="reasoning-part"],
+[data-component="tool-error"],
+[data-component="tool-output"],
+[data-component="edit-content"],
+[data-component="write-content"],
+[data-component="todos"],
+[data-component="diagnostics"] {
+  user-select: text;
+}
+
 [data-component="tool-part-wrapper"] {
   width: 100%;
 

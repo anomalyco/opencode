@@ -858,7 +858,7 @@ export default function Page() {
                   </Tabs.List>
                 </div>
                 <Show when={diffs().length}>
-                  <Tabs.Content value="review" class="select-text flex flex-col h-full overflow-hidden contain-strict">
+                  <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
                       <SessionReview
                         classes={{
@@ -884,7 +884,7 @@ export default function Page() {
                       },
                     )
                     return (
-                      <Tabs.Content value={tab} class="select-text mt-3">
+                      <Tabs.Content value={tab} class="mt-3">
                         <Switch>
                           <Match when={file()}>
                             {(f) => (
@@ -896,7 +896,7 @@ export default function Page() {
                                   cacheKey: checksum(f().content?.content ?? ""),
                                 }}
                                 overflow="scroll"
-                                class="pb-40"
+                                class="select-text pb-40"
                               />
                             )}
                           </Match>
