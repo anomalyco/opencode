@@ -86,7 +86,29 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
     })
   }
 
-  return commits
+  return filterRevertedCommits(commits)
+}
+
+function filterRevertedCommits(commits: Commit[]): Commit[] {
+  const revertPattern = /^Revert "(.+)"$/
+  const seen = new Map<string, Commit>()
+
+  for (const commit of commits) {
+    const match = commit.message.match(revertPattern)
+    if (match) {
+      // It's a revert - remove the original if we've seen it
+      const original = match[1]!
+      if (seen.has(original)) seen.delete(original)
+      else seen.set(commit.message, commit) // Keep revert if original not in range
+    } else {
+      // Regular commit - remove if its revert exists, otherwise add
+      const revertMsg = `Revert "${commit.message}"`
+      if (seen.has(revertMsg)) seen.delete(revertMsg)
+      else seen.set(commit.message, commit)
+    }
+  }
+
+  return [...seen.values()]
 }
 
 const sections = {
@@ -110,15 +132,12 @@ function getSection(areas: Set<string>): string {
   return "Core"
 }
 
-async function summarizeCommit(
-  opencode: Awaited<ReturnType<typeof createOpencode>>,
-  sessionId: string,
-  message: string,
-): Promise<string> {
+async function summarizeCommit(opencode: Awaited<ReturnType<typeof createOpencode>>, message: string): Promise<string> {
   console.log("summarizing commit:", message)
+  const session = await opencode.client.session.create()
   const result = await opencode.client.session
     .prompt({
-      path: { id: sessionId },
+      path: { id: session.data!.id },
       body: {
         model: { providerID: "opencode", modelID: "claude-sonnet-4-5" },
         tools: {
@@ -140,15 +159,21 @@ Commit: ${message}`,
 }
 
 export async function generateChangelog(commits: Commit[], opencode: Awaited<ReturnType<typeof createOpencode>>) {
-  const session = await opencode.client.session.create()
+  // Summarize commits in parallel with max 10 concurrent requests
+  const BATCH_SIZE = 10
+  const summaries: string[] = []
+  for (let i = 0; i < commits.length; i += BATCH_SIZE) {
+    const batch = commits.slice(i, i + BATCH_SIZE)
+    const results = await Promise.all(batch.map((c) => summarizeCommit(opencode, c.message)))
+    summaries.push(...results)
+  }
 
   const grouped = new Map<string, string[]>()
-
-  for (const commit of commits) {
+  for (let i = 0; i < commits.length; i++) {
+    const commit = commits[i]!
     const section = getSection(commit.areas)
-    const summary = await summarizeCommit(opencode, session.data!.id, commit.message)
     const attribution = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
-    const entry = `- ${summary}${attribution}`
+    const entry = `- ${summaries[i]}${attribution}`
 
     if (!grouped.has(section)) grouped.set(section, [])
     grouped.get(section)!.push(entry)
