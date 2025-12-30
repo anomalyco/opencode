@@ -616,11 +616,21 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  const ModelVariant = z
+    .object({
+      disabled: z.boolean().optional(),
+    })
+    .catchall(z.any())
+
+  const ModelConfig = ModelsDev.Model.partial().extend({
+    variants: z.record(z.string(), ModelVariant).optional(),
+  })
+
   export const Provider = ModelsDev.Provider.partial()
     .extend({
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
-      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      models: z.record(z.string(), ModelConfig).optional(),
       options: z
         .object({
           apiKey: z.string().optional(),

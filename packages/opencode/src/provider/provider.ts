@@ -698,6 +698,10 @@ export namespace Provider {
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
         }
+
+        const variantSource = model.variants ?? existingModel?.variants ?? ProviderTransform.variants(parsedModel)
+        parsedModel.variants = mapValues(variantSource ?? {}, (variant) => ({ disabled: false, ...variant }))
+
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
