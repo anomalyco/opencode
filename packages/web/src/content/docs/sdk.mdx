@@ -283,13 +283,19 @@ await client.session.prompt({
 
 ### Files
 
-| Method                    | Description                  | Response                                                                                    |
-| ------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------- |
-| `find.text({ query })`    | Search for text in files     | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
-| `find.files({ query })`   | Find files by name           | `string[]` (file paths)                                                                     |
-| `find.symbols({ query })` | Find workspace symbols       | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
-| `file.read({ query })`    | Read a file                  | `{ type: "raw" \| "patch", content: string }`                                               |
-| `file.status({ query? })` | Get status for tracked files | <a href={typesUrl}><code>File[]</code></a>                                                  |
+| Method                    | Description                        | Response                                                                                    |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`    | Read a file                        | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status({ query? })` | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+`find.files` supports a few optional query fields:
+
+- `type`: `"file"` or `"directory"`
+- `directory`: override the project root for the search
+- `limit`: max results (1–200)
 
 ---
 
@@ -302,7 +308,11 @@ const textResults = await client.find.text({
 })
 
 const files = await client.find.files({
-  query: { query: "*.ts" },
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
 })
 
 const content = await client.file.read({
