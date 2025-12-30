@@ -1,8 +1,9 @@
 import { marked } from "marked"
+import markedKatex from "marked-katex-extension"
 import markedShiki from "marked-shiki"
 import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
-import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/precision-diffs"
+import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
 registerCustomTheme("OpenCode", () => {
   return Promise.resolve({
@@ -378,6 +379,9 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
   name: "Marked",
   init: () => {
     return marked.use(
+      markedKatex({
+        throwOnError: false,
+      }),
       markedShiki({
         async highlight(code, lang) {
           const highlighter = await getSharedHighlighter({ themes: ["OpenCode"], langs: [] })

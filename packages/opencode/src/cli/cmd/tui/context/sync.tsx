@@ -22,6 +22,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
+import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
@@ -254,10 +255,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const exit = useExit()
+    const args = useArgs()
 
     async function bootstrap() {
-      // blocking
-      await Promise.all([
+      const sessionListPromise = sdk.client.session.list().then((x) =>
+        setStore(
+          "session",
+          (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
+        ),
+      )
+
+      // blocking - include session.list when continuing a session
+      const blockingRequests: Promise<unknown>[] = [
         sdk.client.config.providers({}, { throwOnError: true }).then((x) => {
           batch(() => {
             setStore("provider", x.data!.providers)
@@ -271,17 +280,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }),
         sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", x.data ?? [])),
         sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", x.data!)),
-      ])
+        ...(args.continue ? [sessionListPromise] : []),
+      ]
+
+      await Promise.all(blockingRequests)
         .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            sdk.client.session.list().then((x) =>
-              setStore(
-                "session",
-                (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
-              ),
-            ),
+            ...(args.continue ? [] : [sessionListPromise]),
             sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
             sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
             sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),

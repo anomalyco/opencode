@@ -55,7 +55,7 @@ export namespace SessionStatus {
   }
 
   export function list() {
-    return Object.values(state())
+    return state()
   }
 
   export function set(sessionID: string, status: Info) {

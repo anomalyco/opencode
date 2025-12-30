@@ -1,7 +1,7 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
-import { batch, createEffect, createMemo, For, Show, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -19,6 +19,7 @@ export interface DialogSelectProps<T> {
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
+  skipFilter?: boolean
   keybind?: {
     keybind: Keybind.Info
     title: string
@@ -53,14 +54,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     filter: "",
   })
 
-  createEffect(() => {
-    if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
-      }
-    }
-  })
+  createEffect(
+    on(
+      () => props.current,
+      (current) => {
+        if (current) {
+          const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+          if (currentIndex >= 0) {
+            setStore("selected", currentIndex)
+          }
+        }
+      },
+    ),
+  )
 
   let input: InputRenderable
 
@@ -69,7 +75,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const result = pipe(
       props.options,
       filter((x) => x.disabled !== true),
-      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
+      (x) =>
+        !needle || props.skipFilter ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
     )
     return result
   })
@@ -98,20 +105,22 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   const selected = createMemo(() => flat()[store.selected])
 
-  createEffect(() => {
-    store.filter
-    if (store.filter.length > 0) {
-      setStore("selected", 0)
-    } else if (props.current) {
-      const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, props.current))
-      if (currentIndex >= 0) {
-        setStore("selected", currentIndex)
+  createEffect(
+    on([() => store.filter, () => props.current], ([filter, current]) => {
+      if (filter.length > 0) {
+        setStore("selected", 0)
+      } else if (current) {
+        const currentIndex = flat().findIndex((opt) => isDeepEqual(opt.value, current))
+        if (currentIndex >= 0) {
+          setStore("selected", currentIndex)
+        }
       }
-    }
-    scroll.scrollTo(0)
-  })
+      scroll?.scrollTo(0)
+    }),
+  )
 
   function move(direction: number) {
+    if (flat().length === 0) return
     let next = store.selected + direction
     if (next < 0) next = flat().length - 1
     if (next >= flat().length) next = 0
@@ -121,6 +130,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   function moveTo(next: number) {
     setStore("selected", next)
     props.onMove?.(selected()!)
+    if (!scroll) return
     const target = scroll.getChildren().find((child) => {
       return child.id === JSON.stringify(selected()?.value)
     })
@@ -164,7 +174,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     }
   })
 
-  let scroll: ScrollBoxRenderable
+  let scroll: ScrollBoxRenderable | undefined
   const ref: DialogSelectRef<T> = {
     get filter() {
       return store.filter
@@ -205,61 +215,70 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           />
         </box>
       </box>
-      <scrollbox
-        paddingLeft={1}
-        paddingRight={1}
-        scrollbarOptions={{ visible: false }}
-        ref={(r: ScrollBoxRenderable) => (scroll = r)}
-        maxHeight={height()}
+      <Show
+        when={grouped().length > 0}
+        fallback={
+          <box paddingLeft={4} paddingRight={4} paddingTop={1}>
+            <text fg={theme.textMuted}>No results found</text>
+          </box>
+        }
       >
-        <For each={grouped()}>
-          {([category, options], index) => (
-            <>
-              <Show when={category}>
-                <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
-                  <text fg={theme.accent} attributes={TextAttributes.BOLD}>
-                    {category}
-                  </text>
-                </box>
-              </Show>
-              <For each={options}>
-                {(option) => {
-                  const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
-                  const current = createMemo(() => isDeepEqual(option.value, props.current))
-                  return (
-                    <box
-                      id={JSON.stringify(option.value)}
-                      flexDirection="row"
-                      onMouseUp={() => {
-                        option.onSelect?.(dialog)
-                        props.onSelect?.(option)
-                      }}
-                      onMouseOver={() => {
-                        const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
-                        if (index === -1) return
-                        moveTo(index)
-                      }}
-                      backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
-                      paddingLeft={current() || option.gutter ? 1 : 3}
-                      paddingRight={3}
-                      gap={1}
-                    >
-                      <Option
-                        title={option.title}
-                        footer={option.footer}
-                        description={option.description !== category ? option.description : undefined}
-                        active={active()}
-                        current={current()}
-                        gutter={option.gutter}
-                      />
-                    </box>
-                  )
-                }}
-              </For>
-            </>
-          )}
-        </For>
-      </scrollbox>
+        <scrollbox
+          paddingLeft={1}
+          paddingRight={1}
+          scrollbarOptions={{ visible: false }}
+          ref={(r: ScrollBoxRenderable) => (scroll = r)}
+          maxHeight={height()}
+        >
+          <For each={grouped()}>
+            {([category, options], index) => (
+              <>
+                <Show when={category}>
+                  <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
+                    <text fg={theme.accent} attributes={TextAttributes.BOLD}>
+                      {category}
+                    </text>
+                  </box>
+                </Show>
+                <For each={options}>
+                  {(option) => {
+                    const active = createMemo(() => isDeepEqual(option.value, selected()?.value))
+                    const current = createMemo(() => isDeepEqual(option.value, props.current))
+                    return (
+                      <box
+                        id={JSON.stringify(option.value)}
+                        flexDirection="row"
+                        onMouseUp={() => {
+                          option.onSelect?.(dialog)
+                          props.onSelect?.(option)
+                        }}
+                        onMouseOver={() => {
+                          const index = filtered().findIndex((x) => isDeepEqual(x.value, option.value))
+                          if (index === -1) return
+                          moveTo(index)
+                        }}
+                        backgroundColor={active() ? (option.bg ?? theme.primary) : RGBA.fromInts(0, 0, 0, 0)}
+                        paddingLeft={current() || option.gutter ? 1 : 3}
+                        paddingRight={3}
+                        gap={1}
+                      >
+                        <Option
+                          title={option.title}
+                          footer={option.footer}
+                          description={option.description !== category ? option.description : undefined}
+                          active={active()}
+                          current={current()}
+                          gutter={option.gutter}
+                        />
+                      </box>
+                    )
+                  }}
+                </For>
+              </>
+            )}
+          </For>
+        </scrollbox>
+      </Show>
       <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
         <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
           <For each={keybinds()}>
@@ -307,10 +326,9 @@ function Option(props: {
         fg={props.active ? fg : props.current ? theme.primary : theme.text}
         attributes={props.active ? TextAttributes.BOLD : undefined}
         overflow="hidden"
-        wrapMode="word"
         paddingLeft={3}
       >
-        {Locale.truncate(props.title, 62)}
+        {Locale.truncate(props.title, 61)}
         <Show when={props.description}>
           <span style={{ fg: props.active ? fg : theme.textMuted }}> {props.description}</span>
         </Show>

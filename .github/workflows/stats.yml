@@ -5,8 +5,11 @@ on:
     - cron: "0 12 * * *" # Run daily at 12:00 UTC
   workflow_dispatch: # Allow manual trigger
 
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
 jobs:
   stats:
+    if: github.repository == 'sst/opencode'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write

@@ -36,7 +36,7 @@ export default defineConfig({
       expressiveCode: { themes: ["github-light", "github-dark"] },
       social: [
         { icon: "github", label: "GitHub", href: config.github },
-        { icon: "discord", label: "Dscord", href: config.discord },
+        { icon: "discord", label: "Discord", href: config.discord },
       ],
       editLink: {
         baseUrl: `${config.github}/edit/dev/packages/web/`,
@@ -54,6 +54,7 @@ export default defineConfig({
         "",
         "config",
         "providers",
+        "network",
         "enterprise",
         "troubleshooting",
         "1-0",
@@ -77,6 +78,7 @@ export default defineConfig({
             "lsp",
             "mcp-servers",
             "acp",
+            "skills",
             "custom-tools",
           ],
         },

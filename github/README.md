@@ -6,7 +6,7 @@ Mention `/opencode` in your comment, and opencode will execute tasks within your
 
 ## Features
 
-#### Explain an issues
+#### Explain an issue
 
 Leave the following comment on a GitHub issue. `opencode` will read the entire thread, including all comments, and reply with a clear explanation.
 
@@ -14,7 +14,7 @@ Leave the following comment on a GitHub issue. `opencode` will read the entire t
 /opencode explain this issue
 ```
 
-#### Fix an issues
+#### Fix an issue
 
 Leave the following comment on a GitHub issue. opencode will create a new branch, implement the changes, and open a PR with the changes.
 

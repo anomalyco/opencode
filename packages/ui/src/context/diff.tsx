@@ -1,13 +1,10 @@
-import { createContext, useContext, type ParentProps, type ValidComponent } from "solid-js"
+import type { ValidComponent } from "solid-js"
+import { createSimpleContext } from "./helper"
 
-const DiffComponentContext = createContext<ValidComponent>()
+const ctx = createSimpleContext<ValidComponent, { component: ValidComponent }>({
+  name: "DiffComponent",
+  init: (props) => props.component,
+})
 
-export function DiffComponentProvider(props: ParentProps<{ component: ValidComponent }>) {
-  return <DiffComponentContext.Provider value={props.component}>{props.children}</DiffComponentContext.Provider>
-}
-
-export function useDiffComponent() {
-  const component = useContext(DiffComponentContext)
-  if (!component) throw new Error("DiffComponentProvider must be used to provide a diff component")
-  return component
-}
+export const DiffComponentProvider = ctx.provider
+export const useDiffComponent = ctx.use

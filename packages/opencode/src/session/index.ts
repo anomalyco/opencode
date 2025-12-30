@@ -234,22 +234,12 @@ export namespace Session {
   })
 
   export const unshare = fn(Identifier.schema("session"), async (id) => {
-    const cfg = await Config.get()
-    if (cfg.enterprise?.url) {
-      const { ShareNext } = await import("@/share/share-next")
-      await ShareNext.remove(id)
-      await update(id, (draft) => {
-        draft.share = undefined
-      })
-    }
-    const share = await getShare(id)
-    if (!share) return
-    await Storage.remove(["share", id])
+    // Use ShareNext to remove the share (same as share function uses ShareNext to create)
+    const { ShareNext } = await import("@/share/share-next")
+    await ShareNext.remove(id)
     await update(id, (draft) => {
       draft.share = undefined
     })
-    const { Share } = await import("../share/share")
-    await Share.remove(id, share.secret)
   })
 
   export async function update(id: string, editor: (session: Info) => void) {
@@ -346,6 +336,23 @@ export namespace Session {
         messageID: input.messageID,
       })
       return input.messageID
+    },
+  )
+
+  export const removePart = fn(
+    z.object({
+      sessionID: Identifier.schema("session"),
+      messageID: Identifier.schema("message"),
+      partID: Identifier.schema("part"),
+    }),
+    async (input) => {
+      await Storage.remove(["part", input.messageID, input.partID])
+      Bus.publish(MessageV2.Event.PartRemoved, {
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: input.partID,
+      })
+      return input.partID
     },
   )
 

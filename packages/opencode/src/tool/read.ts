@@ -60,10 +60,12 @@ export const ReadTool = Tool.define("read", {
     }
 
     const block = iife(() => {
-      const whitelist = [".env.sample", ".example"]
+      const basename = path.basename(filepath)
+      const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
 
-      if (whitelist.some((w) => filepath.endsWith(w))) return false
-      if (filepath.includes(".env")) return true
+      if (whitelist.some((w) => basename.endsWith(w))) return false
+      // Block .env, .env.local, .env.production, etc. but not .envrc
+      if (/^\.env(\.|$)/.test(basename)) return true
 
       return false
     })

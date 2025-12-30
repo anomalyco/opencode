@@ -5,11 +5,17 @@ import { Instance } from "../project/instance"
 import { Log } from "../util/log"
 import { FileIgnore } from "./ignore"
 import { Config } from "../config/config"
+import path from "path"
 // @ts-ignore
 import { createWrapper } from "@parcel/watcher/wrapper"
 import { lazy } from "@/util/lazy"
+import { withTimeout } from "@/util/timeout"
 import type ParcelWatcher from "@parcel/watcher"
 import { $ } from "bun"
+import { Flag } from "@/flag/flag"
+import { readdir } from "fs/promises"
+
+const SUBSCRIBE_TIMEOUT_MS = 10_000
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -57,24 +63,41 @@ export namespace FileWatcher {
         }
       }
 
-      const subs = []
+      const subs: ParcelWatcher.AsyncSubscription[] = []
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
-      subs.push(
-        await watcher().subscribe(Instance.directory, subscribe, {
+      if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
+        const pending = watcher().subscribe(Instance.directory, subscribe, {
           ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
           backend,
-        }),
-      )
+        })
+        const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+          log.error("failed to subscribe to Instance.directory", { error: err })
+          pending.then((s) => s.unsubscribe()).catch(() => {})
+          return undefined
+        })
+        if (sub) subs.push(sub)
+      }
 
-      const vcsDir = await $`git rev-parse --git-dir`.quiet().nothrow().cwd(Instance.worktree).text()
+      const vcsDir = await $`git rev-parse --git-dir`
+        .quiet()
+        .nothrow()
+        .cwd(Instance.worktree)
+        .text()
+        .then((x) => path.resolve(Instance.worktree, x.trim()))
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
-        subs.push(
-          await watcher().subscribe(vcsDir, subscribe, {
-            ignore: ["hooks", "info", "logs", "objects", "refs", "worktrees", "modules", "lfs"],
-            backend,
-          }),
-        )
+        const gitDirContents = await readdir(vcsDir).catch(() => [])
+        const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
+        const pending = watcher().subscribe(vcsDir, subscribe, {
+          ignore: ignoreList,
+          backend,
+        })
+        const sub = await withTimeout(pending, SUBSCRIBE_TIMEOUT_MS).catch((err) => {
+          log.error("failed to subscribe to vcsDir", { error: err })
+          pending.then((s) => s.unsubscribe()).catch(() => {})
+          return undefined
+        })
+        if (sub) subs.push(sub)
       }
 
       return { subs }
@@ -86,6 +109,9 @@ export namespace FileWatcher {
   )
 
   export function init() {
+    if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER) {
+      return
+    }
     state()
   }
 }

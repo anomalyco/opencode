@@ -157,7 +157,7 @@ export namespace ShareNext {
         secret: share.secret,
       }),
     })
-    await Storage.remove(["session_share", share.id])
+    await Storage.remove(["session_share", sessionID])
   }
 
   async function fullSync(sessionID: string) {

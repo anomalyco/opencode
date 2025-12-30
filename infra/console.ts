@@ -103,6 +103,7 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS3"),
   new sst.Secret("ZEN_MODELS4"),
   new sst.Secret("ZEN_MODELS5"),
+  new sst.Secret("ZEN_MODELS6"),
 ]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
@@ -118,6 +119,7 @@ const gatewayKv = new sst.cloudflare.Kv("GatewayKv")
 ////////////////
 
 const bucket = new sst.cloudflare.Bucket("ZenData")
+const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
@@ -136,6 +138,7 @@ new sst.cloudflare.x.SolidStart("Console", {
   path: "packages/console/app",
   link: [
     bucket,
+    bucketNew,
     database,
     AUTH_API_URL,
     STRIPE_WEBHOOK_SECRET,

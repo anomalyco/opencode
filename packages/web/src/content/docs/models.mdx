@@ -60,7 +60,7 @@ OpenCode config.
 }
 ```
 
-Here the full ID is `provider_id/model_id`.
+Here the full ID is `provider_id/model_id`. For example, if you're using [OpenCode Zen](/docs/zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
 
 If you've configured a [custom provider](/docs/providers#custom), the `provider_id` is key from the `provider` part of your config, and the `model_id` is the key from `provider.models`.
 
@@ -117,6 +117,7 @@ You can also define custom models that extend built-in ones and can optionally u
       "models": {
         "gpt-5-high": {
           "id": "gpt-5",
+          "name": "MyGPT5 (High Reasoning)",
           "options": {
             "reasoningEffort": "high",
             "textVerbosity": "low",
@@ -125,6 +126,7 @@ You can also define custom models that extend built-in ones and can optionally u
         },
         "gpt-5-low": {
           "id": "gpt-5",
+          "name": "MyGPT5 (Low Reasoning)",
           "options": {
             "reasoningEffort": "low",
             "textVerbosity": "low",

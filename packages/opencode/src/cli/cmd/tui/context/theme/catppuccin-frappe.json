@@ -1,0 +1,233 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "frappeRosewater": "#f2d5cf",
+    "frappeFlamingo": "#eebebe",
+    "frappePink": "#f4b8e4",
+    "frappeMauve": "#ca9ee6",
+    "frappeRed": "#e78284",
+    "frappeMaroon": "#ea999c",
+    "frappePeach": "#ef9f76",
+    "frappeYellow": "#e5c890",
+    "frappeGreen": "#a6d189",
+    "frappeTeal": "#81c8be",
+    "frappeSky": "#99d1db",
+    "frappeSapphire": "#85c1dc",
+    "frappeBlue": "#8da4e2",
+    "frappeLavender": "#babbf1",
+    "frappeText": "#c6d0f5",
+    "frappeSubtext1": "#b5bfe2",
+    "frappeSubtext0": "#a5adce",
+    "frappeOverlay2": "#949cb8",
+    "frappeOverlay1": "#838ba7",
+    "frappeOverlay0": "#737994",
+    "frappeSurface2": "#626880",
+    "frappeSurface1": "#51576d",
+    "frappeSurface0": "#414559",
+    "frappeBase": "#303446",
+    "frappeMantle": "#292c3c",
+    "frappeCrust": "#232634"
+  },
+  "theme": {
+    "primary": {
+      "dark": "frappeBlue",
+      "light": "frappeBlue"
+    },
+    "secondary": {
+      "dark": "frappeMauve",
+      "light": "frappeMauve"
+    },
+    "accent": {
+      "dark": "frappePink",
+      "light": "frappePink"
+    },
+    "error": {
+      "dark": "frappeRed",
+      "light": "frappeRed"
+    },
+    "warning": {
+      "dark": "frappeYellow",
+      "light": "frappeYellow"
+    },
+    "success": {
+      "dark": "frappeGreen",
+      "light": "frappeGreen"
+    },
+    "info": {
+      "dark": "frappeTeal",
+      "light": "frappeTeal"
+    },
+    "text": {
+      "dark": "frappeText",
+      "light": "frappeText"
+    },
+    "textMuted": {
+      "dark": "frappeSubtext1",
+      "light": "frappeSubtext1"
+    },
+    "background": {
+      "dark": "frappeBase",
+      "light": "frappeBase"
+    },
+    "backgroundPanel": {
+      "dark": "frappeMantle",
+      "light": "frappeMantle"
+    },
+    "backgroundElement": {
+      "dark": "frappeCrust",
+      "light": "frappeCrust"
+    },
+    "border": {
+      "dark": "frappeSurface0",
+      "light": "frappeSurface0"
+    },
+    "borderActive": {
+      "dark": "frappeSurface1",
+      "light": "frappeSurface1"
+    },
+    "borderSubtle": {
+      "dark": "frappeSurface2",
+      "light": "frappeSurface2"
+    },
+    "diffAdded": {
+      "dark": "frappeGreen",
+      "light": "frappeGreen"
+    },
+    "diffRemoved": {
+      "dark": "frappeRed",
+      "light": "frappeRed"
+    },
+    "diffContext": {
+      "dark": "frappeOverlay2",
+      "light": "frappeOverlay2"
+    },
+    "diffHunkHeader": {
+      "dark": "frappePeach",
+      "light": "frappePeach"
+    },
+    "diffHighlightAdded": {
+      "dark": "frappeGreen",
+      "light": "frappeGreen"
+    },
+    "diffHighlightRemoved": {
+      "dark": "frappeRed",
+      "light": "frappeRed"
+    },
+    "diffAddedBg": {
+      "dark": "#29342b",
+      "light": "#29342b"
+    },
+    "diffRemovedBg": {
+      "dark": "#3a2a31",
+      "light": "#3a2a31"
+    },
+    "diffContextBg": {
+      "dark": "frappeMantle",
+      "light": "frappeMantle"
+    },
+    "diffLineNumber": {
+      "dark": "frappeSurface1",
+      "light": "frappeSurface1"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#223025",
+      "light": "#223025"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#2f242b",
+      "light": "#2f242b"
+    },
+    "markdownText": {
+      "dark": "frappeText",
+      "light": "frappeText"
+    },
+    "markdownHeading": {
+      "dark": "frappeMauve",
+      "light": "frappeMauve"
+    },
+    "markdownLink": {
+      "dark": "frappeBlue",
+      "light": "frappeBlue"
+    },
+    "markdownLinkText": {
+      "dark": "frappeSky",
+      "light": "frappeSky"
+    },
+    "markdownCode": {
+      "dark": "frappeGreen",
+      "light": "frappeGreen"
+    },
+    "markdownBlockQuote": {
+      "dark": "frappeYellow",
+      "light": "frappeYellow"
+    },
+    "markdownEmph": {
+      "dark": "frappeYellow",
+      "light": "frappeYellow"
+    },
+    "markdownStrong": {
+      "dark": "frappePeach",
+      "light": "frappePeach"
+    },
+    "markdownHorizontalRule": {
+      "dark": "frappeSubtext0",
+      "light": "frappeSubtext0"
+    },
+    "markdownListItem": {
+      "dark": "frappeBlue",
+      "light": "frappeBlue"
+    },
+    "markdownListEnumeration": {
+      "dark": "frappeSky",
+      "light": "frappeSky"
+    },
+    "markdownImage": {
+      "dark": "frappeBlue",
+      "light": "frappeBlue"
+    },
+    "markdownImageText": {
+      "dark": "frappeSky",
+      "light": "frappeSky"
+    },
+    "markdownCodeBlock": {
+      "dark": "frappeText",
+      "light": "frappeText"
+    },
+    "syntaxComment": {
+      "dark": "frappeOverlay2",
+      "light": "frappeOverlay2"
+    },
+    "syntaxKeyword": {
+      "dark": "frappeMauve",
+      "light": "frappeMauve"
+    },
+    "syntaxFunction": {
+      "dark": "frappeBlue",
+      "light": "frappeBlue"
+    },
+    "syntaxVariable": {
+      "dark": "frappeRed",
+      "light": "frappeRed"
+    },
+    "syntaxString": {
+      "dark": "frappeGreen",
+      "light": "frappeGreen"
+    },
+    "syntaxNumber": {
+      "dark": "frappePeach",
+      "light": "frappePeach"
+    },
+    "syntaxType": {
+      "dark": "frappeYellow",
+      "light": "frappeYellow"
+    },
+    "syntaxOperator": {
+      "dark": "frappeSky",
+      "light": "frappeSky"
+    },
+    "syntaxPunctuation": {
+      "dark": "frappeText",
+      "light": "frappeText"
+    }
+  }
+}

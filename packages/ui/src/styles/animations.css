@@ -5,10 +5,20 @@
 @keyframes pulse-opacity {
   0%,
   100% {
-    opacity: 0;
+    opacity: 0.4;
   }
   50% {
     opacity: 1;
+  }
+}
+
+@keyframes pulse-opacity-dim {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.2;
   }
 }
 

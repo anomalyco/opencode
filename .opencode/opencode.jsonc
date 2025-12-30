@@ -10,4 +10,8 @@
       "options": {},
     },
   },
+  "mcp": {},
+  "tools": {
+    "github-triage": false,
+  },
 }
