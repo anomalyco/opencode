@@ -164,7 +164,7 @@ export const AuthCommand = cmd({
   describe: "manage credentials",
   builder: (yargs) =>
     yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
-  async handler() { },
+  async handler() {},
 })
 
 export const AuthListCommand = cmd({
@@ -251,7 +251,7 @@ export const AuthLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
-        await ModelsDev.refresh().catch(() => { })
+        await ModelsDev.refresh().catch(() => {})
 
         const config = await Config.get()
 
@@ -350,7 +350,9 @@ export const AuthLoginCommand = cmd({
         }
 
         if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
-          prompts.log.info("Cloudflare AI Gateway can be configured with CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway")
+          prompts.log.info(
+            "Cloudflare AI Gateway can be configured with CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
+          )
         }
 
         const key = await prompts.password({
