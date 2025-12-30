@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, type KeyBinding } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -16,7 +16,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -30,6 +30,9 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
+import { DialogAgent } from "../dialog-agent"
+import { DialogModel } from "../dialog-model"
+import { HoverableLabel } from "../hoverable-label"
 
 export type PromptProps = {
   sessionID?: string
@@ -124,6 +127,9 @@ export function Prompt(props: PromptProps) {
   const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
+  const dimensions = useTerminalDimensions()
+  const tall = createMemo(() => dimensions().height > 40)
+  const wide = createMemo(() => dimensions().width > 120)
   const { theme, syntax } = useTheme()
   const kv = useKV()
 
@@ -948,19 +954,29 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
-              <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                    {local.model.parsed().model}
-                  </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                </box>
-              </Show>
-            </box>
+            <Show when={tall()}>
+              <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+                <HoverableLabel disabled={store.mode === "shell"} onClick={() => dialog.replace(() => <DialogAgent />)}>
+                  {(hover, hoverFg) => (
+                    <text fg={hover ? hoverFg() : highlight()}>
+                      {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                    </text>
+                  )}
+                </HoverableLabel>
+                <Show when={store.mode === "normal"}>
+                  <HoverableLabel onClick={() => dialog.replace(() => <DialogModel />)}>
+                    {(hover, hoverFg) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} fg={hover ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}>
+                          {local.model.parsed().model}
+                        </text>
+                        <text fg={hover ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
+                      </box>
+                    )}
+                  </HoverableLabel>
+                </Show>
+              </box>
+            </Show>
           </box>
         </box>
         <box
@@ -1069,25 +1085,65 @@ export function Prompt(props: PromptProps) {
               </text>
             </box>
           </Show>
-          <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
-              <Switch>
-                <Match when={store.mode === "normal"}>
+          <Switch>
+            <Match when={status().type !== "retry" && !tall()}>
+              <box flexDirection="row" gap={1}>
+                <HoverableLabel disabled={store.mode === "shell"} onClick={() => dialog.replace(() => <DialogAgent />)}>
+                  {(hover, hoverFg) => (
+                    <text fg={hover ? hoverFg() : highlight()}>
+                      {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                    </text>
+                  )}
+                </HoverableLabel>
+                <Show when={store.mode === "normal"}>
+                  <HoverableLabel onClick={() => dialog.replace(() => <DialogModel />)}>
+                    {(hover, hoverFg) => (
+                      <box flexDirection="row" gap={1}>
+                        <text flexShrink={0} fg={hover ? hoverFg() : keybind.leader ? theme.textMuted : theme.text}>
+                          {local.model.parsed().model}
+                        </text>
+                        <text fg={hover ? hoverFg() : theme.textMuted}>{local.model.parsed().provider}</text>
+                      </box>
+                    )}
+                  </HoverableLabel>
+                </Show>
+              </box>
+            </Match>
+          </Switch>
+          <box gap={2} flexDirection="row" marginLeft="auto">
+            <Switch>
+              <Match when={store.mode === "normal"}>
+                <Show when={wide()}>
+                  <HoverableLabel onClick={() => dialog.replace(() => <DialogAgent />)}>
+                    {(hover, hoverFg) => (
+                      <text fg={hover ? hoverFg() : theme.text}>
+                        {keybind.print("agent_cycle")}{" "}
+                        <span style={{ fg: hover ? hoverFg() : theme.textMuted }}>switch agent</span>
+                      </text>
+                    )}
+                  </HoverableLabel>
+                </Show>
+                <Show when={!wide()}>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                    {keybind.print("sidebar_toggle")} <span style={{ fg: theme.textMuted }}>sidebar</span>
                   </text>
-                  <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
-                </Match>
-                <Match when={store.mode === "shell"}>
-                  <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
-                  </text>
-                </Match>
-              </Switch>
-            </box>
-          </Show>
+                </Show>
+                <HoverableLabel onClick={() => command.show()}>
+                  {(hover, hoverFg) => (
+                    <text fg={hover ? hoverFg() : theme.text}>
+                      {keybind.print("command_list")}{" "}
+                      <span style={{ fg: hover ? hoverFg() : theme.textMuted }}>commands</span>
+                    </text>
+                  )}
+                </HoverableLabel>
+              </Match>
+              <Match when={store.mode === "shell"}>
+                <text fg={theme.text}>
+                  esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                </text>
+              </Match>
+            </Switch>
+          </box>
         </box>
       </box>
     </>
