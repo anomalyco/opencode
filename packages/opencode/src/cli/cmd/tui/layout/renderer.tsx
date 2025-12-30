@@ -1,6 +1,5 @@
 // packages/opencode/src/cli/cmd/tui/layout/renderer.tsx
 import { For, Match, Show, Switch, createMemo, type Component } from "solid-js"
-import { Dynamic } from "solid-js/web"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTheme } from "../context/theme"
 import { useLayout } from "../context/layout"
@@ -12,10 +11,10 @@ import { View } from "../view/types"
 import { Session } from "../routes/session"
 import { Home } from "../routes/home"
 
-// View component registry
-const VIEW_COMPONENTS: Record<string, Component<{ view?: View.Info }>> = {
-  session: () => <Session />,
-  home: () => <Home />,
+function parseViewID(viewID: string): { type: string; sessionID?: string } {
+  const idx = viewID.indexOf(":")
+  if (idx === -1) return { type: viewID }
+  return { type: viewID.slice(0, idx), sessionID: viewID.slice(idx + 1) }
 }
 
 // Generic view renderers for plugin views
@@ -126,12 +125,16 @@ const FormViewRenderer: Component<{ view: View.Form.Info }> = (props) => {
 
 // View renderer that dispatches to appropriate component
 const ViewRenderer: Component<{ viewID: string }> = (props) => {
+  const parsed = createMemo(() => parseViewID(props.viewID))
   const view = createMemo(() => ViewRegistry.get(props.viewID))
 
   return (
     <Switch>
-      <Match when={VIEW_COMPONENTS[props.viewID]}>
-        <Dynamic component={VIEW_COMPONENTS[props.viewID]} />
+      <Match when={parsed().type === "home"}>
+        <Home />
+      </Match>
+      <Match when={parsed().type === "session"}>
+        <Session />
       </Match>
       <Match when={view()?.type === "tree"}>
         <TreeViewRenderer view={view() as View.Tree.Info} />

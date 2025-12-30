@@ -2,7 +2,7 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
 import { Global } from "@/global"
 import { Flag } from "@/flag/flag"
@@ -22,9 +22,10 @@ import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { LayoutProvider } from "@tui/context/layout"
 import { WindowCommandsProvider } from "@tui/context/window-commands"
+import { RouteLayoutBridgeProvider } from "@tui/context/route-layout-bridge"
+import { LayoutRenderer } from "@tui/layout/renderer"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
-import { Home } from "@tui/routes/home"
-import { Session } from "@tui/routes/session"
+
 import { PromptHistoryProvider } from "./component/prompt/history"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
@@ -124,19 +125,21 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                             <LocalProvider>
                               <KeybindProvider>
                                 <LayoutProvider>
-                                  <WindowCommandsProvider>
-                                    <PromptStashProvider>
-                                      <DialogProvider>
-                                        <CommandProvider>
-                                          <PromptHistoryProvider>
-                                            <PromptRefProvider>
-                                              <App />
-                                            </PromptRefProvider>
-                                          </PromptHistoryProvider>
-                                        </CommandProvider>
-                                      </DialogProvider>
-                                    </PromptStashProvider>
-                                  </WindowCommandsProvider>
+                                  <RouteLayoutBridgeProvider>
+                                    <WindowCommandsProvider>
+                                      <PromptStashProvider>
+                                        <DialogProvider>
+                                          <CommandProvider>
+                                            <PromptHistoryProvider>
+                                              <PromptRefProvider>
+                                                <App />
+                                              </PromptRefProvider>
+                                            </PromptHistoryProvider>
+                                          </CommandProvider>
+                                        </DialogProvider>
+                                      </PromptStashProvider>
+                                    </WindowCommandsProvider>
+                                  </RouteLayoutBridgeProvider>
                                 </LayoutProvider>
                               </KeybindProvider>
                             </LocalProvider>
@@ -605,14 +608,7 @@ function App() {
         }
       }}
     >
-      <Switch>
-        <Match when={route.data.type === "home"}>
-          <Home />
-        </Match>
-        <Match when={route.data.type === "session"}>
-          <Session />
-        </Match>
-      </Switch>
+      <LayoutRenderer />
     </box>
   )
 }
