@@ -253,6 +253,15 @@ export function Session(props: { sessionID?: string } = {}) {
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
+    // Handle Enter key for prompt submission
+    if (evt.name === "return" && permissions().length === 0) {
+      if (prompt) {
+        prompt.focus()
+        prompt.submit()
+      }
+      return
+    }
+
     const first = permissions()[0]
     if (first) {
       const response = iife(() => {

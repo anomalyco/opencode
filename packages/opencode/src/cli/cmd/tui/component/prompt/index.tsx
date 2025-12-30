@@ -532,6 +532,14 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return
     if (autocomplete?.visible) return
     if (!store.prompt.input) return
+    if (autocomplete?.visible) {
+      toast.show({ message: "DEBUG: blocked by autocomplete", variant: "error", duration: 3000 })
+      return
+    }
+    if (!store.prompt.input) {
+      toast.show({ message: "DEBUG: blocked by empty input", variant: "error", duration: 3000 })
+      return
+    }
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
