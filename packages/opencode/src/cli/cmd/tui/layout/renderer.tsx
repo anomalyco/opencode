@@ -167,8 +167,8 @@ const WindowRenderer: Component<{
     <box
       width={props.width}
       height={props.height}
-      border={["left", "right", "top", "bottom"]}
-      borderColor={focused() ? theme.borderActive : theme.border}
+      border={focused() ? ["left", "right", "top", "bottom"] : undefined}
+      borderColor={focused() ? theme.borderActive : undefined}
     >
       <WindowIDProvider windowID={props.window.id}>
         <ViewRenderer viewID={props.window.viewID} />
