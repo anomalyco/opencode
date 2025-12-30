@@ -255,6 +255,8 @@ export function Session(props: { sessionID?: string } = {}) {
 
     // Handle Enter key for prompt submission
     if (evt.name === "return" && permissions().length === 0) {
+      // Force reactive read (this somehow fixes timing issues)
+      void session()
       if (prompt) {
         prompt.focus()
         prompt.submit()
