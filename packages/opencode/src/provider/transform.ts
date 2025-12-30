@@ -246,7 +246,7 @@ export namespace ProviderTransform {
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
   const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
-  export function variants(model: Provider.Model) {
+  export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()

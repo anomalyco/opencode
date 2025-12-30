@@ -620,7 +620,24 @@ export namespace Config {
     .extend({
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
-      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      models: z
+        .record(
+          z.string(),
+          ModelsDev.Model.partial().extend({
+            variants: z
+              .record(
+                z.string(),
+                z
+                  .object({
+                    disabled: z.boolean().optional().describe("Disable this variant for the model"),
+                  })
+                  .catchall(z.any()),
+              )
+              .optional()
+              .describe("Variant-specific configuration"),
+          }),
+        )
+        .optional(),
       options: z
         .object({
           apiKey: z.string().optional(),
