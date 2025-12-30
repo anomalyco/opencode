@@ -63,9 +63,14 @@ export function DialogSelectServer() {
     onCleanup(() => clearInterval(interval))
   })
 
-  function select(value: string) {
-    if (store.status[value]?.healthy === false) return
+  function select(value: string, persist?: boolean) {
+    if (!persist && store.status[value]?.healthy === false) return
     dialog.close()
+    if (persist) {
+      server.add(value)
+      navigate("/")
+      return
+    }
     server.setActive(value)
     navigate("/")
   }
@@ -87,7 +92,7 @@ export function DialogSelectServer() {
     }
 
     setStore("url", "")
-    select(value)
+    select(value, true)
   }
 
   return (
