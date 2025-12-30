@@ -1437,6 +1437,24 @@ export namespace LSPServer {
     },
   }
 
+  export const Prisma: Info = {
+    id: "prisma",
+    extensions: [".prisma"],
+    root: NearestRoot(["schema.prisma", "prisma/schema.prisma", "prisma"], ["package.json"]),
+    async spawn(root) {
+      const prisma = Bun.which("prisma")
+      if (!prisma) {
+        log.info("prisma not found, please install prisma")
+        return
+      }
+      return {
+        process: spawn(prisma, ["language-server"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const Dart: Info = {
     id: "dart",
     extensions: [".dart"],
