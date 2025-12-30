@@ -556,7 +556,6 @@ export namespace SessionPrompt {
           model: lastUser.model,
           auto: true,
         })
-        continue
       }
       continue
     }
