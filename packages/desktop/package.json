@@ -18,6 +18,7 @@
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-os": "~2",
+    "@tauri-apps/plugin-notification": "~2",
     "@tauri-apps/plugin-process": "~2",
     "@tauri-apps/plugin-shell": "~2",
     "@tauri-apps/plugin-store": "~2",

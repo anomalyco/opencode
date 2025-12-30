@@ -14,6 +14,9 @@ export type Platform = {
   /** Restart the app  */
   restart(): Promise<void>
 
+  /** Send a system notification (optional deep link) */
+  notify(title: string, description?: string, href?: string): Promise<void>
+
   /** Open native directory picker dialog (Tauri only) */
   openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
