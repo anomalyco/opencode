@@ -20,6 +20,7 @@ import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
+import { Image } from "@/util/image"
 import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
@@ -697,6 +698,21 @@ export function Prompt(props: PromptProps) {
   }
 
   async function pasteImage(file: { filename?: string; content: string; mime: string }) {
+    let optimizedContent = file.content
+    let optimizedMime = file.mime
+
+    if (Image.needsCompression(file.content)) {
+      const result = await Image.optimizeForUpload({
+        data: file.content,
+        mime: file.mime,
+      }).catch(() => null)
+
+      if (result) {
+        optimizedContent = result.data
+        optimizedMime = result.mime
+      }
+    }
+
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const count = store.prompt.parts.filter((x) => x.type === "file").length
@@ -716,9 +732,9 @@ export function Prompt(props: PromptProps) {
 
     const part: Omit<FilePart, "id" | "messageID" | "sessionID"> = {
       type: "file" as const,
-      mime: file.mime,
+      mime: optimizedMime,
       filename: file.filename,
-      url: `data:${file.mime};base64,${file.content}`,
+      url: `data:${optimizedMime};base64,${optimizedContent}`,
       source: {
         type: "file",
         path: file.filename ?? "",
