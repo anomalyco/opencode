@@ -32,3 +32,4 @@ jobs:
           ./script/sync-zed.ts ${{ steps.get_tag.outputs.tag }}
         env:
           ZED_EXTENSIONS_PAT: ${{ secrets.ZED_EXTENSIONS_PAT }}
+          ZED_PR_PAT: ${{ secrets.ZED_PR_PAT }}
