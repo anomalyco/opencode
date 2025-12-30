@@ -1801,7 +1801,7 @@ export namespace Server {
         "/find/file",
         describeRoute({
           summary: "Find files",
-          description: "Search for files by name or pattern in the project directory.",
+          description: "Search for files or directories by name or pattern in the project directory.",
           operationId: "find.files",
           responses: {
             200: {
@@ -1819,15 +1819,20 @@ export namespace Server {
           z.object({
             query: z.string(),
             dirs: z.enum(["true", "false"]).optional(),
+            type: z.enum(["file", "directory"]).optional(),
+            limit: z.coerce.number().int().min(1).max(200).optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query").query
           const dirs = c.req.valid("query").dirs
+          const type = c.req.valid("query").type
+          const limit = c.req.valid("query").limit
           const results = await File.search({
             query,
-            limit: 10,
+            limit: limit ?? 10,
             dirs: dirs !== "false",
+            type,
           })
           return c.json(results)
         },
