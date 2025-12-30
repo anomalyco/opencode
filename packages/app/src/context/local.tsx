@@ -395,8 +395,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       const list = async (path: string) => {
+        const listPath = path ? path + "/" : ""
         return sdk.client.file
-          .list({ path: path + "/" })
+          .list({ path: listPath })
           .then((x) => {
             setStore(
               "node",
