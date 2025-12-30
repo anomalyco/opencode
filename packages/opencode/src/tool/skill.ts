@@ -6,6 +6,7 @@ import { Agent } from "../agent/agent"
 import { Permission } from "../permission"
 import { Wildcard } from "../util/wildcard"
 import { ConfigMarkdown } from "../config/markdown"
+import { Config } from "../config/config"
 
 const parameters = z.object({
   name: z.string().describe("The skill identifier from available_skills (e.g., 'code-review')"),
@@ -16,15 +17,25 @@ export const SkillTool: Tool.Info<typeof parameters> = {
   async init(ctx) {
     const skills = await Skill.all()
 
-    // Filter skills by agent permissions if agent provided
-    let accessibleSkills = skills
-    if (ctx?.agent) {
-      const permissions = ctx.agent.permission.skill
-      accessibleSkills = skills.filter((skill) => {
-        const action = Wildcard.all(skill.name, permissions)
-        return action !== "deny"
-      })
-    }
+    // Single pass: build accessible list (for description) + permission map (for O(1) lookup in execute)
+    // - accessibleSkills: only non-denied skills (shown to LLM)
+    // - permissionMap: all skills with their permission (null when no agent = all allowed)
+    const { accessibleSkills, permissionMap } = ctx?.agent
+      ? skills.reduce(
+          (acc, skill) => {
+            const action = Wildcard.all(skill.name, ctx.agent!.permission.skill)
+            acc.permissionMap.set(skill.name, action)
+            if (action !== "deny") {
+              acc.accessibleSkills.push(skill)
+            }
+            return acc
+          },
+          {
+            accessibleSkills: [] as typeof skills,
+            permissionMap: new Map<string, typeof Config.Permission[keyof typeof Config.Permission]>(),
+          },
+        )
+      : { accessibleSkills: skills, permissionMap: null }
 
     const description =
       accessibleSkills.length === 0
@@ -47,20 +58,17 @@ export const SkillTool: Tool.Info<typeof parameters> = {
       description,
       parameters,
       async execute(params, ctx) {
-        const agent = await Agent.get(ctx.agent)
-
         const skill = await Skill.get(params.name)
 
         if (!skill) {
-          const available = await Skill.all().then((x) => x.map((s) => s.name).join(", "))
+          const available = accessibleSkills.map((s) => s.name).join(", ")
           throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
         }
 
-        // Check permission using Wildcard.all on the skill name
-        const permissions = agent.permission.skill
-        const action = Wildcard.all(params.name, permissions)
+        const action = permissionMap?.get(params.name)
 
         if (action === "deny") {
+          const agent = await Agent.get(ctx.agent)
           throw new Permission.RejectedError(
             ctx.sessionID,
             "skill",
