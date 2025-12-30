@@ -331,3 +331,12 @@ export const nixfmt: Info = {
     return Bun.which("nixfmt") !== null
   },
 }
+
+export const rustfmt: Info = {
+  name: "rustfmt",
+  command: ["rustfmt", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    return Bun.which("rustfmt") !== null
+  },
+}
