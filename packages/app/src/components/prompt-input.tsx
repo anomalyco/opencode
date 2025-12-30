@@ -1115,11 +1115,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("imageAttachments", [])
     setStore("mode", "normal")
 
-    const model = {
-      modelID: local.model.current()!.id,
-      providerID: local.model.current()!.provider.id,
+    const currentModel = local.model.current()
+    const currentAgent = local.agent.current()
+    if (!currentModel || !currentAgent) {
+      console.warn("No agent or model available for prompt submission")
+      return
     }
-    const agent = local.agent.current()!.name
+    const model = {
+      modelID: currentModel.id,
+      providerID: currentModel.provider.id,
+    }
+    const agent = currentAgent.name
 
     if (isShellMode) {
       sdk.client.session
@@ -1360,7 +1366,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 >
                   <Select
                     options={local.agent.list().map((agent) => agent.name)}
-                    current={local.agent.current().name}
+                    current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
                     class="capitalize"
                     variant="ghost"
