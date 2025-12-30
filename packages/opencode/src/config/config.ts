@@ -447,7 +447,7 @@ export namespace Config {
       status_view: z.string().optional().default("<leader>s").describe("View status"),
       session_export: z.string().optional().default("<leader>x").describe("Export session to editor"),
       session_new: z.string().optional().default("<leader>n").describe("Create a new session"),
-      session_list: z.string().optional().default("<leader>l").describe("List all sessions"),
+      session_list: z.string().optional().default("<leader>;").describe("List all sessions"),
       session_timeline: z.string().optional().default("<leader>g").describe("Show session timeline"),
       session_fork: z.string().optional().default("none").describe("Fork session from message"),
       session_rename: z.string().optional().default("none").describe("Rename session"),
@@ -474,7 +474,7 @@ export namespace Config {
       messages_toggle_conceal: z
         .string()
         .optional()
-        .default("<leader>h")
+        .default("<leader>.")
         .describe("Toggle code block concealment in messages"),
       tool_details: z.string().optional().default("none").describe("Toggle tool details visibility"),
       model_list: z.string().optional().default("<leader>m").describe("List available models"),
@@ -574,14 +574,14 @@ export namespace Config {
       session_parent: z.string().optional().default("<leader>up").describe("Go to parent session"),
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
-      tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
+      tips_toggle: z.string().optional().default("<leader>?").describe("Toggle tips on home screen"),
       // Window commands (leader + key, default leader is ctrl+x)
-      window_focus_left: z.string().optional().default("<leader>shift+h").describe("Focus window to the left"),
+      window_focus_left: z.string().optional().default("<leader>h").describe("Focus window to the left"),
       window_focus_down: z.string().optional().default("<leader>j").describe("Focus window below"),
       window_focus_up: z.string().optional().default("<leader>k").describe("Focus window above"),
-      window_focus_right: z.string().optional().default("<leader>shift+l").describe("Focus window to the right"),
+      window_focus_right: z.string().optional().default("<leader>l").describe("Focus window to the right"),
       window_split_horizontal: z.string().optional().default("<leader>-").describe("Split window horizontally"),
-      window_split_vertical: z.string().optional().default("<leader>\\").describe("Split window vertically"),
+      window_split_vertical: z.string().optional().default("<leader>|").describe("Split window vertically"),
       window_close: z.string().optional().default("<leader>w").describe("Close current window"),
       window_close_others: z.string().optional().default("<leader>shift+w").describe("Close all other windows"),
       window_equalize: z.string().optional().default("<leader>=").describe("Equalize window sizes"),
