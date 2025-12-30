@@ -1,7 +1,13 @@
-{ lib, stdenvNoCC, bun, ripgrep, makeBinaryWrapper }:
+{
+  lib,
+  stdenvNoCC,
+  bun,
+  ripgrep,
+  makeBinaryWrapper,
+}:
 args:
 let
-  scripts = args.scripts;
+  inherit (args) scripts;
   mkModules =
     attrs:
     args.mkNodeModules (
@@ -14,13 +20,10 @@ let
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "opencode";
-  version = args.version;
-
-  src = args.src;
+  inherit (args) version src;
 
   node_modules = mkModules {
-    version = finalAttrs.version;
-    src = finalAttrs.src;
+    inherit (finalAttrs) version src;
   };
 
   nativeBuildInputs = [

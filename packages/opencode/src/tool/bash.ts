@@ -280,7 +280,7 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       if (timedOut) {
-        resultMetadata.push(`bash tool terminated commmand after exceeding timeout ${timeout} ms`)
+        resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
 
       if (aborted) {
