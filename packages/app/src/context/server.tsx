@@ -25,28 +25,27 @@ export function serverDisplayName(url: string) {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string; forceUrl?: boolean }) => {
+  init: (props: { defaultUrl: string }) => {
     const platform = usePlatform()
-    const fallback = () => normalizeServerUrl(props.defaultUrl)
-    const [forced, setForced] = createSignal(props.forceUrl ?? false)
 
     const [store, setStore, _, ready] = persisted(
-      "server.v2",
+      "server.v3",
       createStore({
         list: [] as string[],
-        active: "",
         projects: {} as Record<string, StoredProject[]>,
       }),
     )
+
+    const [active, setActiveRaw] = createSignal("")
 
     function setActive(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
       batch(() => {
         if (!store.list.includes(url)) {
-          setStore("list", (list) => [url, ...list])
+          setStore("list", store.list.length, url)
         }
-        setStore("active", url)
+        setActiveRaw(url)
       })
     }
 
@@ -55,49 +54,31 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!url) return
 
       const list = store.list.filter((x) => x !== url)
-      const next = store.active === url ? (list[0] ?? fallback() ?? "") : store.active
+      const next = active() === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : active()
 
       batch(() => {
         setStore("list", list)
-        setStore("active", next)
+        setActiveRaw(next)
       })
     }
 
     createEffect(() => {
       if (!ready()) return
-
-      const url = fallback()
+      const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
 
-      if (forced()) {
-        batch(() => {
-          if (!store.list.includes(url)) {
-            setStore("list", (list) => [url, ...list])
-          }
-          if (store.active !== url) {
-            setStore("active", url)
-          }
-        })
-        setForced(false)
-        return
-      }
-
-      if (store.list.length === 0) {
-        batch(() => {
-          setStore("list", [url])
-          setStore("active", url)
-        })
-        return
-      }
-
-      if (store.active && store.list.includes(store.active)) return
-      setStore("active", store.list[0])
+      batch(() => {
+        if (!store.list.includes(url)) {
+          setStore("list", store.list.length, url)
+        }
+        setActiveRaw(url)
+      })
     })
 
-    const isReady = createMemo(() => ready() && !!store.active)
+    const isReady = createMemo(() => ready() && !!active())
 
     const [healthy, { refetch }] = createResource(
-      () => store.active || undefined,
+      () => active() || undefined,
       async (url) => {
         if (!url) return
 
@@ -114,21 +95,21 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
 
     createEffect(() => {
-      if (!store.active) return
+      if (!active()) return
       const interval = setInterval(() => refetch(), 10_000)
       onCleanup(() => clearInterval(interval))
     })
 
-    const projectsList = createMemo(() => store.projects[store.active] ?? [])
+    const projectsList = createMemo(() => store.projects[active()] ?? [])
 
     return {
       ready: isReady,
       healthy,
       get url() {
-        return store.active
+        return active()
       },
       get name() {
-        return serverDisplayName(store.active)
+        return serverDisplayName(active())
       },
       get list() {
         return store.list
@@ -139,14 +120,14 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       projects: {
         list: projectsList,
         open(directory: string) {
-          const url = store.active
+          const url = active()
           if (!url) return
           const current = store.projects[url] ?? []
           if (current.find((x) => x.worktree === directory)) return
           setStore("projects", url, [{ worktree: directory, expanded: true }, ...current])
         },
         close(directory: string) {
-          const url = store.active
+          const url = active()
           if (!url) return
           const current = store.projects[url] ?? []
           setStore(
@@ -156,21 +137,21 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           )
         },
         expand(directory: string) {
-          const url = store.active
+          const url = active()
           if (!url) return
           const current = store.projects[url] ?? []
           const index = current.findIndex((x) => x.worktree === directory)
           if (index !== -1) setStore("projects", url, index, "expanded", true)
         },
         collapse(directory: string) {
-          const url = store.active
+          const url = active()
           if (!url) return
           const current = store.projects[url] ?? []
           const index = current.findIndex((x) => x.worktree === directory)
           if (index !== -1) setStore("projects", url, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
-          const url = store.active
+          const url = active()
           if (!url) return
           const current = store.projects[url] ?? []
           const fromIndex = current.findIndex((x) => x.worktree === directory)
