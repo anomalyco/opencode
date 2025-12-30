@@ -205,8 +205,17 @@ export namespace Ripgrep {
     return filepath
   }
 
-  export async function* files(input: { cwd: string; glob?: string[] }) {
-    const args = [await filepath(), "--files", "--follow", "--hidden", "--glob=!.git/*"]
+  export async function* files(input: {
+    cwd: string
+    glob?: string[]
+    hidden?: boolean
+    follow?: boolean
+    maxDepth?: number
+  }) {
+    const args = [await filepath(), "--files", "--glob=!.git/*"]
+    if (input.follow !== false) args.push("--follow")
+    if (input.hidden !== false) args.push("--hidden")
+    if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
     if (input.glob) {
       for (const g of input.glob) {
         args.push(`--glob=${g}`)

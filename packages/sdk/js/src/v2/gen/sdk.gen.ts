@@ -1829,13 +1829,15 @@ export class Find extends HeyApiClient {
   /**
    * Find files
    *
-   * Search for files by name or pattern in the project directory.
+   * Search for files or directories by name or pattern in the project directory.
    */
   public files<ThrowOnError extends boolean = false>(
     parameters: {
       directory?: string
       query: string
       dirs?: "true" | "false"
+      type?: "file" | "directory"
+      limit?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1847,6 +1849,8 @@ export class Find extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "query" },
             { in: "query", key: "dirs" },
+            { in: "query", key: "type" },
+            { in: "query", key: "limit" },
           ],
         },
       ],

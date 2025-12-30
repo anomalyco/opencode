@@ -8,11 +8,14 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { Icon } from "@opencode-ai/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 
 export default function Home() {
   const sync = useGlobalSync()
   const layout = useLayout()
   const platform = usePlatform()
+  const dialog = useDialog()
   const navigate = useNavigate()
   const homedir = createMemo(() => sync.data.path.home)
 
@@ -22,16 +25,27 @@ export default function Home() {
   }
 
   async function chooseProject() {
-    const result = await platform.openDirectoryPickerDialog?.({
-      title: "Open project",
-      multiple: true,
-    })
-    if (Array.isArray(result)) {
-      for (const directory of result) {
-        openProject(directory)
+    function resolve(result: string | string[] | null) {
+      if (Array.isArray(result)) {
+        for (const directory of result) {
+          openProject(directory)
+        }
+      } else if (result) {
+        openProject(result)
       }
-    } else if (result) {
-      openProject(result)
+    }
+
+    if (platform.openDirectoryPickerDialog) {
+      const result = await platform.openDirectoryPickerDialog?.({
+        title: "Open project",
+        multiple: true,
+      })
+      resolve(result)
+    } else {
+      dialog.show(
+        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+        () => resolve(null),
+      )
     }
   }
 
@@ -43,11 +57,9 @@ export default function Home() {
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">Recent projects</div>
-              <Show when={platform.openDirectoryPickerDialog}>
-                <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                  Open project
-                </Button>
-              </Show>
+              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+                Open project
+              </Button>
             </div>
             <ul class="flex flex-col gap-2">
               <For
@@ -80,11 +92,9 @@ export default function Home() {
               <div class="text-12-regular text-text-weak">Get started by opening a local project</div>
             </div>
             <div />
-            <Show when={platform.openDirectoryPickerDialog}>
-              <Button class="px-3" onClick={chooseProject}>
-                Open project
-              </Button>
-            </Show>
+            <Button class="px-3" onClick={chooseProject}>
+              Open project
+            </Button>
           </div>
         </Match>
       </Switch>
