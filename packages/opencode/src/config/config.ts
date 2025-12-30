@@ -810,6 +810,35 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      memory: z
+        .object({
+          fileCacheLimit: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum file entries per session in FileTime cache (default: 500)"),
+          pruneStepInterval: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Run pruning every N steps during long sessions (default: 50)"),
+          pruneMessageThreshold: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Run pruning when messages exceed this count (default: 200)"),
+          maxQueuedCallbacks: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum queued prompt callbacks per session (default: 10)"),
+        })
+        .optional()
+        .describe("Memory management settings for long-running sessions"),
       experimental: z
         .object({
           hook: z

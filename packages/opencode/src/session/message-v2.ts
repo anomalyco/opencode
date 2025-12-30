@@ -490,7 +490,9 @@ export namespace MessageV2 {
             })
           if (part.type === "tool") {
             if (part.state.status === "completed") {
-              if (part.state.attachments?.length) {
+              const isCompacted = !!part.state.time.compacted
+              // Skip attachments for compacted parts to reduce memory usage
+              if (part.state.attachments?.length && !isCompacted) {
                 result.push({
                   id: Identifier.ascending("message"),
                   role: "user",
@@ -513,7 +515,7 @@ export namespace MessageV2 {
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
-                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                output: isCompacted ? "[Old tool result content cleared]" : part.state.output,
                 callProviderMetadata: part.metadata,
               })
             }
@@ -574,11 +576,14 @@ export namespace MessageV2 {
     },
   )
 
+  const MAX_MESSAGES_LIMIT = 2000
+
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
     const result = [] as MessageV2.WithParts[]
     const completed = new Set<string>()
     for await (const msg of stream) {
       result.push(msg)
+      if (result.length >= MAX_MESSAGES_LIMIT) break
       if (
         msg.info.role === "user" &&
         completed.has(msg.info.id) &&

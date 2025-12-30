@@ -14,6 +14,7 @@ import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
+const MAX_DIAGNOSTICS_FILES = 1000
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -57,6 +58,10 @@ export namespace LSPClient {
       })
       const exists = diagnostics.has(filePath)
       diagnostics.set(filePath, params.diagnostics)
+      if (diagnostics.size > MAX_DIAGNOSTICS_FILES) {
+        const first = diagnostics.keys().next().value
+        if (first) diagnostics.delete(first)
+      }
       if (!exists && input.serverID === "typescript") return
       Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
     })
