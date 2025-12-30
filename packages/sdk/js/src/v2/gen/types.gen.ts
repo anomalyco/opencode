@@ -90,6 +90,7 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  variant?: string
 }
 
 export type ProviderAuthError = {
@@ -970,6 +971,10 @@ export type KeybindsConfig = {
    */
   agent_cycle_reverse?: string
   /**
+   * Cycle model variants
+   */
+  variant_cycle?: string
+  /**
    * Clear input field
    */
   input_clear?: string
@@ -1712,6 +1717,11 @@ export type Command = {
   subtask?: boolean
 }
 
+export type Variant = {
+  disabled: boolean
+  [key: string]: unknown | boolean
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -1775,6 +1785,9 @@ export type Model = {
     [key: string]: string
   }
   release_date: string
+  variants?: {
+    [key: string]: Variant
+  }
 }
 
 export type Provider = {
@@ -2944,6 +2957,7 @@ export type SessionPromptData = {
       [key: string]: boolean
     }
     system?: string
+    variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3127,6 +3141,7 @@ export type SessionPromptAsyncData = {
       [key: string]: boolean
     }
     system?: string
+    variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3170,6 +3185,7 @@ export type SessionCommandData = {
     model?: string
     arguments: string
     command: string
+    variant?: string
   }
   path: {
     /**
@@ -3633,6 +3649,8 @@ export type FindFilesData = {
     directory?: string
     query: string
     dirs?: "true" | "false"
+    type?: "file" | "directory"
+    limit?: number
   }
   url: "/find/file"
 }

@@ -8,6 +8,10 @@
     "opener:default",
     "core:window:allow-start-dragging",
     "core:webview:allow-set-webview-zoom",
+    "core:window:allow-is-focused",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
     "shell:default",
     "updater:default",
     "dialog:default",
@@ -15,6 +19,7 @@
     "store:default",
     "window-state:default",
     "os:default",
+    "notification:default",
     {
       "identifier": "http:default",
       "allow": [{ "url": "http://*" }, { "url": "https://*" }, { "url": "http://*:*/*" }]
