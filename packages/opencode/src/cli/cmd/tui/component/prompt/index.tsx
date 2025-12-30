@@ -167,6 +167,13 @@ export function Prompt(props: PromptProps) {
     if (!props.disabled) input.cursorColor = theme.text
   })
 
+  const lastUserMessage = createMemo(() => {
+    if (!props.sessionID) return undefined
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return undefined
+    return messages.findLast((m) => m.role === "user")
+  })
+
   const [store, setStore] = createStore<{
     prompt: PromptInfo
     mode: "normal" | "shell"
@@ -182,6 +189,26 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+  })
+
+  createEffect(() => {
+    const msg = lastUserMessage()
+    if (!msg) return
+
+    // Set agent from last message
+    if (msg.agent) {
+      local.agent.set(msg.agent)
+    }
+
+    // Set model from last message
+    if (msg.model) {
+      local.model.set(msg.model)
+    }
+
+    // Set variant from last message
+    if (msg.variant) {
+      local.model.variant.set(msg.variant)
+    }
   })
 
   command.register(() => {
@@ -562,6 +589,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
+    const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -590,6 +618,7 @@ export function Prompt(props: PromptProps) {
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
+        variant,
       })
     } else {
       sdk.client.session.prompt({
@@ -598,6 +627,7 @@ export function Prompt(props: PromptProps) {
         messageID,
         agent: local.agent.current().name,
         model: selectedModel,
+        variant,
         parts: [
           {
             id: Identifier.ascending("part"),
@@ -716,6 +746,13 @@ export function Prompt(props: PromptProps) {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
     return local.agent.color(local.agent.current().name)
+  })
+
+  const showVariant = createMemo(() => {
+    const variants = local.model.variant.list()
+    if (variants.length === 0) return false
+    const current = local.model.variant.current()
+    return !!current
   })
 
   const spinnerDef = createMemo(() => {
@@ -843,6 +880,12 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                 }
+                if (keybind.match("variant_cycle", e)) {
+                  e.preventDefault()
+                  if (local.model.variant.list().length === 0) return
+                  local.model.variant.cycle()
+                  return
+                }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
                 if (!autocomplete.visible) {
                   if (
@@ -958,6 +1001,12 @@ export function Prompt(props: PromptProps) {
                     {local.model.parsed().model}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <Show when={showVariant()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text>
+                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                    </text>
+                  </Show>
                 </box>
               </Show>
             </box>
