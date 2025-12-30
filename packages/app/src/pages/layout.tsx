@@ -161,27 +161,33 @@ export default function Layout(props: ParentProps) {
       if (e.details?.type !== "permission.updated") return
       const directory = e.name
       const permission = e.details.properties
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      const [store] = globalSync.child(directory)
+      const session = store.session.find((s) => s.id === permission.sessionID)
+      const sessionTitle = session?.title ?? "New session"
+      const projectName = getFilename(directory)
+      const description = `${sessionTitle} in ${projectName} needs permission`
+      const href = `/${base64Encode(directory)}/session/${permission.sessionID}`
+      void platform.notify("Permission required", description, href)
+
+      if (directory === currentDir && permission.sessionID === currentSession) return
+      if (directory === currentDir && session?.parentID === currentSession) return
+
       const sessionKey = `${directory}:${permission.sessionID}`
       if (seenSessions.has(sessionKey)) return
       seenSessions.add(sessionKey)
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
-      const currentSession = params.id
-      if (directory === currentDir && permission.sessionID === currentSession) return
-      const [store] = globalSync.child(directory)
-      const session = store.session.find((s) => s.id === permission.sessionID)
-      if (directory === currentDir && session?.parentID === currentSession) return
-      const sessionTitle = session?.title ?? "New session"
-      const projectName = getFilename(directory)
+
       const toastId = showToast({
         persistent: true,
         icon: "checklist",
         title: "Permission required",
-        description: `${sessionTitle} in ${projectName} needs permission`,
+        description,
         actions: [
           {
             label: "Go to session",
             onClick: () => {
-              navigate(`/${base64Encode(directory)}/session/${permission.sessionID}`)
+              navigate(href)
             },
           },
           {
