@@ -20,6 +20,17 @@ interface SessionStats {
     }
   }
   toolUsage: Record<string, number>
+  modelUsage: Record<
+    string,
+    {
+      messages: number
+      tokens: {
+        input: number
+        output: number
+      }
+      cost: number
+    }
+  >
   dateRange: {
     earliest: number
     latest: number
@@ -43,6 +54,9 @@ export const StatsCommand = cmd({
         describe: "number of tools to show (default: all)",
         type: "number",
       })
+      .option("models", {
+        describe: "show model statistics (default: hidden). Pass a number to show top N, otherwise shows all",
+      })
       .option("project", {
         describe: "filter by project (default: all projects, empty string: current project)",
         type: "string",
@@ -51,7 +65,15 @@ export const StatsCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const stats = await aggregateSessionStats(args.days, args.project)
-      displayStats(stats, args.tools)
+
+      let modelLimit: number | undefined
+      if (args.models === true) {
+        modelLimit = Infinity
+      } else if (typeof args.models === "number") {
+        modelLimit = args.models
+      }
+
+      displayStats(stats, args.tools, modelLimit)
     })
   },
 })
@@ -121,6 +143,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
       },
     },
     toolUsage: {},
+    modelUsage: {},
     dateRange: {
       earliest: Date.now(),
       latest: Date.now(),
@@ -154,10 +177,32 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
       let sessionCost = 0
       let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
       let sessionToolUsage: Record<string, number> = {}
+      let sessionModelUsage: Record<
+        string,
+        {
+          messages: number
+          tokens: {
+            input: number
+            output: number
+          }
+          cost: number
+        }
+      > = {}
 
       for (const message of messages) {
         if (message.info.role === "assistant") {
           sessionCost += message.info.cost || 0
+
+          const modelKey = `${message.info.providerID}/${message.info.modelID}`
+          if (!sessionModelUsage[modelKey]) {
+            sessionModelUsage[modelKey] = {
+              messages: 0,
+              tokens: { input: 0, output: 0 },
+              cost: 0,
+            }
+          }
+          sessionModelUsage[modelKey].messages++
+          sessionModelUsage[modelKey].cost += message.info.cost || 0
 
           if (message.info.tokens) {
             sessionTokens.input += message.info.tokens.input || 0
@@ -165,6 +210,10 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
             sessionTokens.reasoning += message.info.tokens.reasoning || 0
             sessionTokens.cache.read += message.info.tokens.cache?.read || 0
             sessionTokens.cache.write += message.info.tokens.cache?.write || 0
+
+            sessionModelUsage[modelKey].tokens.input += message.info.tokens.input || 0
+            sessionModelUsage[modelKey].tokens.output +=
+              (message.info.tokens.output || 0) + (message.info.tokens.reasoning || 0)
           }
         }
 
@@ -181,6 +230,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
         sessionTokens,
         sessionTotalTokens: sessionTokens.input + sessionTokens.output + sessionTokens.reasoning,
         sessionToolUsage,
+        sessionModelUsage,
         earliestTime: session.time.created,
         latestTime: session.time.updated,
       }
@@ -203,6 +253,20 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
 
       for (const [tool, count] of Object.entries(result.sessionToolUsage)) {
         stats.toolUsage[tool] = (stats.toolUsage[tool] || 0) + count
+      }
+
+      for (const [model, usage] of Object.entries(result.sessionModelUsage)) {
+        if (!stats.modelUsage[model]) {
+          stats.modelUsage[model] = {
+            messages: 0,
+            tokens: { input: 0, output: 0 },
+            cost: 0,
+          }
+        }
+        stats.modelUsage[model].messages += usage.messages
+        stats.modelUsage[model].tokens.input += usage.tokens.input
+        stats.modelUsage[model].tokens.output += usage.tokens.output
+        stats.modelUsage[model].cost += usage.cost
       }
     }
   }
@@ -228,7 +292,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   return stats
 }
 
-export function displayStats(stats: SessionStats, toolLimit?: number) {
+export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
   const width = 56
 
   function renderRow(label: string, value: string): string {
@@ -265,6 +329,29 @@ export function displayStats(stats: SessionStats, toolLimit?: number) {
   console.log(renderRow("Cache Read", formatNumber(stats.totalTokens.cache.read)))
   console.log(renderRow("Cache Write", formatNumber(stats.totalTokens.cache.write)))
   console.log("└────────────────────────────────────────────────────────┘")
+  console.log()
+
+  // Model Usage section
+  if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
+    const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
+    const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
+
+    console.log("┌────────────────────────────────────────────────────────┐")
+    console.log("│                      MODEL USAGE                       │")
+    console.log("├────────────────────────────────────────────────────────┤")
+
+    for (const [model, usage] of modelsToDisplay) {
+      console.log(`│ ${model.padEnd(54)} │`)
+      console.log(renderRow("  Messages", usage.messages.toLocaleString()))
+      console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
+      console.log(renderRow("  Output Tokens", formatNumber(usage.tokens.output)))
+      console.log(renderRow("  Cost", `$${usage.cost.toFixed(4)}`))
+      console.log("├────────────────────────────────────────────────────────┤")
+    }
+    // Remove last separator and add bottom border
+    process.stdout.write("\x1B[1A") // Move up one line
+    console.log("└────────────────────────────────────────────────────────┘")
+  }
   console.log()
 
   // Tool Usage section
