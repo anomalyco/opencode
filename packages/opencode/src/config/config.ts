@@ -98,7 +98,7 @@ export namespace Config {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
-          // to satisy the type checker
+          // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
           result.plugin ??= []
@@ -191,6 +191,10 @@ export namespace Config {
         cwd: dir,
       },
     ).catch(() => {})
+
+    // Install any additional dependencies defined in the package.json
+    // This allows local plugins and custom tools to use external packages
+    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 
   const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
@@ -486,6 +490,7 @@ export namespace Config {
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
+      variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),

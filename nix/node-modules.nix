@@ -9,8 +9,7 @@
 args:
 stdenvNoCC.mkDerivation {
   pname = "opencode-node_modules";
-  version = args.version;
-  src = args.src;
+  inherit (args) version src;
 
   impureEnvVars = lib.fetchers.proxyImpureEnvVars ++ [
     "GIT_PROXY_COMMAND"
