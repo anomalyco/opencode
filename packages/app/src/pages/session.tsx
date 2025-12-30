@@ -942,8 +942,6 @@ export default function Page() {
                 <For each={tabs().all()}>
                   {(tab) => {
                     const path = tab.startsWith("file://") ? tab.replace("file://", "") : undefined
-                    // Trigger the file load
-                    if (path) local.file.init(path)
                     return (
                       <Tabs.Content value={tab} class="mt-3">
                         <Show when={path}>
