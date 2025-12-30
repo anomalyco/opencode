@@ -13,6 +13,8 @@ import { Instance } from "../../project/instance"
 import { Installation } from "../../installation"
 import path from "path"
 import { Global } from "../../global"
+import { McpServer } from "../../mcp/server"
+import { bootstrap } from "../bootstrap"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {
@@ -45,6 +47,7 @@ export const McpCommand = cmd({
       .command(McpAuthCommand)
       .command(McpLogoutCommand)
       .command(McpDebugCommand)
+      .command(McpServeCommand)
       .demandCommand(),
   async handler() {},
 })
@@ -649,6 +652,66 @@ export const McpDebugCommand = cmd({
 
         prompts.outro("Debug complete")
       },
+    })
+  },
+})
+
+export const McpServeCommand = cmd({
+  command: "serve",
+  describe: "start OpenCode as an MCP server (stdio)",
+  builder: (yargs) =>
+    yargs
+      .option("list", {
+        describe: "list tools that would be exposed, then exit",
+        type: "boolean",
+        default: false,
+      })
+      .option("force", {
+        describe: "start server even if mcpServer.enabled is not true",
+        type: "boolean",
+        default: false,
+      })
+      .option("project", {
+        describe: "project directory (defaults to current working directory)",
+        type: "string",
+      }),
+  async handler(args) {
+    const cwd = args.project ?? process.cwd()
+
+    await bootstrap(cwd, async () => {
+      const config = await Config.get()
+      const mcpServerConfig = config.mcpServer ?? {}
+
+      // Check if MCP server is enabled (unless --force is used)
+      if (!args.force && mcpServerConfig.enabled !== true) {
+        UI.error(
+          "MCP server is not enabled. Set mcpServer.enabled to true in your opencode.json config, or use --force to start anyway.",
+        )
+        process.exit(1)
+      }
+
+      // Handle --list flag: print tools and exit
+      if (args.list) {
+        const tools = await McpServer.listTools()
+
+        if (tools.length === 0) {
+          console.log("No custom tools would be exposed.")
+          console.log("Add custom tools in .opencode/tool/*.{js,ts} or configure mcpServer.tools in opencode.json.")
+        } else {
+          console.log(`Tools that would be exposed (${tools.length}):`)
+          console.log("")
+          for (const tool of tools) {
+            console.log(`  ${tool.id}`)
+            if (tool.description) {
+              console.log(`    ${tool.description}`)
+            }
+          }
+        }
+        return
+      }
+
+      // Start the MCP server
+      await McpServer.start({ cwd })
     })
   },
 })

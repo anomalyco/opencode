@@ -1,0 +1,162 @@
+---
+title: MCP Server
+description: Run OpenCode as an MCP server to expose custom tools.
+---
+
+OpenCode can run as an MCP server, allowing external MCP clients to access your [custom tools](/docs/custom-tools). This enables integration with other AI tools and editors that support the Model Context Protocol.
+
+:::note
+The MCP server exposes **only custom tools** (from `.opencode/tool/` and plugins). Built-in tools like `bash`, `read`, `write`, etc. are not exposed for security reasons.
+:::
+
+---
+
+## Enable
+
+To enable the MCP server, add `mcpServer` to your OpenCode config and set `enabled` to `true`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcpServer": {
+    "enabled": true
+  }
+}
+```
+
+---
+
+## Start the server
+
+Use the `opencode mcp serve` command to start the MCP server. The server communicates over STDIO, making it compatible with any MCP client.
+
+```bash
+opencode mcp serve
+```
+
+The server will refuse to start unless `mcpServer.enabled` is `true` in your config. You can bypass this check with the `--force` flag.
+
+```bash
+opencode mcp serve --force
+```
+
+---
+
+### List tools
+
+Use the `--list` flag to see which tools would be exposed without starting the server. This is useful for debugging your configuration.
+
+```bash
+opencode mcp serve --list
+```
+
+This prints the tool names and descriptions, then exits.
+
+---
+
+## Filter tools
+
+By default, all custom tools are exposed. Use the `tools` option to control which tools are available.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcpServer": {
+    "enabled": true,
+    "tools": {
+      "*": false,
+      "echo": true
+    }
+  }
+}
+```
+
+This exposes only the `echo` tool while disabling all others.
+
+---
+
+### Wildcard patterns
+
+The `tools` option supports wildcard patterns, using the same syntax as [tool configuration](/docs/tools).
+
+| Pattern | Description |
+|---------|-------------|
+| `"*": true` | Enable all tools (default) |
+| `"*": false` | Disable all tools |
+| `"echo": true` | Enable the `echo` tool |
+| `"db_*": true` | Enable all tools starting with `db_` |
+| `"*_test": false` | Disable all tools ending with `_test` |
+
+---
+
+### Examples
+
+**Allowlist specific tools:**
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcpServer": {
+    "enabled": true,
+    "tools": {
+      "*": false,
+      "database": true,
+      "search": true
+    }
+  }
+}
+```
+
+**Blocklist specific tools:**
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcpServer": {
+    "enabled": true,
+    "tools": {
+      "*": true,
+      "dangerous_tool": false
+    }
+  }
+}
+```
+
+**Enable tools matching a pattern:**
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcpServer": {
+    "enabled": true,
+    "tools": {
+      "*": false,
+      "api_*": true
+    }
+  }
+}
+```
+
+---
+
+## Configuration options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `enabled` | Boolean | Enable or disable the MCP server. Required to be `true` to start. |
+| `tools` | Object | Map of tool patterns to boolean values for filtering. |
+
+---
+
+## Security
+
+The MCP server is designed with security in mind:
+
+- **Custom tools only** - Built-in tools (`bash`, `read`, `write`, `edit`, `glob`, `grep`) are never exposed. Only tools you create in `.opencode/tool/` or via plugins are available.
+- **User control** - You control which custom tools exist and what they can do.
+- **STDIO transport** - Communication is local via standard input/output, with no network exposure.
+- **Config-driven** - The server only starts when explicitly enabled in your config.
+
+:::tip
+Review your custom tools before enabling the MCP server. Only expose tools that are safe for external access.
+:::

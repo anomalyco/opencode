@@ -611,6 +611,20 @@ export namespace Config {
       ref: "ServerConfig",
     })
 
+  export const McpServer = z
+    .object({
+      enabled: z.boolean().optional().describe("Enable the MCP server to expose custom tools via stdio"),
+      tools: z
+        .record(z.string(), z.boolean())
+        .optional()
+        .describe("Tool filtering rules with wildcard support. Omit to enable all custom tools."),
+    })
+    .strict()
+    .meta({
+      ref: "McpServerConfig",
+    })
+  export type McpServer = z.infer<typeof McpServer>
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -660,6 +674,7 @@ export namespace Config {
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
+      mcpServer: McpServer.optional().describe("MCP server configuration for exposing custom tools via stdio"),
       command: z
         .record(z.string(), Command)
         .optional()
