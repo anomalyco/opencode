@@ -31,6 +31,7 @@ export namespace Command {
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
       subtask: z.boolean().optional(),
+      hints: z.array(z.string()),
     })
     .meta({
       ref: "Command",
@@ -38,6 +39,16 @@ export namespace Command {
 
   // for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
   export type Info = Omit<z.infer<typeof Info>, "template"> & { template: Promise<string> | string }
+
+  export function hints(template: string): string[] {
+    const result: string[] = []
+    const numbered = template.match(/\$\d+/g)
+    if (numbered) {
+      for (const match of [...new Set(numbered)].sort()) result.push(match)
+    }
+    if (template.includes("$ARGUMENTS")) result.push("$ARGUMENTS")
+    return result
+  }
 
   export const Default = {
     INIT: "init",
@@ -54,6 +65,7 @@ export namespace Command {
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", Instance.worktree)
         },
+        hints: hints(PROMPT_INITIALIZE),
       },
       [Default.REVIEW]: {
         name: Default.REVIEW,
@@ -62,6 +74,7 @@ export namespace Command {
           return PROMPT_REVIEW.replace("${path}", Instance.worktree)
         },
         subtask: true,
+        hints: hints(PROMPT_REVIEW),
       },
     }
 
@@ -75,6 +88,7 @@ export namespace Command {
           return command.template
         },
         subtask: command.subtask,
+        hints: hints(command.template),
       }
     }
     for (const [name, prompt] of Object.entries(await MCP.prompts())) {
@@ -99,6 +113,7 @@ export namespace Command {
             )
           })
         },
+        hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
       }
     }
 
