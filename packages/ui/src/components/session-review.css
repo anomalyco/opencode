@@ -66,6 +66,7 @@
   }
 
   [data-slot="accordion-content"] {
+    -webkit-user-select: text;
     user-select: text;
   }
 

@@ -118,6 +118,7 @@
 
   [data-slot="session-turn-markdown"],
   [data-slot="session-turn-accordion"] [data-slot="accordion-content"] {
+    -webkit-user-select: text;
     user-select: text;
   }
 
