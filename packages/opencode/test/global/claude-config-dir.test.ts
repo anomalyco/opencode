@@ -1,37 +1,8 @@
 import { test, expect, beforeEach, afterEach } from "bun:test"
 import { tmpdir } from "../fixture/fixture"
+import { Global } from "../../src/global"
 import path from "path"
-import fs from "fs/promises"
-
-async function isDirectory(p: string): Promise<boolean> {
-  const stat = await fs.stat(p).catch(() => undefined)
-  return stat?.isDirectory() ?? false
-}
-
-function createClaudeConfigDir(opts: { envVar?: string; testHome: string; xdgConfig: string }) {
-  if (opts.envVar !== undefined) {
-    process.env.CLAUDE_CONFIG_DIR = opts.envVar
-  } else {
-    delete process.env.CLAUDE_CONFIG_DIR
-  }
-  process.env.OPENCODE_TEST_HOME = opts.testHome
-  process.env.XDG_CONFIG_HOME = opts.xdgConfig
-
-  return async function claudeConfigDir(): Promise<string | undefined> {
-    const envDir = process.env.CLAUDE_CONFIG_DIR
-    if (envDir && (await isDirectory(envDir))) return envDir
-
-    const xdgPath = process.env.XDG_CONFIG_HOME || path.join(opts.testHome, ".config")
-    const xdgClaude = path.join(xdgPath, "claude")
-    if (await isDirectory(xdgClaude)) return xdgClaude
-
-    const home = process.env.OPENCODE_TEST_HOME || opts.testHome
-    const legacy = path.join(home, ".claude")
-    if (await isDirectory(legacy)) return legacy
-
-    return undefined
-  }
-}
+import { mkdir } from "fs/promises"
 
 let originalClaudeConfigDir: string | undefined
 let originalTestHome: string | undefined
@@ -64,125 +35,109 @@ afterEach(() => {
 test("returns CLAUDE_CONFIG_DIR when set to valid directory", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await fs.mkdir(path.join(dir, "custom-claude-config"), { recursive: true })
+      await mkdir(path.join(dir, "custom-claude-config"), { recursive: true })
     },
   })
 
   const customDir = path.join(tmp.path, "custom-claude-config")
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: customDir,
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  process.env.CLAUDE_CONFIG_DIR = customDir
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBe(customDir)
+  expect(await Global.claudeConfigDir()).toBe(customDir)
 })
 
 test("falls back when CLAUDE_CONFIG_DIR path does not exist", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await fs.mkdir(path.join(dir, ".claude"), { recursive: true })
+      await mkdir(path.join(dir, ".claude"), { recursive: true })
     },
   })
 
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: path.join(tmp.path, "non-existent-dir"),
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  process.env.CLAUDE_CONFIG_DIR = path.join(tmp.path, "non-existent-dir")
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBe(path.join(tmp.path, ".claude"))
+  expect(await Global.claudeConfigDir()).toBe(path.join(tmp.path, ".claude"))
 })
 
 test("falls back when CLAUDE_CONFIG_DIR is a file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(path.join(dir, "claude-file"), "not a directory")
-      await fs.mkdir(path.join(dir, ".claude"), { recursive: true })
+      await mkdir(path.join(dir, ".claude"), { recursive: true })
     },
   })
 
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: path.join(tmp.path, "claude-file"),
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  process.env.CLAUDE_CONFIG_DIR = path.join(tmp.path, "claude-file")
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBe(path.join(tmp.path, ".claude"))
+  expect(await Global.claudeConfigDir()).toBe(path.join(tmp.path, ".claude"))
 })
 
 test("returns xdg path when CLAUDE_CONFIG_DIR not set", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await fs.mkdir(path.join(dir, ".config", "claude"), { recursive: true })
-      await fs.mkdir(path.join(dir, ".claude"), { recursive: true })
+      await mkdir(path.join(dir, ".config", "claude"), { recursive: true })
+      await mkdir(path.join(dir, ".claude"), { recursive: true })
     },
   })
 
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: undefined,
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  delete process.env.CLAUDE_CONFIG_DIR
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBe(path.join(tmp.path, ".config", "claude"))
+  expect(await Global.claudeConfigDir()).toBe(path.join(tmp.path, ".config", "claude"))
 })
 
 test("returns legacy path when only it exists", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await fs.mkdir(path.join(dir, ".claude"), { recursive: true })
+      await mkdir(path.join(dir, ".claude"), { recursive: true })
     },
   })
 
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: undefined,
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  delete process.env.CLAUDE_CONFIG_DIR
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBe(path.join(tmp.path, ".claude"))
+  expect(await Global.claudeConfigDir()).toBe(path.join(tmp.path, ".claude"))
 })
 
 test("returns undefined when no paths exist", async () => {
   await using tmp = await tmpdir()
 
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: undefined,
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  delete process.env.CLAUDE_CONFIG_DIR
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBeUndefined()
+  expect(await Global.claudeConfigDir()).toBeUndefined()
 })
 
 test("returns undefined when CLAUDE_CONFIG_DIR is empty string", async () => {
   await using tmp = await tmpdir()
 
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: "",
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  process.env.CLAUDE_CONFIG_DIR = ""
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBeUndefined()
+  expect(await Global.claudeConfigDir()).toBeUndefined()
 })
 
 test("priority: CLAUDE_CONFIG_DIR > XDG > legacy", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await fs.mkdir(path.join(dir, "custom"), { recursive: true })
-      await fs.mkdir(path.join(dir, ".config", "claude"), { recursive: true })
-      await fs.mkdir(path.join(dir, ".claude"), { recursive: true })
+      await mkdir(path.join(dir, "custom"), { recursive: true })
+      await mkdir(path.join(dir, ".config", "claude"), { recursive: true })
+      await mkdir(path.join(dir, ".claude"), { recursive: true })
     },
   })
 
   const customDir = path.join(tmp.path, "custom")
-  const claudeConfigDir = createClaudeConfigDir({
-    envVar: customDir,
-    testHome: tmp.path,
-    xdgConfig: path.join(tmp.path, ".config"),
-  })
+  process.env.CLAUDE_CONFIG_DIR = customDir
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.XDG_CONFIG_HOME = path.join(tmp.path, ".config")
 
-  expect(await claudeConfigDir()).toBe(customDir)
+  expect(await Global.claudeConfigDir()).toBe(customDir)
 })

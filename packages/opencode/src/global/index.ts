@@ -11,7 +11,9 @@ const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
 async function isDirectory(p: string): Promise<boolean> {
-  const stat = await fs.stat(p).catch(() => undefined)
+  const stat = await Bun.file(p)
+    .stat()
+    .catch(() => undefined)
   return stat?.isDirectory() ?? false
 }
 
