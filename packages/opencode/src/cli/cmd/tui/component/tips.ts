@@ -28,7 +28,7 @@ export const TIPS = [
   "Press {highlight}Ctrl+C{/highlight} when typing to clear the input field.",
   "Press {highlight}Escape{/highlight} to stop the AI mid-response.",
   "Switch to {highlight}Plan{/highlight} agent to get suggestions without making actual changes.",
-  "Use {highlight}@agent-name{/highlight} in prompts to invoke specialized subagents.",
+  "Use {highlight}@<agent-name>{/highlight} in prompts to invoke specialized subagents.",
   "Press {highlight}Ctrl+X Right/Left{/highlight} to cycle through parent and child sessions.",
   "Create {highlight}opencode.json{/highlight} in project root for project-specific settings.",
   "Place settings in {highlight}~/.config/opencode/opencode.json{/highlight} for global config.",
