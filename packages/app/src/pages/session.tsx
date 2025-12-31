@@ -447,21 +447,6 @@ export default function Page() {
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
-    // {
-    //   id: "theme.toggle",
-    //   title: "Toggle theme",
-    //   description: "Switch between themes",
-    //   category: "View",
-    //   keybind: "ctrl+t",
-    //   slash: "theme",
-    //   onSelect: () => {
-    //     const currentTheme = localStorage.getItem("theme") ?? "oc-1"
-    //     const themes = ["oc-1", "oc-2-paper"]
-    //     const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
-    //     localStorage.setItem("theme", nextTheme)
-    //     document.documentElement.setAttribute("data-theme", nextTheme)
-    //   },
-    // },
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
@@ -551,14 +536,28 @@ export default function Page() {
       onSelect: () => local.agent.move(-1),
     },
     {
+      id: "model.variant.cycle",
+      title: "Cycle thinking effort",
+      description: "Switch to the next effort level",
+      category: "Model",
+      keybind: "shift+mod+t",
+      onSelect: () => {
+        local.model.variant.cycle()
+        showToast({
+          title: "Thinking effort changed",
+          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
+        })
+      },
+    },
+    {
       id: "permissions.autoaccept",
       title: params.id && permission.isAutoAccepting(params.id) ? "Stop auto-accepting edits" : "Auto-accept edits",
       category: "Permissions",
-      disabled: !params.id,
+      keybind: "mod+shift+a",
+      disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
         const sessionID = params.id
         if (!sessionID) return
-
         permission.toggleAutoAccept(sessionID, sdk.directory)
         showToast({
           title: permission.isAutoAccepting(sessionID) ? "Auto-accepting edits" : "Stopped auto-accepting edits",

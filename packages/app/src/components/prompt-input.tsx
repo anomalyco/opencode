@@ -23,6 +23,7 @@ import { useCommand } from "@/context/command"
 import { persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { usePermission } from "@/context/permission"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -80,6 +81,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const dialog = useDialog()
   const providers = useProviders()
   const command = useCommand()
+  const permission = usePermission()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
@@ -1346,7 +1348,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Show>
         </div>
         <div class="relative p-3 flex items-center justify-between">
-          <div class="flex items-center justify-start gap-1">
+          <div class="flex items-center justify-start gap-0.5">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -1393,13 +1395,40 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Button>
                 </Tooltip>
                 <Show when={local.model.variant.list().length > 0}>
-                  <TooltipKeybind placement="top" title="Thinking effort" keybind={command.keybind("model.variant")}>
+                  <TooltipKeybind
+                    placement="top"
+                    title="Thinking effort"
+                    keybind={command.keybind("model.variant.cycle")}
+                  >
                     <Button
                       variant="ghost"
+                      class="text-text-base _hidden group-hover/prompt-input:inline-block"
                       onClick={() => local.model.variant.cycle()}
-                      class="text-text-base hidden group-hover/prompt-input:inline-block"
                     >
                       <span class="capitalize text-12-regular">{local.model.variant.current() ?? "Default"}</span>
+                    </Button>
+                  </TooltipKeybind>
+                </Show>
+                <Show when={permission.permissionsEnabled() && params.id}>
+                  <TooltipKeybind
+                    placement="top"
+                    title="Auto-accept edits"
+                    keybind={command.keybind("permissions.autoaccept")}
+                  >
+                    <Button
+                      variant="ghost"
+                      onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
+                      classList={{
+                        "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
+                        "text-text-base": !permission.isAutoAccepting(params.id!),
+                        "bg-surface-success-base": permission.isAutoAccepting(params.id!),
+                      }}
+                    >
+                      <Icon
+                        name="chevron-double-right"
+                        size="small"
+                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!) }}
+                      />
                     </Button>
                   </TooltipKeybind>
                 </Show>

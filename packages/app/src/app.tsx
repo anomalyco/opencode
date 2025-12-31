@@ -67,36 +67,36 @@ export function App() {
                     <ServerKey>
                       <GlobalSDKProvider>
                         <GlobalSyncProvider>
-                          <PermissionProvider>
-                            <LayoutProvider>
-                              <NotificationProvider>
-                                <Router
-                                  root={(props) => (
+                          <Router
+                            root={(props) => (
+                              <PermissionProvider>
+                                <LayoutProvider>
+                                  <NotificationProvider>
                                     <CommandProvider>
                                       <Layout>{props.children}</Layout>
                                     </CommandProvider>
-                                  )}
-                                >
-                                  <Route path="/" component={Home} />
-                                  <Route path="/:dir" component={DirectoryLayout}>
-                                    <Route path="/" component={() => <Navigate href="session" />} />
-                                    <Route
-                                      path="/session/:id?"
-                                      component={(p) => (
-                                        <Show when={p.params.id ?? "new"} keyed>
-                                          <TerminalProvider>
-                                            <PromptProvider>
-                                              <Session />
-                                            </PromptProvider>
-                                          </TerminalProvider>
-                                        </Show>
-                                      )}
-                                    />
-                                  </Route>
-                                </Router>
-                              </NotificationProvider>
-                            </LayoutProvider>
-                          </PermissionProvider>
+                                  </NotificationProvider>
+                                </LayoutProvider>
+                              </PermissionProvider>
+                            )}
+                          >
+                            <Route path="/" component={Home} />
+                            <Route path="/:dir" component={DirectoryLayout}>
+                              <Route path="/" component={() => <Navigate href="session" />} />
+                              <Route
+                                path="/session/:id?"
+                                component={(p) => (
+                                  <Show when={p.params.id ?? "new"} keyed>
+                                    <TerminalProvider>
+                                      <PromptProvider>
+                                        <Session />
+                                      </PromptProvider>
+                                    </TerminalProvider>
+                                  </Show>
+                                )}
+                              />
+                            </Route>
+                          </Router>
                         </GlobalSyncProvider>
                       </GlobalSDKProvider>
                     </ServerKey>
