@@ -357,6 +357,7 @@ function App() {
     {
       title: "Toggle MCPs",
       value: "mcp.list",
+      keybind: "mcp_list",
       category: "Agent",
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)

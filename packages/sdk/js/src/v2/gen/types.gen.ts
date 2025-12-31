@@ -962,6 +962,10 @@ export type KeybindsConfig = {
    */
   agent_list?: string
   /**
+   * Toggle MCPs
+   */
+  mcp_list?: string
+  /**
    * Next agent
    */
   agent_cycle?: string
