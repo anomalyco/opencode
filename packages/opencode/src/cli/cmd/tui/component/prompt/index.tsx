@@ -664,6 +664,12 @@ export function Prompt(props: PromptProps) {
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = createSignal(false)
   let ctrlCResetTimeout: ReturnType<typeof setTimeout> | undefined
 
+  const [ctrlCClearedState, setCtrlCClearedState] = createSignal<{
+    input: string
+    parts: PromptInfo["parts"]
+    mode: "normal" | "shell"
+  } | null>(null)
+
   onCleanup(() => {
     if (ctrlCResetTimeout) clearTimeout(ctrlCResetTimeout)
   })
@@ -853,7 +859,24 @@ export function Prompt(props: PromptProps) {
                   }
                   // If no image, let the default paste behavior continue
                 }
+                if (keybind.match("input_undo", e) && ctrlCClearedState()) {
+                  const saved = ctrlCClearedState()!
+                  input.setText(saved.input)
+                  setStore("prompt", {
+                    input: saved.input,
+                    parts: saved.parts,
+                  })
+                  setStore("mode", saved.mode)
+                  setCtrlCClearedState(null)
+                  e.preventDefault()
+                  return
+                }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
+                  setCtrlCClearedState({
+                    input: store.prompt.input,
+                    parts: [...store.prompt.parts],
+                    mode: store.mode,
+                  })
                   input.clear()
                   input.extmarks.clear()
                   setStore("prompt", {
@@ -861,6 +884,7 @@ export function Prompt(props: PromptProps) {
                     parts: [],
                   })
                   setStore("extmarkToPartIndex", new Map())
+                  e.preventDefault()
                   return
                 }
                 if (keybind.match("app_exit", e)) {
