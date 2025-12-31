@@ -21,7 +21,7 @@ import { DateTime } from "luxon"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -149,17 +149,9 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
             />
           </div>
           <Show when={currentSession()}>
-            <Tooltip
-              class="hidden xl:block"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>New session</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
-                </div>
-              }
-            >
+            <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
-            </Tooltip>
+            </TooltipKeybind>
           </Show>
         </div>
         <div class="flex items-center gap-3">
@@ -187,14 +179,10 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
           </div>
           <div class="flex items-center gap-1">
             <Show when={currentSession()?.summary?.files}>
-              <Tooltip
+              <TooltipKeybind
                 class="hidden md:block shrink-0"
-                value={
-                  <div class="flex items-center gap-2">
-                    <span>Toggle review</span>
-                    <span class="text-icon-base text-12-medium">{command.keybind("review.toggle")}</span>
-                  </div>
-                }
+                title="Toggle review"
+                keybind={command.keybind("review.toggle")}
               >
                 <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
                   <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -215,16 +203,12 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
                     />
                   </div>
                 </Button>
-              </Tooltip>
+              </TooltipKeybind>
             </Show>
-            <Tooltip
+            <TooltipKeybind
               class="hidden md:block shrink-0"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle terminal</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("terminal.toggle")}</span>
-                </div>
-              }
+              title="Toggle terminal"
+              keybind={command.keybind("terminal.toggle")}
             >
               <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
                 <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -245,7 +229,7 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
                   />
                 </div>
               </Button>
-            </Tooltip>
+            </TooltipKeybind>
           </div>
           <Show when={shareEnabled() && currentSession()}>
             <Popover
@@ -1056,13 +1040,9 @@ export default function Page() {
                       </For>
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                      <Tooltip
-                        value={
-                          <div class="flex items-center gap-2">
-                            <span>Open file</span>
-                            <span class="text-icon-base text-12-medium">{command.keybind("file.open")}</span>
-                          </div>
-                        }
+                      <TooltipKeybind
+                        title="Open file"
+                        keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
                         <IconButton
@@ -1071,7 +1051,7 @@ export default function Page() {
                           iconSize="large"
                           onClick={() => dialog.show(() => <DialogSelectFile />)}
                         />
-                      </Tooltip>
+                      </TooltipKeybind>
                     </div>
                   </Tabs.List>
                 </div>
@@ -1178,17 +1158,13 @@ export default function Page() {
                   <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                 </SortableProvider>
                 <div class="h-full flex items-center justify-center">
-                  <Tooltip
-                    value={
-                      <div class="flex items-center gap-2">
-                        <span>New terminal</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("terminal.new")}</span>
-                      </div>
-                    }
+                  <TooltipKeybind
+                    title="New terminal"
+                    keybind={command.keybind("terminal.new")}
                     class="flex items-center"
                   >
                     <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                  </Tooltip>
+                  </TooltipKeybind>
                 </div>
               </Tabs.List>
               <For each={terminal.all()}>
