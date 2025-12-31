@@ -6,8 +6,8 @@ import { NamedError } from "@opencode-ai/util/error"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import {
-  IntentInfo,
-  IntentResponse,
+  IntentInfo as IntentInfoSchema,
+  IntentResponse as IntentResponseSchema,
   Intent as IntentType,
   FormIntent,
   ConfirmIntent,
@@ -21,21 +21,21 @@ export * from "./types"
 export namespace Intent {
   const log = Log.create({ service: "intent" })
 
+  export const IntentInfo = IntentInfoSchema
+  export const IntentResponse = IntentResponseSchema
+
   // ============================================================================
   // Events
   // ============================================================================
 
   export const Event = {
-    /** Emitted when a new intent is created (TUI should show dialog) */
-    Updated: BusEvent.define("intent.updated", IntentInfo),
-
-    /** Emitted when user responds (internal, for cleanup) */
+    Updated: BusEvent.define("intent.updated", IntentInfoSchema),
     Replied: BusEvent.define(
       "intent.replied",
       z.object({
         sessionID: z.string(),
         intentID: z.string(),
-        response: IntentResponse,
+        response: IntentResponseSchema,
       }),
     ),
   }
@@ -66,8 +66,8 @@ export namespace Intent {
   // ============================================================================
 
   type PendingIntent = {
-    info: z.infer<typeof IntentInfo>
-    resolve: (response: z.infer<typeof IntentResponse>) => void
+    info: z.infer<typeof IntentInfoSchema>
+    resolve: (response: z.infer<typeof IntentResponseSchema>) => void
     reject: (error: Error) => void
   }
 
@@ -106,24 +106,25 @@ export namespace Intent {
    * For toast intents, returns immediately (non-blocking).
    */
   export async function request(input: {
-    intent: z.infer<typeof IntentType>
+    intent: z.input<typeof IntentType>
     sessionID: string
     messageID: string
     callID?: string
     source?: "core" | "plugin"
     plugin?: string
     timeout?: number
-  }): Promise<z.infer<typeof IntentResponse>> {
+  }): Promise<z.infer<typeof IntentResponseSchema>> {
     const id = Identifier.ascending("intent")
+    const parsedIntent = IntentType.parse(input.intent)
 
-    const info: z.infer<typeof IntentInfo> = {
+    const info: z.infer<typeof IntentInfoSchema> = {
       id,
       sessionID: input.sessionID,
       messageID: input.messageID,
       callID: input.callID,
       source: input.source ?? "core",
       plugin: input.plugin,
-      intent: input.intent,
+      intent: parsedIntent,
       time: {
         created: Date.now(),
       },
@@ -147,7 +148,7 @@ export namespace Intent {
       pending[input.sessionID] = {}
     }
 
-    return new Promise<z.infer<typeof IntentResponse>>((resolve, reject) => {
+    return new Promise<z.infer<typeof IntentResponseSchema>>((resolve, reject) => {
       // Store pending intent
       pending[input.sessionID][id] = {
         info,
@@ -184,7 +185,7 @@ export namespace Intent {
   export function respond(input: {
     sessionID: string
     intentID: string
-    response: z.infer<typeof IntentResponse>
+    response: z.infer<typeof IntentResponseSchema>
   }): boolean {
     const { pending } = state()
     const p = pending[input.sessionID]?.[input.intentID]
@@ -233,7 +234,7 @@ export namespace Intent {
   /**
    * List all pending intents (for a session or all).
    */
-  export function list(sessionID?: string): z.infer<typeof IntentInfo>[] {
+  export function list(sessionID?: string): z.infer<typeof IntentInfoSchema>[] {
     const { pending } = state()
     if (sessionID) {
       return Object.values(pending[sessionID] ?? {}).map((p) => p.info)
@@ -273,7 +274,7 @@ export namespace Intent {
    * Show a form and return field values.
    */
   export async function form(
-    input: Omit<z.infer<typeof FormIntent>, "type"> & {
+    input: Omit<z.input<typeof FormIntent>, "type"> & {
       sessionID: string
       messageID: string
       callID?: string
@@ -306,7 +307,7 @@ export namespace Intent {
    * Show a confirmation dialog and return boolean.
    */
   export async function confirm(
-    input: Omit<z.infer<typeof ConfirmIntent>, "type"> & {
+    input: Omit<z.input<typeof ConfirmIntent>, "type"> & {
       sessionID: string
       messageID: string
       callID?: string
@@ -332,7 +333,7 @@ export namespace Intent {
    * Show a select dialog and return selected value.
    */
   export async function select(
-    input: Omit<z.infer<typeof SelectIntent>, "type"> & {
+    input: Omit<z.input<typeof SelectIntent>, "type"> & {
       sessionID: string
       messageID: string
       callID?: string
@@ -362,7 +363,7 @@ export namespace Intent {
    * Show a multiselect dialog and return selected values.
    */
   export async function multiselect(
-    input: Omit<z.infer<typeof MultiSelectIntent>, "type"> & {
+    input: Omit<z.input<typeof MultiSelectIntent>, "type"> & {
       sessionID: string
       messageID: string
       callID?: string
@@ -392,7 +393,7 @@ export namespace Intent {
    * Show a non-blocking toast notification.
    */
   export async function toast(
-    input: Omit<z.infer<typeof ToastIntent>, "type"> & {
+    input: Omit<z.input<typeof ToastIntent>, "type"> & {
       sessionID: string
       messageID: string
       callID?: string

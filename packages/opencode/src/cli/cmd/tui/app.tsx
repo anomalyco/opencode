@@ -28,7 +28,9 @@ import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
+import { Intent, type IntentInfo } from "@/intent"
 import { TuiEvent } from "./event"
+import { DialogIntent } from "@tui/component/dialog-intent"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
@@ -554,6 +556,20 @@ function App() {
       type: "session",
       sessionID: evt.properties.sessionID,
     })
+  })
+
+  sdk.event.on(Intent.Event.Updated.type as any, (evt: any) => {
+    const info = evt.properties as IntentInfo
+    if (info.intent.type === "toast") {
+      toast.show({
+        title: undefined,
+        message: info.intent.message,
+        variant: info.intent.variant ?? "info",
+        duration: info.intent.duration ?? 5000,
+      })
+      return
+    }
+    DialogIntent.show(dialog, info)
   })
 
   sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {

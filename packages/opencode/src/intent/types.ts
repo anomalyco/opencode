@@ -77,17 +77,17 @@ export const FormIntent = z.object({
   title: z.string(),
   description: z.string().optional(),
   fields: z.array(FormField).min(1).max(10),
-  submitLabel: z.string().default("Submit"),
-  cancelLabel: z.string().default("Cancel"),
+  submitLabel: z.string().optional().default("Submit"),
+  cancelLabel: z.string().optional().default("Cancel"),
 })
 
 export const ConfirmIntent = z.object({
   type: z.literal("confirm"),
   title: z.string(),
   message: z.string(),
-  confirmLabel: z.string().default("Yes"),
-  cancelLabel: z.string().default("No"),
-  variant: z.enum(["info", "warning", "danger"]).default("info"),
+  confirmLabel: z.string().optional().default("Yes"),
+  cancelLabel: z.string().optional().default("No"),
+  variant: z.enum(["info", "warning", "danger"]).optional().default("info"),
 })
 
 // Standalone select (for simple single-question use)
@@ -114,8 +114,8 @@ export const MultiSelectIntent = z.object({
 export const ToastIntent = z.object({
   type: z.literal("toast"),
   message: z.string(),
-  variant: z.enum(["info", "success", "warning", "error"]).default("info"),
-  duration: z.number().optional(), // ms, 0 = persistent until dismissed
+  variant: z.enum(["info", "success", "warning", "error"]).optional().default("info"),
+  duration: z.number().optional(),
 })
 
 // Note: progress primitive deferred to future PR - implementation unclear

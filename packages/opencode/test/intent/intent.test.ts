@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Intent } from "../../src/intent"
+import { Intent, type IntentInfo } from "../../src/intent"
 import { Bus } from "../../src/bus"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
@@ -220,7 +220,7 @@ describe("intent", () => {
       directory: projectRoot,
       fn: async () => {
         let eventReceived = false
-        let receivedInfo: typeof Intent.IntentInfo._type | undefined
+        let receivedInfo: IntentInfo | undefined
 
         const unsub = Bus.subscribe(Intent.Event.Updated, (event) => {
           eventReceived = true
