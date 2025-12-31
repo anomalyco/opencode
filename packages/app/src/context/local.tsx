@@ -115,9 +115,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         createStore<{
           user: (ModelKey & { visibility: "show" | "hide"; favorite?: boolean })[]
           recent: ModelKey[]
+          variant?: Record<string, string | undefined>
         }>({
           user: [],
           recent: [],
+          variant: {},
         }),
       )
 
@@ -271,6 +273,45 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         setVisibility(model: ModelKey, visible: boolean) {
           updateVisibility(model, visible ? "show" : "hide")
+        },
+        variant: {
+          current() {
+            const m = current()
+            if (!m) return undefined
+            const key = `${m.provider.id}/${m.id}`
+            return store.variant?.[key]
+          },
+          list() {
+            const m = current()
+            if (!m) return []
+            if (!m.variants) return []
+            return Object.keys(m.variants)
+          },
+          set(value: string | undefined) {
+            const m = current()
+            if (!m) return
+            const key = `${m.provider.id}/${m.id}`
+            if (!store.variant) {
+              setStore("variant", { [key]: value })
+            } else {
+              setStore("variant", key, value)
+            }
+          },
+          cycle() {
+            const variants = this.list()
+            if (variants.length === 0) return
+            const currentVariant = this.current()
+            if (!currentVariant) {
+              this.set(variants[0])
+              return
+            }
+            const index = variants.indexOf(currentVariant)
+            if (index === -1 || index === variants.length - 1) {
+              this.set(undefined)
+              return
+            }
+            this.set(variants[index + 1])
+          },
         },
       }
     })()
