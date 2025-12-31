@@ -8976,13 +8976,26 @@
             "type": "string"
           },
           "template": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
           },
           "subtask": {
             "type": "boolean"
+          },
+          "hints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["name", "template"]
+        "required": ["name", "template", "hints"]
       },
       "Model": {
         "type": "object",
