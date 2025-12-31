@@ -63,7 +63,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         async sync(sessionID: string, _isRetry = false) {
           const [session, messages, todo, diff] = await Promise.all([
             retry(() => sdk.client.session.get({ sessionID })),
-            retry(() => sdk.client.session.messages({ sessionID, limit: 100 })),
+            retry(() => sdk.client.session.messages({ sessionID, limit: 1000 })),
             retry(() => sdk.client.session.todo({ sessionID })),
             retry(() => sdk.client.session.diff({ sessionID })),
           ])
