@@ -22,25 +22,39 @@ export namespace Filesystem {
     return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
   }
 
-  export function contains(parent: string, child: string) {
-    // First try with resolved real paths to prevent symlink escapes
-    try {
-      const realParent = realpathSync(parent)
-      const realChild = realpathSync(child)
-      const rel = relative(realParent, realChild)
-      // On Windows, check for cross-drive paths (e.g., "D:\..." from "C:\...")
-      if (process.platform === "win32" && /^[A-Za-z]:/.test(rel)) {
-        return false
-      }
-      return !rel.startsWith("..")
-    } catch {
-      // If realpath fails (e.g., file doesn't exist yet), fall back to lexical check
-      const rel = relative(parent, child)
-      if (process.platform === "win32" && /^[A-Za-z]:/.test(rel)) {
-        return false
-      }
-      return !rel.startsWith("..")
+  /**
+   * Check if a relative path is contained (doesn't escape via .. or cross-drive)
+   */
+  function isContained(rel: string): boolean {
+    // On Windows, check for cross-drive paths (e.g., "D:\..." from "C:\...")
+    if (process.platform === "win32" && /^[A-Za-z]:/.test(rel)) {
+      return false
     }
+    return !rel.startsWith("..")
+  }
+
+  export function contains(parent: string, child: string) {
+    // Try to resolve each path individually to prevent symlink escapes.
+    // Use resolved paths when available for maximum security.
+    let resolvedParent = parent
+    let resolvedChild = child
+
+    try {
+      resolvedParent = realpathSync(parent)
+    } catch {
+      // Parent doesn't exist or can't be resolved, use original
+    }
+
+    try {
+      resolvedChild = realpathSync(child)
+    } catch {
+      // Child doesn't exist yet (common for new files), use original
+      // But if parent was resolved, still use resolved parent for safety
+    }
+
+    // Use the best available paths (resolved when possible)
+    const rel = relative(resolvedParent, resolvedChild)
+    return isContained(rel)
   }
 
   export async function findUp(target: string, start: string, stop?: string) {
