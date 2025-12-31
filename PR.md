@@ -241,6 +241,55 @@ See `MANUAL_TESTING.md` for step-by-step TUI testing instructions.
 
 7. **Separate `dialog-intent` vs reusing `dialog-select`** — Intentionally kept as separate components despite functional overlap. Analysis below.
 
+8. **Modal dialog vs inline input replacement** — Chose modal overlay rather than replacing the input area (Claude Code style). Analysis below.
+
+### Why Modal Dialog Instead of Inline Input Replacement
+
+Claude Code replaces the input textarea with the question UI, keeping the user "in flow" with the conversation. We considered this but chose a modal dialog instead.
+
+#### Approach Comparison
+
+| Aspect | Modal Dialog (This PR) | Inline Replacement (Claude Code) |
+|--------|------------------------|----------------------------------|
+| **Context visibility** | Obscures conversation | Conversation visible |
+| **User mental model** | "I'm answering a question" | "I'm continuing the conversation" |
+| **Complex forms** | ✅ Multiple fields, selects, conditions | ❌ Awkward for multi-field |
+| **Implementation** | New component, self-contained | Modify input component state machine |
+| **Partial input handling** | N/A (separate UI) | Must save/restore draft text |
+| **Escape behavior** | Close modal, cancel intent | Unclear—restore input? Cancel? |
+
+#### Why Modal Fits OpenCode
+
+1. **Consistent with existing UI** — OpenCode already uses modals for:
+   - Model picker (`Ctrl+K`)
+   - Command palette (`Ctrl+P`)
+   - Session list, theme picker, MCP config
+   - All 14 existing dialog components
+   
+   Adding another modal is expected behavior. Inline replacement would be the outlier.
+
+2. **Supports all intent types** — Modal naturally handles:
+   - `confirm` — Yes/No buttons
+   - `select` — Option list with keyboard nav
+   - `multiselect` — Checkboxes with space to toggle
+   - `form` — Multiple fields with conditions
+   
+   Inline replacement works well for simple text input but becomes awkward for structured selection UI.
+
+3. **Clear escape hatch** — `Esc` closes modal and cancels the intent. With inline replacement, the semantics are muddier—does Esc restore the previous input? Cancel the whole operation? Users would need to learn new behavior.
+
+4. **Implementation isolation** — Modal is a new component (`dialog-intent.tsx`) with no coupling to the input system. Inline replacement would require:
+   - Modifying input component to accept "replacement" mode
+   - Saving/restoring partial user input
+   - Handling edge cases (what if user was mid-edit?)
+   - Changes to focus management
+
+#### Future Consideration
+
+Inline replacement could be offered as an **optional UX mode** in a future PR if users prefer the Claude Code style. This would be additive—the modal implementation provides a working baseline, and inline could be added as `intent.display: "inline" | "modal"` in config.
+
+This keeps the current PR focused on the Intent API and plugin integration, deferring UX experimentation to a separate effort.
+
 ### Why dialog-intent is a Separate Component
 
 We considered three options for the TUI dialog implementation:
