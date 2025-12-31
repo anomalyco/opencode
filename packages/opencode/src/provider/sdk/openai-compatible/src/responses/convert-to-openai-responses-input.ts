@@ -224,9 +224,10 @@ export async function convertToOpenAIResponsesInput({
                   }
 
                   if (reasoningMessage === undefined) {
+                    // When store is false, don't include the id field as third-party APIs
+                    // don't support OpenAI's item_reference mechanism
                     reasoningMessages[reasoningId] = {
                       type: "reasoning",
-                      id: reasoningId,
                       encrypted_content: providerOptions?.reasoningEncryptedContent,
                       summary: summaryParts,
                     }
