@@ -26,18 +26,37 @@ function ensureDir(dir: string) {
   return fs.mkdir(dir, { recursive: true }).catch((err) => {
     if (err.code === "EACCES") {
       const parent = path.dirname(dir)
-      console.error(`
-Error: Permission denied creating directory: ${dir}
+      const isWindows = process.platform === "win32"
 
-The parent directory "${parent}" exists but opencode cannot write to it.
-This can happen when another application created it with restrictive permissions.
+      const remediation = isWindows
+        ? [
+            "On Windows, adjust the folder permissions so your user can write to it.",
+            "For example, in an elevated PowerShell prompt you can run:",
+            `  icacls "${parent}" /grant "${process.env.USERNAME}:(OI)(CI)M" /T`,
+          ].join("\n")
+        : [
+            "To fix this on Unix-like systems, run:",
+            `  sudo chown -R $(whoami) "${parent}"`,
+          ].join("\n")
 
-To fix this, run:
-  sudo chown -R $(whoami) ${parent}
+      const dataDirInstruction = isWindows
+        ? '  $env:XDG_DATA_HOME="$HOME\\.opencode-data"'
+        : '  export XDG_DATA_HOME="$HOME/.opencode-data"'
 
-Or set a custom data directory:
-  export XDG_DATA_HOME=~/.opencode-data
-`)
+      const message = [
+        `Error: Permission denied creating directory: ${dir}`,
+        "",
+        `The parent directory "${parent}" exists but opencode cannot write to it.`,
+        "This can happen when another application created it with restrictive permissions.",
+        "",
+        remediation,
+        "",
+        "Or set a custom data directory:",
+        dataDirInstruction,
+        "",
+      ].join("\n")
+
+      console.error(message)
       process.exit(1)
     }
     throw err
