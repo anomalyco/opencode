@@ -230,7 +230,6 @@ export namespace ProviderTransform {
     const id = model.id.toLowerCase()
     if (id.includes("qwen")) return 1
     if (id.includes("minimax-m2")) {
-      if (id.includes("m2.1")) return 0.9
       return 0.95
     }
     if (id.includes("gemini")) return 0.95
@@ -239,7 +238,10 @@ export namespace ProviderTransform {
 
   export function topK(model: Provider.Model) {
     const id = model.id.toLowerCase()
-    if (id.includes("minimax-m2")) return 20
+    if (id.includes("minimax-m2")) {
+      if (id.includes("m2.1")) return 40
+      return 20
+    }
     if (id.includes("gemini")) return 64
     return undefined
   }
