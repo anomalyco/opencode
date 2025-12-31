@@ -18,6 +18,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { BusEvent } from "../bus/bus-event"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -134,11 +135,6 @@ export namespace Config {
       result.share = "auto"
     }
 
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
-
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
     // Apply flag overrides for compaction settings
@@ -149,9 +145,24 @@ export namespace Config {
       result.compaction = { ...result.compaction, prune: false }
     }
 
+    // Collect warnings for unknown keybind names
+    const warnings: Warning[] = []
+    if (result.keybinds) {
+      const unknownKeybinds = Object.keys(result.keybinds).filter(
+        (key) => key !== "leader" && !ValidKeybindNames.has(key),
+      )
+      if (unknownKeybinds.length > 0) {
+        warnings.push({
+          type: "unknown_keybind",
+          message: `Unknown keybind command(s): ${unknownKeybinds.join(", ")}`,
+        })
+      }
+    }
+
     return {
       config: result,
       directories,
+      warnings,
     }
   })
 
@@ -581,10 +592,25 @@ export namespace Config {
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
     })
-    .strict()
+    .passthrough()
     .meta({
       ref: "KeybindsConfig",
     })
+
+  // Set of valid keybind names for validation
+  export const ValidKeybindNames = new Set(Object.keys(Keybinds.shape).filter((key) => key !== "leader"))
+
+  export const Warning = z
+    .object({
+      type: z.enum(["unknown_keybind"]),
+      message: z.string(),
+    })
+    .meta({ ref: "ConfigWarning" })
+  export type Warning = z.infer<typeof Warning>
+
+  export const Event = {
+    Warning: BusEvent.define("config.warning", Warning),
+  }
 
   export const TUI = z.object({
     scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
@@ -1022,5 +1048,9 @@ export namespace Config {
 
   export async function directories() {
     return state().then((x) => x.directories)
+  }
+
+  export async function warnings() {
+    return state().then((x) => x.warnings)
   }
 }

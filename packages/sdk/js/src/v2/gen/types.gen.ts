@@ -39,6 +39,16 @@ export type EventProjectUpdated = {
   properties: Project
 }
 
+export type ConfigWarning = {
+  type: "unknown_keybind"
+  message: string
+}
+
+export type EventConfigWarning = {
+  type: "config.warning"
+  properties: ConfigWarning
+}
+
 export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
@@ -749,6 +759,7 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
+  | EventConfigWarning
   | EventServerInstanceDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
@@ -2305,6 +2316,24 @@ export type ConfigUpdateResponses = {
 }
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
+
+export type ConfigWarningsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/config/warnings"
+}
+
+export type ConfigWarningsResponses = {
+  /**
+   * List of configuration warnings
+   */
+  200: Array<ConfigWarning>
+}
+
+export type ConfigWarningsResponse = ConfigWarningsResponses[keyof ConfigWarningsResponses]
 
 export type ToolIdsData = {
   body?: never

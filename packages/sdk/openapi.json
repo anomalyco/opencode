@@ -678,6 +678,43 @@
         ]
       }
     },
+    "/config/warnings": {
+      "get": {
+        "operationId": "config.warnings",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get configuration warnings",
+        "description": "Retrieve any warnings generated during configuration loading, such as unknown keybind commands.",
+        "responses": {
+          "200": {
+            "description": "List of configuration warnings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConfigWarning"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.config.warnings({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/tool/ids": {
       "get": {
         "operationId": "tool.ids",
@@ -5149,6 +5186,32 @@
         },
         "required": ["type", "properties"]
       },
+      "ConfigWarning": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["unknown_keybind"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "message"]
+      },
+      "Event.config.warning": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "config.warning"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/ConfigWarning"
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.server.instance.disposed": {
         "type": "object",
         "properties": {
@@ -7165,6 +7228,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.project.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.config.warning"
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"

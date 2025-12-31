@@ -472,6 +472,28 @@ export namespace Server {
         },
       )
       .get(
+        "/config/warnings",
+        describeRoute({
+          summary: "Get configuration warnings",
+          description:
+            "Retrieve any warnings generated during configuration loading, such as unknown keybind commands.",
+          operationId: "config.warnings",
+          responses: {
+            200: {
+              description: "List of configuration warnings",
+              content: {
+                "application/json": {
+                  schema: resolver(Config.Warning.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await Config.warnings())
+        },
+      )
+      .get(
         "/experimental/tool/ids",
         describeRoute({
           summary: "List tool IDs",

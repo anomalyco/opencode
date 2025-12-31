@@ -627,3 +627,55 @@ test("compaction config can disable both auto and prune", async () => {
     },
   })
 })
+
+test("unknown keybind names generate warnings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          keybinds: {
+            unknown_command: "ctrl+x",
+            another_fake_command: "ctrl+y",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const warnings = await Config.warnings()
+      expect(warnings.length).toBe(1)
+      expect(warnings[0].type).toBe("unknown_keybind")
+      expect(warnings[0].message).toContain("unknown_command")
+      expect(warnings[0].message).toContain("another_fake_command")
+    },
+  })
+})
+
+test("valid keybind names do not generate warnings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          keybinds: {
+            leader: "ctrl+x",
+            app_exit: "ctrl+q",
+            session_new: "ctrl+n",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const warnings = await Config.warnings()
+      expect(warnings.length).toBe(0)
+    },
+  })
+})
