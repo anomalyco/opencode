@@ -135,6 +135,11 @@ export namespace Config {
       result.share = "auto"
     }
 
+    // Handle migration from autoshare to share field
+    if (result.autoshare === true && !result.share) {
+      result.share = "auto"
+    }
+
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
     // Apply flag overrides for compaction settings
