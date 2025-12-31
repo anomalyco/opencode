@@ -66,6 +66,7 @@
     "@ai-sdk/provider": "2.0.0",
     "@ai-sdk/provider-utils": "3.0.19",
     "@ai-sdk/togetherai": "1.0.30",
+    "@ai-sdk/vercel": "1.0.31",
     "@ai-sdk/xai": "2.0.42",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
