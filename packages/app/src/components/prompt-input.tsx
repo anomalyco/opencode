@@ -16,7 +16,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectModel } from "@/components/dialog-select-model"
+import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
@@ -1367,20 +1367,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                   />
                 </TooltipKeybind>
-                <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
-                  <Button
-                    as="div"
-                    variant="ghost"
-                    onClick={() =>
-                      dialog.show(() =>
-                        providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
-                      )
-                    }
-                  >
-                    {local.model.current()?.name ?? "Select model"}
-                    <Icon name="chevron-down" size="small" />
-                  </Button>
-                </TooltipKeybind>
+                <Show
+                  when={providers.paid().length > 0}
+                  fallback={
+                    <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
+                      <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
+                        {local.model.current()?.name ?? "Select model"}
+                        <Icon name="chevron-down" size="small" />
+                      </Button>
+                    </TooltipKeybind>
+                  }
+                >
+                  <ModelSelectorPopover>
+                    <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
+                      <Button as="div" variant="ghost">
+                        {local.model.current()?.name ?? "Select model"}
+                        <Icon name="chevron-down" size="small" />
+                      </Button>
+                    </TooltipKeybind>
+                  </ModelSelectorPopover>
+                </Show>
                 <Show when={local.model.variant.list().length > 0}>
                   <TooltipKeybind
                     placement="top"
