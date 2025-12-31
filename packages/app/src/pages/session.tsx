@@ -742,6 +742,8 @@ export default function Page() {
                 <div class="relative h-full mt-6 overflow-y-auto no-scrollbar">
                   <SessionReview
                     diffs={diffs()}
+                    diffStyle={layout.review.diffStyle()}
+                    onDiffStyleChange={layout.review.setDiffStyle}
                     classes={{
                       root: "pb-32",
                       header: "px-4",
@@ -867,7 +869,8 @@ export default function Page() {
                           container: "px-6",
                         }}
                         diffs={diffs()}
-                        split
+                        diffStyle={layout.review.diffStyle()}
+                        onDiffStyleChange={layout.review.setDiffStyle}
                       />
                     </div>
                   </Tabs.Content>
