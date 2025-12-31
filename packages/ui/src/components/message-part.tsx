@@ -874,7 +874,6 @@ ToolRegistry.register({
     return (
       <BasicTool
         {...props}
-        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="edit-trigger">
@@ -926,7 +925,6 @@ ToolRegistry.register({
     return (
       <BasicTool
         {...props}
-        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="write-trigger">
