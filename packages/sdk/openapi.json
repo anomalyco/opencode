@@ -8982,6 +8982,9 @@
           "model": {
             "type": "string"
           },
+          "mcp": {
+            "type": "boolean"
+          },
           "template": {
             "anyOf": [
               {

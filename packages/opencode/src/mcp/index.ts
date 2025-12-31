@@ -195,7 +195,7 @@ export namespace MCP {
     for (const prompt of prompts.prompts) {
       const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
       const sanitizedPromptName = prompt.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-      const key = sanitizedClientName + ":" + sanitizedPromptName + " (MCP)"
+      const key = sanitizedClientName + ":" + sanitizedPromptName
 
       commands[key] = { ...prompt, client: clientName }
     }
