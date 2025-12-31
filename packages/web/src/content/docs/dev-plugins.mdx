@@ -56,12 +56,17 @@ export const EventPlugin: Plugin = async (ctx) => {
   return {
     event: async ({ event }) => {
       if (event.type === "session.idle") {
-        // Session finished processing
+        // Send notification on session completion
+        await ctx.$`osascript -e 'display notification "Session completed!" with title "OpenCode"'`
       }
     },
   }
 }
 ```
+
+:::note
+If you're using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.
+:::
 
 Events are named `{group}.{event}`, e.g. `session.idle` or `file.edited`. OpenCode emits four types of events:
 

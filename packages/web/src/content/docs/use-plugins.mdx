@@ -31,7 +31,39 @@ Place JavaScript or TypeScript files in the plugin directory.
 - `.opencode/plugin/` - Project-level plugins
 - `~/.config/opencode/plugin/` - Global plugins
 
-Files in these directories are automatically loaded at startup. Dependencies are not installed automatically - if your local plugin requires external packages, publish it to npm instead.
+Files in these directories are automatically loaded at startup.
+
+---
+
+## Dependencies
+
+Local plugins can use external npm packages. Add a `package.json` to your config directory with the dependencies you need.
+
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode runs `bun install` at startup to install these. Your plugins can then import them.
+
+```ts title=".opencode/plugin/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
+
+Alternatively, publish your plugin to npm and [add it to your config](/docs/config#plugins).
 
 ---
 
