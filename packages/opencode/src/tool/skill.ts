@@ -26,20 +26,25 @@ export const SkillTool: Tool.Info<typeof parameters> = {
       })
     }
 
+    const description =
+      accessibleSkills.length === 0
+        ? "Load a skill to get detailed instructions for a specific task. No skills are currently available."
+        : [
+            "Load a skill to get detailed instructions for a specific task.",
+            "Skills provide specialized knowledge and step-by-step guidance.",
+            "Use this when a task matches an available skill's description.",
+            "<available_skills>",
+            ...accessibleSkills.flatMap((skill) => [
+              `  <skill>`,
+              `    <name>${skill.name}</name>`,
+              `    <description>${skill.description}</description>`,
+              `  </skill>`,
+            ]),
+            "</available_skills>",
+          ].join(" ")
+
     return {
-      description: [
-        "Load a skill to get detailed instructions for a specific task.",
-        "Skills provide specialized knowledge and step-by-step guidance.",
-        "Use this when a task matches an available skill's description.",
-        "<available_skills>",
-        ...accessibleSkills.flatMap((skill) => [
-          `  <skill>`,
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `  </skill>`,
-        ]),
-        "</available_skills>",
-      ].join(" "),
+      description,
       parameters,
       async execute(params, ctx) {
         const agent = await Agent.get(ctx.agent)

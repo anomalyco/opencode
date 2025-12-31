@@ -12,6 +12,38 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
 
+function removeLineRange(input: string) {
+  const hashIndex = input.lastIndexOf("#")
+  return hashIndex !== -1 ? input.substring(0, hashIndex) : input
+}
+
+function extractLineRange(input: string) {
+  const hashIndex = input.lastIndexOf("#")
+  if (hashIndex === -1) {
+    return { baseQuery: input }
+  }
+
+  const baseName = input.substring(0, hashIndex)
+  const linePart = input.substring(hashIndex + 1)
+  const lineMatch = linePart.match(/^(\d+)(?:-(\d*))?$/)
+
+  if (!lineMatch) {
+    return { baseQuery: baseName }
+  }
+
+  const startLine = Number(lineMatch[1])
+  const endLine = lineMatch[2] && startLine < Number(lineMatch[2]) ? Number(lineMatch[2]) : undefined
+
+  return {
+    lineRange: {
+      baseName,
+      startLine,
+      endLine,
+    },
+    baseQuery: baseName,
+  }
+}
+
 export type AutocompleteRef = {
   onInput: (value: string) => void
   onKeyDown: (e: KeyEvent) => void
@@ -142,9 +174,11 @@ export function Autocomplete(props: {
     async (query) => {
       if (!store.visible || store.visible === "/") return []
 
+      const { lineRange, baseQuery } = extractLineRange(query ?? "")
+
       // Get files from SDK
       const result = await sdk.client.find.files({
-        query: query ?? "",
+        query: baseQuery,
       })
 
       const options: AutocompleteOption[] = []
@@ -153,15 +187,27 @@ export function Autocomplete(props: {
       if (!result.error && result.data) {
         const width = props.anchor().width - 4
         options.push(
-          ...result.data.map(
-            (item): AutocompleteOption => ({
-              display: Locale.truncateMiddle(item, width),
+          ...result.data.map((item): AutocompleteOption => {
+            let url = `file://${process.cwd()}/${item}`
+            let filename = item
+            if (lineRange && !item.endsWith("/")) {
+              filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+              const urlObj = new URL(url)
+              urlObj.searchParams.set("start", String(lineRange.startLine))
+              if (lineRange.endLine !== undefined) {
+                urlObj.searchParams.set("end", String(lineRange.endLine))
+              }
+              url = urlObj.toString()
+            }
+
+            return {
+              display: Locale.truncateMiddle(filename, width),
               onSelect: () => {
-                insertPart(item, {
+                insertPart(filename, {
                   type: "file",
                   mime: "text/plain",
-                  filename: item,
-                  url: `file://${process.cwd()}/${item}`,
+                  filename,
+                  url,
                   source: {
                     type: "file",
                     text: {
@@ -173,8 +219,8 @@ export function Autocomplete(props: {
                   },
                 })
               },
-            }),
-          ),
+            }
+          }),
         )
       }
 
@@ -383,8 +429,8 @@ export function Autocomplete(props: {
       return prev
     }
 
-    const result = fuzzysort.go(currentFilter, mixed, {
-      keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+    const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
+      keys: [(obj) => removeLineRange(obj.display.trimEnd()), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]

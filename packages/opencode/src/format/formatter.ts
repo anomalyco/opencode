@@ -322,3 +322,21 @@ export const shfmt: Info = {
     return Bun.which("shfmt") !== null
   },
 }
+
+export const nixfmt: Info = {
+  name: "nixfmt",
+  command: ["nixfmt", "$FILE"],
+  extensions: [".nix"],
+  async enabled() {
+    return Bun.which("nixfmt") !== null
+  },
+}
+
+export const rustfmt: Info = {
+  name: "rustfmt",
+  command: ["rustfmt", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    return Bun.which("rustfmt") !== null
+  },
+}

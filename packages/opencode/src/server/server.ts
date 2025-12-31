@@ -45,7 +45,6 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
-import type { BunWebSocketData } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
@@ -56,6 +55,13 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+
+  let _url: URL | undefined
+  let _corsWhitelist: string[] = []
+
+  export function url(): URL {
+    return _url ?? new URL("http://localhost:4096")
+  }
 
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
@@ -98,7 +104,27 @@ export namespace Server {
           timer.stop()
         }
       })
-      .use(cors())
+      .use(
+        cors({
+          origin(input) {
+            if (!input) return
+
+            if (input.startsWith("http://localhost:")) return input
+            if (input.startsWith("http://127.0.0.1:")) return input
+            if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
+
+            // *.opencode.ai (https only, adjust if needed)
+            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
+              return input
+            }
+            if (_corsWhitelist.includes(input)) {
+              return input
+            }
+
+            return
+          },
+        }),
+      )
       .get(
         "/global/health",
         describeRoute({
@@ -1084,6 +1110,8 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          const session = await Session.get(sessionID)
+          await SessionRevert.cleanup(session)
           const msgs = await Session.messages({ sessionID })
           let currentAgent = await Agent.defaultAgent()
           for (let i = msgs.length - 1; i >= 0; i--) {
@@ -1531,6 +1559,28 @@ export namespace Server {
         },
       )
       .get(
+        "/permission",
+        describeRoute({
+          summary: "List pending permissions",
+          description: "Get all pending permission requests across all sessions.",
+          operationId: "permission.list",
+          responses: {
+            200: {
+              description: "List of pending permissions",
+              content: {
+                "application/json": {
+                  schema: resolver(Permission.Info.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const permissions = Permission.list()
+          return c.json(permissions)
+        },
+      )
+      .get(
         "/command",
         describeRoute({
           summary: "List commands",
@@ -1771,7 +1821,7 @@ export namespace Server {
         "/find/file",
         describeRoute({
           summary: "Find files",
-          description: "Search for files by name or pattern in the project directory.",
+          description: "Search for files or directories by name or pattern in the project directory.",
           operationId: "find.files",
           responses: {
             200: {
@@ -1789,15 +1839,20 @@ export namespace Server {
           z.object({
             query: z.string(),
             dirs: z.enum(["true", "false"]).optional(),
+            type: z.enum(["file", "directory"]).optional(),
+            limit: z.coerce.number().int().min(1).max(200).optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query").query
           const dirs = c.req.valid("query").dirs
+          const type = c.req.valid("query").type
+          const limit = c.req.valid("query").limit
           const results = await File.search({
             query,
-            limit: 10,
+            limit: limit ?? 10,
             dirs: dirs !== "false",
+            type,
           })
           return c.json(results)
         },
@@ -2625,7 +2680,9 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+    _corsWhitelist = opts.cors ?? []
+
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
@@ -2641,6 +2698,8 @@ export namespace Server {
     }
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
+
+    _url = server.url
 
     const shouldPublishMDNS =
       opts.mdns &&

@@ -1,5 +1,4 @@
 import { createMemo, Show } from "solid-js"
-import { Icon } from "@opencode-ai/ui/icon"
 import { useSync } from "@/context/sync"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 
@@ -24,12 +23,11 @@ export function SessionLspIndicator() {
     <Show when={lspStats().total > 0}>
       <Tooltip placement="top" value={tooltipContent()}>
         <div class="flex items-center gap-1 px-2 cursor-default select-none">
-          <Icon
-            name="code"
-            size="small"
+          <div
             classList={{
-              "text-icon-critical-base": lspStats().hasError,
-              "text-icon-success-base": !lspStats().hasError && lspStats().connected > 0,
+              "size-1.5 rounded-full": true,
+              "bg-icon-critical-base": lspStats().hasError,
+              "bg-icon-success-base": !lspStats().hasError && lspStats().connected > 0,
             }}
           />
           <span class="text-12-regular text-text-weak">{lspStats().connected} LSP</span>
