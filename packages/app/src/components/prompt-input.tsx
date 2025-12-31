@@ -1155,6 +1155,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
+            parts: imageAttachmentParts,
           })
           .catch((e) => {
             console.error("Failed to send command", e)
