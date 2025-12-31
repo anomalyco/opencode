@@ -9,7 +9,7 @@
 }
 
 [data-slot="tooltip-keybind-key"] {
-  color: var(--icon-base);
+  color: var(--text-invert-base);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-large);
@@ -20,7 +20,7 @@
   max-width: 320px;
   border-radius: var(--radius-md);
   background-color: var(--surface-float-base);
-  color: var(--text-inverted-base);
+  color: var(--text-invert-strong);
   background: var(--surface-float-base);
   padding: 6px 12px;
   border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));

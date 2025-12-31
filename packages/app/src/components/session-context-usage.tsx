@@ -38,15 +38,15 @@ export function SessionContextUsage() {
             <div class="">
               <div class="flex items-center gap-2">
                 <span class="text-text-invert-strong">{ctx().tokens}</span>
-                <span class="text-text-invert-weak">Tokens</span>
+                <span class="text-text-invert-base">Tokens</span>
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-text-invert-strong">{ctx().percentage ?? 0}%</span>
-                <span class="text-text-invert-weak">Usage</span>
+                <span class="text-text-invert-base">Usage</span>
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-text-invert-strong">{cost()}</span>
-                <span class="text-text-invert-weak">Cost</span>
+                <span class="text-text-invert-base">Cost</span>
               </div>
             </div>
           }
