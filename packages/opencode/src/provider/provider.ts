@@ -1016,6 +1016,7 @@ export namespace Provider {
         "claude-haiku-4.5",
         "3-5-haiku",
         "3.5-haiku",
+        "gemini-3-flash",
         "gemini-2.5-flash",
         "gpt-5-nano",
       ]
