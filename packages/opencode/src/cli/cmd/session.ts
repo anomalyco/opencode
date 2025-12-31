@@ -9,19 +9,26 @@ import { EOL } from "os"
 import path from "path"
 
 function pagerCmd(): string[] {
+  const lessOptions = ["-R", "-S"]
   if (process.platform !== "win32") {
-    return ["less", "-R", "-S"]
+    return ["less", ...lessOptions]
+  }
+
+  // user could have less installed via other options
+  const lessOnPath = Bun.which("less")
+  if (lessOnPath) {
+    if (Bun.file(lessOnPath).size) return [lessOnPath, ...lessOptions]
   }
 
   if (Flag.OPENCODE_GIT_BASH_PATH) {
     const less = path.join(Flag.OPENCODE_GIT_BASH_PATH, "..", "..", "usr", "bin", "less.exe")
-    if (Bun.file(less).size) return [less, "-R", "-S"]
+    if (Bun.file(less).size) return [less, ...lessOptions]
   }
 
   const git = Bun.which("git")
   if (git) {
     const less = path.join(git, "..", "..", "usr", "bin", "less.exe")
-    if (Bun.file(less).size) return [less, "-R", "-S"]
+    if (Bun.file(less).size) return [less, ...lessOptions]
   }
 
   // Fall back to Windows built-in more (via cmd.exe)
