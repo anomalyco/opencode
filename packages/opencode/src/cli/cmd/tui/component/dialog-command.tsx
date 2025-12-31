@@ -11,6 +11,8 @@ import {
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
+import { useToast } from "@tui/ui/toast"
+import { useSync } from "@tui/context/sync"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 type Context = ReturnType<typeof init>
@@ -26,6 +28,8 @@ function init() {
   const [suspendCount, setSuspendCount] = createSignal(0)
   const dialog = useDialog()
   const keybind = useKeybind()
+  const toast = useToast()
+  const sync = useSync()
   const options = createMemo(() => {
     const all = registrations().flatMap((x) => x())
     const suggested = all.filter((x) => x.suggested)
@@ -43,6 +47,15 @@ function init() {
   })
   const suspended = () => suspendCount() > 0
 
+  // Get the set of keybind names that have registered commands
+  const registeredKeybinds = createMemo(() => {
+    const set = new Set<string>()
+    for (const option of options()) {
+      if (option.keybind) set.add(option.keybind)
+    }
+    return set
+  })
+
   useKeyboard((evt) => {
     if (suspended()) return
     if (dialog.stack.length > 0) return
@@ -50,6 +63,23 @@ function init() {
       if (option.keybind && keybind.match(option.keybind, evt)) {
         evt.preventDefault()
         option.onSelect?.(dialog)
+        return
+      }
+    }
+
+    // Check if the pressed key matches an unknown keybind command
+    const allKeybinds = keybind.all
+    const registered = registeredKeybinds()
+    for (const [name, _] of Object.entries(allKeybinds)) {
+      if (name === "leader") continue
+      if (registered.has(name)) continue
+      if (keybind.match(name as keyof typeof sync.data.config.keybinds, evt)) {
+        evt.preventDefault()
+        toast.show({
+          variant: "warning",
+          message: `Unknown command: ${name}`,
+          duration: 3000,
+        })
         return
       }
     }
