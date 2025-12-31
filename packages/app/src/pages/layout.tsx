@@ -54,6 +54,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -88,6 +89,7 @@ export default function Layout(props: ParentProps) {
   const globalSync = useGlobalSync()
   const layout = useLayout()
   const platform = usePlatform()
+  const server = useServer()
   const notification = useNotification()
   const navigate = useNavigate()
   const providers = useProviders()
@@ -476,7 +478,7 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (platform.openDirectoryPickerDialog) {
+    if (platform.openDirectoryPickerDialog && server.isLocal()) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: "Open project",
         multiple: true,
