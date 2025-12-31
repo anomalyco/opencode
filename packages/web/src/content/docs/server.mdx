@@ -13,16 +13,23 @@ The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI
 ### Usage
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
 #### Options
 
-| Flag         | Description           | Default     |
-| ------------ | --------------------- | ----------- |
-| `--port`     | Port to listen on     | `4096`      |
-| `--hostname` | Hostname to listen on | `127.0.0.1` |
-| `--mdns`     | Enable mDNS discovery | `false`     |
+| Flag         | Description                         | Default     |
+| ------------ | ----------------------------------- | ----------- |
+| `--port`     | Port to listen on                   | `4096`      |
+| `--hostname` | Hostname to listen on               | `127.0.0.1` |
+| `--mdns`     | Enable mDNS discovery               | `false`     |
+| `--cors`     | Additional browser origins to allow | `[]`        |
+
+`--cors` can be passed multiple times:
+
+```bash
+opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
 
 ---
 
