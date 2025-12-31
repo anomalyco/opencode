@@ -30,7 +30,7 @@ scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
 brew install opencode              # macOS and Linux
 paru -S opencode-bin               # Arch Linux
-mise use -g github:sst/opencode # Any OS
+mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:sst/opencode for latest dev branch
 ```
 
