@@ -1408,7 +1408,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       classList={{
                         "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
                         "text-text-base": !permission.isAutoAccepting(params.id!),
-                        "bg-surface-success-base": permission.isAutoAccepting(params.id!),
+                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!),
                       }}
                     >
                       <Icon
