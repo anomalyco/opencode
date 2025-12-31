@@ -24,7 +24,7 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createOpenaiCompatible as createOpenaiCompatibleWithResponses } from "./sdk/openai-compatible/src"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -61,7 +61,7 @@ export namespace Provider {
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
-    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@ai-sdk/github-copilot": createOpenaiCompatibleWithResponses,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -70,6 +70,21 @@ export namespace Provider {
     getModel?: CustomModelLoader
     options?: Record<string, any>
   }>
+
+  const RESPONSES_MODELS_PREFIXES = ["gpt-4.1", "gpt-5", "o1", "o3", "o4"]
+  const shouldUseResponsesAPI = (modelID: string) => {
+    const id = modelID.split("/").pop()?.toLowerCase() ?? modelID.toLowerCase()
+    return RESPONSES_MODELS_PREFIXES.some((prefix) => id.startsWith(prefix))
+  }
+
+  const gatewayBase = (accountId: string, gateway: string) =>
+    `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}`
+  const gatewayBaseForModel = (accountId: string, gateway: string, modelID: string) => {
+    const namespace = modelID.split("/")[0]
+    if (namespace === "openai") return `${gatewayBase(accountId, gateway)}/openai`
+    if (namespace === "anthropic") return `${gatewayBase(accountId, gateway)}/anthropic`
+    return `${gatewayBase(accountId, gateway)}/compat`
+  }
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -371,13 +386,95 @@ export namespace Provider {
         return undefined
       })()
 
+      const hasCfAigAuthorizationHeader = (init?: unknown) => {
+        if (!init) return false
+        if (init instanceof Headers) return init.has("cf-aig-authorization")
+        if (Array.isArray(init)) {
+          for (const entry of init) {
+            if (!Array.isArray(entry)) continue
+            const [key] = entry
+            if (typeof key === "string" && key.toLowerCase() === "cf-aig-authorization") return true
+          }
+          return false
+        }
+        if (typeof init === "object" && init !== null) {
+          if (Symbol.iterator in (init as Record<string, unknown>)) {
+            for (const entry of init as Iterable<readonly [string, string]>) {
+              const [key] = entry
+              if (typeof key === "string" && key.toLowerCase() === "cf-aig-authorization") return true
+            }
+            return false
+          }
+          for (const key of Object.keys(init as Record<string, unknown>)) {
+            if (key.toLowerCase() === "cf-aig-authorization") return true
+          }
+        }
+        return false
+      }
+
+      const gatewayAuthHeaders = { value: input.options?.headers }
+
+      const sharedFetch: typeof fetch = Object.assign(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const headers = new Headers(gatewayAuthHeaders.value)
+          const requestHeaders = new Headers(init?.headers)
+          for (const [key, value] of requestHeaders.entries()) headers.set(key, value)
+          const shouldStripAuthorization =
+            Boolean(apiToken) ||
+            hasCfAigAuthorizationHeader(gatewayAuthHeaders.value) ||
+            hasCfAigAuthorizationHeader(headers)
+          if (shouldStripAuthorization) headers.delete("Authorization")
+          return fetch(input, { ...init, headers })
+        },
+        { preconnect: fetch.preconnect },
+      )
+
       return {
         autoload: true,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.chat(modelID)
+          const baseURL = gatewayBaseForModel(accountId, gateway, modelID)
+          const [namespace, ...rest] = modelID.split("/")
+          const wireModelID =
+            rest.length > 0 && (namespace === "openai" || namespace === "anthropic") ? rest.join("/") : modelID
+
+          gatewayAuthHeaders.value = _options?.headers ?? gatewayAuthHeaders.value
+
+          const opts: Record<string, any> = {
+            ..._options,
+            baseURL,
+            fetch: sharedFetch,
+          }
+
+          if (shouldUseResponsesAPI(modelID)) {
+            // Some models (gpt-5.x, o-series) only support the Responses API. Gateway's
+            // SDK may not expose `responses`, so create an OpenAI-compatible provider
+            // with the same options to force `/responses`.
+            const compat = createOpenaiCompatibleWithResponses({
+              name: input.id,
+              ...opts,
+            })
+            if (typeof compat.responses === "function") {
+              return compat.responses(wireModelID)
+            }
+
+            // Fallback: use the OpenAI provider (which exposes responses) with the same baseURL/headers/fetch.
+            const fallback = createOpenAI({
+              name: input.id,
+              apiKey: undefined,
+              baseURL,
+              headers: opts["headers"],
+              fetch: sharedFetch,
+            })
+            if (typeof fallback.responses === "function") {
+              return fallback.responses(wireModelID)
+            }
+          }
+          if (sdk.languageModel) return sdk.languageModel(wireModelID)
+          if (sdk.chat) return sdk.chat(wireModelID)
+          return sdk(wireModelID)
         },
         options: {
-          baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/compat`,
+          baseURL: `${gatewayBase(accountId, gateway)}/compat`,
           headers: {
             // Cloudflare AI Gateway uses cf-aig-authorization for authenticated gateways
             // This enables Unified Billing where Cloudflare handles upstream provider auth
@@ -386,12 +483,9 @@ export namespace Provider {
             "X-Title": "opencode",
           },
           // Custom fetch to strip Authorization header - AI Gateway uses cf-aig-authorization instead
-          // Sending Authorization header with invalid value causes auth errors
-          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-            const headers = new Headers(init?.headers)
-            headers.delete("Authorization")
-            return fetch(input, { ...init, headers })
-          },
+          // Sending Authorization header with invalid value causes auth errors. Preserve Authorization
+          // when no cf-aig-authorization is provided so upstream keys still work.
+          fetch: sharedFetch,
         },
       }
     },

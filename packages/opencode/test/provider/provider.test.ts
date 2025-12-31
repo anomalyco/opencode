@@ -1405,6 +1405,138 @@ test("model headers are preserved", async () => {
   })
 })
 
+test("cloudflare gateway strips Authorization when gateway auth configured", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "cloudflare-ai-gateway": {
+              models: {
+                "openai/gpt-4.1-mini": {
+                  name: "CF GPT-4.1 Mini",
+                  tool_call: true,
+                  limit: { context: 8000, output: 4000 },
+                },
+              },
+              options: {
+                headers: {
+                  "cf-aig-authorization": "Bearer config-token",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("CLOUDFLARE_ACCOUNT_ID", "acc")
+      Env.set("CLOUDFLARE_GATEWAY_ID", "gate")
+      Env.set("CLOUDFLARE_API_TOKEN", "")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const provider = providers["cloudflare-ai-gateway"]
+      expect(provider).toBeDefined()
+
+      const model = await Provider.getModel("cloudflare-ai-gateway", "openai/gpt-4.1-mini")
+      const fetchFn = provider.options.fetch as typeof fetch
+      const calls: Array<RequestInit | undefined> = []
+      const originalFetch = globalThis.fetch
+      try {
+        globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+          calls.push(init)
+          return Promise.resolve(new Response("ok"))
+        }) as typeof fetch
+
+        await Provider.getLanguage(model)
+        await fetchFn("https://example.com", {
+          headers: {
+            Authorization: "Bearer to-strip",
+          },
+        })
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+
+      const call = calls[calls.length - 1]
+      const headers = new Headers(call?.headers)
+      expect(headers.has("Authorization")).toBe(false)
+      expect(headers.get("cf-aig-authorization")).toBe("Bearer config-token")
+    },
+  })
+})
+
+test("cloudflare gateway keeps Authorization without gateway auth", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "cloudflare-ai-gateway": {
+              models: {
+                "openai/gpt-4.1-mini": {
+                  name: "CF GPT-4.1 Mini",
+                  tool_call: true,
+                  limit: { context: 8000, output: 4000 },
+                },
+              },
+              options: {},
+            },
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("CLOUDFLARE_ACCOUNT_ID", "acc")
+      Env.set("CLOUDFLARE_GATEWAY_ID", "gate")
+      Env.set("CLOUDFLARE_API_TOKEN", "")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const provider = providers["cloudflare-ai-gateway"]
+      expect(provider).toBeDefined()
+
+      const model = await Provider.getModel("cloudflare-ai-gateway", "openai/gpt-4.1-mini")
+      const fetchFn = provider.options.fetch as typeof fetch
+      const calls: Array<RequestInit | undefined> = []
+      const originalFetch = globalThis.fetch
+      try {
+        globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+          calls.push(init)
+          return Promise.resolve(new Response("ok"))
+        }) as typeof fetch
+
+        await Provider.getLanguage(model)
+        await fetchFn("https://example.com", {
+          headers: {
+            Authorization: "Bearer keep-me",
+          },
+        })
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+
+      const call = calls[calls.length - 1]
+      const headers = new Headers(call?.headers)
+      expect(headers.get("Authorization")).toBe("Bearer keep-me")
+      expect(headers.has("cf-aig-authorization")).toBe(false)
+    },
+  })
+})
+
 test("provider env fallback - second env var used if first missing", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
