@@ -556,11 +556,13 @@ export default function Page() {
       category: "Permissions",
       disabled: !params.id,
       onSelect: () => {
-        if (!params.id) return
-        permission.toggleAutoAccept(params.id)
+        const sessionID = params.id
+        if (!sessionID) return
+
+        permission.toggleAutoAccept(sessionID, sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(params.id) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
-          description: permission.isAutoAccepting(params.id)
+          title: permission.isAutoAccepting(sessionID) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(sessionID)
             ? "Edit and write permissions will be automatically approved"
             : "Edit and write permissions will require approval",
         })

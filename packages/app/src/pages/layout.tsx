@@ -45,6 +45,7 @@ import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
+import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -92,6 +93,7 @@ export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const server = useServer()
   const notification = useNotification()
+  const permission = usePermission()
   const navigate = useNavigate()
   const providers = useProviders()
   const dialog = useDialog()
@@ -160,28 +162,41 @@ export default function Layout(props: ParentProps) {
   })
 
   onMount(() => {
-    const seenSessions = new Set<string>()
     const toastBySession = new Map<string, number>()
+    const alertedAtBySession = new Map<string, number>()
+    const permissionAlertCooldownMs = 5000
+
     const unsub = globalSDK.event.listen((e) => {
       if (e.details?.type !== "permission.updated") return
       const directory = e.name
-      const permission = e.details.properties
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
-      const currentSession = params.id
+      const perm = e.details.properties
+      if (permission.autoResponds(perm)) return
+
+      const sessionKey = `${directory}:${perm.sessionID}`
       const [store] = globalSync.child(directory)
-      const session = store.session.find((s) => s.id === permission.sessionID)
+      const session = store.session.find((s) => s.id === perm.sessionID)
+
       const sessionTitle = session?.title ?? "New session"
       const projectName = getFilename(directory)
       const description = `${sessionTitle} in ${projectName} needs permission`
-      const href = `/${base64Encode(directory)}/session/${permission.sessionID}`
+      const href = `/${base64Encode(directory)}/session/${perm.sessionID}`
+
+      const now = Date.now()
+      const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
+      if (now - lastAlerted < permissionAlertCooldownMs) return
+      alertedAtBySession.set(sessionKey, now)
+
       void platform.notify("Permission required", description, href)
 
-      if (directory === currentDir && permission.sessionID === currentSession) return
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      if (directory === currentDir && perm.sessionID === currentSession) return
       if (directory === currentDir && session?.parentID === currentSession) return
 
-      const sessionKey = `${directory}:${permission.sessionID}`
-      if (seenSessions.has(sessionKey)) return
-      seenSessions.add(sessionKey)
+      const existingToastId = toastBySession.get(sessionKey)
+      if (existingToastId !== undefined) {
+        toaster.dismiss(existingToastId)
+      }
 
       const toastId = showToast({
         persistent: true,
@@ -214,7 +229,7 @@ export default function Layout(props: ParentProps) {
       if (toastId !== undefined) {
         toaster.dismiss(toastId)
         toastBySession.delete(sessionKey)
-        seenSessions.delete(sessionKey)
+        alertedAtBySession.delete(sessionKey)
       }
       const [store] = globalSync.child(currentDir)
       const childSessions = store.session.filter((s) => s.parentID === currentSession)
@@ -224,7 +239,7 @@ export default function Layout(props: ParentProps) {
         if (childToastId !== undefined) {
           toaster.dismiss(childToastId)
           toastBySession.delete(childKey)
-          seenSessions.delete(childKey)
+          alertedAtBySession.delete(childKey)
         }
       }
     })
