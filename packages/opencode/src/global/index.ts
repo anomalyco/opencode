@@ -10,6 +10,11 @@ const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
+async function isDirectory(p: string): Promise<boolean> {
+  const stat = await fs.stat(p).catch(() => undefined)
+  return stat?.isDirectory() ?? false
+}
+
 export namespace Global {
   export const Path = {
     // Allow override via OPENCODE_TEST_HOME for test isolation
@@ -22,6 +27,37 @@ export namespace Global {
     cache,
     config,
     state,
+  }
+
+  /**
+   * Returns the Claude config directory path using this priority:
+   * 1. CLAUDE_CONFIG_DIR environment variable (if set and is a directory)
+   * 2. ~/.config/claude (new default, if it exists as a directory)
+   * 3. ~/.claude (legacy, if it exists as a directory)
+   * 4. undefined if none exist
+   */
+  export async function claudeConfigDir(): Promise<string | undefined> {
+    // Check CLAUDE_CONFIG_DIR env var at runtime (not cached in Flag namespace)
+    const claudeEnvDir = process.env.CLAUDE_CONFIG_DIR
+    if (claudeEnvDir && (await isDirectory(claudeEnvDir))) {
+      return claudeEnvDir
+    }
+
+    // Check XDG path (~/.config/claude or XDG_CONFIG_HOME/claude)
+    // Read XDG_CONFIG_HOME at runtime to support test isolation
+    const xdgConfigPath = process.env.XDG_CONFIG_HOME || path.join(Path.home, ".config")
+    const xdgClaude = path.join(xdgConfigPath, "claude")
+    if (await isDirectory(xdgClaude)) {
+      return xdgClaude
+    }
+
+    // Check legacy path (~/.claude)
+    const legacyClaude = path.join(Path.home, ".claude")
+    if (await isDirectory(legacyClaude)) {
+      return legacyClaude
+    }
+
+    return undefined
   }
 }
 

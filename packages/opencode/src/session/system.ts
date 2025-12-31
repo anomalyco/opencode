@@ -5,7 +5,6 @@ import { Config } from "../config/config"
 
 import { Instance } from "../project/instance"
 import path from "path"
-import os from "os"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
@@ -61,10 +60,15 @@ export namespace SystemPrompt {
     "CLAUDE.md",
     "CONTEXT.md", // deprecated
   ]
-  const GLOBAL_RULE_FILES = [
-    path.join(Global.Path.config, "AGENTS.md"),
-    path.join(os.homedir(), ".claude", "CLAUDE.md"),
-  ]
+
+  async function globalRuleFiles(): Promise<string[]> {
+    const files = [path.join(Global.Path.config, "AGENTS.md")]
+    const claudeDir = await Global.claudeConfigDir()
+    if (claudeDir) {
+      files.push(path.join(claudeDir, "CLAUDE.md"))
+    }
+    return files
+  }
 
   export async function custom() {
     const config = await Config.get()
@@ -78,7 +82,7 @@ export namespace SystemPrompt {
       }
     }
 
-    for (const globalRuleFile of GLOBAL_RULE_FILES) {
+    for (const globalRuleFile of await globalRuleFiles()) {
       if (await Bun.file(globalRuleFile).exists()) {
         paths.add(globalRuleFile)
         break
@@ -88,7 +92,7 @@ export namespace SystemPrompt {
     if (config.instructions) {
       for (let instruction of config.instructions) {
         if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
+          instruction = path.join(Global.Path.home, instruction.slice(2))
         }
         let matches: string[] = []
         if (path.isAbsolute(instruction)) {
