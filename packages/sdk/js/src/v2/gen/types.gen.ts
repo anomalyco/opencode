@@ -39,17 +39,6 @@ export type EventProjectUpdated = {
   properties: Project
 }
 
-export type ConfigWarning = {
-  type: "unknown_keybind"
-  message: string
-  keybinds?: Array<string>
-}
-
-export type EventConfigWarning = {
-  type: "config.warning"
-  properties: ConfigWarning
-}
-
 export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
@@ -760,7 +749,6 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
-  | EventConfigWarning
   | EventServerInstanceDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
@@ -1166,7 +1154,6 @@ export type KeybindsConfig = {
    * Toggle tips on home screen
    */
   tips_toggle?: string
-  [key: string]: unknown | string | undefined
 }
 
 /**
@@ -1673,6 +1660,15 @@ export type Config = {
      */
     mcp_timeout?: number
   }
+}
+
+export type ConfigWarning = {
+  type: "unknown_keybind"
+  message: string
+  keybinds?: Array<{
+    name: string
+    binding: string
+  }>
 }
 
 export type ToolIds = Array<string>

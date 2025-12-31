@@ -18,7 +18,6 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { BusEvent } from "../bus/bus-event"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -36,18 +35,24 @@ export namespace Config {
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
-    let result = await global()
+    const globalResult = await global()
+    let result = globalResult.config
+    const allUnknownKeybinds: Array<{ name: string; binding: string }> = [...globalResult.unknownKeybinds]
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
+      const loaded = await loadFile(Flag.OPENCODE_CONFIG)
+      result = mergeConfigWithPlugins(result, loaded.config)
+      allUnknownKeybinds.push(...loaded.unknownKeybinds)
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
-        result = mergeConfigWithPlugins(result, await loadFile(resolved))
+        const loaded = await loadFile(resolved)
+        result = mergeConfigWithPlugins(result, loaded.config)
+        allUnknownKeybinds.push(...loaded.unknownKeybinds)
       }
     }
 
@@ -60,7 +65,9 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        const loaded = await load(JSON.stringify(wellknown.config ?? {}), process.cwd())
+        result = mergeConfigWithPlugins(result, loaded.config)
+        allUnknownKeybinds.push(...loaded.unknownKeybinds)
       }
     }
 
@@ -96,7 +103,9 @@ export namespace Config {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
+          const loaded = await loadFile(path.join(dir, file))
+          result = mergeConfigWithPlugins(result, loaded.config)
+          allUnknownKeybinds.push(...loaded.unknownKeybinds)
           // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
@@ -148,19 +157,15 @@ export namespace Config {
       result.compaction = { ...result.compaction, prune: false }
     }
 
-    // Collect warnings for unknown keybind names
+    // Generate warnings for unknown keybind names (collected during pre-processing)
     const warnings: Warning[] = []
-    if (result.keybinds) {
-      const unknownKeybinds = Object.keys(result.keybinds).filter(
-        (key) => key !== "leader" && !ValidKeybindNames.has(key),
-      )
-      if (unknownKeybinds.length > 0) {
-        warnings.push({
-          type: "unknown_keybind",
-          message: `Unknown keybind ${unknownKeybinds.length === 1 ? "command" : "commands"}: ${unknownKeybinds.join(", ")}`,
-          keybinds: unknownKeybinds,
-        })
-      }
+    if (allUnknownKeybinds.length > 0) {
+      const names = allUnknownKeybinds.map((kb) => kb.name)
+      warnings.push({
+        type: "unknown_keybind",
+        message: `Unknown keybind ${names.length === 1 ? "command" : "commands"}: ${names.join(", ")}`,
+        keybinds: allUnknownKeybinds,
+      })
     }
 
     return {
@@ -579,7 +584,7 @@ export namespace Config {
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
       tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
     })
-    .passthrough()
+    .strict()
     .meta({
       ref: "KeybindsConfig",
     })
@@ -591,14 +596,17 @@ export namespace Config {
     .object({
       type: z.enum(["unknown_keybind"]),
       message: z.string(),
-      keybinds: z.array(z.string()).optional(),
+      keybinds: z
+        .array(
+          z.object({
+            name: z.string(),
+            binding: z.string(),
+          }),
+        )
+        .optional(),
     })
     .meta({ ref: "ConfigWarning" })
   export type Warning = z.infer<typeof Warning>
-
-  export const Event = {
-    Warning: BusEvent.define("config.warning", Warning),
-  }
 
   export const TUI = z.object({
     scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
@@ -894,13 +902,18 @@ export namespace Config {
 
   export type Info = z.output<typeof Info>
 
-  export const global = lazy(async () => {
-    let result: Info = pipe(
-      {},
-      mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
-    )
+  export const global = lazy(async (): Promise<LoadResult> => {
+    const globalUnknownKeybinds: Array<{ name: string; binding: string }> = []
+
+    const configJson = await loadFile(path.join(Global.Path.config, "config.json"))
+    const opencodeJson = await loadFile(path.join(Global.Path.config, "opencode.json"))
+    const opencodeJsonc = await loadFile(path.join(Global.Path.config, "opencode.jsonc"))
+
+    globalUnknownKeybinds.push(...configJson.unknownKeybinds)
+    globalUnknownKeybinds.push(...opencodeJson.unknownKeybinds)
+    globalUnknownKeybinds.push(...opencodeJsonc.unknownKeybinds)
+
+    let result: Info = pipe({}, mergeDeep(configJson.config), mergeDeep(opencodeJson.config), mergeDeep(opencodeJsonc.config))
 
     await import(path.join(Global.Path.config, "config"), {
       with: {
@@ -917,10 +930,12 @@ export namespace Config {
       })
       .catch(() => {})
 
-    return result
+    return { config: result, unknownKeybinds: globalUnknownKeybinds }
   })
 
-  async function loadFile(filepath: string): Promise<Info> {
+  type LoadResult = { config: Info; unknownKeybinds: Array<{ name: string; binding: string }> }
+
+  async function loadFile(filepath: string): Promise<LoadResult> {
     log.info("loading", { path: filepath })
     let text = await Bun.file(filepath)
       .text()
@@ -928,7 +943,7 @@ export namespace Config {
         if (err.code === "ENOENT") return
         throw new JsonError({ path: filepath }, { cause: err })
       })
-    if (!text) return {}
+    if (!text) return { config: {}, unknownKeybinds: [] }
     return load(text, filepath)
   }
 
@@ -998,6 +1013,21 @@ export namespace Config {
       })
     }
 
+    // Pre-process keybinds: extract and strip unknown keybind keys before Zod validation
+    const unknownKeybinds: Array<{ name: string; binding: string }> = []
+    if (data && typeof data === "object" && "keybinds" in data && data.keybinds && typeof data.keybinds === "object") {
+      const keybindsObj = data.keybinds as Record<string, unknown>
+      for (const key of Object.keys(keybindsObj)) {
+        if (key !== "leader" && !ValidKeybindNames.has(key)) {
+          const binding = keybindsObj[key]
+          if (typeof binding === "string") {
+            unknownKeybinds.push({ name: key, binding })
+          }
+          delete keybindsObj[key]
+        }
+      }
+    }
+
     const parsed = Info.safeParse(data)
     if (parsed.success) {
       if (!parsed.data.$schema) {
@@ -1013,7 +1043,7 @@ export namespace Config {
           } catch (err) {}
         }
       }
-      return data
+      return { config: data, unknownKeybinds }
     }
 
     throw new InvalidError({
@@ -1021,6 +1051,7 @@ export namespace Config {
       issues: parsed.error.issues,
     })
   }
+
   export const JsonError = NamedError.create(
     "ConfigJsonError",
     z.object({
@@ -1053,8 +1084,8 @@ export namespace Config {
 
   export async function update(config: Info) {
     const filepath = path.join(Instance.directory, "config.json")
-    const existing = await loadFile(filepath)
-    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
+    const loaded = await loadFile(filepath)
+    await Bun.write(filepath, JSON.stringify(mergeDeep(loaded.config, config), null, 2))
     await Instance.dispose()
   }
 

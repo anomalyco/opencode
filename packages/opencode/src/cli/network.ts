@@ -32,7 +32,8 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
 }
 
 export async function resolveNetworkOptions(args: NetworkOptions) {
-  const config = await Config.global()
+  const globalResult = await Config.global()
+  const config = globalResult.config
   const portExplicitlySet = process.argv.includes("--port")
   const hostnameExplicitlySet = process.argv.includes("--hostname")
   const mdnsExplicitlySet = process.argv.includes("--mdns")

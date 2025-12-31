@@ -16,6 +16,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { useToast } from "@tui/ui/toast"
 import { useSync } from "@tui/context/sync"
 import { useSDK } from "@tui/context/sdk"
+import { Keybind } from "@/util/keybind"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 type Context = ReturnType<typeof init>
@@ -26,10 +27,15 @@ export type CommandOption = DialogSelectOption & {
   suggested?: boolean
 }
 
+type ParsedUnknownKeybind = {
+  name: string
+  parsed: Keybind.Info[]
+}
+
 function init() {
   const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
   const [suspendCount, setSuspendCount] = createSignal(0)
-  const [unknownKeybinds, setUnknownKeybinds] = createSignal<string[]>([])
+  const [unknownKeybinds, setUnknownKeybinds] = createSignal<ParsedUnknownKeybind[]>([])
   const dialog = useDialog()
   const keybind = useKeybind()
   const toast = useToast()
@@ -50,7 +56,11 @@ function init() {
             const warnings = response.data ?? []
             for (const warning of warnings) {
               if (warning.type === "unknown_keybind" && warning.keybinds) {
-                setUnknownKeybinds(warning.keybinds)
+                const parsed = warning.keybinds.map((kb) => ({
+                  name: kb.name,
+                  parsed: Keybind.parse(kb.binding),
+                }))
+                setUnknownKeybinds(parsed)
                 break
               }
             }
@@ -89,15 +99,18 @@ function init() {
     }
 
     // Check if the pressed key matches an unknown keybind command
-    for (const name of unknownKeybinds()) {
-      if (keybind.match(name as keyof KeybindsConfig, evt)) {
-        evt.preventDefault()
-        toast.show({
-          variant: "warning",
-          message: `Unknown keybind command: ${name}`,
-          duration: 3000,
-        })
-        return
+    const evtParsed = keybind.parse(evt)
+    for (const { name, parsed } of unknownKeybinds()) {
+      for (const binding of parsed) {
+        if (Keybind.match(binding, evtParsed)) {
+          evt.preventDefault()
+          toast.show({
+            variant: "warning",
+            message: `Unknown keybind command: ${name}`,
+            duration: 3000,
+          })
+          return
+        }
       }
     }
   })

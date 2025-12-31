@@ -651,6 +651,15 @@ test("unknown keybind names generate warnings", async () => {
       expect(warnings[0].type).toBe("unknown_keybind")
       expect(warnings[0].message).toContain("unknown_command")
       expect(warnings[0].message).toContain("another_fake_command")
+      // Verify the keybinds array contains name and binding
+      expect(warnings[0].keybinds).toBeDefined()
+      expect(warnings[0].keybinds!.length).toBe(2)
+      const names = warnings[0].keybinds!.map((kb) => kb.name)
+      expect(names).toContain("unknown_command")
+      expect(names).toContain("another_fake_command")
+      const bindings = warnings[0].keybinds!.map((kb) => kb.binding)
+      expect(bindings).toContain("ctrl+x")
+      expect(bindings).toContain("ctrl+y")
     },
   })
 })
