@@ -15,6 +15,9 @@ use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
 
+const CLI_INSTALL_DIR: &str = ".opencode/bin";
+const CLI_BINARY_NAME: &str = "opencode";
+
 #[derive(Clone)]
 struct ServerState(Arc<Mutex<Option<CommandChild>>>);
 
@@ -75,6 +78,102 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
     Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
 }
 
+fn get_cli_install_path() -> Option<std::path::PathBuf> {
+    std::env::var("HOME").ok().map(|home| {
+        std::path::PathBuf::from(home)
+            .join(CLI_INSTALL_DIR)
+            .join(CLI_BINARY_NAME)
+    })
+}
+
+fn get_sidecar_path() -> std::path::PathBuf {
+    tauri::utils::platform::current_exe()
+        .expect("Failed to get current exe")
+        .parent()
+        .expect("Failed to get parent dir")
+        .join("opencode-cli")
+}
+
+#[tauri::command]
+fn is_cli_installed() -> bool {
+    get_cli_install_path()
+        .map(|path| path.exists())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn get_installed_cli_path() -> Option<String> {
+    get_cli_install_path()
+        .filter(|path| path.exists())
+        .map(|path| path.to_string_lossy().to_string())
+}
+
+const INSTALL_SCRIPT: &str = include_str!("../../../../install");
+
+#[tauri::command]
+fn install_cli() -> Result<String, String> {
+    let sidecar = get_sidecar_path();
+    if !sidecar.exists() {
+        return Err("Sidecar binary not found".to_string());
+    }
+
+    let temp_script = std::env::temp_dir().join("opencode-install.sh");
+    std::fs::write(&temp_script, INSTALL_SCRIPT)
+        .map_err(|e| format!("Failed to write install script: {}", e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&temp_script, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set script permissions: {}", e))?;
+    }
+
+    let output = std::process::Command::new(&temp_script)
+        .arg("--binary")
+        .arg(&sidecar)
+        .output()
+        .map_err(|e| format!("Failed to run install script: {}", e))?;
+
+    let _ = std::fs::remove_file(&temp_script);
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Install script failed: {}", stderr));
+    }
+
+    let install_path = get_cli_install_path()
+        .ok_or_else(|| "Could not determine install path".to_string())?;
+
+    Ok(install_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn sync_cli() -> Result<(), String> {
+    if !is_cli_installed() {
+        return Ok(());
+    }
+
+    let sidecar = get_sidecar_path();
+    if !sidecar.exists() {
+        return Err("Sidecar binary not found".to_string());
+    }
+
+    let install_path = get_cli_install_path()
+        .ok_or_else(|| "Could not determine home directory".to_string())?;
+
+    std::fs::copy(&sidecar, &install_path)
+        .map_err(|e| format!("Failed to sync CLI binary: {}", e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&install_path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set permissions: {}", e))?;
+    }
+
+    Ok(())
+}
+
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
         .map(|s| s.to_string())
@@ -116,11 +215,9 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
 
     #[cfg(not(target_os = "windows"))]
     let (mut rx, child) = {
-        let sidecar_path = tauri::utils::platform::current_exe()
-            .expect("Failed to get current exe")
-            .parent()
-            .expect("Failed to get parent dir")
-            .join("opencode-cli");
+        let cli_path = get_cli_install_path()
+            .filter(|p| p.exists())
+            .unwrap_or_else(get_sidecar_path);
         let shell = get_user_shell();
         app.shell()
             .command(&shell)
@@ -130,7 +227,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
             .args([
                 "-il",
                 "-c",
-                &format!("{} serve --port={}", sidecar_path.display(), port),
+                &format!("{} serve --port={}", cli_path.display(), port),
             ])
             .spawn()
             .expect("Failed to spawn opencode")
@@ -202,7 +299,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             copy_logs_to_clipboard,
-            get_logs
+            get_logs,
+            is_cli_installed,
+            get_installed_cli_path,
+            install_cli,
+            sync_cli
         ])
         .setup(move |app| {
             let app = app.handle().clone();

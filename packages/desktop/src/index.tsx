@@ -13,6 +13,7 @@ import { createMenu } from "./menu"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { invoke } from "@tauri-apps/api/core"
 import { relaunch } from "@tauri-apps/plugin-process"
+import { syncCli } from "./cli"
 import pkg from "../package.json"
 
 const root = document.getElementById("root")
@@ -87,6 +88,7 @@ const platform: Platform = {
     if (!UPDATER_ENABLED || !update) return
     if (ostype() === "windows") await invoke("kill_sidecar")
     await update.install()
+    await syncCli()
   },
 
   restart: async () => {
