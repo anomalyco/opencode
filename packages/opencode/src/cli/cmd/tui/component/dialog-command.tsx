@@ -2,8 +2,10 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "@tui/ui/dialog-select"
 import {
   createContext,
+  createEffect,
   createMemo,
   createSignal,
+  on,
   onCleanup,
   useContext,
   type Accessor,
@@ -13,6 +15,7 @@ import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
 import { useToast } from "@tui/ui/toast"
 import { useSync } from "@tui/context/sync"
+import { useSDK } from "@tui/context/sdk"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 type Context = ReturnType<typeof init>
@@ -26,10 +29,37 @@ export type CommandOption = DialogSelectOption & {
 function init() {
   const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
   const [suspendCount, setSuspendCount] = createSignal(0)
+  const [unknownKeybinds, setUnknownKeybinds] = createSignal<string[]>([])
   const dialog = useDialog()
   const keybind = useKeybind()
   const toast = useToast()
   const sync = useSync()
+  const sdk = useSDK()
+
+  // Fetch unknown keybinds from warnings when sync completes
+  let warningsFetched = false
+  createEffect(
+    on(
+      () => sync.status === "complete",
+      (isComplete) => {
+        if (!isComplete || warningsFetched) return
+        warningsFetched = true
+        sdk.client.config
+          .warnings()
+          .then((response) => {
+            const warnings = response.data ?? []
+            for (const warning of warnings) {
+              if (warning.type === "unknown_keybind" && warning.keybinds) {
+                setUnknownKeybinds(warning.keybinds)
+                break
+              }
+            }
+          })
+          .catch(() => {})
+      },
+    ),
+  )
+
   const options = createMemo(() => {
     const all = registrations().flatMap((x) => x())
     const suggested = all.filter((x) => x.suggested)
@@ -47,15 +77,6 @@ function init() {
   })
   const suspended = () => suspendCount() > 0
 
-  // Get the set of keybind names that have registered commands
-  const registeredKeybinds = createMemo(() => {
-    const set = new Set<string>()
-    for (const option of options()) {
-      if (option.keybind) set.add(option.keybind)
-    }
-    return set
-  })
-
   useKeyboard((evt) => {
     if (suspended()) return
     if (dialog.stack.length > 0) return
@@ -68,12 +89,8 @@ function init() {
     }
 
     // Check if the pressed key matches an unknown keybind command
-    const allKeybinds = keybind.all
-    const registered = registeredKeybinds()
-    for (const [name, _] of Object.entries(allKeybinds)) {
-      if (name === "leader") continue
-      if (registered.has(name)) continue
-      if (keybind.match(name as keyof typeof sync.data.config.keybinds, evt)) {
+    for (const name of unknownKeybinds()) {
+      if (keybind.match(name as keyof KeybindsConfig, evt)) {
         evt.preventDefault()
         toast.show({
           variant: "warning",

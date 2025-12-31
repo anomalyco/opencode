@@ -5195,6 +5195,12 @@
           },
           "message": {
             "type": "string"
+          },
+          "keybinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["type", "message"]
@@ -7822,7 +7828,7 @@
             "type": "string"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": {}
       },
       "LogLevel": {
         "description": "Log level",

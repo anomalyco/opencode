@@ -155,6 +155,7 @@ export namespace Config {
         warnings.push({
           type: "unknown_keybind",
           message: `Unknown keybind command(s): ${unknownKeybinds.join(", ")}`,
+          keybinds: unknownKeybinds,
         })
       }
     }
@@ -604,6 +605,7 @@ export namespace Config {
     .object({
       type: z.enum(["unknown_keybind"]),
       message: z.string(),
+      keybinds: z.array(z.string()).optional(),
     })
     .meta({ ref: "ConfigWarning" })
   export type Warning = z.infer<typeof Warning>

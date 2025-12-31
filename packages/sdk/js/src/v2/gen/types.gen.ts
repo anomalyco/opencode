@@ -42,6 +42,7 @@ export type EventProjectUpdated = {
 export type ConfigWarning = {
   type: "unknown_keybind"
   message: string
+  keybinds?: Array<string>
 }
 
 export type EventConfigWarning = {
@@ -1165,6 +1166,7 @@ export type KeybindsConfig = {
    * Toggle tips on home screen
    */
   tips_toggle?: string
+  [key: string]: unknown | string | undefined
 }
 
 /**
