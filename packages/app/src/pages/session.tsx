@@ -51,22 +51,237 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { useCommand } from "@/context/command"
-import { useNavigate, useParams } from "@solidjs/router"
+import { A, useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
-import { StatusBar } from "@/components/status-bar"
-import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
-import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useServer } from "@/context/server"
+import { Button } from "@opencode-ai/ui/button"
+import { DialogSelectServer } from "@/components/dialog-select-server"
+import { SessionLspIndicator } from "@/components/session-lsp-indicator"
+import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { Popover } from "@opencode-ai/ui/popover"
+import { Select } from "@opencode-ai/ui/select"
+import { TextField } from "@opencode-ai/ui/text-field"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { iife } from "@opencode-ai/util/iife"
+import { Session } from "@opencode-ai/sdk/v2/client"
 
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
+}
+
+function Header(props: { onMobileMenuToggle?: () => void }) {
+  const globalSDK = useGlobalSDK()
+  const layout = useLayout()
+  const params = useParams()
+  const navigate = useNavigate()
+  const command = useCommand()
+  const server = useServer()
+  const dialog = useDialog()
+  const sync = useSync()
+
+  const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
+  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const branch = createMemo(() => sync.data.vcs?.branch)
+
+  function navigateToProject(directory: string) {
+    navigate(`/${base64Encode(directory)}`)
+  }
+
+  function navigateToSession(session: Session | undefined) {
+    if (!session) return
+    navigate(`/${params.dir}/session/${session.id}`)
+  }
+
+  return (
+    <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
+      <button
+        type="button"
+        class="xl:hidden w-12 shrink-0 flex items-center justify-center border-r border-border-weak-base hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors"
+        onClick={props.onMobileMenuToggle}
+      >
+        <Icon name="menu" size="small" />
+      </button>
+      <div class="px-4 flex items-center justify-between gap-4 w-full">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="hidden xl:flex items-center gap-2">
+              <Select
+                options={layout.projects.list().map((project) => project.worktree)}
+                current={sync.directory}
+                label={(x) => {
+                  const name = getFilename(x)
+                  const b = x === sync.directory ? branch() : undefined
+                  return b ? `${name}:${b}` : name
+                }}
+                onSelect={(x) => (x ? navigateToProject(x) : undefined)}
+                class="text-14-regular text-text-base"
+                variant="ghost"
+              >
+                {/* @ts-ignore */}
+                {(i) => (
+                  <div class="flex items-center gap-2">
+                    <Icon name="folder" size="small" />
+                    <div class="text-text-strong">{getFilename(i)}</div>
+                  </div>
+                )}
+              </Select>
+              <div class="text-text-weaker">/</div>
+            </div>
+            <Select
+              options={sessions()}
+              current={currentSession()}
+              placeholder="New session"
+              label={(x) => x.title}
+              value={(x) => x.id}
+              onSelect={navigateToSession}
+              class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+              variant="ghost"
+            />
+          </div>
+          <Show when={currentSession()}>
+            <Tooltip
+              class="hidden xl:block"
+              value={
+                <div class="flex items-center gap-2">
+                  <span>New session</span>
+                  <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
+                </div>
+              }
+            >
+              <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
+            </Tooltip>
+          </Show>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="hidden md:flex items-center gap-1">
+            <Button
+              size="small"
+              variant="ghost"
+              onClick={() => {
+                dialog.show(() => <DialogSelectServer />)
+              }}
+            >
+              <div
+                classList={{
+                  "size-1.5 rounded-full": true,
+                  "bg-icon-success-base": server.healthy() === true,
+                  "bg-icon-critical-base": server.healthy() === false,
+                  "bg-border-weak-base": server.healthy() === undefined,
+                }}
+              />
+              <Icon name="server" size="small" class="text-icon-weak" />
+              <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span>
+            </Button>
+            <SessionLspIndicator />
+            <SessionMcpIndicator />
+          </div>
+          <div class="flex items-center gap-1">
+            <Show when={currentSession()?.summary?.files}>
+              <Tooltip
+                class="hidden md:block shrink-0"
+                value={
+                  <div class="flex items-center gap-2">
+                    <span>Toggle review</span>
+                    <span class="text-icon-base text-12-medium">{command.keybind("review.toggle")}</span>
+                  </div>
+                }
+              >
+                <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
+                  <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                    <Icon
+                      name={layout.review.opened() ? "layout-right" : "layout-left"}
+                      size="small"
+                      class="group-hover/review-toggle:hidden"
+                    />
+                    <Icon
+                      name={layout.review.opened() ? "layout-right-partial" : "layout-left-partial"}
+                      size="small"
+                      class="hidden group-hover/review-toggle:inline-block"
+                    />
+                    <Icon
+                      name={layout.review.opened() ? "layout-right-full" : "layout-left-full"}
+                      size="small"
+                      class="hidden group-active/review-toggle:inline-block"
+                    />
+                  </div>
+                </Button>
+              </Tooltip>
+            </Show>
+            <Tooltip
+              class="hidden md:block shrink-0"
+              value={
+                <div class="flex items-center gap-2">
+                  <span>Toggle terminal</span>
+                  <span class="text-icon-base text-12-medium">{command.keybind("terminal.toggle")}</span>
+                </div>
+              }
+            >
+              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
+                <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                  <Icon
+                    size="small"
+                    name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                    class="group-hover/terminal-toggle:hidden"
+                  />
+                  <Icon
+                    size="small"
+                    name="layout-bottom-partial"
+                    class="hidden group-hover/terminal-toggle:inline-block"
+                  />
+                  <Icon
+                    size="small"
+                    name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                    class="hidden group-active/terminal-toggle:inline-block"
+                  />
+                </div>
+              </Button>
+            </Tooltip>
+          </div>
+          <Show when={shareEnabled() && currentSession()}>
+            <Popover
+              title="Share session"
+              trigger={
+                <Tooltip class="shrink-0" value="Share session">
+                  <IconButton icon="share" variant="ghost" class="" />
+                </Tooltip>
+              }
+            >
+              {iife(() => {
+                const [url] = createResource(
+                  () => currentSession(),
+                  async (session) => {
+                    if (!session) return
+                    let shareURL = session.share?.url
+                    if (!shareURL) {
+                      shareURL = await globalSDK.client.session
+                        .share({ sessionID: session.id, directory: sync.directory })
+                        .then((r) => r.data?.share?.url)
+                        .catch((e) => {
+                          console.error("Failed to share session", e)
+                          return undefined
+                        })
+                    }
+                    return shareURL
+                  },
+                )
+                return <Show when={url()}>{(url) => <TextField value={url()} readOnly copyable class="w-72" />}</Show>
+              })}
+            </Popover>
+          </Show>
+        </div>
+      </div>
+    </header>
+  )
 }
 
 export default function Page() {
@@ -718,6 +933,7 @@ export default function Page() {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
+      <Header />
       <div class="md:hidden flex-1 min-h-0 flex flex-col bg-background-stronger">
         <Switch>
           <Match when={!params.id}>
@@ -1002,10 +1218,6 @@ export default function Page() {
           </DragDropProvider>
         </div>
       </Show>
-      <StatusBar>
-        <SessionLspIndicator />
-        <SessionMcpIndicator />
-      </StatusBar>
     </div>
   )
 }
