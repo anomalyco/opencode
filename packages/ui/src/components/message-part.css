@@ -78,10 +78,9 @@
   [data-slot="user-message-text"] {
     white-space: pre-wrap;
     overflow: hidden;
-    background: var(--surface-inset-base);
-    padding: 6px 12px;
+    background: var(--surface-base);
+    padding: 8px 12px;
     border-radius: 4px;
-    border: 0.5px solid var(--border-weak-base);
   }
 
   .text-text-strong {
