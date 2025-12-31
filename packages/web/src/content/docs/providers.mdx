@@ -896,7 +896,7 @@ To use Kimi K2 from Moonshot AI:
    /models
    ```
 
-You can also configure Morpheus AI with additional models through your opencode config.
+ You can also configure Morpheus AI with additional models through your opencode config with full model specifications:
 
 ```json title="opencode.json"
 {
@@ -904,14 +904,157 @@ You can also configure Morpheus AI with additional models through your opencode 
   "provider": {
     "morpheus-ai": {
       "models": {
-        "glm-4.6": {},
-        "kimi-k2-thinking": {},
-        "qwen3-coder-480b-a35b-instruct": {}
+        "glm-4.6": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 200000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.6,
+            "output": 2.2
+          }
+        },
+        "kimi-k2-thinking": {
+          "reasoning": true,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 262144,
+            "output": 65536
+          },
+          "cost": {
+            "input": 0.4,
+            "output": 1.75
+          }
+        },
+        "qwen3-coder-480b-a35b-instruct": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 262144,
+            "output": 65536
+          },
+          "cost": {
+            "input": 0.25,
+            "output": 0.85
+          }
+        },
+        "qwen3-235b-a22b": {
+          "reasoning": true,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 131072,
+            "output": 131072
+          },
+          "cost": {
+            "input": 0.18,
+            "output": 0.54
+          }
+        },
+        "qwen3-next-80b-a3b-instruct": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 262144,
+            "output": 65536
+          },
+          "cost": {
+            "input": 0.1,
+            "output": 0.8
+          }
+        },
+        "llama-3.3-70b-instruct": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.2,
+            "output": 0.2
+          }
+        },
+        "mistral-small-24b-instruct": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": true,
+          "temperature": true,
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 128000,
+            "output": 8192
+          },
+          "cost": {
+            "input": 0.35,
+            "output": 0.56
+          }
+        },
+        "hermes-3-llama-3.1-405b-instruct": {
+          "reasoning": false,
+          "tool_call": true,
+          "attachment": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 32000,
+            "output": 32000
+          },
+          "cost": {
+            "input": 0.9,
+            "output": 0.9
+          }
+        }
       }
     }
   }
 }
 ```
+
+> **Note**: Specifications sourced from official model providers (Z.AI, Moonshot AI, Alibaba Qwen, Meta, Mistral AI, Nous Research). Context limits and capabilities reflect base models. Actual pricing on Morpheus AI may vary.
 
 ---
 
