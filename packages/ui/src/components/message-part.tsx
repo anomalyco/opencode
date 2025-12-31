@@ -388,10 +388,8 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
       {(segment) => (
         <span
           classList={{
-            "text-icon-info-active": segment.type === "file",
-          }}
-          style={{
-            color: segment.type === "agent" ? "light-dark(var(--solaris-light-11), var(--solaris-dark-11))" : undefined,
+            "text-syntax-property": segment.type === "file",
+            "text-syntax-type": segment.type === "agent",
           }}
         >
           {segment.text}

@@ -478,7 +478,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             pill.setAttribute("data-type", "agent")
             pill.setAttribute("data-name", part.name)
             pill.setAttribute("contenteditable", "false")
-            pill.style.color = "light-dark(var(--solaris-light-11), var(--solaris-dark-11))"
             pill.style.userSelect = "text"
             pill.style.cursor = "default"
             editorRef.appendChild(pill)
@@ -692,7 +691,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       pill.setAttribute("data-type", "agent")
       pill.setAttribute("data-name", part.name)
       pill.setAttribute("contenteditable", "false")
-      pill.style.color = "light-dark(var(--solaris-light-11), var(--solaris-dark-11))"
       pill.style.userSelect = "text"
       pill.style.cursor = "default"
 
@@ -1218,7 +1216,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-              "[&_[data-type=file]]:text-icon-info-active": true,
+              "[&_[data-type=file]]:text-syntax-property": true,
+              "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
