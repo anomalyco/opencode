@@ -73,7 +73,6 @@ export namespace Skill {
         stop: Instance.worktree,
       }),
     )
-    // Also include global Claude config directory (supports CLAUDE_CONFIG_DIR env var)
     const globalClaude = await Global.claudeConfigDir()
     if (globalClaude) {
       claudeDirs.push(globalClaude)

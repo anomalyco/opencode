@@ -29,33 +29,16 @@ export namespace Global {
     state,
   }
 
-  /**
-   * Returns the Claude config directory path using this priority:
-   * 1. CLAUDE_CONFIG_DIR environment variable (if set and is a directory)
-   * 2. ~/.config/claude (new default, if it exists as a directory)
-   * 3. ~/.claude (legacy, if it exists as a directory)
-   * 4. undefined if none exist
-   */
   export async function claudeConfigDir(): Promise<string | undefined> {
-    // Check CLAUDE_CONFIG_DIR env var at runtime (not cached in Flag namespace)
-    const claudeEnvDir = process.env.CLAUDE_CONFIG_DIR
-    if (claudeEnvDir && (await isDirectory(claudeEnvDir))) {
-      return claudeEnvDir
-    }
+    const envDir = process.env.CLAUDE_CONFIG_DIR
+    if (envDir && (await isDirectory(envDir))) return envDir
 
-    // Check XDG path (~/.config/claude or XDG_CONFIG_HOME/claude)
-    // Read XDG_CONFIG_HOME at runtime to support test isolation
-    const xdgConfigPath = process.env.XDG_CONFIG_HOME || path.join(Path.home, ".config")
-    const xdgClaude = path.join(xdgConfigPath, "claude")
-    if (await isDirectory(xdgClaude)) {
-      return xdgClaude
-    }
+    const xdgPath = process.env.XDG_CONFIG_HOME || path.join(Path.home, ".config")
+    const xdgClaude = path.join(xdgPath, "claude")
+    if (await isDirectory(xdgClaude)) return xdgClaude
 
-    // Check legacy path (~/.claude)
-    const legacyClaude = path.join(Path.home, ".claude")
-    if (await isDirectory(legacyClaude)) {
-      return legacyClaude
-    }
+    const legacy = path.join(Path.home, ".claude")
+    if (await isDirectory(legacy)) return legacy
 
     return undefined
   }
