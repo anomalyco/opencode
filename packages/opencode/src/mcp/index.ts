@@ -4,7 +4,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
-import { type Tool as MCPToolDef, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
+import {
+  CallToolResultSchema,
+  type Tool as MCPToolDef,
+  ToolListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js"
 import { Config } from "../config/config"
 import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
@@ -93,7 +97,7 @@ export namespace MCP {
   }
 
   // Convert MCP tool definition to AI SDK Tool type
-  function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient): Tool {
+  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
@@ -103,15 +107,23 @@ export namespace MCP {
       properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
       additionalProperties: false,
     }
+    const config = await Config.get()
 
     return dynamicTool({
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        return client.callTool({
-          name: mcpTool.name,
-          arguments: args as Record<string, unknown>,
-        })
+        return client.callTool(
+          {
+            name: mcpTool.name,
+            arguments: args as Record<string, unknown>,
+          },
+          CallToolResultSchema,
+          {
+            resetTimeoutOnProgress: true,
+            timeout: config.experimental?.mcp_timeout,
+          },
+        )
       },
     })
   }
@@ -474,7 +486,7 @@ export namespace MCP {
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = convertMcpTool(mcpTool, client)
+        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client)
       }
     }
     return result
