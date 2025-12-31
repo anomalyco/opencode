@@ -253,7 +253,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const next = favorites[index]
           if (!next) return
           setModelStore("model", agent.current().name, { ...next })
-          const uniq = uniqueBy([next, ...modelStore.recent], (x) => x.providerID + x.modelID)
+          const uniq = uniqueBy([next, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
           if (uniq.length > 10) uniq.pop()
           setModelStore(
             "recent",
@@ -273,7 +273,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             setModelStore("model", agent.current().name, model)
             if (options?.recent) {
-              const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
+              const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
               if (uniq.length > 10) uniq.pop()
               setModelStore(
                 "recent",
@@ -319,9 +319,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const provider = sync.data.provider.find((x) => x.id === m.providerID)
             const info = provider?.models[m.modelID]
             if (!info?.variants) return []
-            return Object.entries(info.variants)
-              .filter(([_, v]) => !v.disabled)
-              .map(([name]) => name)
+            return Object.keys(info.variants)
           },
           set(value: string | undefined) {
             const m = currentModel()
