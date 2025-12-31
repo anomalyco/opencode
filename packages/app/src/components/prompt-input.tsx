@@ -1367,20 +1367,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     variant="ghost"
                   />
                 </TooltipKeybind>
-                <Tooltip
-                  placement="top"
-                  value={
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center gap-2">
-                        <span>Choose model</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("model.choose")}</span>
-                      </div>
-                      <Show when={local.model.current()?.provider.name}>
-                        <span class="text-text-weak">{local.model.current()?.provider.name}</span>
-                      </Show>
-                    </div>
-                  }
-                >
+                <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
                   <Button
                     as="div"
                     variant="ghost"
@@ -1393,7 +1380,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     {local.model.current()?.name ?? "Select model"}
                     <Icon name="chevron-down" size="small" />
                   </Button>
-                </Tooltip>
+                </TooltipKeybind>
                 <Show when={local.model.variant.list().length > 0}>
                   <TooltipKeybind
                     placement="top"
