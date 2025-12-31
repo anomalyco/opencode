@@ -2,6 +2,19 @@
   display: flex;
 }
 
+[data-slot="tooltip-keybind"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-slot="tooltip-keybind-key"] {
+  color: var(--icon-base);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-large);
+}
+
 [data-component="tooltip"] {
   z-index: 1000;
   max-width: 320px;

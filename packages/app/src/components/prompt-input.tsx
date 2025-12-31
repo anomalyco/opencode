@@ -11,7 +11,7 @@ import { useSync } from "@/context/sync"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
@@ -1355,15 +1355,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </div>
               </Match>
               <Match when={store.mode === "normal"}>
-                <Tooltip
-                  placement="top"
-                  value={
-                    <div class="flex items-center gap-2">
-                      <span>Cycle agent</span>
-                      <span class="text-icon-base text-12-medium">{command.keybind("agent.cycle")}</span>
-                    </div>
-                  }
-                >
+                <TooltipKeybind placement="top" title="Cycle agent" keybind={command.keybind("agent.cycle")}>
                   <Select
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
@@ -1371,7 +1363,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     class="capitalize"
                     variant="ghost"
                   />
-                </Tooltip>
+                </TooltipKeybind>
                 <Tooltip
                   placement="top"
                   value={

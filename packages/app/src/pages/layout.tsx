@@ -22,7 +22,7 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -709,17 +709,13 @@ export default function Layout(props: ParentProps) {
             </A>
           </Tooltip>
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
-            <Tooltip
+            <TooltipKeybind
               placement={props.mobile ? "bottom" : "right"}
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Archive session</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("session.archive")}</span>
-                </div>
-              }
+              title="Archive session"
+              keybind={command.keybind("session.archive")}
             >
               <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
-            </Tooltip>
+            </TooltipKeybind>
           </div>
         </div>
       </>
@@ -787,17 +783,9 @@ export default function Layout(props: ParentProps) {
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <Tooltip
-                    placement="top"
-                    value={
-                      <div class="flex items-center gap-2">
-                        <span>New session</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
-                      </div>
-                    }
-                  >
+                  <TooltipKeybind placement="top" title="New session" keybind={command.keybind("session.new")}>
                     <IconButton as={A} href={`${slug()}/session`} icon="plus-small" variant="ghost" />
-                  </Tooltip>
+                  </TooltipKeybind>
                 </div>
               </Button>
               <Collapsible.Content>
@@ -880,15 +868,11 @@ export default function Layout(props: ParentProps) {
             </A>
           </Show>
           <Show when={!sidebarProps.mobile}>
-            <Tooltip
+            <TooltipKeybind
               class="shrink-0"
               placement="right"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle sidebar</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("sidebar.toggle")}</span>
-                </div>
-              }
+              title="Toggle sidebar"
+              keybind={command.keybind("sidebar.toggle")}
               inactive={expanded()}
             >
               <Button
@@ -920,7 +904,7 @@ export default function Layout(props: ParentProps) {
                   </div>
                 </Show>
               </Button>
-            </Tooltip>
+            </TooltipKeybind>
           </Show>
           <DragDropProvider
             onDragStart={handleDragStart}
