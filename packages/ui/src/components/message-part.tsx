@@ -639,7 +639,7 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "grep",
   render(props) {
-    const args = []
+    const args: string[] = []
     if (props.input.pattern) args.push("pattern=" + props.input.pattern)
     if (props.input.include) args.push("include=" + props.input.include)
     return (
