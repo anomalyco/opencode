@@ -1731,6 +1731,7 @@ export type Command = {
   model?: string
   template: string
   subtask?: boolean
+  hints: Array<string>
 }
 
 export type Model = {
