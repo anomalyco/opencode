@@ -1,9 +1,5 @@
 import z from "zod"
 
-// ============================================================================
-// Field Definitions (for form intent)
-// ============================================================================
-
 export const SelectOption = z.object({
   value: z.string(),
   label: z.string(),
@@ -37,7 +33,6 @@ export const TextField = z.object({
   description: z.string().optional(),
   placeholder: z.string().optional(),
   default: z.string().optional(),
-  // Conditional display based on another field's value
   condition: z
     .object({
       field: z.string(),
@@ -63,10 +58,6 @@ export type TextField = z.infer<typeof TextField>
 export type ConfirmField = z.infer<typeof ConfirmField>
 export type SelectOption = z.infer<typeof SelectOption>
 
-// ============================================================================
-// Intent Definitions
-// ============================================================================
-
 export const FormIntent = z.object({
   type: z.literal("form"),
   title: z.string(),
@@ -85,7 +76,6 @@ export const ConfirmIntent = z.object({
   variant: z.enum(["info", "warning", "danger"]).optional().default("info"),
 })
 
-// Standalone select (for simple single-question use)
 export const SelectIntent = z.object({
   type: z.literal("select"),
   title: z.string(),
@@ -94,7 +84,6 @@ export const SelectIntent = z.object({
   default: z.string().optional(),
 })
 
-// Standalone multiselect
 export const MultiSelectIntent = z.object({
   type: z.literal("multiselect"),
   title: z.string(),
@@ -105,15 +94,12 @@ export const MultiSelectIntent = z.object({
   max: z.number().optional(),
 })
 
-// Toast (non-blocking notification)
 export const ToastIntent = z.object({
   type: z.literal("toast"),
   message: z.string(),
   variant: z.enum(["info", "success", "warning", "error"]).optional().default("info"),
   duration: z.number().optional(),
 })
-
-// Note: progress primitive deferred to future PR - implementation unclear
 
 export const Intent = z
   .discriminatedUnion("type", [FormIntent, ConfirmIntent, SelectIntent, MultiSelectIntent, ToastIntent])
@@ -127,10 +113,6 @@ export type ConfirmIntent = z.infer<typeof ConfirmIntent>
 export type SelectIntent = z.infer<typeof SelectIntent>
 export type MultiSelectIntent = z.infer<typeof MultiSelectIntent>
 export type ToastIntent = z.infer<typeof ToastIntent>
-
-// ============================================================================
-// Request & Response
-// ============================================================================
 
 export const IntentInfo = z
   .object({

@@ -24,10 +24,6 @@ export namespace Intent {
   export const IntentInfo = IntentInfoSchema
   export const IntentResponse = IntentResponseSchema
 
-  // ============================================================================
-  // Events
-  // ============================================================================
-
   export const Event = {
     Updated: BusEvent.define("intent.updated", IntentInfoSchema),
     Replied: BusEvent.define(
@@ -39,10 +35,6 @@ export namespace Intent {
       }),
     ),
   }
-
-  // ============================================================================
-  // Errors
-  // ============================================================================
 
   export const CancelledError = NamedError.create(
     "IntentCancelledError",
@@ -61,10 +53,6 @@ export namespace Intent {
     }),
   )
 
-  // ============================================================================
-  // State
-  // ============================================================================
-
   type PendingIntent = {
     info: z.infer<typeof IntentInfoSchema>
     resolve: (response: z.infer<typeof IntentResponseSchema>) => void
@@ -82,7 +70,6 @@ export namespace Intent {
       return { pending }
     },
     async (entry) => {
-      // On dispose, reject all pending intents
       for (const session of Object.values(entry.pending)) {
         for (const item of Object.values(session)) {
           item.reject(
@@ -96,15 +83,6 @@ export namespace Intent {
     },
   )
 
-  // ============================================================================
-  // Public API
-  // ============================================================================
-
-  /**
-   * Request user input via intent.
-   * Blocks until user responds or cancels.
-   * For toast intents, returns immediately (non-blocking).
-   */
   export async function request(input: {
     intent: z.input<typeof IntentType>
     sessionID: string
@@ -136,30 +114,25 @@ export namespace Intent {
       sessionID: input.sessionID,
     })
 
-    // Toast intents are non-blocking - just publish and return
     if (input.intent.type === "toast") {
       Bus.publish(Event.Updated, info)
       return { type: "submit" }
     }
 
-    // Initialize session pending map if needed
     const { pending } = state()
     if (!pending[input.sessionID]) {
       pending[input.sessionID] = {}
     }
 
     return new Promise<z.infer<typeof IntentResponseSchema>>((resolve, reject) => {
-      // Store pending intent
       pending[input.sessionID][id] = {
         info,
         resolve,
         reject,
       }
 
-      // Publish event for TUI
       Bus.publish(Event.Updated, info)
 
-      // Optional timeout
       if (input.timeout) {
         setTimeout(() => {
           const p = pending[input.sessionID]?.[id]
@@ -178,10 +151,6 @@ export namespace Intent {
     })
   }
 
-  /**
-   * Submit response to a pending intent.
-   * Called by server endpoint when TUI submits.
-   */
   export function respond(input: {
     sessionID: string
     intentID: string
@@ -203,20 +172,17 @@ export namespace Intent {
       responseType: input.response.type,
     })
 
-    // Clean up
     delete pending[input.sessionID][input.intentID]
     if (Object.keys(pending[input.sessionID]).length === 0) {
       delete pending[input.sessionID]
     }
 
-    // Publish replied event
     Bus.publish(Event.Replied, {
       sessionID: input.sessionID,
       intentID: input.intentID,
       response: input.response,
     })
 
-    // Resolve or reject based on response type
     if (input.response.type === "cancel") {
       p.reject(
         new CancelledError({
@@ -224,16 +190,13 @@ export namespace Intent {
           sessionID: input.sessionID,
         }),
       )
-    } else {
-      p.resolve(input.response)
+      return true
     }
-
+    
+    p.resolve(input.response)
     return true
   }
 
-  /**
-   * List all pending intents (for a session or all).
-   */
   export function list(sessionID?: string): z.infer<typeof IntentInfoSchema>[] {
     const { pending } = state()
     if (sessionID) {
@@ -244,10 +207,6 @@ export namespace Intent {
       .sort((a, b) => a.id.localeCompare(b.id))
   }
 
-  /**
-   * Cancel all pending intents for a session.
-   * Used when session is aborted.
-   */
   export function cancelAll(sessionID: string): void {
     const { pending } = state()
     const session = pending[sessionID]
@@ -266,13 +225,6 @@ export namespace Intent {
     delete pending[sessionID]
   }
 
-  // ============================================================================
-  // Convenience Helpers
-  // ============================================================================
-
-  /**
-   * Show a form and return field values.
-   */
   export async function form(
     input: Omit<z.input<typeof FormIntent>, "type"> & {
       sessionID: string
@@ -303,9 +255,6 @@ export namespace Intent {
     return response.data ?? {}
   }
 
-  /**
-   * Show a confirmation dialog and return boolean.
-   */
   export async function confirm(
     input: Omit<z.input<typeof ConfirmIntent>, "type"> & {
       sessionID: string
@@ -329,9 +278,6 @@ export namespace Intent {
     return response.type === "submit"
   }
 
-  /**
-   * Show a select dialog and return selected value.
-   */
   export async function select(
     input: Omit<z.input<typeof SelectIntent>, "type"> & {
       sessionID: string
@@ -359,9 +305,6 @@ export namespace Intent {
     return response.data?.selected as string | undefined
   }
 
-  /**
-   * Show a multiselect dialog and return selected values.
-   */
   export async function multiselect(
     input: Omit<z.input<typeof MultiSelectIntent>, "type"> & {
       sessionID: string
@@ -389,9 +332,6 @@ export namespace Intent {
     return (response.data?.selected as string[]) ?? []
   }
 
-  /**
-   * Show a non-blocking toast notification.
-   */
   export async function toast(
     input: Omit<z.input<typeof ToastIntent>, "type"> & {
       sessionID: string

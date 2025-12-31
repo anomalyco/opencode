@@ -87,9 +87,13 @@ function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCance
     }
 
   useKeyboard((evt) => {
+    if (evt.name === "return" && store.active === "confirm") {
+      props.onConfirm()
+      return
+    }
     if (evt.name === "return") {
-      if (store.active === "confirm") props.onConfirm()
-      else props.onCancel()
+      props.onCancel()
+      return
     }
     if (evt.name === "left" || evt.name === "right") {
       setStore("active", store.active === "confirm" ? "cancel" : "confirm")
@@ -117,10 +121,7 @@ function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCance
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={key === store.active ? theme.primary : undefined}
-              onMouseUp={() => {
-                if (key === "confirm") props.onConfirm()
-                else props.onCancel()
-              }}
+              onMouseUp={() => key === "confirm" ? props.onConfirm() : props.onCancel()}
             >
               <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
                 {key === "confirm" ? intent().confirmLabel || "Yes" : intent().cancelLabel || "No"}
@@ -389,12 +390,12 @@ function FormFieldRenderer(props: {
             focusedBackgroundColor={theme.backgroundPanel}
             cursorColor={theme.primary}
             focusedTextColor={theme.text}
-            placeholder={(props.field as any).placeholder ?? ""}
+            placeholder={"placeholder" in props.field ? props.field.placeholder ?? "" : ""}
           />
         </Match>
         <Match when={props.field.type === "select"}>
           <SelectFieldRenderer
-            field={props.field as any}
+            field={props.field as { type: "select"; options: SelectOption[]; default?: string }}
             value={props.value}
             onChange={props.onChange}
             focused={props.focused}
@@ -402,7 +403,7 @@ function FormFieldRenderer(props: {
         </Match>
         <Match when={props.field.type === "multiselect"}>
           <MultiSelectFieldRenderer
-            field={props.field as any}
+            field={props.field as { type: "multiselect"; options: SelectOption[]; default?: string[] }}
             value={props.value ?? []}
             onChange={props.onChange}
             focused={props.focused}
