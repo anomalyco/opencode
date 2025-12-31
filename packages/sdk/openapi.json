@@ -8767,6 +8767,12 @@
               "continue_loop_on_deny": {
                 "description": "Continue the agent loop when a tool call is denied",
                 "type": "boolean"
+              },
+              "mcp_timeout": {
+                "description": "Timeout in milliseconds for model context protocol (MCP) requests",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               }
             }
           }
