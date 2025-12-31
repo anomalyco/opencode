@@ -38,7 +38,7 @@ export default function Home() {
       }
     }
 
-    if (platform.openDirectoryPickerDialog) {
+    if (platform.openDirectoryPickerDialog && server.isLocal()) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: "Open project",
         multiple: true,

@@ -107,7 +107,10 @@ const platform: Platform = {
 
     await Promise.resolve()
       .then(() => {
-        const notification = new Notification(title, { body: description ?? "" })
+        const notification = new Notification(title, {
+          body: description ?? "",
+          icon: "https://opencode.ai/favicon-96x96.png",
+        })
         notification.onclick = () => {
           const win = getCurrentWindow()
           void win.show().catch(() => undefined)
