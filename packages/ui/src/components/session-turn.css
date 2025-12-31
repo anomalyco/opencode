@@ -116,6 +116,11 @@
     color: var(--text-weak);
   }
 
+  [data-slot="session-turn-markdown"],
+  [data-slot="session-turn-accordion"] [data-slot="accordion-content"] {
+    user-select: text;
+  }
+
   [data-slot="session-turn-markdown"] {
     &[data-diffs="true"] {
       font-size: 15px;
@@ -343,6 +348,8 @@
 
   .error-card {
     color: var(--text-on-critical-base);
+    max-height: 240px;
+    overflow-y: auto;
   }
 
   [data-slot="session-turn-collapsible-content-inner"] {

@@ -2048,6 +2048,9 @@
                   "system": {
                     "type": "string"
                   },
+                  "variant": {
+                    "type": "string"
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -2420,6 +2423,9 @@
                   "system": {
                     "type": "string"
                   },
+                  "variant": {
+                    "type": "string"
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -2540,6 +2546,9 @@
                     "type": "string"
                   },
                   "command": {
+                    "type": "string"
+                  },
+                  "variant": {
                     "type": "string"
                   }
                 },
@@ -3200,6 +3209,19 @@
                                     }
                                   },
                                   "required": ["npm"]
+                                },
+                                "variants": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
+                                  }
                                 }
                               },
                               "required": [
@@ -3556,10 +3578,27 @@
               "type": "string",
               "enum": ["true", "false"]
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": ["file", "directory"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
           }
         ],
         "summary": "Find files",
-        "description": "Search for files by name or pattern in the project directory.",
+        "description": "Search for files or directories by name or pattern in the project directory.",
         "responses": {
           "200": {
             "description": "File paths",
@@ -5265,6 +5304,9 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "variant": {
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"]
@@ -7496,6 +7538,11 @@
             "default": "shift+tab",
             "type": "string"
           },
+          "variant_cycle": {
+            "description": "Cycle model variants",
+            "default": "ctrl+t",
+            "type": "string"
+          },
           "input_clear": {
             "description": "Clear input field",
             "default": "ctrl+c",
@@ -7746,6 +7793,13 @@
           "mdns": {
             "description": "Enable mDNS service discovery",
             "type": "boolean"
+          },
+          "cors": {
+            "description": "Additional domains to allow for CORS",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -8027,6 +8081,23 @@
                     }
                   },
                   "required": ["npm"]
+                },
+                "variants": {
+                  "description": "Variant-specific configuration",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "disabled": {
+                        "description": "Disable this variant for the model",
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": {}
+                  }
                 }
               }
             }
@@ -8703,6 +8774,12 @@
               "continue_loop_on_deny": {
                 "description": "Continue the agent loop when a tool call is denied",
                 "type": "boolean"
+              },
+              "mcp_timeout": {
+                "description": "Timeout in milliseconds for model context protocol (MCP) requests",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               }
             }
           }
@@ -8906,13 +8983,26 @@
             "type": "string"
           },
           "template": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
           },
           "subtask": {
             "type": "boolean"
+          },
+          "hints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["name", "template"]
+        "required": ["name", "template", "hints"]
       },
       "Model": {
         "type": "object",
@@ -9103,6 +9193,19 @@
           },
           "release_date": {
             "type": "string"
+          },
+          "variants": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
           }
         },
         "required": [

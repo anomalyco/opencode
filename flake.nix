@@ -17,7 +17,7 @@
         "aarch64-darwin"
         "x86_64-darwin"
       ];
-      lib = nixpkgs.lib;
+      inherit (nixpkgs) lib;
       forEachSystem = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
       packageJson = builtins.fromJSON (builtins.readFile ./packages/opencode/package.json);
@@ -70,12 +70,12 @@
         in
         {
           default = mkPackage {
-            version = packageJson.version;
+            inherit (packageJson) version;
             src = ./.;
             scripts = ./nix/scripts;
             target = bunTarget.${system};
             modelsDev = "${modelsDev.${system}}/dist/_api.json";
-            mkNodeModules = mkNodeModules;
+            inherit mkNodeModules;
           };
         }
       );
