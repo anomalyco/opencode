@@ -1,5 +1,5 @@
 import { json, action, useParams, createAsync, useSubmission } from "@solidjs/router"
-import { createEffect, Show } from "solid-js"
+import { createEffect, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
 import { Billing } from "@opencode-ai/console-core/billing.js"
@@ -68,6 +68,12 @@ export function ReloadSection() {
     reloadTrigger: "",
   })
 
+  const processingFee = createMemo(() => {
+    const reloadAmount = billingInfo()?.reloadAmount
+    if (!reloadAmount) return "0.00"
+    return (((reloadAmount + 0.3) / 0.956) * 0.044 + 0.3).toFixed(2)
+  })
+
   createEffect(() => {
     if (!setReloadSubmission.pending && setReloadSubmission.result && !(setReloadSubmission.result as any).error) {
       setStore("show", false)
@@ -104,8 +110,8 @@ export function ReloadSection() {
             }
           >
             <p>
-              Auto reload is <b>enabled</b>. We'll reload <b>${billingInfo()?.reloadAmount}</b> (+$1.23 processing fee)
-              when balance reaches <b>${billingInfo()?.reloadTrigger}</b>.
+              Auto reload is <b>enabled</b>. We'll reload <b>${billingInfo()?.reloadAmount}</b> (+${processingFee()}{" "}
+              processing fee) when balance reaches <b>${billingInfo()?.reloadTrigger}</b>.
             </p>
           </Show>
           <button data-color="primary" type="button" onClick={() => show()}>
