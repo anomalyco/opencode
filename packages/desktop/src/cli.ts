@@ -21,5 +21,9 @@ export async function installCli(): Promise<void> {
 }
 
 export async function syncCli(): Promise<void> {
-  await invoke("sync_cli")
+  try {
+    await invoke("sync_cli")
+  } catch (e) {
+    console.error("Failed to sync CLI:", e)
+  }
 }

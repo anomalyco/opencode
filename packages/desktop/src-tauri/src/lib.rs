@@ -215,9 +215,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
 
     #[cfg(not(target_os = "windows"))]
     let (mut rx, child) = {
-        let cli_path = get_cli_install_path()
-            .filter(|p| p.exists())
-            .unwrap_or_else(get_sidecar_path);
+        let sidecar = get_sidecar_path();
         let shell = get_user_shell();
         app.shell()
             .command(&shell)
@@ -227,7 +225,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
             .args([
                 "-il",
                 "-c",
-                &format!("{} serve --port={}", cli_path.display(), port),
+                &format!("{} serve --port={}", sidecar.display(), port),
             ])
             .spawn()
             .expect("Failed to spawn opencode")
