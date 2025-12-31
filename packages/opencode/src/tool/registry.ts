@@ -58,6 +58,15 @@ export namespace ToolRegistry {
     return { custom }
   })
 
+  function isStructuredResult(result: unknown): result is Partial<Tool.Result> & { output: string } {
+    return (
+      typeof result === "object" &&
+      result !== null &&
+      "output" in result &&
+      typeof (result as Record<string, unknown>).output === "string"
+    )
+  }
+
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
       id,
@@ -66,6 +75,18 @@ export namespace ToolRegistry {
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
+          if (isStructuredResult(result)) {
+            const out = await Truncate.output(result.output, {}, initCtx?.agent)
+            return {
+              title: result.title ?? "",
+              metadata: {
+                ...result.metadata,
+                truncated: out.truncated,
+                outputPath: out.truncated ? out.outputPath : undefined,
+              },
+              output: out.truncated ? out.content : result.output,
+            }
+          }
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",

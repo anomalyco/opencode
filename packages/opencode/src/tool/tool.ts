@@ -23,20 +23,20 @@ export namespace Tool {
     metadata(input: { title?: string; metadata?: M }): void
     ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
   }
+
+  export interface Result<M extends Metadata = Metadata> {
+    title: string
+    metadata: M
+    output: string
+    attachments?: MessageV2.FilePart[]
+  }
+
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string
     init: (ctx?: InitContext) => Promise<{
       description: string
       parameters: Parameters
-      execute(
-        args: z.infer<Parameters>,
-        ctx: Context,
-      ): Promise<{
-        title: string
-        metadata: M
-        output: string
-        attachments?: MessageV2.FilePart[]
-      }>
+      execute(args: z.infer<Parameters>, ctx: Context): Promise<Result<M>>
       formatValidationError?(error: z.ZodError): string
     }>
   }
