@@ -1400,10 +1400,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         "text-icon-warning": !!local.model.variant.current(),
                       }}
                     >
-                      <Icon name="brain" size="small" />
-                      <Show when={local.model.variant.current()}>
-                        <span class="text-12-regular">{local.model.variant.current()}</span>
-                      </Show>
+                      <span class="text-12-regular">{local.model.variant.current() ?? "Default"}</span>
                     </Button>
                   </Tooltip>
                 </Show>
