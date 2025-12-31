@@ -520,22 +520,19 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         </Match>
       </Switch>
       <Show when={showPermission() && permission()}>
-        {(perm) => (
-          <div data-component="permission-prompt">
-            <div data-slot="permission-message">{perm().title}</div>
-            <div data-slot="permission-actions">
-              <Button variant="ghost" size="small" onClick={() => respond("reject")}>
-                Deny
-              </Button>
-              <Button variant="secondary" size="small" onClick={() => respond("always")}>
-                Allow always
-              </Button>
-              <Button variant="primary" size="small" onClick={() => respond("once")}>
-                Allow once
-              </Button>
-            </div>
+        <div data-component="permission-prompt">
+          <div data-slot="permission-actions">
+            <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+              Deny
+            </Button>
+            <Button variant="secondary" size="small" onClick={() => respond("always")}>
+              Allow always
+            </Button>
+            <Button variant="primary" size="small" onClick={() => respond("once")}>
+              Allow once
+            </Button>
           </div>
-        )}
+        </div>
       </Show>
     </div>
   )
@@ -768,40 +765,37 @@ ToolRegistry.register({
       <div data-component="tool-part-wrapper" data-permission={!!childPermission()}>
         <Switch>
           <Match when={childPermission()}>
-            {(perm) => (
-              <>
-                <Show
-                  when={childToolPart()}
-                  fallback={
-                    <BasicTool
-                      icon="task"
-                      defaultOpen={true}
-                      trigger={{
-                        title: `${props.input.subagent_type || props.tool} Agent`,
-                        titleClass: "capitalize",
-                        subtitle: props.input.description,
-                      }}
-                    />
-                  }
-                >
-                  {renderChildToolPart()}
-                </Show>
-                <div data-component="permission-prompt">
-                  <div data-slot="permission-message">{perm().title}</div>
-                  <div data-slot="permission-actions">
-                    <Button variant="ghost" size="small" onClick={() => respond("reject")}>
-                      Deny
-                    </Button>
-                    <Button variant="secondary" size="small" onClick={() => respond("always")}>
-                      Allow always
-                    </Button>
-                    <Button variant="primary" size="small" onClick={() => respond("once")}>
-                      Allow once
-                    </Button>
-                  </div>
+            <>
+              <Show
+                when={childToolPart()}
+                fallback={
+                  <BasicTool
+                    icon="task"
+                    defaultOpen={true}
+                    trigger={{
+                      title: `${props.input.subagent_type || props.tool} Agent`,
+                      titleClass: "capitalize",
+                      subtitle: props.input.description,
+                    }}
+                  />
+                }
+              >
+                {renderChildToolPart()}
+              </Show>
+              <div data-component="permission-prompt">
+                <div data-slot="permission-actions">
+                  <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+                    Deny
+                  </Button>
+                  <Button variant="secondary" size="small" onClick={() => respond("always")}>
+                    Allow always
+                  </Button>
+                  <Button variant="primary" size="small" onClick={() => respond("once")}>
+                    Allow once
+                  </Button>
                 </div>
-              </>
-            )}
+              </div>
+            </>
           </Match>
           <Match when={true}>
             <BasicTool
