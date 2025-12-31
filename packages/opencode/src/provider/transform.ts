@@ -3,6 +3,7 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
+import { iife } from "@/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -292,13 +293,17 @@ export namespace ProviderTransform {
       case "@ai-sdk/openai":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
-        const openaiEfforts = ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
-        if (model.release_date >= "2025-11-13") {
-          openaiEfforts.unshift("none")
-        }
-        if (model.release_date >= "2025-12-04") {
-          openaiEfforts.push("xhigh")
-        }
+        const openaiEfforts = iife(() => {
+          if (model.id.includes("codex")) return WIDELY_SUPPORTED_EFFORTS
+          const arr = ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
+          if (model.release_date >= "2025-11-13") {
+            arr.unshift("none")
+          }
+          if (model.release_date >= "2025-12-04") {
+            arr.push("xhigh")
+          }
+          return arr
+        })
         return Object.fromEntries(
           openaiEfforts.map((effort) => [
             effort,
