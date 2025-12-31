@@ -862,6 +862,7 @@ export function Prompt(props: PromptProps) {
                 if (keybind.match("input_undo", e) && ctrlCClearedState()) {
                   const saved = ctrlCClearedState()!
                   input.setText(saved.input)
+                  restoreExtmarksFromParts(saved.parts)
                   setStore("prompt", {
                     input: saved.input,
                     parts: saved.parts,
