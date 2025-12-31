@@ -52,21 +52,45 @@ export namespace Plugin {
     }
   })
 
+  export interface BlockedResult {
+    blocked: {
+      hookEvent: string
+      reason: string
+    }
+  }
+
+  function isBlockedError(e: unknown): e is { name: string; hookEvent: string; reason: string } {
+    return (
+      e instanceof Error &&
+      (e as any).name === "BlockedError" &&
+      typeof (e as any).hookEvent === "string" &&
+      typeof (e as any).reason === "string"
+    )
+  }
+
   export async function trigger<
     Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
-  >(name: Name, input: Input, output: Output): Promise<Output> {
-    if (!name) return output
+  >(name: Name, input: Input, output: Output): Promise<Output & Partial<BlockedResult>> {
+    if (!name) return output as Output & Partial<BlockedResult>
     for (const hook of await state().then((x) => x.hooks)) {
       const fn = hook[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
-      await fn(input, output)
+      try {
+        // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
+        // give up.
+        // try-counter: 2
+        await fn(input, output)
+      } catch (e) {
+        if (isBlockedError(e)) {
+          log.info("hook blocked", { event: name, hookEvent: e.hookEvent, reason: e.reason })
+          return { ...output, blocked: { hookEvent: e.hookEvent, reason: e.reason } } as Output & BlockedResult
+        }
+        throw e
+      }
     }
-    return output
+    return output as Output & Partial<BlockedResult>
   }
 
   export async function list() {
