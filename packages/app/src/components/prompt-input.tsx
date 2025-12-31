@@ -1390,16 +1390,6 @@ function getCursorPosition(parent: HTMLElement): number {
 }
 
 function setCursorPosition(parent: HTMLElement, position: number) {
-  // Bounds check - prevent invalid positions
-  if (position < 0 || position > 1000000) {
-    position = 0
-  }
-
-  const totalLength = getTextLength(parent)
-  if (position > totalLength) {
-    position = totalLength
-  }
-
   let remaining = position
   let node = parent.firstChild
   while (node) {

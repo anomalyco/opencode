@@ -353,7 +353,6 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
   const segments = createMemo(() => {
     const text = props.text
 
-    // Combine file and agent references with their types
     const allRefs: { start: number; end: number; type: "file" | "agent" }[] = [
       ...props.references
         .filter((r) => r.source?.text?.start !== undefined && r.source?.text?.end !== undefined)
