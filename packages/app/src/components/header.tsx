@@ -102,9 +102,7 @@ export function Header(props: {
                         </div>
                       }
                     >
-                      <Button as={A} href={`/${params.dir}/session`} icon="plus-small">
-                        New session
-                      </Button>
+                      <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
                     </Tooltip>
                   </Show>
                 </div>
