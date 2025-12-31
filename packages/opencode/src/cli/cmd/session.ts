@@ -4,7 +4,29 @@ import { Session } from "../../session"
 import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import { Locale } from "../../util/locale"
+import { Flag } from "../../flag/flag"
 import { EOL } from "os"
+import path from "path"
+
+function pagerCmd(): string[] {
+  if (process.platform !== "win32") {
+    return ["less", "-R", "-S"]
+  }
+
+  if (Flag.OPENCODE_GIT_BASH_PATH) {
+    const less = path.join(Flag.OPENCODE_GIT_BASH_PATH, "..", "..", "usr", "bin", "less.exe")
+    if (Bun.file(less).size) return [less, "-R", "-S"]
+  }
+
+  const git = Bun.which("git")
+  if (git) {
+    const less = path.join(git, "..", "..", "usr", "bin", "less.exe")
+    if (Bun.file(less).size) return [less, "-R", "-S"]
+  }
+
+  // Fall back to Windows built-in more (via cmd.exe)
+  return ["cmd", "/c", "more"]
+}
 
 export const SessionCommand = cmd({
   command: "session",
@@ -58,7 +80,7 @@ export const SessionListCommand = cmd({
 
       if (shouldPaginate) {
         const proc = Bun.spawn({
-          cmd: ["less", "-R", "-S"],
+          cmd: pagerCmd(),
           stdin: "pipe",
           stdout: "inherit",
           stderr: "inherit",
