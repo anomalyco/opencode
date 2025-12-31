@@ -869,6 +869,52 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### Morpheus AI
+
+[Morpheus AI](https://mor.org) provides access to enterprise-grade AI models through a unified OpenAI-compatible API gateway, including GLM, Qwen, Kimi, Hermes, Llama, Mistral, and other state-of-the-art models.
+
+1. Head over to the [Morpheus AI portal](https://app.mor.org), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **Morpheus AI**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Morpheus AI API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _GLM 4.6_, _Kimi K2 Thinking_, or _Qwen3 Coder 480B_.
+
+   ```txt
+   /models
+   ```
+
+You can also configure Morpheus AI with additional models through your opencode config.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "morpheus-ai": {
+      "models": {
+        "glm-4.6": {},
+        "kimi-k2-thinking": {},
+        "qwen3-coder-480b-a35b-instruct": {}
+      }
+    }
+  }
+}
+```
+
+---
+
 ### MiniMax
 
 1. Head over to the [MiniMax API Console](https://platform.minimax.io/login), create an account, and generate an API key.
