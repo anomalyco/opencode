@@ -94,7 +94,7 @@ function init() {
         evt.preventDefault()
         toast.show({
           variant: "warning",
-          message: `Unknown command: ${name}`,
+          message: `Unknown keybind command: ${name}`,
           duration: 3000,
         })
         return
