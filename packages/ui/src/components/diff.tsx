@@ -1,7 +1,7 @@
 import { FileDiff } from "@pierre/diffs"
 import { createEffect, createMemo, onCleanup, splitProps } from "solid-js"
 import { createDefaultOptions, type DiffProps, styleVariables } from "../pierre"
-import { workerPool } from "../pierre/worker"
+import { getWorkerPool } from "../pierre/worker"
 
 // interface ThreadMetadata {
 //   threadId: string
@@ -20,26 +20,23 @@ export function Diff<T>(props: DiffProps<T>) {
           ...createDefaultOptions(props.diffStyle),
           ...others,
         },
-        workerPool,
+        getWorkerPool(props.diffStyle),
       ),
   )
 
-  const cleanupFunctions: Array<() => void> = []
-
   createEffect(() => {
+    const diff = fileDiff()
     container.innerHTML = ""
-    fileDiff().render({
+    diff.render({
       oldFile: local.before,
       newFile: local.after,
       lineAnnotations: local.annotations,
       containerWrapper: container,
     })
-  })
 
-  onCleanup(() => {
-    // Clean up FileDiff event handlers and dispose SolidJS components
-    fileDiff()?.cleanUp()
-    cleanupFunctions.forEach((dispose) => dispose())
+    onCleanup(() => {
+      diff.cleanUp()
+    })
   })
 
   return <div data-component="diff" style={styleVariables} ref={container} />
