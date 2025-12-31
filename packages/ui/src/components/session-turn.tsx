@@ -78,6 +78,7 @@ function AssistantMessageItem(props: {
   message: AssistantMessage
   responsePartId: string | undefined
   hideResponsePart: boolean
+  hideReasoning: boolean
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
@@ -92,7 +93,12 @@ function AssistantMessageItem(props: {
   })
 
   const filteredParts = createMemo(() => {
-    const parts = msgParts()
+    let parts = msgParts()
+
+    if (props.hideReasoning) {
+      parts = parts.filter((part) => part?.type !== "reasoning")
+    }
+
     if (!props.hideResponsePart) return parts
 
     const responsePartId = props.responsePartId
@@ -556,6 +562,7 @@ export function SessionTurn(
                               message={assistantMessage}
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
+                              hideReasoning={!working()}
                             />
                           )}
                         </For>
