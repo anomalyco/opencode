@@ -97,7 +97,6 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
-  // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
     const onExit = async () => {

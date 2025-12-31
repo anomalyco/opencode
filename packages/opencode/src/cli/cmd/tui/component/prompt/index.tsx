@@ -661,6 +661,12 @@ export function Prompt(props: PromptProps) {
     input.clear()
   }
   const exit = useExit()
+  const [ctrlCPressedOnce, setCtrlCPressedOnce] = createSignal(false)
+  let ctrlCResetTimeout: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => {
+    if (ctrlCResetTimeout) clearTimeout(ctrlCResetTimeout)
+  })
 
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.visualCursor.offset
@@ -859,8 +865,22 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
-                    await exit()
-                    // Don't preventDefault - let textarea potentially handle the event
+                    if (ctrlCPressedOnce()) {
+                      if (ctrlCResetTimeout) clearTimeout(ctrlCResetTimeout)
+                      await exit()
+                      e.preventDefault()
+                      return
+                    }
+                    setCtrlCPressedOnce(true)
+                    toast.show({
+                      variant: "warning",
+                      message: "Press Ctrl+C again to exit",
+                      duration: 3000,
+                    })
+                    if (ctrlCResetTimeout) clearTimeout(ctrlCResetTimeout)
+                    ctrlCResetTimeout = setTimeout(() => {
+                      setCtrlCPressedOnce(false)
+                    }, 3000)
                     e.preventDefault()
                     return
                   }

@@ -28,6 +28,8 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 
+process.on("SIGINT", () => {})
+
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: e instanceof Error ? e.message : e,
