@@ -127,20 +127,22 @@ export namespace Command {
 
   async function loadFreshCommands(): Promise<Record<string, Info>> {
     const result = createBuiltInCommands()
-    const directories = await Config.directories()
-
-    // Reload commands from markdown files in all config directories
-    for (const dir of directories) {
-      const freshCommands = await Config.loadCommand(dir)
-      for (const [name, command] of Object.entries(freshCommands)) {
-        result[name] = {
-          name,
-          agent: command.agent,
-          model: command.model,
-          description: command.description,
-          template: command.template,
-          subtask: command.subtask,
-        }
+    const cfg = await Config.get()
+    
+    // Get fresh config to reload commands from markdown files
+    const freshConfig = await Config.state()
+    
+    // Extract commands from the fresh config
+    const freshCommands = freshConfig.config.command || {}
+    for (const [name, command] of Object.entries(freshCommands)) {
+      result[name] = {
+        name,
+        agent: command.agent,
+        model: command.model,
+        description: command.description,
+        template: command.template,
+        subtask: command.subtask,
+        hints: Command.hints(command.template),
       }
     }
 
