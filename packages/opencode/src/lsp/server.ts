@@ -196,13 +196,14 @@ export namespace LSPServer {
         }
         await fs.rename(extractedPath, finalPath)
 
-        await $`npm install`.cwd(finalPath).quiet()
-        await $`npm run compile`.cwd(finalPath).quiet()
+        const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm"
+        await $`${npmCmd} install`.cwd(finalPath).quiet()
+        await $`${npmCmd} run compile`.cwd(finalPath).quiet()
 
         log.info("installed VS Code ESLint server", { serverPath })
       }
 
-      const proc = spawn(BunProc.which(), ["--max-old-space-size=8192", serverPath, "--stdio"], {
+      const proc = spawn(BunProc.which(), [serverPath, "--stdio"], {
         cwd: root,
         env: {
           ...process.env,
@@ -1432,6 +1433,24 @@ export namespace LSPServer {
       return {
         process: proc,
         initialization: {},
+      }
+    },
+  }
+
+  export const Prisma: Info = {
+    id: "prisma",
+    extensions: [".prisma"],
+    root: NearestRoot(["schema.prisma", "prisma/schema.prisma", "prisma"], ["package.json"]),
+    async spawn(root) {
+      const prisma = Bun.which("prisma")
+      if (!prisma) {
+        log.info("prisma not found, please install prisma")
+        return
+      }
+      return {
+        process: spawn(prisma, ["language-server"], {
+          cwd: root,
+        }),
       }
     },
   }

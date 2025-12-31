@@ -65,23 +65,40 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agent = (() => {
       const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const [store, setStore] = createStore<{
-        current: string
+        current?: string
       }>({
-        current: list()[0].name,
+        current: list()[0]?.name,
       })
       return {
         list,
         current() {
-          return list().find((x) => x.name === store.current)!
+          const available = list()
+          if (available.length === 0) return undefined
+          return available.find((x) => x.name === store.current) ?? available[0]
         },
         set(name: string | undefined) {
-          setStore("current", name ?? list()[0].name)
+          const available = list()
+          if (available.length === 0) {
+            setStore("current", undefined)
+            return
+          }
+          if (name && available.some((x) => x.name === name)) {
+            setStore("current", name)
+            return
+          }
+          setStore("current", available[0].name)
         },
         move(direction: 1 | -1) {
-          let next = list().findIndex((x) => x.name === store.current) + direction
-          if (next < 0) next = list().length - 1
-          if (next >= list().length) next = 0
-          const value = list()[next]
+          const available = list()
+          if (available.length === 0) {
+            setStore("current", undefined)
+            return
+          }
+          let next = available.findIndex((x) => x.name === store.current) + direction
+          if (next < 0) next = available.length - 1
+          if (next >= available.length) next = 0
+          const value = available[next]
+          if (!value) return
           setStore("current", value.name)
           if (value.model)
             model.set({
@@ -98,9 +115,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         createStore<{
           user: (ModelKey & { visibility: "show" | "hide"; favorite?: boolean })[]
           recent: ModelKey[]
+          variant?: Record<string, string | undefined>
         }>({
           user: [],
           recent: [],
+          variant: {},
         }),
       )
 
@@ -182,11 +201,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const current = createMemo(() => {
         const a = agent.current()
+        if (!a) return undefined
         const key = getFirstValidModel(
           () => ephemeral.model[a.name],
           () => a.model,
           fallbackModel,
-        )!
+        )
+        if (!key) return undefined
         return find(key)
       })
 
@@ -232,7 +253,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         cycle,
         set(model: ModelKey | undefined, options?: { recent?: boolean }) {
           batch(() => {
-            setEphemeral("model", agent.current().name, model ?? fallbackModel())
+            const currentAgent = agent.current()
+            if (currentAgent) setEphemeral("model", currentAgent.name, model ?? fallbackModel())
             if (model) updateVisibility(model, "show")
             if (options?.recent && model) {
               const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
@@ -251,6 +273,45 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         setVisibility(model: ModelKey, visible: boolean) {
           updateVisibility(model, visible ? "show" : "hide")
+        },
+        variant: {
+          current() {
+            const m = current()
+            if (!m) return undefined
+            const key = `${m.provider.id}/${m.id}`
+            return store.variant?.[key]
+          },
+          list() {
+            const m = current()
+            if (!m) return []
+            if (!m.variants) return []
+            return Object.keys(m.variants)
+          },
+          set(value: string | undefined) {
+            const m = current()
+            if (!m) return
+            const key = `${m.provider.id}/${m.id}`
+            if (!store.variant) {
+              setStore("variant", { [key]: value })
+            } else {
+              setStore("variant", key, value)
+            }
+          },
+          cycle() {
+            const variants = this.list()
+            if (variants.length === 0) return
+            const currentVariant = this.current()
+            if (!currentVariant) {
+              this.set(variants[0])
+              return
+            }
+            const index = variants.indexOf(currentVariant)
+            if (index === -1 || index === variants.length - 1) {
+              this.set(undefined)
+              return
+            }
+            this.set(variants[index + 1])
+          },
         },
       }
     })()

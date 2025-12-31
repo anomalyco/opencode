@@ -6,7 +6,7 @@
   color: var(--text-base);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
-  line-height: var(--line-height-large);
+  line-height: var(--line-height-x-large);
 
   /* Spacing for flow */
   > *:first-child {
@@ -64,8 +64,16 @@
     list-style-position: inside;
   }
 
+  ul {
+    list-style-type: disc;
+  }
+
+  ol {
+    list-style-type: decimal;
+  }
+
   li {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
   }
 
   li::marker {
@@ -117,13 +125,15 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    font-size: 13px;
+    color: var(--syntax-string);
+    font-weight: var(--font-weight-medium);
+    /* font-size: 13px; */
 
-    padding: 2px 2px;
-    margin: 0 1.5px;
-    border-radius: 2px;
-    background: var(--surface-base);
-    box-shadow: 0 0 0 0.5px var(--border-weak-base);
+    /* padding: 2px 2px; */
+    /* margin: 0 1.5px; */
+    /* border-radius: 2px; */
+    /* background: var(--surface-base); */
+    /* box-shadow: 0 0 0 0.5px var(--border-weak-base); */
   }
 
   /* Tables */
