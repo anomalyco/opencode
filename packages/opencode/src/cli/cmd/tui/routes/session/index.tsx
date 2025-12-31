@@ -107,6 +107,19 @@ export function Session() {
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
+  const [historyExpanded, setHistoryExpanded] = createSignal(false)
+  const MAX_VISIBLE_MESSAGES = 50
+
+  const visibleMessages = createMemo(() => {
+    const msgs = messages()
+    // Auto-expand if revert is active to avoid hiding context
+    if (historyExpanded() || msgs.length <= MAX_VISIBLE_MESSAGES) return msgs
+    return msgs.slice(-MAX_VISIBLE_MESSAGES)
+  })
+
+  const hiddenMessageCount = createMemo(() => messages().length - visibleMessages().length)
+
   const permissions = createMemo(() => sync.data.permission[route.sessionID] ?? [])
 
   const pending = createMemo(() => {
@@ -1024,7 +1037,21 @@ export function Session() {
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
             >
-              <For each={messages()}>
+              <Show when={hiddenMessageCount() > 0}>
+                <box
+                  height={1}
+                  flexShrink={0}
+                  alignItems="center"
+                  justifyContent="center"
+                  backgroundColor={theme.backgroundPanel}
+                  marginTop={1}
+                  marginBottom={1}
+                  onMouseUp={() => setHistoryExpanded(true)}
+                >
+                  <text fg={theme.textMuted}>{hiddenMessageCount()} older messages collapsed · click to expand</text>
+                </box>
+              </Show>
+              <For each={visibleMessages()}>
                 {(message, index) => (
                   <Switch>
                     <Match when={message.id === revert()?.messageID}>
