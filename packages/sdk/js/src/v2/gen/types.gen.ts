@@ -1178,6 +1178,10 @@ export type ServerConfig = {
    * Enable mDNS service discovery
    */
   mdns?: boolean
+  /**
+   * Additional domains to allow for CORS
+   */
+  cors?: Array<string>
 }
 
 export type AgentConfig = {
@@ -1309,6 +1313,18 @@ export type ProviderConfig = {
       }
       provider?: {
         npm: string
+      }
+      /**
+       * Variant-specific configuration
+       */
+      variants?: {
+        [key: string]: {
+          /**
+           * Disable this variant for the model
+           */
+          disabled?: boolean
+          [key: string]: unknown | boolean | undefined
+        }
       }
     }
   }
@@ -1640,6 +1656,10 @@ export type Config = {
      * Continue the agent loop when a tool call is denied
      */
     continue_loop_on_deny?: boolean
+    /**
+     * Timeout in milliseconds for model context protocol (MCP) requests
+     */
+    mcp_timeout?: number
   }
 }
 
@@ -1714,13 +1734,10 @@ export type Command = {
   description?: string
   agent?: string
   model?: string
+  mcp?: boolean
   template: string
   subtask?: boolean
-}
-
-export type Variant = {
-  disabled: boolean
-  [key: string]: unknown | boolean
+  hints: Array<string>
 }
 
 export type Model = {
@@ -1787,7 +1804,9 @@ export type Model = {
   }
   release_date: string
   variants?: {
-    [key: string]: Variant
+    [key: string]: {
+      [key: string]: unknown
+    }
   }
 }
 
@@ -3497,6 +3516,11 @@ export type ProviderListResponses = {
           }
           provider?: {
             npm: string
+          }
+          variants?: {
+            [key: string]: {
+              [key: string]: unknown
+            }
           }
         }
       }
