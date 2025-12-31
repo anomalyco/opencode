@@ -1733,6 +1733,7 @@ export type Command = {
   description?: string
   agent?: string
   model?: string
+  mcp?: boolean
   template: string
   subtask?: boolean
   hints: Array<string>
