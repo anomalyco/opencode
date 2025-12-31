@@ -1,7 +1,7 @@
 import { type FileContents, File, FileOptions, LineAnnotation } from "@pierre/diffs"
 import { ComponentProps, createEffect, createMemo, splitProps } from "solid-js"
 import { createDefaultOptions, styleVariables } from "../pierre"
-import { workerPool } from "../pierre/worker"
+import { getWorkerPool } from "../pierre/worker"
 
 export type CodeProps<T = {}> = FileOptions<T> & {
   file: FileContents
@@ -21,7 +21,7 @@ export function Code<T>(props: CodeProps<T>) {
           ...createDefaultOptions<T>("unified"),
           ...others,
         },
-        workerPool,
+        getWorkerPool("unified"),
       ),
   )
 
