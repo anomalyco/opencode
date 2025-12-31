@@ -1271,6 +1271,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       <form
         onSubmit={handleSubmit}
         classList={{
+          "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-md overflow-clip focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.dragging,
@@ -1392,17 +1393,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Button>
                 </Tooltip>
                 <Show when={local.model.variant.list().length > 0}>
-                  <Tooltip placement="top" value="Cycle effort level">
+                  <TooltipKeybind placement="top" title="Thinking effort" keybind={command.keybind("model.variant")}>
                     <Button
                       variant="ghost"
                       onClick={() => local.model.variant.cycle()}
-                      classList={{
-                        "text-icon-warning": !!local.model.variant.current(),
-                      }}
+                      class="text-text-base hidden group-hover/prompt-input:inline-block"
                     >
-                      <span class="text-12-regular">{local.model.variant.current() ?? "Default"}</span>
+                      <span class="capitalize text-12-regular">{local.model.variant.current() ?? "Default"}</span>
                     </Button>
-                  </Tooltip>
+                  </TooltipKeybind>
                 </Show>
               </Match>
             </Switch>
