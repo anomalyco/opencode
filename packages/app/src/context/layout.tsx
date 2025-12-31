@@ -30,6 +30,8 @@ type SessionTabs = {
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
+export type ReviewDiffStyle = "unified" | "split"
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -49,6 +51,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           opened: true,
+          diffStyle: "split" as ReviewDiffStyle,
         },
         session: {
           width: 600,
@@ -156,6 +159,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       review: {
         opened: createMemo(() => store.review?.opened ?? true),
+        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
+        setDiffStyle(diffStyle: ReviewDiffStyle) {
+          if (!store.review) {
+            setStore("review", { opened: true, diffStyle })
+            return
+          }
+          setStore("review", "diffStyle", diffStyle)
+        },
         open() {
           setStore("review", "opened", true)
         },
