@@ -102,7 +102,7 @@ This PR implements TUI renderers only. Desktop and Web clients would need their 
 - `ConfirmDialog` — Left/right arrow navigation, enter to confirm
 - `SelectDialog` — Up/down navigation, enter to select
 - `MultiSelectDialog` — Space to toggle, enter to submit
-- `FormDialog` — Tab between fields, ctrl+enter to submit
+- `FormDialog` — Tab between fields, enter to submit
 
 **`app.tsx`** — Event subscription:
 - Subscribes to `Intent.Event.Updated`
@@ -238,6 +238,64 @@ See `MANUAL_TESTING.md` for step-by-step TUI testing instructions.
 5. **Schema limits** — Options capped at 2-8 items, fields at 1-10 to prevent UI overload
 
 6. **Optional `ui` on PluginInput** — Plugins must check `if (ui)` before using, as it may not be available in all contexts (headless mode, non-TUI clients)
+
+7. **Separate `dialog-intent` vs reusing `dialog-select`** — Intentionally kept as separate components despite functional overlap. Analysis below.
+
+### Why dialog-intent is a Separate Component
+
+We considered three options for the TUI dialog implementation:
+
+| Option | Description | Risk |
+|--------|-------------|------|
+| **1. Keep separate** | New `dialog-intent.tsx` with its own Select/MultiSelect | Low |
+| **2. Compose** | `dialog-intent` uses `DialogSelect` internally | Medium |
+| **3. Extract primitives** | Shared `OptionList` component both use | High |
+
+**We chose Option 1.** Here's why:
+
+#### Functional Overlap
+
+| Aspect | `dialog-select` | `dialog-intent` |
+|--------|-----------------|-----------------|
+| **Purpose** | General TUI selection | Intent API communication |
+| **Trigger** | Direct TUI invocation | Agent Intent events |
+| **Search/Filter** | ✅ Fuzzy search | ❌ None needed |
+| **Categories** | ✅ Grouped options | ❌ Flat list |
+| **Intent Types** | Select only | Confirm, Select, MultiSelect, Form |
+| **Form Fields** | ❌ | ✅ With conditions |
+
+#### Risk Assessment
+
+**Test coverage for TUI components: None**
+
+```
+dialog-select.tsx    → 0 tests (14 consumer components)
+dialog-intent.tsx    → 0 tests (new, 1 consumer)
+Intent API           → 8 tests (core module only)
+```
+
+**DialogSelect consumers (14 files):**
+- dialog-command, dialog-model, dialog-provider, dialog-mcp
+- dialog-agent, dialog-session-list, dialog-theme-list, dialog-stash
+- dialog-tag, dialog-timeline, dialog-fork-from-timeline
+- dialog-message, dialog-subagent
+
+**Option 3 would require:**
+- Refactoring a core component with 14 consumers
+- Zero test coverage to catch regressions
+- Manual testing of all 14 dialog types
+- High likelihood of rejection due to risk
+
+#### Recommendation for Future
+
+If abstracting shared primitives is desired:
+
+1. **Separate PR** — Do not bundle with Intent feature
+2. **Add tests first** — Cover DialogSelect before refactoring
+3. **Extract incrementally** — Start with one shared primitive (e.g., `OptionList`)
+4. **Keep Intent decoupled** — Intent feature should not depend on this refactor
+
+This keeps the Intent PR focused, reviewable, and low-risk.
 
 ---
 
