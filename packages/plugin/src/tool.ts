@@ -7,10 +7,25 @@ export type ToolContext = {
   abort: AbortSignal
 }
 
+/**
+ * Structured result for plugin tools.
+ *
+ * Return this instead of a plain string to provide rich metadata
+ * that integrates with streaming updates.
+ */
+export interface ToolResult {
+  /** Title displayed in the UI */
+  title: string
+  /** Arbitrary metadata passed to tool.execute.after hooks */
+  metadata: Record<string, unknown>
+  /** The text output returned to the model */
+  output: string
+}
+
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
-  execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string>
+  execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<string | ToolResult>
 }) {
   return input
 }
