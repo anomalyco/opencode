@@ -31,6 +31,22 @@ export const TaskTool = Tool.define("task", async () => {
     async execute(params, ctx) {
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+      // Security: Inherit Plan mode restrictions to sub-agents
+      // When parent agent has edit="deny" (e.g., Plan mode), sub-agents must:
+      // 1. Run as Plan agent to inherit bash whitelist (read-only commands)
+      // 2. Have edit/write tools explicitly disabled
+      // This prevents bypass of Plan mode restrictions via Task tool
+      const parent = await Agent.get(ctx.agent)
+      const restricted = parent?.permission.edit === "deny"
+      const plan = restricted ? await Agent.get("plan") : null
+      if (restricted && !plan)
+        throw new Error(
+          `Cannot spawn sub-agent from restricted parent "${ctx.agent}": Plan agent is required but not available. ` +
+            `Ensure the Plan agent is not disabled in your configuration.`,
+        )
+      const target = restricted ? plan! : agent
+      const restrictions: Record<string, boolean> = restricted ? { edit: false, write: false } : {}
       const session = await iife(async () => {
         if (params.session_id) {
           const found = await Session.get(params.session_id).catch(() => {})
@@ -39,7 +55,7 @@ export const TaskTool = Tool.define("task", async () => {
 
         return await Session.create({
           parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
+          title: params.description + ` (@${target.name} subagent)`,
         })
       })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
@@ -96,13 +112,14 @@ export const TaskTool = Tool.define("task", async () => {
           modelID: model.modelID,
           providerID: model.providerID,
         },
-        agent: agent.name,
+        agent: target.name,
         tools: {
           todowrite: false,
           todoread: false,
           task: false,
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
           ...agent.tools,
+          ...restrictions,
         },
         parts: promptParts,
       })
