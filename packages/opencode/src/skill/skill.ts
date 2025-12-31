@@ -1,4 +1,5 @@
 import z from "zod"
+import path from "path"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
@@ -40,6 +41,12 @@ export namespace Skill {
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
+
+    const config = await Config.get()
+
+    const customDirs = (config.skills?.path ?? []).map((p) =>
+      p.startsWith("~") ? path.join(Global.Path.home, p.slice(1)) : p,
+    )
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(match)
@@ -94,6 +101,22 @@ export namespace Skill {
 
     // Scan .opencode/skill/ directories
     for (const dir of await Config.directories()) {
+      for await (const match of OPENCODE_SKILL_GLOB.scan({
+        cwd: dir,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: true,
+      })) {
+        await addSkill(match)
+      }
+    }
+
+    // Scan custom skill directories
+    for (const dir of customDirs) {
+      if (!(await exists(dir))) {
+        log.debug("custom skill directory does not exist", { dir })
+        continue
+      }
       for await (const match of OPENCODE_SKILL_GLOB.scan({
         cwd: dir,
         absolute: true,

@@ -29,6 +29,31 @@ Global definitions are also loaded from `~/.config/opencode/skill/*/SKILL.md` an
 
 ---
 
+## Custom Skill Directories
+
+Add additional directories to scan for skills beyond the default locations.
+
+```json
+{
+  "skills": {
+    "path": ["~/my-skills", "~/.config/agents/skills"]
+  }
+}
+```
+
+Custom directories must contain a `skill/` or `skills/` subdirectory with skills inside:
+
+```
+~/my-skills/
+└── skills/
+    └── my-skill/
+        └── SKILL.md
+```
+
+Custom directories are scanned in addition to the default locations.
+
+---
+
 ## Write frontmatter
 
 Each `SKILL.md` must start with YAML frontmatter.

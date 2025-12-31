@@ -183,3 +183,47 @@ test("returns empty array when no skills exist", async () => {
     },
   })
 })
+
+test("discovers skills from custom paths in config", async () => {
+  await using customDir = await tmpdir({})
+
+  // Create skill in custom directory before Instance.provide
+  const skillDir = path.join(customDir.path, "skills", "custom-path-skill")
+  await Bun.write(
+    path.join(skillDir, "SKILL.md"),
+    `---
+name: custom-path-skill
+description: A skill from a custom path in config.
+---
+
+# Custom Path Skill
+This skill is loaded from a custom directory.
+`,
+  )
+
+  // Create project with config that references custom path
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          skills: { path: [customDir.path] },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const skills = await Skill.all()
+      expect(skills.length).toBe(1)
+      const customSkill = skills.find((s) => s.name === "custom-path-skill")
+      expect(customSkill).toBeDefined()
+      expect(customSkill!.description).toBe("A skill from a custom path in config.")
+      expect(customSkill!.location).toContain("custom-path-skill/SKILL.md")
+    },
+  })
+})
