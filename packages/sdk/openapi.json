@@ -3209,6 +3209,19 @@
                                     }
                                   },
                                   "required": ["npm"]
+                                },
+                                "variants": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
+                                  }
                                 }
                               },
                               "required": [
@@ -7780,6 +7793,13 @@
           "mdns": {
             "description": "Enable mDNS service discovery",
             "type": "boolean"
+          },
+          "cors": {
+            "description": "Additional domains to allow for CORS",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
@@ -8061,6 +8081,23 @@
                     }
                   },
                   "required": ["npm"]
+                },
+                "variants": {
+                  "description": "Variant-specific configuration",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "disabled": {
+                        "description": "Disable this variant for the model",
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": {}
+                  }
                 }
               }
             }
@@ -8737,6 +8774,12 @@
               "continue_loop_on_deny": {
                 "description": "Continue the agent loop when a tool call is denied",
                 "type": "boolean"
+              },
+              "mcp_timeout": {
+                "description": "Timeout in milliseconds for model context protocol (MCP) requests",
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
               }
             }
           }
@@ -8939,24 +8982,30 @@
           "model": {
             "type": "string"
           },
+          "mcp": {
+            "type": "boolean"
+          },
           "template": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
           },
           "subtask": {
             "type": "boolean"
+          },
+          "hints": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "required": ["name", "template"]
-      },
-      "Variant": {
-        "type": "object",
-        "properties": {
-          "disabled": {
-            "type": "boolean"
-          }
-        },
-        "required": ["disabled"],
-        "additionalProperties": {}
+        "required": ["name", "template", "hints"]
       },
       "Model": {
         "type": "object",
@@ -9154,7 +9203,11 @@
               "type": "string"
             },
             "additionalProperties": {
-              "$ref": "#/components/schemas/Variant"
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
             }
           }
         },
