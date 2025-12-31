@@ -33,7 +33,7 @@ const ClientOnlyCode = clientOnly(() => import("@opencode-ai/ui/code").then((m) 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
-      <WorkerPoolProvider pool={m.workerPool}>{props.children}</WorkerPoolProvider>
+      <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
   })),
 )
