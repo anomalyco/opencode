@@ -65,6 +65,10 @@
     }
   }
 
+  [data-slot="accordion-content"] {
+    user-select: text;
+  }
+
   [data-slot="session-review-trigger-content"] {
     display: flex;
     align-items: center;
