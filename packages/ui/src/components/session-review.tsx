@@ -1,5 +1,6 @@
 import { Accordion } from "./accordion"
 import { Button } from "./button"
+import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
@@ -13,8 +14,12 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { Dynamic } from "solid-js/web"
 import { checksum } from "@opencode-ai/util/encode"
 
+export type SessionReviewDiffStyle = "unified" | "split"
+
 export interface SessionReviewProps {
   split?: boolean
+  diffStyle?: SessionReviewDiffStyle
+  onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
   class?: string
   classList?: Record<string, boolean | undefined>
   classes?: { root?: string; header?: string; container?: string }
@@ -27,6 +32,8 @@ export const SessionReview = (props: SessionReviewProps) => {
   const [store, setStore] = createStore({
     open: props.diffs.length > 10 ? [] : props.diffs.map((d) => d.file),
   })
+
+  const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
 
   const handleChange = (open: string[]) => {
     setStore("open", open)
@@ -60,6 +67,15 @@ export const SessionReview = (props: SessionReviewProps) => {
       >
         <div data-slot="session-review-title">Session changes</div>
         <div data-slot="session-review-actions">
+          <Show when={props.onDiffStyleChange}>
+            <RadioGroup
+              options={["unified", "split"] as const}
+              current={diffStyle()}
+              value={(style) => style}
+              label={(style) => (style === "unified" ? "Unified" : "Split")}
+              onSelect={(style) => style && props.onDiffStyleChange?.(style)}
+            />
+          </Show>
           <Button size="normal" icon="chevron-grabber-vertical" onClick={handleExpandOrCollapseAll}>
             <Switch>
               <Match when={store.open.length > 0}>Collapse all</Match>
@@ -102,7 +118,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                   <Dynamic
                     component={diffComponent}
                     preloadedDiff={diff.preloaded}
-                    diffStyle={props.split ? "split" : "unified"}
+                    diffStyle={diffStyle()}
                     before={{
                       name: diff.file!,
                       contents: diff.before!,

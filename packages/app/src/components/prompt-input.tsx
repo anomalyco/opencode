@@ -1126,6 +1126,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       providerID: currentModel.provider.id,
     }
     const agent = currentAgent.name
+    const variant = local.model.variant.current()
 
     if (isShellMode) {
       sdk.client.session
@@ -1153,6 +1154,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             arguments: args.join(" "),
             agent,
             model: `${model.providerID}/${model.modelID}`,
+            variant,
           })
           .catch((e) => {
             console.error("Failed to send command", e)
@@ -1189,6 +1191,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         model,
         messageID,
         parts: requestParts,
+        variant,
       })
       .catch((e) => {
         console.error("Failed to send prompt", e)
@@ -1375,9 +1378,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Tooltip
                   placement="top"
                   value={
-                    <div class="flex items-center gap-2">
-                      <span>Choose model</span>
-                      <span class="text-icon-base text-12-medium">{command.keybind("model.choose")}</span>
+                    <div class="flex flex-col gap-1">
+                      <div class="flex items-center gap-2">
+                        <span>Choose model</span>
+                        <span class="text-icon-base text-12-medium">{command.keybind("model.choose")}</span>
+                      </div>
+                      <Show when={local.model.current()?.provider.name}>
+                        <span class="text-text-weak">{local.model.current()?.provider.name}</span>
+                      </Show>
                     </div>
                   }
                 >
@@ -1391,12 +1399,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     }
                   >
                     {local.model.current()?.name ?? "Select model"}
-                    <span class="hidden md:block ml-0.5 text-text-weak text-12-regular">
-                      {local.model.current()?.provider.name}
-                    </span>
                     <Icon name="chevron-down" size="small" />
                   </Button>
                 </Tooltip>
+                <Show when={local.model.variant.list().length > 0}>
+                  <Tooltip placement="top" value="Cycle effort level">
+                    <Button
+                      variant="ghost"
+                      onClick={() => local.model.variant.cycle()}
+                      classList={{
+                        "text-icon-warning": !!local.model.variant.current(),
+                      }}
+                    >
+                      <Icon name="brain" size="small" />
+                      <Show when={local.model.variant.current()}>
+                        <span class="text-12-regular">{local.model.variant.current()}</span>
+                      </Show>
+                    </Button>
+                  </Tooltip>
+                </Show>
               </Match>
             </Switch>
           </div>
