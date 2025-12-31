@@ -154,7 +154,7 @@ export namespace Config {
       if (unknownKeybinds.length > 0) {
         warnings.push({
           type: "unknown_keybind",
-          message: `Unknown keybind command(s): ${unknownKeybinds.join(", ")}`,
+          message: `Unknown keybind ${unknownKeybinds.length === 1 ? "command" : "commands"}: ${unknownKeybinds.join(", ")}`,
           keybinds: unknownKeybinds,
         })
       }
