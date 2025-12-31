@@ -92,13 +92,11 @@ export namespace Config {
 
     const promises: Promise<void>[] = []
     for (const dir of unique(directories)) {
-      await assertValid(dir)
-
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
-          // to satisy the type checker
+          // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
           result.plugin ??= []
@@ -141,28 +139,19 @@ export namespace Config {
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
+    // Apply flag overrides for compaction settings
+    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
+      result.compaction = { ...result.compaction, auto: false }
+    }
+    if (Flag.OPENCODE_DISABLE_PRUNE) {
+      result.compaction = { ...result.compaction, prune: false }
+    }
+
     return {
       config: result,
       directories,
     }
   })
-
-  const INVALID_DIRS = new Bun.Glob(`{${["agents", "commands", "plugins", "tools"].join(",")}}/`)
-  async function assertValid(dir: string) {
-    const invalid = await Array.fromAsync(
-      INVALID_DIRS.scan({
-        onlyFiles: false,
-        cwd: dir,
-      }),
-    )
-    for (const item of invalid) {
-      throw new ConfigDirectoryTypoError({
-        path: dir,
-        dir: item,
-        suggestion: item.substring(0, item.length - 1),
-      })
-    }
-  }
 
   async function installDependencies(dir: string) {
     if (Installation.isLocal()) return
@@ -183,9 +172,13 @@ export namespace Config {
         cwd: dir,
       },
     ).catch(() => {})
+
+    // Install any additional dependencies defined in the package.json
+    // This allows local plugins and custom tools to use external packages
+    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 
-  const COMMAND_GLOB = new Bun.Glob("command/**/*.md")
+  const COMMAND_GLOB = new Bun.Glob("{command,commands}/**/*.md")
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
     for await (const item of COMMAND_GLOB.scan({
@@ -223,7 +216,7 @@ export namespace Config {
     return result
   }
 
-  const AGENT_GLOB = new Bun.Glob("agent/**/*.md")
+  const AGENT_GLOB = new Bun.Glob("{agent,agents}/**/*.md")
   async function loadAgent(dir: string) {
     const result: Record<string, Agent> = {}
 
@@ -266,7 +259,7 @@ export namespace Config {
     return result
   }
 
-  const MODE_GLOB = new Bun.Glob("mode/*.md")
+  const MODE_GLOB = new Bun.Glob("{mode,modes}/**/*.md")
   async function loadMode(dir: string) {
     const result: Record<string, Agent> = {}
     for await (const item of MODE_GLOB.scan({
@@ -295,7 +288,7 @@ export namespace Config {
     return result
   }
 
-  const PLUGIN_GLOB = new Bun.Glob("plugin/*.{ts,js}")
+  const PLUGIN_GLOB = new Bun.Glob("{plugin,plugins}/**/*.{ts,js}")
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
@@ -478,6 +471,7 @@ export namespace Config {
       agent_list: z.string().optional().default("<leader>a").describe("List agents"),
       agent_cycle: z.string().optional().default("tab").describe("Next agent"),
       agent_cycle_reverse: z.string().optional().default("shift+tab").describe("Previous agent"),
+      variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
@@ -566,6 +560,7 @@ export namespace Config {
       session_parent: z.string().optional().default("<leader>up").describe("Go to parent session"),
       terminal_suspend: z.string().optional().default("ctrl+z").describe("Suspend terminal"),
       terminal_title_toggle: z.string().optional().default("none").describe("Toggle terminal title"),
+      tips_toggle: z.string().optional().default("<leader>h").describe("Toggle tips on home screen"),
     })
     .strict()
     .meta({
@@ -586,6 +581,17 @@ export namespace Config {
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
   })
 
+  export const Server = z
+    .object({
+      port: z.number().int().positive().optional().describe("Port to listen on"),
+      hostname: z.string().optional().describe("Hostname to listen on"),
+      mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
+    })
+    .strict()
+    .meta({
+      ref: "ServerConfig",
+    })
+
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -596,7 +602,24 @@ export namespace Config {
       type: z.string().optional(),
       whitelist: z.array(z.string()).optional(),
       blacklist: z.array(z.string()).optional(),
-      models: z.record(z.string(), ModelsDev.Model.partial()).optional(),
+      models: z
+        .record(
+          z.string(),
+          ModelsDev.Model.partial().extend({
+            variants: z
+              .record(
+                z.string(),
+                z
+                  .object({
+                    disabled: z.boolean().optional().describe("Disable this variant for the model"),
+                  })
+                  .catchall(z.any()),
+              )
+              .optional()
+              .describe("Variant-specific configuration"),
+          }),
+        )
+        .optional(),
       options: z
         .object({
           apiKey: z.string().optional(),
@@ -633,7 +656,9 @@ export namespace Config {
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
+      logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
+      server: Server.optional().describe("Server configuration for opencode serve and web commands"),
       command: z
         .record(z.string(), Command)
         .optional()
@@ -776,6 +801,12 @@ export namespace Config {
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
+        })
+        .optional(),
+      compaction: z
+        .object({
+          auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
+          prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
       experimental: z

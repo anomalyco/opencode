@@ -142,8 +142,8 @@ export const EditTool = Tool.define("edit", {
     const diagnostics = await LSP.diagnostics()
     const normalizedFilePath = Filesystem.normalizePath(filePath)
     const issues = diagnostics[normalizedFilePath] ?? []
-    if (issues.length > 0) {
-      const errors = issues.filter((item) => item.severity === 1)
+    const errors = issues.filter((item) => item.severity === 1)
+    if (errors.length > 0) {
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""

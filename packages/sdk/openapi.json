@@ -2048,6 +2048,9 @@
                   "system": {
                     "type": "string"
                   },
+                  "variant": {
+                    "type": "string"
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -2420,6 +2423,9 @@
                   "system": {
                     "type": "string"
                   },
+                  "variant": {
+                    "type": "string"
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -2540,6 +2546,9 @@
                     "type": "string"
                   },
                   "command": {
+                    "type": "string"
+                  },
+                  "variant": {
                     "type": "string"
                   }
                 },
@@ -2879,6 +2888,43 @@
         ]
       }
     },
+    "/permission": {
+      "get": {
+        "operationId": "permission.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List pending permissions",
+        "description": "Get all pending permission requests across all sessions.",
+        "responses": {
+          "200": {
+            "description": "List of pending permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Permission"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/command": {
       "get": {
         "operationId": "command.list",
@@ -3163,6 +3209,19 @@
                                     }
                                   },
                                   "required": ["npm"]
+                                },
+                                "variants": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
+                                  }
                                 }
                               },
                               "required": [
@@ -3519,10 +3578,27 @@
               "type": "string",
               "enum": ["true", "false"]
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": ["file", "directory"]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
           }
         ],
         "summary": "Find files",
-        "description": "Search for files by name or pattern in the project directory.",
+        "description": "Search for files or directories by name or pattern in the project directory.",
         "responses": {
           "200": {
             "description": "File paths",
@@ -5228,6 +5304,9 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "variant": {
+            "type": "string"
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"]
@@ -5336,6 +5415,15 @@
               },
               "responseBody": {
                 "type": "string"
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
               }
             },
             "required": ["message", "isRetryable"]
@@ -6534,6 +6622,117 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.tui.prompt.append": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.prompt.append"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.command.execute": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.command.execute"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "session.list",
+                      "session.new",
+                      "session.share",
+                      "session.interrupt",
+                      "session.compact",
+                      "session.page.up",
+                      "session.page.down",
+                      "session.half.page.up",
+                      "session.half.page.down",
+                      "session.first",
+                      "session.last",
+                      "prompt.clear",
+                      "prompt.submit",
+                      "agent.cycle"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["command"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.toast.show": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.toast.show"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string",
+                "enum": ["info", "success", "warning", "error"]
+              },
+              "duration": {
+                "description": "Duration in milliseconds",
+                "default": 5000,
+                "type": "number"
+              }
+            },
+            "required": ["message", "variant"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.mcp.tools.changed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "mcp.tools.changed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "type": "string"
+              }
+            },
+            "required": ["server"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.command.executed": {
         "type": "object",
         "properties": {
@@ -6828,98 +7027,6 @@
         },
         "required": ["type", "properties"]
       },
-      "Event.tui.prompt.append": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.prompt.append"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": ["text"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.command.execute": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.command.execute"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "session.list",
-                      "session.new",
-                      "session.share",
-                      "session.interrupt",
-                      "session.compact",
-                      "session.page.up",
-                      "session.page.down",
-                      "session.half.page.up",
-                      "session.half.page.down",
-                      "session.first",
-                      "session.last",
-                      "prompt.clear",
-                      "prompt.submit",
-                      "agent.cycle"
-                    ]
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            },
-            "required": ["command"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.toast.show": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.toast.show"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "title": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string",
-                "enum": ["info", "success", "warning", "error"]
-              },
-              "duration": {
-                "description": "Duration in milliseconds",
-                "default": 5000,
-                "type": "number"
-              }
-            },
-            "required": ["message", "variant"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
       "Pty": {
         "type": "object",
         "properties": {
@@ -7115,6 +7222,18 @@
             "$ref": "#/components/schemas/Event.session.compacted"
           },
           {
+            "$ref": "#/components/schemas/Event.tui.prompt.append"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.command.execute"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.toast.show"
+          },
+          {
+            "$ref": "#/components/schemas/Event.mcp.tools.changed"
+          },
+          {
             "$ref": "#/components/schemas/Event.command.executed"
           },
           {
@@ -7137,15 +7256,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.vcs.branch.updated"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.prompt.append"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.command.execute"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.toast.show"
           },
           {
             "$ref": "#/components/schemas/Event.pty.created"
@@ -7428,6 +7538,11 @@
             "default": "shift+tab",
             "type": "string"
           },
+          "variant_cycle": {
+            "description": "Cycle model variants",
+            "default": "ctrl+t",
+            "type": "string"
+          },
           "input_clear": {
             "description": "Clear input field",
             "default": "ctrl+c",
@@ -7647,6 +7762,37 @@
             "description": "Toggle terminal title",
             "default": "none",
             "type": "string"
+          },
+          "tips_toggle": {
+            "description": "Toggle tips on home screen",
+            "default": "<leader>h",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LogLevel": {
+        "description": "Log level",
+        "type": "string",
+        "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
+      },
+      "ServerConfig": {
+        "description": "Server configuration for opencode serve and web commands",
+        "type": "object",
+        "properties": {
+          "port": {
+            "description": "Port to listen on",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "hostname": {
+            "description": "Hostname to listen on",
+            "type": "string"
+          },
+          "mdns": {
+            "description": "Enable mDNS service discovery",
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -7928,6 +8074,23 @@
                     }
                   },
                   "required": ["npm"]
+                },
+                "variants": {
+                  "description": "Variant-specific configuration",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "disabled": {
+                        "description": "Disable this variant for the model",
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": {}
+                  }
                 }
               }
             }
@@ -8107,6 +8270,9 @@
           "keybinds": {
             "$ref": "#/components/schemas/KeybindsConfig"
           },
+          "logLevel": {
+            "$ref": "#/components/schemas/LogLevel"
+          },
           "tui": {
             "description": "TUI specific settings",
             "type": "object",
@@ -8133,6 +8299,9 @@
                 "enum": ["auto", "stacked"]
               }
             }
+          },
+          "server": {
+            "$ref": "#/components/schemas/ServerConfig"
           },
           "command": {
             "description": "Command configuration, see https://opencode.ai/docs/commands",
@@ -8495,6 +8664,19 @@
               "url": {
                 "description": "Enterprise URL",
                 "type": "string"
+              }
+            }
+          },
+          "compaction": {
+            "type": "object",
+            "properties": {
+              "auto": {
+                "description": "Enable automatic compaction when context is full (default: true)",
+                "type": "boolean"
+              },
+              "prune": {
+                "description": "Enable pruning of old tool outputs (default: true)",
+                "type": "boolean"
               }
             }
           },
@@ -8985,6 +9167,19 @@
           },
           "release_date": {
             "type": "string"
+          },
+          "variants": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
           }
         },
         "required": [

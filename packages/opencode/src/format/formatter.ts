@@ -313,3 +313,30 @@ export const gleam: Info = {
     return Bun.which("gleam") !== null
   },
 }
+
+export const shfmt: Info = {
+  name: "shfmt",
+  command: ["shfmt", "-w", "$FILE"],
+  extensions: [".sh", ".bash"],
+  async enabled() {
+    return Bun.which("shfmt") !== null
+  },
+}
+
+export const nixfmt: Info = {
+  name: "nixfmt",
+  command: ["nixfmt", "$FILE"],
+  extensions: [".nix"],
+  async enabled() {
+    return Bun.which("nixfmt") !== null
+  },
+}
+
+export const rustfmt: Info = {
+  name: "rustfmt",
+  command: ["rustfmt", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    return Bun.which("rustfmt") !== null
+  },
+}

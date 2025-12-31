@@ -1,7 +1,7 @@
 import z from "zod"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
-import { mapValues, mergeDeep, sortBy } from "remeda"
+import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
@@ -34,6 +34,7 @@ import { createCohere } from "@ai-sdk/cohere"
 import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
+import { ProviderTransform } from "./transform"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -165,28 +166,43 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
-      const [awsProfile, awsAccessKeyId, awsBearerToken, awsRegion] = await Promise.all([
-        Env.get("AWS_PROFILE"),
-        Env.get("AWS_ACCESS_KEY_ID"),
-        Env.get("AWS_BEARER_TOKEN_BEDROCK"),
-        Env.get("AWS_REGION"),
-      ])
+      const auth = await Auth.get("amazon-bedrock")
+      const awsProfile = Env.get("AWS_PROFILE")
+      const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
+      const awsRegion = Env.get("AWS_REGION")
+
+      const awsBearerToken = iife(() => {
+        const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
+        if (envToken) return envToken
+        if (auth?.type === "api") {
+          Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+          return auth.key
+        }
+        return undefined
+      })
+
       if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
-      const region = awsRegion ?? "us-east-1"
+      const defaultRegion = awsRegion ?? "us-east-1"
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
       return {
         autoload: true,
         options: {
-          region,
+          region: defaultRegion,
           credentialProvider: fromNodeProviderChain(),
         },
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has global prefix
           if (modelID.startsWith("global.")) {
             return sdk.languageModel(modelID)
           }
+
+          // Region resolution precedence (highest to lowest):
+          // 1. options.region from opencode.json provider config
+          // 2. defaultRegion from AWS_REGION environment variable
+          // 3. Default "us-east-1" (baked into defaultRegion)
+          const region = options?.region ?? defaultRegion
 
           let regionPrefix = region.split("-")[0]
 
@@ -338,6 +354,45 @@ export namespace Provider {
         },
       }
     },
+    "cloudflare-ai-gateway": async (input) => {
+      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
+      const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
+
+      if (!accountId || !gateway) return { autoload: false }
+
+      // Get API token from env or auth prompt
+      const apiToken = await (async () => {
+        const envToken = Env.get("CLOUDFLARE_API_TOKEN")
+        if (envToken) return envToken
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      return {
+        autoload: true,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          return sdk.chat(modelID)
+        },
+        options: {
+          baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/compat`,
+          headers: {
+            // Cloudflare AI Gateway uses cf-aig-authorization for authenticated gateways
+            // This enables Unified Billing where Cloudflare handles upstream provider auth
+            ...(apiToken ? { "cf-aig-authorization": `Bearer ${apiToken}` } : {}),
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+          // Custom fetch to strip Authorization header - AI Gateway uses cf-aig-authorization instead
+          // Sending Authorization header with invalid value causes auth errors
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const headers = new Headers(init?.headers)
+            headers.delete("Authorization")
+            return fetch(input, { ...init, headers })
+          },
+        },
+      }
+    },
     cerebras: async () => {
       return {
         autoload: false,
@@ -413,6 +468,7 @@ export namespace Provider {
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
+      variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
     })
     .meta({
       ref: "Model",
@@ -436,7 +492,7 @@ export namespace Provider {
   export type Info = z.infer<typeof Info>
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
-    return {
+    const m: Model = {
       id: model.id,
       providerID: provider.id,
       name: model.name,
@@ -493,7 +549,12 @@ export namespace Provider {
         interleaved: model.interleaved ?? false,
       },
       release_date: model.release_date,
+      variants: {},
     }
+
+    m.variants = mapValues(ProviderTransform.variants(m), (v) => v)
+
+    return m
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
@@ -631,7 +692,13 @@ export namespace Provider {
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
+          variants: {},
         }
+        const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
+        parsedModel.variants = mapValues(
+          pickBy(merged, (v) => !v.disabled),
+          (v) => omit(v, ["disabled"]),
+        )
         parsed.models[modelID] = parsedModel
       }
       database[providerID] = parsed
@@ -756,6 +823,16 @@ export namespace Provider {
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
         )
           delete provider.models[modelID]
+
+        // Filter out disabled variants from config
+        const configVariants = configProvider?.models?.[modelID]?.variants
+        if (configVariants && model.variants) {
+          const merged = mergeDeep(model.variants, configVariants)
+          model.variants = mapValues(
+            pickBy(merged, (v) => !v.disabled),
+            (v) => omit(v, ["disabled"]),
+          )
+        }
       }
 
       if (Object.keys(provider.models).length === 0) {

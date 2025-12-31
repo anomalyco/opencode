@@ -31,9 +31,13 @@ for (const [name, wasmPath] of byName) {
 next = next.replaceAll("tree-sitter.wasm", mainWasm).replaceAll("web-tree-sitter/tree-sitter.wasm", mainWasm)
 
 // Collapse any relative prefixes before absolute store paths (e.g., "../../../..//nix/store/...")
+const nixStorePrefix = process.env.NIX_STORE || "/nix/store"
 next = next.replace(/(\.\/)+/g, "./")
-next = next.replace(/(\.\.\/)+\/?(\/nix\/store[^"']+)/g, "/$2")
-next = next.replace(/(["'])\/{2,}(\/nix\/store[^"']+)(["'])/g, "$1/$2$3")
-next = next.replace(/(["'])\/\/(nix\/store[^"']+)(["'])/g, "$1/$2$3")
+next = next.replace(
+  new RegExp(`(\\.\\.\\/)+\\/{1,2}(${nixStorePrefix.replace(/^\//, "").replace(/\//g, "\\/")}[^"']+)`, "g"),
+  "/$2",
+)
+next = next.replace(new RegExp(`(["'])\\/{2,}(\\/${nixStorePrefix.replace(/\//g, "\\/")}[^"']+)(["'])`, "g"), "$1$2$3")
+next = next.replace(new RegExp(`(["'])\\/\\/(${nixStorePrefix.replace(/\//g, "\\/")}[^"']+)(["'])`, "g"), "$1$2$3")
 
 if (next !== content) fs.writeFileSync(file, next)

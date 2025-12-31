@@ -90,6 +90,7 @@ export namespace SessionPrompt {
     noReply: z.boolean().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     system: z.string().optional(),
+    variant: z.string().optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -459,7 +460,7 @@ export namespace SessionPrompt {
       if (
         lastFinished &&
         lastFinished.summary !== true &&
-        SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model })
+        (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
         await SessionCompaction.create({
           sessionID,
@@ -729,6 +730,7 @@ export namespace SessionPrompt {
       agent: agent.name,
       model: input.model ?? agent.model ?? lastM,
       system: input.system,
+      variant: input.variant,
     }
 
     const parts = await Promise.all(
@@ -1269,6 +1271,7 @@ export namespace SessionPrompt {
     model: z.string().optional(),
     arguments: z.string(),
     command: z.string(),
+    variant: z.string().optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
@@ -1371,6 +1374,7 @@ export namespace SessionPrompt {
       model,
       agent: agentName,
       parts,
+      variant: input.variant,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {

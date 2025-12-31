@@ -104,12 +104,14 @@ Or you can set it up manually.
 
 OpenCode can be triggered by the following GitHub events:
 
-| Event Type                    | Triggered By                           | Details                                                                                                                                                             |
-| ----------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Comment on an issue or PR              | Mention `/opencode` or `/oc` in your comment. OpenCode reads the issue/PR context and can create branches, open PRs, or reply with explanations.                    |
-| `pull_request_review_comment` | Comment on specific code lines in a PR | Mention `/opencode` or `/oc` while reviewing code. OpenCode receives file path, line numbers, and diff context for precise responses.                               |
-| `schedule`                    | Cron-based schedule                    | Run OpenCode on a schedule using the `prompt` input. Useful for automated code reviews, reports, or maintenance tasks. OpenCode can create issues or PRs as needed. |
-| `pull_request`                | PR opened or updated                   | Automatically trigger OpenCode when PRs are opened, synchronized, or reopened. Useful for automated reviews without needing to leave a comment.                     |
+| Event Type                    | Triggered By                           | Details                                                                                                           |
+| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | Comment on an issue or PR              | Mention `/opencode` or `/oc` in your comment. OpenCode reads context and can create branches, open PRs, or reply. |
+| `pull_request_review_comment` | Comment on specific code lines in a PR | Mention `/opencode` or `/oc` while reviewing code. OpenCode receives file path, line numbers, and diff context.   |
+| `issues`                      | Issue opened or edited                 | Automatically trigger OpenCode when issues are created or modified. Requires `prompt` input.                      |
+| `pull_request`                | PR opened or updated                   | Automatically trigger OpenCode when PRs are opened, synchronized, or reopened. Useful for automated reviews.      |
+| `schedule`                    | Cron-based schedule                    | Run OpenCode on a schedule. Requires `prompt` input. Output goes to logs and PRs (no issue to comment on).        |
+| `workflow_dispatch`           | Manual trigger from GitHub UI          | Trigger OpenCode on demand via Actions tab. Requires `prompt` input. Output goes to logs and PRs.                 |
 
 ### Schedule Example
 
@@ -145,9 +147,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-For scheduled events, the `prompt` input is **required** since there's no comment to extract instructions from.
-
-> **Note:** Scheduled workflows run without a user context to permission-check, so the workflow must grant `contents: write` and `pull-requests: write` if you expect OpenCode to create branches or PRs during a scheduled run.
+For scheduled events, the `prompt` input is **required** since there's no comment to extract instructions from. Scheduled workflows run without a user context to permission-check, so the workflow must grant `contents: write` and `pull-requests: write` if you expect OpenCode to create branches or PRs.
 
 ---
 
@@ -185,6 +185,59 @@ jobs:
 ```
 
 For `pull_request` events, if no `prompt` is provided, OpenCode defaults to reviewing the pull request.
+
+---
+
+### Issues Triage Example
+
+Automatically triage new issues. This example filters to accounts older than 30 days to reduce spam:
+
+```yaml title=".github/workflows/opencode-triage.yml"
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check account age
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const user = await github.rest.users.getByUsername({
+              username: context.payload.issue.user.login
+            });
+            const created = new Date(user.data.created_at);
+            const days = (Date.now() - created) / (1000 * 60 * 60 * 24);
+            return days >= 30;
+          result-encoding: string
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.result == 'true'
+
+      - uses: sst/opencode/github@latest
+        if: steps.check.outputs.result == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          prompt: |
+            Review this issue. If there's a clear fix or relevant docs:
+            - Provide documentation links
+            - Add error handling guidance for code examples
+            Otherwise, do not comment.
+```
+
+For `issues` events, the `prompt` input is **required** since there's no comment to extract instructions from.
 
 ---
 
