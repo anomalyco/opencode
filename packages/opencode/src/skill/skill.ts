@@ -35,7 +35,7 @@ export namespace Skill {
     }),
   )
 
-  const OPENCODE_SKILL_GLOB = new Bun.Glob("skill/**/SKILL.md")
+  const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
 
   export const state = Instance.state(async () => {
