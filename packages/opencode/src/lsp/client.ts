@@ -154,7 +154,7 @@ export namespace LSPClient {
 
           const version = files[input.path]
           if (version !== undefined) {
-            log.info("workspace/didChangeWatchedFiles", input);
+            log.info("workspace/didChangeWatchedFiles", input)
             await connection.sendNotification("workspace/didChangeWatchedFiles", {
               changes: [
                 {
@@ -162,7 +162,7 @@ export namespace LSPClient {
                   type: 2, // Changed
                 },
               ],
-            });
+            })
 
             const next = version + 1
             files[input.path] = next
@@ -180,7 +180,7 @@ export namespace LSPClient {
             return
           }
 
-          log.info("workspace/didChangeWatchedFiles", input);
+          log.info("workspace/didChangeWatchedFiles", input)
           await connection.sendNotification("workspace/didChangeWatchedFiles", {
             changes: [
               {
@@ -188,7 +188,7 @@ export namespace LSPClient {
                 type: 1, // Created
               },
             ],
-          });
+          })
 
           log.info("textDocument/didOpen", input)
           diagnostics.delete(input.path)
