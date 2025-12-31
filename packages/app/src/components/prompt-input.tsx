@@ -1343,9 +1343,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
             </div>
           </Show>
-          <div class="absolute top-4.5 right-4">
-            <SessionContextUsage />
-          </div>
         </div>
         <div class="relative p-3 flex items-center justify-between">
           <div class="flex items-center justify-start gap-1">
@@ -1421,7 +1418,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-1 absolute right-2 bottom-2">
+          <div class="flex items-center gap-3 absolute right-2 bottom-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -1433,17 +1430,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <Show when={store.mode === "normal"}>
-              <Tooltip placement="top" value="Attach image">
-                <IconButton
-                  type="button"
-                  icon="photo"
-                  variant="ghost"
-                  class="h-10 w-8"
-                  onClick={() => fileInputRef.click()}
-                />
-              </Tooltip>
-            </Show>
+            <div class="flex items-center gap-2">
+              <SessionContextUsage />
+              <Show when={store.mode === "normal"}>
+                <Tooltip placement="top" value="Attach image">
+                  <Button type="button" variant="ghost" class="size-6" onClick={() => fileInputRef.click()}>
+                    <Icon name="photo" class="size-4.5" />
+                  </Button>
+                </Tooltip>
+              </Show>
+            </div>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}
@@ -1469,7 +1465,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="h-10 w-8"
+                class="h-6 w-4.5"
               />
             </Tooltip>
           </div>
