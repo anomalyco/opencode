@@ -22,6 +22,7 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
     config.headers = {
       ...config.headers,
       "x-opencode-directory": config.directory,
+      "X-Daytona-Skip-Preview-Warning": true,
     }
   }
 
