@@ -621,6 +621,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     queueScroll()
   }
 
+  const setRangeEdge = (range: Range, edge: "start" | "end", offset: number) => {
+    let remaining = offset
+    const nodes = Array.from(editorRef.childNodes)
+
+    for (const node of nodes) {
+      const length = getNodeLength(node)
+      const isText = node.nodeType === Node.TEXT_NODE
+      const isPill =
+        node.nodeType === Node.ELEMENT_NODE &&
+        ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+      const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
+
+      if (isText && remaining <= length) {
+        if (edge === "start") range.setStart(node, remaining)
+        if (edge === "end") range.setEnd(node, remaining)
+        return
+      }
+
+      if ((isPill || isBreak) && remaining <= length) {
+        if (edge === "start" && remaining === 0) range.setStartBefore(node)
+        if (edge === "start" && remaining > 0) range.setStartAfter(node)
+        if (edge === "end" && remaining === 0) range.setEndBefore(node)
+        if (edge === "end" && remaining > 0) range.setEndAfter(node)
+        return
+      }
+
+      remaining -= length
+    }
+  }
+
   const addPart = (part: ContentPart) => {
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0) return
@@ -643,38 +673,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const gap = document.createTextNode(" ")
       const range = selection.getRangeAt(0)
 
-      const setEdge = (edge: "start" | "end", offset: number) => {
-        let remaining = offset
-        const nodes = Array.from(editorRef.childNodes)
-
-        for (const node of nodes) {
-          const length = getNodeLength(node)
-          const isText = node.nodeType === Node.TEXT_NODE
-          const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
-          const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
-
-          if (isText && remaining <= length) {
-            if (edge === "start") range.setStart(node, remaining)
-            if (edge === "end") range.setEnd(node, remaining)
-            return
-          }
-
-          if ((isFile || isBreak) && remaining <= length) {
-            if (edge === "start" && remaining === 0) range.setStartBefore(node)
-            if (edge === "start" && remaining > 0) range.setStartAfter(node)
-            if (edge === "end" && remaining === 0) range.setEndBefore(node)
-            if (edge === "end" && remaining > 0) range.setEndAfter(node)
-            return
-          }
-
-          remaining -= length
-        }
-      }
-
       if (atMatch) {
         const start = atMatch.index ?? cursorPosition - atMatch[0].length
-        setEdge("start", start)
-        setEdge("end", cursorPosition)
+        setRangeEdge(range, "start", start)
+        setRangeEdge(range, "end", cursorPosition)
       }
 
       range.deleteContents()
@@ -697,40 +699,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const gap = document.createTextNode(" ")
       const range = selection.getRangeAt(0)
 
-      const setEdge = (edge: "start" | "end", offset: number) => {
-        let remaining = offset
-        const nodes = Array.from(editorRef.childNodes)
-
-        for (const node of nodes) {
-          const length = getNodeLength(node)
-          const isText = node.nodeType === Node.TEXT_NODE
-          const isPill =
-            node.nodeType === Node.ELEMENT_NODE &&
-            ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
-          const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
-
-          if (isText && remaining <= length) {
-            if (edge === "start") range.setStart(node, remaining)
-            if (edge === "end") range.setEnd(node, remaining)
-            return
-          }
-
-          if ((isPill || isBreak) && remaining <= length) {
-            if (edge === "start" && remaining === 0) range.setStartBefore(node)
-            if (edge === "start" && remaining > 0) range.setStartAfter(node)
-            if (edge === "end" && remaining === 0) range.setEndBefore(node)
-            if (edge === "end" && remaining > 0) range.setEndAfter(node)
-            return
-          }
-
-          remaining -= length
-        }
-      }
-
       if (atMatch) {
         const start = atMatch.index ?? cursorPosition - atMatch[0].length
-        setEdge("start", start)
-        setEdge("end", cursorPosition)
+        setRangeEdge(range, "start", start)
+        setRangeEdge(range, "end", cursorPosition)
       }
 
       range.deleteContents()
