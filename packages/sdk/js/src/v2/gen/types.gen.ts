@@ -1177,6 +1177,10 @@ export type ServerConfig = {
    * Enable mDNS service discovery
    */
   mdns?: boolean
+  /**
+   * Additional domains to allow for CORS
+   */
+  cors?: Array<string>
 }
 
 export type AgentConfig = {

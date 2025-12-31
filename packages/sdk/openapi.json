@@ -7793,6 +7793,13 @@
           "mdns": {
             "description": "Enable mDNS service discovery",
             "type": "boolean"
+          },
+          "cors": {
+            "description": "Additional domains to allow for CORS",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false
