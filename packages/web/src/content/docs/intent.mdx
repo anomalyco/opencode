@@ -1,0 +1,487 @@
+---
+title: Intent
+description: Request user input from plugins and tools.
+---
+
+Intents allow plugins and tools to request user input through the TUI. Use them to ask questions, get confirmations, or collect structured input during execution.
+
+This follows the same event-based pattern as the [Permission](/docs/permissions) system.
+
+---
+
+## Overview
+
+Intents provide composable UI primitives:
+
+| Type | Description | Returns |
+|------|-------------|---------|
+| `confirm` | Yes/no dialog with variants | `boolean` |
+| `select` | Single-choice selection | `string \| undefined` |
+| `multiselect` | Multi-choice selection | `string[]` |
+| `form` | Multi-field input form | `Record<string, any>` |
+| `toast` | Non-blocking notification | `void` |
+
+All blocking intents (everything except `toast`) display a modal dialog and wait for user response.
+
+---
+
+## Using Intents in Plugins
+
+Plugins receive a `ui` helper object that provides intent methods. Check if `ui` is available before using, as it may be undefined in headless mode.
+
+```ts title=".opencode/plugin/my-plugin.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const MyPlugin: Plugin = async ({ ui }) => {
+  return {
+    tool: {
+      my_tool: {
+        description: "A tool that asks questions",
+        parameters: z.object({ action: z.string() }),
+        async execute({ parameters, sessionID, messageID }) {
+          if (!ui) {
+            return { output: "UI not available" }
+          }
+          
+          // Use ui helpers here
+          const confirmed = await ui.confirm(
+            { sessionID, messageID },
+            { title: "Proceed?", message: "Continue with action?" }
+          )
+          
+          return { output: confirmed ? "Confirmed" : "Cancelled" }
+        },
+      },
+    },
+  }
+}
+```
+
+---
+
+## Intent Types
+
+### confirm
+
+Display a yes/no confirmation dialog. Supports three visual variants for different severity levels.
+
+```ts
+const confirmed = await ui.confirm(
+  { sessionID, messageID },
+  {
+    title: "Delete Files",
+    message: "This will permanently delete 3 files. Continue?",
+    variant: "danger", // "info" | "warning" | "danger"
+  }
+)
+
+if (!confirmed) {
+  return { output: "Operation cancelled" }
+}
+```
+
+**Options:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | `string` | Yes | Dialog title |
+| `message` | `string` | No | Additional context |
+| `variant` | `"info" \| "warning" \| "danger"` | No | Visual style (default: `"info"`) |
+
+**Returns:** `boolean` — `true` if confirmed, `false` if denied
+
+---
+
+### select
+
+Display a single-choice selection dialog. User picks one option.
+
+```ts
+const choice = await ui.select(
+  { sessionID, messageID },
+  {
+    title: "Choose Database",
+    message: "Select the database for this project",
+    options: [
+      { value: "postgres", label: "PostgreSQL", description: "Best for complex queries" },
+      { value: "mysql", label: "MySQL", description: "Wide hosting support" },
+      { value: "sqlite", label: "SQLite", description: "Zero configuration" },
+    ],
+  }
+)
+
+if (!choice) {
+  return { output: "No selection made" }
+}
+```
+
+**Options:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | `string` | Yes | Dialog title |
+| `message` | `string` | No | Additional context |
+| `options` | `Option[]` | Yes | 2-8 options to choose from |
+
+**Option fields:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `value` | `string` | Yes | Value returned when selected |
+| `label` | `string` | Yes | Display text |
+| `description` | `string` | No | Additional context shown below label |
+
+**Returns:** `string | undefined` — Selected value, or `undefined` if cancelled
+
+---
+
+### multiselect
+
+Display a multi-choice selection dialog. User can select multiple options.
+
+```ts
+const features = await ui.multiselect(
+  { sessionID, messageID },
+  {
+    title: "Select Features",
+    message: "Choose which features to enable",
+    options: [
+      { value: "auth", label: "Authentication" },
+      { value: "api", label: "REST API" },
+      { value: "db", label: "Database" },
+      { value: "cache", label: "Caching" },
+    ],
+    min: 1, // At least one required
+    max: 3, // Maximum three allowed
+  }
+)
+
+if (features.length === 0) {
+  return { output: "No features selected" }
+}
+```
+
+**Options:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | `string` | Yes | Dialog title |
+| `message` | `string` | No | Additional context |
+| `options` | `Option[]` | Yes | 2-8 options to choose from |
+| `min` | `number` | No | Minimum selections required |
+| `max` | `number` | No | Maximum selections allowed |
+
+**Returns:** `string[]` — Array of selected values (empty if cancelled)
+
+---
+
+### form
+
+Display a multi-field form with conditional visibility. Supports text inputs, selects, and multiselects.
+
+```ts
+const result = await ui.form(
+  { sessionID, messageID },
+  {
+    title: "Configure Project",
+    fields: [
+      {
+        type: "select",
+        id: "framework",
+        label: "Framework",
+        options: [
+          { value: "next", label: "Next.js" },
+          { value: "remix", label: "Remix" },
+          { value: "other", label: "Other" },
+        ],
+      },
+      {
+        type: "text",
+        id: "custom_framework",
+        label: "Specify framework",
+        placeholder: "e.g., Astro, SvelteKit",
+        condition: { field: "framework", equals: "other" },
+      },
+      {
+        type: "multiselect",
+        id: "features",
+        label: "Features",
+        options: [
+          { value: "typescript", label: "TypeScript" },
+          { value: "tailwind", label: "Tailwind CSS" },
+          { value: "testing", label: "Testing" },
+        ],
+      },
+    ],
+  }
+)
+
+// result = { framework: "next", features: ["typescript", "tailwind"] }
+// or { framework: "other", custom_framework: "Astro", features: [] }
+```
+
+**Form options:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | `string` | Yes | Form title |
+| `message` | `string` | No | Additional context |
+| `fields` | `Field[]` | Yes | 1-10 form fields |
+
+**Field types:**
+
+#### Text field
+
+```ts
+{
+  type: "text",
+  id: "name",
+  label: "Project Name",
+  placeholder: "my-project",      // Optional
+  default: "",                     // Optional
+  condition: { field, equals },    // Optional - show only when condition met
+}
+```
+
+#### Select field
+
+```ts
+{
+  type: "select",
+  id: "database",
+  label: "Database",
+  options: [
+    { value: "postgres", label: "PostgreSQL" },
+    { value: "mysql", label: "MySQL" },
+  ],
+  default: "postgres",             // Optional
+  condition: { field, equals },    // Optional
+}
+```
+
+#### Multiselect field
+
+```ts
+{
+  type: "multiselect",
+  id: "plugins",
+  label: "Plugins",
+  options: [...],
+  min: 1,                          // Optional
+  max: 5,                          // Optional
+  condition: { field, equals },    // Optional
+}
+```
+
+**Conditional fields:**
+
+Use `condition` to show fields only when another field has a specific value:
+
+```ts
+{
+  type: "text",
+  id: "other_reason",
+  label: "Please specify",
+  condition: { field: "reason", equals: "other" },
+}
+```
+
+The field only appears when the `reason` field equals `"other"`.
+
+**Returns:** `Record<string, any>` — Object with field IDs as keys
+
+---
+
+### toast
+
+Display a non-blocking notification. Does not wait for user interaction.
+
+```ts
+await ui.toast(
+  { sessionID, messageID },
+  {
+    title: "Build Complete",
+    message: "Project compiled successfully",
+    variant: "success", // "info" | "success" | "warning" | "error"
+  }
+)
+```
+
+**Options:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | `string` | Yes | Toast title |
+| `message` | `string` | No | Additional message |
+| `variant` | `"info" \| "success" \| "warning" \| "error"` | No | Visual style |
+
+**Returns:** `void` — Returns immediately
+
+---
+
+## Keyboard Navigation
+
+All intent dialogs support keyboard navigation:
+
+| Key | Action |
+|-----|--------|
+| `↑` `↓` | Navigate options |
+| `←` `→` | Switch confirm buttons |
+| `Space` | Toggle multiselect option |
+| `Enter` | Submit / Confirm |
+| `Esc` | Cancel |
+| `Tab` | Move between form fields |
+
+---
+
+## Cancellation
+
+When the user presses `Esc`, blocking intents return:
+
+- `confirm` → `false`
+- `select` → `undefined`
+- `multiselect` → `[]` (empty array)
+- `form` → throws `IntentCancelledError`
+
+Handle cancellation appropriately in your plugin:
+
+```ts
+try {
+  const result = await ui.form(ctx, { ... })
+  // Process result
+} catch (error) {
+  if (error.name === "IntentCancelledError") {
+    return { output: "Form cancelled by user" }
+  }
+  throw error
+}
+```
+
+---
+
+## Complete Example
+
+Here's a full plugin example using multiple intent types:
+
+```ts title=".opencode/plugin/setup-wizard.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+import { z } from "zod"
+
+export const SetupWizard: Plugin = async ({ ui }) => {
+  return {
+    tool: {
+      setup_project: tool({
+        description: "Interactive project setup wizard",
+        args: {},
+        async execute({ sessionID, messageID }) {
+          if (!ui) {
+            return "UI not available - cannot run interactive setup"
+          }
+
+          const ctx = { sessionID, messageID }
+
+          // Step 1: Confirm starting setup
+          const proceed = await ui.confirm(ctx, {
+            title: "Project Setup",
+            message: "This will configure your project. Continue?",
+            variant: "info",
+          })
+
+          if (!proceed) {
+            return "Setup cancelled"
+          }
+
+          // Step 2: Collect project configuration
+          const config = await ui.form(ctx, {
+            title: "Project Configuration",
+            fields: [
+              {
+                type: "text",
+                id: "name",
+                label: "Project Name",
+                placeholder: "my-awesome-project",
+              },
+              {
+                type: "select",
+                id: "type",
+                label: "Project Type",
+                options: [
+                  { value: "app", label: "Application" },
+                  { value: "lib", label: "Library" },
+                  { value: "api", label: "API Service" },
+                ],
+              },
+              {
+                type: "multiselect",
+                id: "features",
+                label: "Features",
+                options: [
+                  { value: "ts", label: "TypeScript" },
+                  { value: "lint", label: "ESLint" },
+                  { value: "test", label: "Testing" },
+                  { value: "ci", label: "CI/CD" },
+                ],
+              },
+            ],
+          })
+
+          // Step 3: Show success notification
+          await ui.toast(ctx, {
+            title: "Setup Complete",
+            message: `Created ${config.name} with ${config.features.length} features`,
+            variant: "success",
+          })
+
+          return `Project "${config.name}" configured as ${config.type} with features: ${config.features.join(", ")}`
+        },
+      }),
+    },
+  }
+}
+```
+
+---
+
+## SDK Usage
+
+The Intent API is also available through the SDK for programmatic access:
+
+```ts
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({ baseUrl: "http://localhost:4096" })
+
+// List pending intents
+const intents = await client.intent.list()
+
+// Respond to an intent
+await client.intent.respond({
+  path: { sessionID: "...", intentID: "..." },
+  body: { value: { confirmed: true } },
+})
+```
+
+See the [SDK documentation](/docs/sdk) for more details.
+
+---
+
+## Events
+
+Plugins can subscribe to intent lifecycle events:
+
+```ts
+export const IntentLogger: Plugin = async () => {
+  return {
+    event: async ({ event }) => {
+      if (event.type === "intent.updated") {
+        console.log("Intent created:", event.properties.intent.id)
+      }
+      if (event.type === "intent.replied") {
+        console.log("Intent answered:", event.properties.intentID)
+      }
+    },
+  }
+}
+```
+
+See the [Plugins documentation](/docs/plugins#events) for all available events.

@@ -173,6 +173,11 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 - `permission.replied`
 - `permission.updated`
 
+#### Intent Events
+
+- `intent.updated` — Intent created, waiting for user response
+- `intent.replied` — User responded to intent
+
 #### Server Events
 
 - `server.connected`
@@ -285,6 +290,61 @@ The `tool` helper creates a custom tool that opencode can call. It takes a Zod s
 - `execute`: Function that runs when the tool is called
 
 Your custom tools will be available to opencode alongside built-in tools.
+
+---
+
+### User input with Intents
+
+Plugins can request user input through the TUI using the `ui` helpers. This enables interactive tools that ask questions, get confirmations, or collect structured input.
+
+```ts title=".opencode/plugin/interactive-tool.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const InteractivePlugin: Plugin = async ({ ui }) => {
+  return {
+    tool: {
+      deploy: tool({
+        description: "Deploy to production with confirmation",
+        args: {
+          target: tool.schema.string(),
+        },
+        async execute({ target }, { sessionID, messageID }) {
+          if (!ui) {
+            return "UI not available"
+          }
+
+          // Ask for confirmation
+          const confirmed = await ui.confirm(
+            { sessionID, messageID },
+            {
+              title: "Deploy to Production",
+              message: `Deploy to ${target}? This cannot be undone.`,
+              variant: "danger",
+            }
+          )
+
+          if (!confirmed) {
+            return "Deployment cancelled"
+          }
+
+          // Proceed with deployment...
+          return `Deployed to ${target}`
+        },
+      }),
+    },
+  }
+}
+```
+
+Available UI helpers:
+
+- `ui.confirm()` — Yes/no confirmation dialog
+- `ui.select()` — Single-choice selection
+- `ui.multiselect()` — Multi-choice selection
+- `ui.form()` — Multi-field input form
+- `ui.toast()` — Non-blocking notification
+
+[Learn more](/docs/intent) about using Intents in plugins.
 
 ---
 

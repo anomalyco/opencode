@@ -389,3 +389,49 @@ for await (const event of events.stream) {
   console.log("Event:", event.type, event.properties)
 }
 ```
+
+---
+
+### Intent
+
+| Method | Description | Response |
+| ------ | ----------- | -------- |
+| `intent.list()` | List all pending intents | <a href={typesUrl}><code>Intent[]</code></a> |
+| `intent.respond({ path, body })` | Submit response to pending intent | `boolean` |
+
+---
+
+#### Examples
+
+```javascript
+// List pending intents
+const intents = await client.intent.list()
+
+// Respond to a confirm intent
+await client.intent.respond({
+  path: { sessionID: "session-id", intentID: "intent-id" },
+  body: { value: { confirmed: true } },
+})
+
+// Respond to a select intent
+await client.intent.respond({
+  path: { sessionID: "session-id", intentID: "intent-id" },
+  body: { value: { selected: "option-value" } },
+})
+
+// Respond to a form intent
+await client.intent.respond({
+  path: { sessionID: "session-id", intentID: "intent-id" },
+  body: { 
+    value: { 
+      fields: { 
+        name: "my-project",
+        type: "app",
+        features: ["typescript", "testing"],
+      } 
+    } 
+  },
+})
+```
+
+[Learn more](/docs/intent) about the Intent system.
