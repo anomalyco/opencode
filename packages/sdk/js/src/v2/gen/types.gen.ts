@@ -698,6 +698,132 @@ export type EventSessionError = {
   }
 }
 
+export type Intent =
+  | {
+      type: "form"
+      title: string
+      description?: string
+      fields: Array<
+        | {
+            type: "select"
+            id: string
+            label: string
+            description?: string
+            options: Array<{
+              value: string
+              label: string
+              description?: string
+            }>
+            default?: string
+          }
+        | {
+            type: "multiselect"
+            id: string
+            label: string
+            description?: string
+            options: Array<{
+              value: string
+              label: string
+              description?: string
+            }>
+            default?: Array<string>
+            min?: number
+            max?: number
+          }
+        | {
+            type: "text"
+            id: string
+            label: string
+            description?: string
+            placeholder?: string
+            default?: string
+            condition?: {
+              field: string
+              equals: string
+            }
+          }
+        | {
+            type: "confirm"
+            id: string
+            label: string
+            description?: string
+            default?: boolean
+          }
+      >
+      submitLabel?: string
+      cancelLabel?: string
+    }
+  | {
+      type: "confirm"
+      title: string
+      message: string
+      confirmLabel?: string
+      cancelLabel?: string
+      variant?: "info" | "warning" | "danger"
+    }
+  | {
+      type: "select"
+      title: string
+      description?: string
+      options: Array<{
+        value: string
+        label: string
+        description?: string
+      }>
+      default?: string
+    }
+  | {
+      type: "multiselect"
+      title: string
+      description?: string
+      options: Array<{
+        value: string
+        label: string
+        description?: string
+      }>
+      default?: Array<string>
+      min?: number
+      max?: number
+    }
+  | {
+      type: "toast"
+      message: string
+      variant?: "info" | "success" | "warning" | "error"
+      duration?: number
+    }
+
+export type IntentInfo = {
+  id: string
+  sessionID: string
+  messageID: string
+  callID?: string
+  source: "core" | "plugin"
+  plugin?: string
+  intent: Intent
+  time: {
+    created: number
+  }
+}
+
+export type EventIntentUpdated = {
+  type: "intent.updated"
+  properties: IntentInfo
+}
+
+export type EventIntentReplied = {
+  type: "intent.replied"
+  properties: {
+    sessionID: string
+    intentID: string
+    response: {
+      type: "submit" | "cancel"
+      data?: {
+        [key: string]: unknown
+      }
+    }
+  }
+}
+
 export type EventFileWatcherUpdated = {
   type: "file.watcher.updated"
   properties: {
@@ -795,6 +921,8 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventIntentUpdated
+  | EventIntentReplied
   | EventFileWatcherUpdated
   | EventVcsBranchUpdated
   | EventPtyCreated
@@ -3504,6 +3632,65 @@ export type PermissionListResponses = {
 }
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
+
+export type IntentRespondData = {
+  body?: {
+    response: {
+      type: "submit" | "cancel"
+      data?: {
+        [key: string]: unknown
+      }
+    }
+  }
+  path: {
+    sessionID: string
+    intentID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/intent/{intentID}"
+}
+
+export type IntentRespondErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IntentRespondError = IntentRespondErrors[keyof IntentRespondErrors]
+
+export type IntentRespondResponses = {
+  /**
+   * Intent processed successfully
+   */
+  200: boolean
+}
+
+export type IntentRespondResponse = IntentRespondResponses[keyof IntentRespondResponses]
+
+export type IntentListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/intent"
+}
+
+export type IntentListResponses = {
+  /**
+   * List of pending intents
+   */
+  200: Array<IntentInfo>
+}
+
+export type IntentListResponse = IntentListResponses[keyof IntentListResponses]
 
 export type CommandListData = {
   body?: never

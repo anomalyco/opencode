@@ -33,6 +33,9 @@ import type {
   GlobalEventResponses,
   GlobalHealthResponses,
   InstanceDisposeResponses,
+  IntentListResponses,
+  IntentRespondErrors,
+  IntentRespondResponses,
   LspStatusResponses,
   McpAddErrors,
   McpAddResponses,
@@ -1755,6 +1758,71 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Intent extends HeyApiClient {
+  /**
+   * Respond to intent
+   *
+   * Submit user response to a pending intent request.
+   */
+  public respond<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      intentID: string
+      directory?: string
+      response?: {
+        type: "submit" | "cancel"
+        data?: {
+          [key: string]: unknown
+        }
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "intentID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "response" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IntentRespondResponses, IntentRespondErrors, ThrowOnError>({
+      url: "/session/{sessionID}/intent/{intentID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List pending intents
+   *
+   * Get all pending intent requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<IntentListResponses, unknown, ThrowOnError>({
+      url: "/intent",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Command extends HeyApiClient {
   /**
    * List commands
@@ -2860,6 +2928,8 @@ export class OpencodeClient extends HeyApiClient {
   part = new Part({ client: this.client })
 
   permission = new Permission({ client: this.client })
+
+  intent = new Intent({ client: this.client })
 
   command = new Command({ client: this.client })
 

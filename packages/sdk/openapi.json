@@ -3100,6 +3100,142 @@
         ]
       }
     },
+    "/session/{sessionID}/intent/{intentID}": {
+      "post": {
+        "operationId": "intent.respond",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "intentID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Respond to intent",
+        "description": "Submit user response to a pending intent request.",
+        "responses": {
+          "200": {
+            "description": "Intent processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "response": {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["submit", "cancel"]
+                      },
+                      "data": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": ["type"]
+                  }
+                },
+                "required": ["response"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.intent.respond({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/intent": {
+      "get": {
+        "operationId": "intent.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List pending intents",
+        "description": "Get all pending intent requests across all sessions.",
+        "responses": {
+          "200": {
+            "description": "List of pending intents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IntentInfo"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.intent.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/command": {
       "get": {
         "operationId": "command.list",
@@ -7274,6 +7410,421 @@
         },
         "required": ["type", "properties"]
       },
+      "Intent": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "form"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "fields": {
+                "minItems": 1,
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "select"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "options": {
+                          "minItems": 2,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["value", "label"]
+                          }
+                        },
+                        "default": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["type", "id", "label", "options"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "multiselect"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "options": {
+                          "minItems": 2,
+                          "maxItems": 8,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "value": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "description": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["value", "label"]
+                          }
+                        },
+                        "default": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "min": {
+                          "type": "number"
+                        },
+                        "max": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["type", "id", "label", "options"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "text"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "placeholder": {
+                          "type": "string"
+                        },
+                        "default": {
+                          "type": "string"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "equals": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["field", "equals"]
+                        }
+                      },
+                      "required": ["type", "id", "label"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "confirm"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "default": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["type", "id", "label"]
+                    }
+                  ]
+                }
+              },
+              "submitLabel": {
+                "default": "Submit",
+                "type": "string"
+              },
+              "cancelLabel": {
+                "default": "Cancel",
+                "type": "string"
+              }
+            },
+            "required": ["type", "title", "fields"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "confirm"
+              },
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "confirmLabel": {
+                "default": "Yes",
+                "type": "string"
+              },
+              "cancelLabel": {
+                "default": "No",
+                "type": "string"
+              },
+              "variant": {
+                "default": "info",
+                "type": "string",
+                "enum": ["info", "warning", "danger"]
+              }
+            },
+            "required": ["type", "title", "message"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "select"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "options": {
+                "minItems": 2,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["value", "label"]
+                }
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": ["type", "title", "options"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "multiselect"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "options": {
+                "minItems": 2,
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["value", "label"]
+                }
+              },
+              "default": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "required": ["type", "title", "options"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "toast"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "default": "info",
+                "type": "string",
+                "enum": ["info", "success", "warning", "error"]
+              },
+              "duration": {
+                "type": "number"
+              }
+            },
+            "required": ["type", "message"]
+          }
+        ]
+      },
+      "IntentInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "callID": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["core", "plugin"]
+          },
+          "plugin": {
+            "type": "string"
+          },
+          "intent": {
+            "$ref": "#/components/schemas/Intent"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"]
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "source", "intent", "time"]
+      },
+      "Event.intent.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "intent.updated"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/IntentInfo"
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.intent.replied": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "intent.replied"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string"
+              },
+              "intentID": {
+                "type": "string"
+              },
+              "response": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": ["submit", "cancel"]
+                  },
+                  "data": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": ["type"]
+              }
+            },
+            "required": ["sessionID", "intentID", "response"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.file.watcher.updated": {
         "type": "object",
         "properties": {
@@ -7553,6 +8104,12 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.error"
+          },
+          {
+            "$ref": "#/components/schemas/Event.intent.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.intent.replied"
           },
           {
             "$ref": "#/components/schemas/Event.file.watcher.updated"

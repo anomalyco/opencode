@@ -23,6 +23,113 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+// ============================================================================
+// UI Intent Helpers (for plugins to request user input)
+// ============================================================================
+
+export type SelectOption = {
+  value: string
+  label: string
+  description?: string
+}
+
+export type FormField =
+  | {
+      type: "select"
+      id: string
+      label: string
+      description?: string
+      options: SelectOption[]
+      default?: string
+    }
+  | {
+      type: "multiselect"
+      id: string
+      label: string
+      description?: string
+      options: SelectOption[]
+      default?: string[]
+      min?: number
+      max?: number
+    }
+  | {
+      type: "text"
+      id: string
+      label: string
+      description?: string
+      placeholder?: string
+      default?: string
+      condition?: { field: string; equals: string }
+    }
+  | {
+      type: "confirm"
+      id: string
+      label: string
+      description?: string
+      default?: boolean
+    }
+
+type SessionContext = {
+  sessionID: string
+  messageID: string
+  callID?: string
+}
+
+export type UIHelpers = {
+  form(
+    ctx: SessionContext,
+    input: {
+      title: string
+      description?: string
+      fields: FormField[]
+      submitLabel?: string
+      cancelLabel?: string
+    },
+  ): Promise<Record<string, any>>
+
+  confirm(
+    ctx: SessionContext,
+    input: {
+      title: string
+      message: string
+      confirmLabel?: string
+      cancelLabel?: string
+      variant?: "info" | "warning" | "danger"
+    },
+  ): Promise<boolean>
+
+  select(
+    ctx: SessionContext,
+    input: {
+      title: string
+      description?: string
+      options: SelectOption[]
+      default?: string
+    },
+  ): Promise<string | undefined>
+
+  multiselect(
+    ctx: SessionContext,
+    input: {
+      title: string
+      description?: string
+      options: SelectOption[]
+      default?: string[]
+      min?: number
+      max?: number
+    },
+  ): Promise<string[]>
+
+  toast(
+    ctx: SessionContext,
+    input: {
+      message: string
+      variant?: "info" | "success" | "warning" | "error"
+      duration?: number
+    },
+  ): Promise<void>
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -30,6 +137,12 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  /**
+   * UI Intent helpers for plugins to request user input.
+   * Available when running in TUI mode with intent support.
+   * Check for availability before using.
+   */
+  ui?: UIHelpers
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>

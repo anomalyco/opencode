@@ -1,4 +1,4 @@
-import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput, Plugin as PluginInstance, UIHelpers } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -7,6 +7,7 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { Intent } from "../intent"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -21,6 +22,53 @@ export namespace Plugin {
     })
     const config = await Config.get()
     const hooks = []
+    const ui: UIHelpers = {
+      async form(ctx, input) {
+        return Intent.form({
+          ...input,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          source: "plugin",
+        })
+      },
+      async confirm(ctx, input) {
+        return Intent.confirm({
+          ...input,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          source: "plugin",
+        })
+      },
+      async select(ctx, input) {
+        return Intent.select({
+          ...input,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          source: "plugin",
+        })
+      },
+      async multiselect(ctx, input) {
+        return Intent.multiselect({
+          ...input,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          source: "plugin",
+        })
+      },
+      async toast(ctx, input) {
+        return Intent.toast({
+          ...input,
+          sessionID: ctx.sessionID,
+          messageID: ctx.messageID,
+          callID: ctx.callID,
+          source: "plugin",
+        })
+      },
+    }
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -28,6 +76,7 @@ export namespace Plugin {
       directory: Instance.directory,
       serverUrl: Server.url(),
       $: Bun.$,
+      ui,
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {

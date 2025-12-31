@@ -54,12 +54,7 @@ export const ConfirmField = z.object({
   default: z.boolean().optional(),
 })
 
-export const FormField = z.discriminatedUnion("type", [
-  SelectField,
-  MultiSelectField,
-  TextField,
-  ConfirmField,
-])
+export const FormField = z.discriminatedUnion("type", [SelectField, MultiSelectField, TextField, ConfirmField])
 
 export type FormField = z.infer<typeof FormField>
 export type SelectField = z.infer<typeof SelectField>
@@ -121,13 +116,7 @@ export const ToastIntent = z.object({
 // Note: progress primitive deferred to future PR - implementation unclear
 
 export const Intent = z
-  .discriminatedUnion("type", [
-    FormIntent,
-    ConfirmIntent,
-    SelectIntent,
-    MultiSelectIntent,
-    ToastIntent,
-  ])
+  .discriminatedUnion("type", [FormIntent, ConfirmIntent, SelectIntent, MultiSelectIntent, ToastIntent])
   .meta({
     ref: "Intent",
   })

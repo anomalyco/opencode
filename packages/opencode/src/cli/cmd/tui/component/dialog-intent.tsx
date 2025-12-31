@@ -76,7 +76,15 @@ function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCance
   const dialog = useDialog()
   const [store, setStore] = createStore({ active: "confirm" as "confirm" | "cancel" })
 
-  const intent = () => props.info.intent as { type: "confirm"; title: string; message: string; confirmLabel?: string; cancelLabel?: string; variant?: string }
+  const intent = () =>
+    props.info.intent as {
+      type: "confirm"
+      title: string
+      message: string
+      confirmLabel?: string
+      cancelLabel?: string
+      variant?: string
+    }
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
@@ -115,7 +123,7 @@ function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCance
               }}
             >
               <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
-                {key === "confirm" ? (intent().confirmLabel || "Yes") : (intent().cancelLabel || "No")}
+                {key === "confirm" ? intent().confirmLabel || "Yes" : intent().cancelLabel || "No"}
               </text>
             </box>
           )}
@@ -129,7 +137,14 @@ function SelectDialog(props: { info: IntentInfo; onSelect: (value: string) => vo
   const { theme } = useTheme()
   const [selected, setSelected] = createSignal(0)
 
-  const intent = () => props.info.intent as { type: "select"; title: string; description?: string; options: SelectOption[]; default?: string }
+  const intent = () =>
+    props.info.intent as {
+      type: "select"
+      title: string
+      description?: string
+      options: SelectOption[]
+      default?: string
+    }
   const options = () => intent().options
 
   useKeyboard((evt) => {
@@ -169,12 +184,11 @@ function SelectDialog(props: { info: IntentInfo; onSelect: (value: string) => vo
               onMouseUp={() => props.onSelect(opt.value)}
               onMouseOver={() => setSelected(index())}
             >
-              <text fg={index() === selected() ? theme.selectedListItemText : theme.text}>
-                {opt.label}
-              </text>
+              <text fg={index() === selected() ? theme.selectedListItemText : theme.text}>{opt.label}</text>
               <Show when={opt.description}>
                 <text fg={index() === selected() ? theme.selectedListItemText : theme.textMuted}>
-                  {" "}- {opt.description}
+                  {" "}
+                  - {opt.description}
                 </text>
               </Show>
             </box>
@@ -190,10 +204,22 @@ function MultiSelectDialog(props: { info: IntentInfo; onSubmit: (values: string[
   const [focused, setFocused] = createSignal(0)
   const [selectedValues, setSelectedValues] = createStore<Record<string, boolean>>({})
 
-  const intent = () => props.info.intent as { type: "multiselect"; title: string; description?: string; options: SelectOption[]; default?: string[]; min?: number; max?: number }
+  const intent = () =>
+    props.info.intent as {
+      type: "multiselect"
+      title: string
+      description?: string
+      options: SelectOption[]
+      default?: string[]
+      min?: number
+      max?: number
+    }
   const options = () => intent().options
 
-  const getSelected = () => Object.entries(selectedValues).filter(([_, v]) => v).map(([k]) => k)
+  const getSelected = () =>
+    Object.entries(selectedValues)
+      .filter(([_, v]) => v)
+      .map(([k]) => k)
 
   useKeyboard((evt) => {
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
@@ -238,11 +264,13 @@ function MultiSelectDialog(props: { info: IntentInfo; onSubmit: (values: string[
               onMouseOver={() => setFocused(index())}
             >
               <text fg={index() === focused() ? theme.selectedListItemText : theme.text}>
-                {selectedValues[opt.value] ? "[x] " : "[ ] "}{opt.label}
+                {selectedValues[opt.value] ? "[x] " : "[ ] "}
+                {opt.label}
               </text>
               <Show when={opt.description}>
                 <text fg={index() === focused() ? theme.selectedListItemText : theme.textMuted}>
-                  {" "}- {opt.description}
+                  {" "}
+                  - {opt.description}
                 </text>
               </Show>
             </box>
@@ -258,7 +286,15 @@ function FormDialog(props: { info: IntentInfo; onSubmit: (data: Record<string, a
   const [focusedField, setFocusedField] = createSignal(0)
   const [formData, setFormData] = createStore<Record<string, any>>({})
 
-  const intent = () => props.info.intent as { type: "form"; title: string; description?: string; fields: FormField[]; submitLabel?: string; cancelLabel?: string }
+  const intent = () =>
+    props.info.intent as {
+      type: "form"
+      title: string
+      description?: string
+      fields: FormField[]
+      submitLabel?: string
+      cancelLabel?: string
+    }
   const fields = () => intent().fields
   const visibleFields = createMemo(() => {
     return fields().filter((field) => {
@@ -312,7 +348,12 @@ function FormDialog(props: { info: IntentInfo; onSubmit: (data: Record<string, a
         <box paddingLeft={1} paddingRight={1} onMouseUp={() => props.onCancel()}>
           <text fg={theme.textMuted}>{intent().cancelLabel || "Cancel"}</text>
         </box>
-        <box paddingLeft={1} paddingRight={1} backgroundColor={theme.primary} onMouseUp={() => props.onSubmit(formData)}>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={theme.primary}
+          onMouseUp={() => props.onSubmit(formData)}
+        >
           <text fg={theme.selectedListItemText}>{intent().submitLabel || "Submit"}</text>
         </box>
       </box>
@@ -368,13 +409,8 @@ function FormFieldRenderer(props: {
           />
         </Match>
         <Match when={props.field.type === "confirm"}>
-          <box
-            flexDirection="row"
-            onMouseUp={() => props.onChange(!props.value)}
-          >
-            <text fg={props.focused ? theme.primary : theme.text}>
-              {props.value ? "[x] Yes" : "[ ] No"}
-            </text>
+          <box flexDirection="row" onMouseUp={() => props.onChange(!props.value)}>
+            <text fg={props.focused ? theme.primary : theme.text}>{props.value ? "[x] Yes" : "[ ] No"}</text>
           </box>
         </Match>
       </Switch>
@@ -390,7 +426,7 @@ function SelectFieldRenderer(props: {
 }) {
   const { theme } = useTheme()
   const [selectedIndex, setSelectedIndex] = createSignal(
-    props.field.options.findIndex((o) => o.value === (props.value ?? props.field.default)) || 0
+    props.field.options.findIndex((o) => o.value === (props.value ?? props.field.default)) || 0,
   )
 
   useKeyboard((evt) => {
@@ -418,9 +454,7 @@ function SelectFieldRenderer(props: {
               props.onChange(opt.value)
             }}
           >
-            <text fg={index() === selectedIndex() ? theme.selectedListItemText : theme.text}>
-              {opt.label}
-            </text>
+            <text fg={index() === selectedIndex() ? theme.selectedListItemText : theme.text}>{opt.label}</text>
           </box>
         )}
       </For>
@@ -456,7 +490,8 @@ function MultiSelectFieldRenderer(props: {
             onMouseUp={() => toggle(opt.value)}
           >
             <text fg={isSelected(opt.value) ? theme.selectedListItemText : theme.text}>
-              {isSelected(opt.value) ? "x " : "  "}{opt.label}
+              {isSelected(opt.value) ? "x " : "  "}
+              {opt.label}
             </text>
           </box>
         )}
