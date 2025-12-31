@@ -1229,6 +1229,7 @@ export class Session extends HeyApiClient {
         [key: string]: boolean
       }
       system?: string
+      variant?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1246,6 +1247,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
             { in: "body", key: "system" },
+            { in: "body", key: "variant" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1315,6 +1317,7 @@ export class Session extends HeyApiClient {
         [key: string]: boolean
       }
       system?: string
+      variant?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1332,6 +1335,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "noReply" },
             { in: "body", key: "tools" },
             { in: "body", key: "system" },
+            { in: "body", key: "variant" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1363,6 +1367,7 @@ export class Session extends HeyApiClient {
       model?: string
       arguments?: string
       command?: string
+      variant?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1378,6 +1383,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
+            { in: "body", key: "variant" },
           ],
         },
       ],
@@ -1824,13 +1830,15 @@ export class Find extends HeyApiClient {
   /**
    * Find files
    *
-   * Search for files by name or pattern in the project directory.
+   * Search for files or directories by name or pattern in the project directory.
    */
   public files<ThrowOnError extends boolean = false>(
     parameters: {
       directory?: string
       query: string
       dirs?: "true" | "false"
+      type?: "file" | "directory"
+      limit?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1842,6 +1850,8 @@ export class Find extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "query", key: "query" },
             { in: "query", key: "dirs" },
+            { in: "query", key: "type" },
+            { in: "query", key: "limit" },
           ],
         },
       ],

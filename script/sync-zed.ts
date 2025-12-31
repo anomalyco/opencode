@@ -15,6 +15,9 @@ async function main() {
   const token = process.env.ZED_EXTENSIONS_PAT
   if (!token) throw new Error("ZED_EXTENSIONS_PAT environment variable required")
 
+  const prToken = process.env.ZED_PR_PAT
+  if (!prToken) throw new Error("ZED_PR_PAT environment variable required")
+
   const cleanVersion = version.replace(/^v/, "")
   console.log(`📦 Syncing Zed extension for version ${cleanVersion}`)
 
@@ -108,7 +111,7 @@ async function main() {
   console.log(`📬 Creating pull request...`)
   const prResult =
     await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Updating OpenCode extension to v${cleanVersion}"`
-      .env({ ...process.env, GH_TOKEN: token })
+      .env({ ...process.env, GH_TOKEN: prToken })
       .nothrow()
 
   if (prResult.exitCode !== 0) {
