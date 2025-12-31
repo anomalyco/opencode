@@ -1105,7 +1105,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 when={atFlat().length > 0}
                 fallback={<div class="text-text-weak px-2 py-1">No matching results</div>}
               >
-                <For each={atFlat()}>
+                <For each={atFlat().slice(0, 10)}>
                   {(item) => (
                     <button
                       classList={{
