@@ -12,6 +12,7 @@ import { DialogManageModels } from "./dialog-manage-models"
 
 const ModelList: Component<{
   provider?: string
+  class?: string
   onSelect: () => void
 }> = (props) => {
   const local = useLocal()
@@ -25,7 +26,7 @@ const ModelList: Component<{
 
   return (
     <List
-      class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 p-1"
+      class={`flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
       search={{ placeholder: "Search models", autofocus: true }}
       emptyMessage="No model results"
       key={(x) => `${x.provider.id}:${x.id}`}
@@ -77,7 +78,7 @@ export const ModelSelectorPopover: Component<{
       <Kobalte.Portal>
         <Kobalte.Content class="w-72 h-80 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none">
           <Kobalte.Title class="sr-only">Select model</Kobalte.Title>
-          <ModelList provider={props.provider} onSelect={() => setOpen(false)} />
+          <ModelList provider={props.provider} onSelect={() => setOpen(false)} class="p-1" />
         </Kobalte.Content>
       </Kobalte.Portal>
     </Kobalte>
