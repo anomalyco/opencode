@@ -1,4 +1,4 @@
-import { Ripgrep } from "../file/ripgrep"
+import { FileTree } from "../file/tree"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
@@ -43,14 +43,7 @@ export namespace SystemPrompt {
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<files>`,
-        `  ${
-          project.vcs === "git"
-            ? await Ripgrep.tree({
-                cwd: Instance.directory,
-                limit: 200,
-              })
-            : ""
-        }`,
+        `  ${await FileTree.tree({ cwd: Instance.directory, limit: 200 })}`,
         `</files>`,
       ].join("\n"),
     ]
