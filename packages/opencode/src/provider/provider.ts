@@ -869,7 +869,15 @@ export namespace Provider {
         options["includeUsage"] = true
       }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
+      // Clean up invalid baseURL to let SDK use its default
+      // baseURL must be a valid URL (starts with http:// or https://)
+      const isValidUrl = (url: string | undefined | null): url is string => {
+        return typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://"))
+      }
+      if (!isValidUrl(options["baseURL"])) {
+        delete options["baseURL"]
+        if (isValidUrl(model.api.url)) options["baseURL"] = model.api.url
+      }
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
