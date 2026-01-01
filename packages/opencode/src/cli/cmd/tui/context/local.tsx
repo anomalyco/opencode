@@ -1,6 +1,7 @@
 import { createStore } from "solid-js/store"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
+import { useRoute } from "@tui/context/route"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
 import path from "path"
@@ -34,7 +35,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const route = useRoute()
+      const agents = createMemo(() => {
+        const isSubagentSession = (() => {
+          if (route.data.type !== "session") return false
+          const session = sync.session.get(route.data.sessionID)
+          return !!session?.parentID
+        })()
+
+        return sync.data.agent.filter((x) => {
+          if (x.hidden) return false
+          if (x.mode === "subagent" && !isSubagentSession) return false
+          return true
+        })
+      })
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
