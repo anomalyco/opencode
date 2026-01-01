@@ -14,10 +14,21 @@ export const GrepTool = Tool.define("grep", {
     path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
     include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
   }),
-  async execute(params) {
+  async execute(params, ctx) {
     if (!params.pattern) {
       throw new Error("pattern is required")
     }
+
+    await ctx.ask({
+      permission: "grep",
+      patterns: [params.pattern],
+      always: ["*"],
+      metadata: {
+        pattern: params.pattern,
+        path: params.path,
+        include: params.include,
+      },
+    })
 
     const searchPath = params.path || Instance.directory
 

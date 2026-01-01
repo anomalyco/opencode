@@ -15,7 +15,7 @@ import {
   type McpStatus,
   type LspStatus,
   type VcsInfo,
-  type Permission,
+  type PermissionRequest,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -46,7 +46,7 @@ type State = {
     [sessionID: string]: Todo[]
   }
   permission: {
-    [sessionID: string]: Permission[]
+    [sessionID: string]: PermissionRequest[]
   }
   mcp: {
     [name: string]: McpStatus
@@ -168,7 +168,7 @@ function createGlobalSync() {
       vcs: () => sdk.vcs.get().then((x) => setStore("vcs", x.data)),
       permission: () =>
         sdk.permission.list().then((x) => {
-          const grouped: Record<string, Permission[]> = {}
+          const grouped: Record<string, PermissionRequest[]> = {}
           for (const perm of x.data ?? []) {
             if (!perm?.id || !perm.sessionID) continue
             const existing = grouped[perm.sessionID]
@@ -349,7 +349,7 @@ function createGlobalSync() {
         setStore("vcs", { branch: event.properties.branch })
         break
       }
-      case "permission.updated": {
+      case "permission.asked": {
         const sessionID = event.properties.sessionID
         const permissions = store.permission[sessionID]
         if (!permissions) {
@@ -375,7 +375,7 @@ function createGlobalSync() {
       case "permission.replied": {
         const permissions = store.permission[event.properties.sessionID]
         if (!permissions) break
-        const result = Binary.search(permissions, event.properties.permissionID, (p) => p.id)
+        const result = Binary.search(permissions, event.properties.requestID, (p) => p.id)
         if (!result.found) break
         setStore(
           "permission",

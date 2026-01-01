@@ -9,7 +9,7 @@ import { SessionRevert } from "./revert"
 import { Session } from "."
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
-import { type Tool as AITool, tool, jsonSchema } from "ai"
+import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
 import { Bus } from "../bus"
@@ -20,9 +20,8 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { clone, mergeDeep, pipe } from "remeda"
+import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
-import { Wildcard } from "../util/wildcard"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
@@ -39,6 +38,8 @@ import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
+import { Tool } from "@/tool/tool"
+import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
@@ -88,7 +89,12 @@ export namespace SessionPrompt {
       .optional(),
     agent: z.string().optional(),
     noReply: z.boolean().optional(),
-    tools: z.record(z.string(), z.boolean()).optional(),
+    tools: z
+      .record(z.string(), z.boolean())
+      .optional()
+      .describe(
+        "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+      ),
     system: z.string().optional(),
     variant: z.string().optional(),
     parts: z.array(
@@ -144,6 +150,23 @@ export namespace SessionPrompt {
 
     const message = await createUserMessage(input)
     await Session.touch(input.sessionID)
+
+    // this is backwards compatibility for allowing `tools` to be specified when
+    // prompting
+    const permissions: PermissionNext.Ruleset = []
+    for (const [tool, enabled] of Object.entries(input.tools ?? {})) {
+      permissions.push({
+        permission: tool,
+        action: enabled ? "allow" : "deny",
+        pattern: "*",
+      })
+    }
+    if (permissions.length > 0) {
+      session.permission = permissions
+      await Session.update(session.id, (draft) => {
+        draft.permission = permissions
+      })
+    }
 
     if (input.noReply === true) {
       return message
@@ -240,6 +263,7 @@ export namespace SessionPrompt {
     using _ = defer(() => cancel(sessionID))
 
     let step = 0
+    const session = await Session.get(sessionID)
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
@@ -276,7 +300,7 @@ export namespace SessionPrompt {
       step++
       if (step === 1)
         ensureTitle({
-          session: await Session.get(sessionID),
+          session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
           message: msgs.find((m) => m.info.role === "user")!,
@@ -350,28 +374,35 @@ export namespace SessionPrompt {
           { args: taskArgs },
         )
         let executionError: Error | undefined
-        const result = await taskTool
-          .execute(taskArgs, {
-            agent: task.agent,
-            messageID: assistantMessage.id,
-            sessionID: sessionID,
-            abort,
-            async metadata(input) {
-              await Session.updatePart({
-                ...part,
-                type: "tool",
-                state: {
-                  ...part.state,
-                  ...input,
-                },
-              } satisfies MessageV2.ToolPart)
-            },
-          })
-          .catch((error) => {
-            executionError = error
-            log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
-            return undefined
-          })
+        const taskAgent = await Agent.get(task.agent)
+        const taskCtx: Tool.Context = {
+          agent: task.agent,
+          messageID: assistantMessage.id,
+          sessionID: sessionID,
+          abort,
+          async metadata(input) {
+            await Session.updatePart({
+              ...part,
+              type: "tool",
+              state: {
+                ...part.state,
+                ...input,
+              },
+            } satisfies MessageV2.ToolPart)
+          },
+          async ask(req) {
+            await PermissionNext.ask({
+              ...req,
+              sessionID: sessionID,
+              ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
+            })
+          },
+        }
+        const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
+          executionError = error
+          log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
+          return undefined
+        })
         await Plugin.trigger(
           "tool.execute.after",
           {
@@ -473,7 +504,7 @@ export namespace SessionPrompt {
 
       // normal processing
       const agent = await Agent.get(lastUser.agent)
-      const maxSteps = agent.maxSteps ?? Infinity
+      const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = insertReminders({
         messages: msgs,
@@ -511,7 +542,7 @@ export namespace SessionPrompt {
       })
       const tools = await resolveTools({
         agent,
-        sessionID,
+        session,
         model,
         tools: lastUser.tools,
         processor,
@@ -581,67 +612,73 @@ export namespace SessionPrompt {
   async function resolveTools(input: {
     agent: Agent.Info
     model: Provider.Model
-    sessionID: string
+    session: Session.Info
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
-    const enabledTools = pipe(
-      input.agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.agent)),
-      mergeDeep(input.tools ?? {}),
-    )
-    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent)) {
-      if (Wildcard.all(item.id, enabledTools) === false) continue
+
+    const context = (args: any, options: ToolCallOptions): Tool.Context => ({
+      sessionID: input.session.id,
+      abort: options.abortSignal!,
+      messageID: input.processor.message.id,
+      callID: options.toolCallId,
+      extra: { model: input.model },
+      agent: input.agent.name,
+      metadata: async (val: { title?: string; metadata?: any }) => {
+        const match = input.processor.partFromToolCall(options.toolCallId)
+        if (match && match.state.status === "running") {
+          await Session.updatePart({
+            ...match,
+            state: {
+              title: val.title,
+              metadata: val.metadata,
+              status: "running",
+              input: args,
+              time: {
+                start: Date.now(),
+              },
+            },
+          })
+        }
+      },
+      async ask(req) {
+        await PermissionNext.ask({
+          ...req,
+          sessionID: input.session.id,
+          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+          ruleset: PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
+        })
+      },
+    })
+
+    for (const item of await ToolRegistry.tools(input.model.providerID)) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
         description: item.description,
         inputSchema: jsonSchema(schema as any),
         async execute(args, options) {
+          const ctx = context(args, options)
           await Plugin.trigger(
             "tool.execute.before",
             {
               tool: item.id,
-              sessionID: input.sessionID,
-              callID: options.toolCallId,
+              sessionID: ctx.sessionID,
+              callID: ctx.callID,
             },
             {
               args,
             },
           )
-          const result = await item.execute(args, {
-            sessionID: input.sessionID,
-            abort: options.abortSignal!,
-            messageID: input.processor.message.id,
-            callID: options.toolCallId,
-            extra: { model: input.model },
-            agent: input.agent.name,
-            metadata: async (val) => {
-              const match = input.processor.partFromToolCall(options.toolCallId)
-              if (match && match.state.status === "running") {
-                await Session.updatePart({
-                  ...match,
-                  state: {
-                    title: val.title,
-                    metadata: val.metadata,
-                    status: "running",
-                    input: args,
-                    time: {
-                      start: Date.now(),
-                    },
-                  },
-                })
-              }
-            },
-          })
+          const result = await item.execute(args, ctx)
           await Plugin.trigger(
             "tool.execute.after",
             {
               tool: item.id,
-              sessionID: input.sessionID,
-              callID: options.toolCallId,
+              sessionID: ctx.sessionID,
+              callID: ctx.callID,
             },
             result,
           )
@@ -655,31 +692,41 @@ export namespace SessionPrompt {
         },
       })
     }
+
     for (const [key, item] of Object.entries(await MCP.tools())) {
-      if (Wildcard.all(key, enabledTools) === false) continue
       const execute = item.execute
       if (!execute) continue
 
       // Wrap execute to add plugin hooks and format output
       item.execute = async (args, opts) => {
+        const ctx = context(args, opts)
+
         await Plugin.trigger(
           "tool.execute.before",
           {
             tool: key,
-            sessionID: input.sessionID,
+            sessionID: ctx.sessionID,
             callID: opts.toolCallId,
           },
           {
             args,
           },
         )
+
+        await ctx.ask({
+          permission: key,
+          metadata: {},
+          patterns: ["*"],
+          always: ["*"],
+        })
+
         const result = await execute(args, opts)
 
         await Plugin.trigger(
           "tool.execute.after",
           {
             tool: key,
-            sessionID: input.sessionID,
+            sessionID: ctx.sessionID,
             callID: opts.toolCallId,
           },
           result,
@@ -694,7 +741,7 @@ export namespace SessionPrompt {
           } else if (contentItem.type === "image") {
             attachments.push({
               id: Identifier.ascending("part"),
-              sessionID: input.sessionID,
+              sessionID: input.session.id,
               messageID: input.processor.message.id,
               type: "file",
               mime: contentItem.mimeType,
@@ -834,14 +881,16 @@ export namespace SessionPrompt {
                 await ReadTool.init()
                   .then(async (t) => {
                     const model = await Provider.getModel(info.model.providerID, info.model.modelID)
-                    const result = await t.execute(args, {
+                    const readCtx: Tool.Context = {
                       sessionID: input.sessionID,
                       abort: new AbortController().signal,
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
                       metadata: async () => {},
-                    })
+                      ask: async () => {},
+                    }
+                    const result = await t.execute(args, readCtx)
                     pieces.push({
                       id: Identifier.ascending("part"),
                       messageID: info.id,
@@ -893,16 +942,16 @@ export namespace SessionPrompt {
 
               if (part.mime === "application/x-directory") {
                 const args = { path: filepath }
-                const result = await ListTool.init().then((t) =>
-                  t.execute(args, {
-                    sessionID: input.sessionID,
-                    abort: new AbortController().signal,
-                    agent: input.agent!,
-                    messageID: info.id,
-                    extra: { bypassCwdCheck: true },
-                    metadata: async () => {},
-                  }),
-                )
+                const listCtx: Tool.Context = {
+                  sessionID: input.sessionID,
+                  abort: new AbortController().signal,
+                  agent: input.agent!,
+                  messageID: info.id,
+                  extra: { bypassCwdCheck: true },
+                  metadata: async () => {},
+                  ask: async () => {},
+                }
+                const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [
                   {
                     id: Identifier.ascending("part"),

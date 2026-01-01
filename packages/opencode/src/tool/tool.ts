@@ -1,6 +1,7 @@
 import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
+import type { PermissionNext } from "../permission/next"
 
 export namespace Tool {
   interface Metadata {
@@ -19,6 +20,7 @@ export namespace Tool {
     callID?: string
     extra?: { [key: string]: any }
     metadata(input: { title?: string; metadata?: M }): void
+    ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
   }
   export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
     id: string

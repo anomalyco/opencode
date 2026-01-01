@@ -40,8 +40,17 @@ export const ListTool = Tool.define("list", {
     path: z.string().describe("The absolute path to the directory to list (must be absolute, not relative)").optional(),
     ignore: z.array(z.string()).describe("List of glob patterns to ignore").optional(),
   }),
-  async execute(params) {
+  async execute(params, ctx) {
     const searchPath = path.resolve(Instance.directory, params.path || ".")
+
+    await ctx.ask({
+      permission: "list",
+      patterns: [searchPath],
+      always: ["*"],
+      metadata: {
+        path: searchPath,
+      },
+    })
 
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
     const files = []

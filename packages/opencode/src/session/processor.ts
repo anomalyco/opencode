@@ -3,7 +3,6 @@ import { Log } from "@/util/log"
 import { Identifier } from "@/id/id"
 import { Session } from "."
 import { Agent } from "@/agent/agent"
-import { Permission } from "@/permission"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
@@ -14,6 +13,7 @@ import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
+import { PermissionNext } from "@/permission/next"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -152,32 +152,18 @@ export namespace SessionProcessor {
                           JSON.stringify(p.state.input) === JSON.stringify(value.input),
                       )
                     ) {
-                      const permission = await Agent.get(input.assistantMessage.mode).then((x) => x.permission)
-                      if (permission.doom_loop === "ask") {
-                        await Permission.ask({
-                          type: "doom_loop",
-                          pattern: value.toolName,
-                          sessionID: input.assistantMessage.sessionID,
-                          messageID: input.assistantMessage.id,
-                          callID: value.toolCallId,
-                          title: `Possible doom loop: "${value.toolName}" called ${DOOM_LOOP_THRESHOLD} times with identical arguments`,
-                          metadata: {
-                            tool: value.toolName,
-                            input: value.input,
-                          },
-                        })
-                      } else if (permission.doom_loop === "deny") {
-                        throw new Permission.RejectedError(
-                          input.assistantMessage.sessionID,
-                          "doom_loop",
-                          value.toolCallId,
-                          {
-                            tool: value.toolName,
-                            input: value.input,
-                          },
-                          `You seem to be stuck in a doom loop, please stop repeating the same action`,
-                        )
-                      }
+                      const agent = await Agent.get(input.assistantMessage.agent)
+                      await PermissionNext.ask({
+                        permission: "doom_loop",
+                        patterns: [value.toolName],
+                        sessionID: input.assistantMessage.sessionID,
+                        metadata: {
+                          tool: value.toolName,
+                          input: value.input,
+                        },
+                        always: [value.toolName],
+                        ruleset: agent.permission,
+                      })
                     }
                   }
                   break
@@ -215,7 +201,6 @@ export namespace SessionProcessor {
                         status: "error",
                         input: value.input,
                         error: (value.error as any).toString(),
-                        metadata: value.error instanceof Permission.RejectedError ? value.error.metadata : undefined,
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
@@ -223,7 +208,7 @@ export namespace SessionProcessor {
                       },
                     })
 
-                    if (value.error instanceof Permission.RejectedError) {
+                    if (value.error instanceof PermissionNext.RejectedError) {
                       blocked = shouldBreak
                     }
                     delete toolcalls[value.toolCallId]

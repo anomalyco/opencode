@@ -71,19 +71,19 @@ export namespace ACP {
       this.config.sdk.event.subscribe({ directory }).then(async (events) => {
         for await (const event of events.stream) {
           switch (event.type) {
-            case "permission.updated":
+            case "permission.asked":
               try {
                 const permission = event.properties
                 const res = await this.connection
                   .requestPermission({
                     sessionId,
                     toolCall: {
-                      toolCallId: permission.callID ?? permission.id,
+                      toolCallId: permission.tool?.callID ?? permission.id,
                       status: "pending",
-                      title: permission.title,
+                      title: permission.permission,
                       rawInput: permission.metadata,
-                      kind: toToolKind(permission.type),
-                      locations: toLocations(permission.type, permission.metadata),
+                      kind: toToolKind(permission.permission),
+                      locations: toLocations(permission.permission, permission.metadata),
                     },
                     options,
                   })
@@ -93,28 +93,25 @@ export namespace ACP {
                       permissionID: permission.id,
                       sessionID: permission.sessionID,
                     })
-                    await this.config.sdk.permission.respond({
-                      sessionID: permission.sessionID,
-                      permissionID: permission.id,
-                      response: "reject",
+                    await this.config.sdk.permission.reply({
+                      requestID: permission.id,
+                      reply: "reject",
                       directory,
                     })
                     return
                   })
                 if (!res) return
                 if (res.outcome.outcome !== "selected") {
-                  await this.config.sdk.permission.respond({
-                    sessionID: permission.sessionID,
-                    permissionID: permission.id,
-                    response: "reject",
+                  await this.config.sdk.permission.reply({
+                    requestID: permission.id,
+                    reply: "reject",
                     directory,
                   })
                   return
                 }
-                await this.config.sdk.permission.respond({
-                  sessionID: permission.sessionID,
-                  permissionID: permission.id,
-                  response: res.outcome.optionId as "once" | "always" | "reject",
+                await this.config.sdk.permission.reply({
+                  requestID: permission.id,
+                  reply: res.outcome.optionId as "once" | "always" | "reject",
                   directory,
                 })
               } catch (err) {

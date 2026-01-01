@@ -175,7 +175,7 @@ export default function Layout(props: ParentProps) {
     const permissionAlertCooldownMs = 5000
 
     const unsub = globalSDK.event.listen((e) => {
-      if (e.details?.type !== "permission.updated") return
+      if (e.details?.type !== "permission.asked") return
       const directory = e.name
       const perm = e.details.properties
       if (permission.autoResponds(perm)) return

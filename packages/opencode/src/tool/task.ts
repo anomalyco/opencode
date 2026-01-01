@@ -29,6 +29,17 @@ export const TaskTool = Tool.define("task", async () => {
       command: z.string().describe("The command that triggered this task").optional(),
     }),
     async execute(params, ctx) {
+      const config = await Config.get()
+      await ctx.ask({
+        permission: "task",
+        patterns: [params.subagent_type],
+        always: ["*"],
+        metadata: {
+          description: params.description,
+          subagent_type: params.subagent_type,
+        },
+      })
+
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
       const session = await iife(async () => {
@@ -40,6 +51,28 @@ export const TaskTool = Tool.define("task", async () => {
         return await Session.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
+          permission: [
+            {
+              permission: "todowrite",
+              pattern: "*",
+              action: "deny",
+            },
+            {
+              permission: "todoread",
+              pattern: "*",
+              action: "deny",
+            },
+            {
+              permission: "task",
+              pattern: "*",
+              action: "deny",
+            },
+            ...(config.experimental?.primary_tools?.map((t) => ({
+              pattern: "*",
+              action: "allow" as const,
+              permission: t,
+            })) ?? []),
+          ],
         })
       })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
@@ -88,7 +121,6 @@ export const TaskTool = Tool.define("task", async () => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
-      const config = await Config.get()
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -102,7 +134,6 @@ export const TaskTool = Tool.define("task", async () => {
           todoread: false,
           task: false,
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-          ...agent.tools,
         },
         parts: promptParts,
       })

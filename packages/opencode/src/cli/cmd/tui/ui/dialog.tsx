@@ -99,6 +99,7 @@ function init() {
     replace(input: any, onClose?: () => void) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
+        focus?.blur()
       }
       for (const item of store.stack) {
         if (item.onClose) item.onClose()

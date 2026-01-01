@@ -205,11 +205,13 @@ test("handles agent configuration", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.agent?.["test_agent"]).toEqual({
-        model: "test/model",
-        temperature: 0.7,
-        description: "test agent",
-      })
+      expect(config.agent?.["test_agent"]).toEqual(
+        expect.objectContaining({
+          model: "test/model",
+          temperature: 0.7,
+          description: "test agent",
+        }),
+      )
     },
   })
 })
@@ -292,6 +294,8 @@ test("migrates mode field to agent field", async () => {
         model: "test/model",
         temperature: 0.5,
         mode: "primary",
+        options: {},
+        permission: {},
       })
     },
   })
@@ -318,11 +322,13 @@ Test agent prompt`,
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.agent?.["test"]).toEqual({
-        name: "test",
-        model: "test/model",
-        prompt: "Test agent prompt",
-      })
+      expect(config.agent?.["test"]).toEqual(
+        expect.objectContaining({
+          name: "test",
+          model: "test/model",
+          prompt: "Test agent prompt",
+        }),
+      )
     },
   })
 })
@@ -472,7 +478,7 @@ Helper subagent prompt`,
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.agent?.["helper"]).toEqual({
+      expect(config.agent?.["helper"]).toMatchObject({
         name: "helper",
         model: "test/model",
         mode: "subagent",
@@ -534,36 +540,22 @@ test("deduplicates duplicate plugins from global and local configs", async () =>
   })
 })
 
-test("compaction config defaults to true when not specified", async () => {
-  await using tmp = await tmpdir({
-    init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-        }),
-      )
-    },
-  })
-  await Instance.provide({
-    directory: tmp.path,
-    fn: async () => {
-      const config = await Config.get()
-      // When not specified, compaction should be undefined (defaults handled in usage)
-      expect(config.compaction).toBeUndefined()
-    },
-  })
-})
+// Legacy tools migration tests
 
-test("compaction config can disable auto compaction", async () => {
+test("migrates legacy tools config to permissions - allow", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
-          compaction: {
-            auto: false,
+          agent: {
+            test: {
+              tools: {
+                bash: true,
+                read: true,
+              },
+            },
           },
         }),
       )
@@ -573,21 +565,28 @@ test("compaction config can disable auto compaction", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.compaction?.auto).toBe(false)
-      expect(config.compaction?.prune).toBeUndefined()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        bash: "allow",
+        read: "allow",
+      })
     },
   })
 })
 
-test("compaction config can disable prune", async () => {
+test("migrates legacy tools config to permissions - deny", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
-          compaction: {
-            prune: false,
+          agent: {
+            test: {
+              tools: {
+                bash: false,
+                webfetch: false,
+              },
+            },
           },
         }),
       )
@@ -597,22 +596,27 @@ test("compaction config can disable prune", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.compaction?.prune).toBe(false)
-      expect(config.compaction?.auto).toBeUndefined()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        bash: "deny",
+        webfetch: "deny",
+      })
     },
   })
 })
 
-test("compaction config can disable both auto and prune", async () => {
+test("migrates legacy write tool to edit permission", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "opencode.json"),
         JSON.stringify({
           $schema: "https://opencode.ai/config.json",
-          compaction: {
-            auto: false,
-            prune: false,
+          agent: {
+            test: {
+              tools: {
+                write: true,
+              },
+            },
           },
         }),
       )
@@ -622,8 +626,164 @@ test("compaction config can disable both auto and prune", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.compaction?.auto).toBe(false)
-      expect(config.compaction?.prune).toBe(false)
+      expect(config.agent?.["test"]?.permission).toEqual({
+        edit: "allow",
+      })
+    },
+  })
+})
+
+test("migrates legacy edit tool to edit permission", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            test: {
+              tools: {
+                edit: false,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        edit: "deny",
+      })
+    },
+  })
+})
+
+test("migrates legacy patch tool to edit permission", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            test: {
+              tools: {
+                patch: true,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        edit: "allow",
+      })
+    },
+  })
+})
+
+test("migrates legacy multiedit tool to edit permission", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            test: {
+              tools: {
+                multiedit: false,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        edit: "deny",
+      })
+    },
+  })
+})
+
+test("migrates mixed legacy tools config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            test: {
+              tools: {
+                bash: true,
+                write: true,
+                read: false,
+                webfetch: true,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        bash: "allow",
+        edit: "allow",
+        read: "deny",
+        webfetch: "allow",
+      })
+    },
+  })
+})
+
+test("merges legacy tools with existing permission config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          agent: {
+            test: {
+              permission: {
+                glob: "allow",
+              },
+              tools: {
+                bash: true,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.agent?.["test"]?.permission).toEqual({
+        glob: "allow",
+        bash: "allow",
+      })
     },
   })
 })

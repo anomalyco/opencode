@@ -7,7 +7,7 @@ import type {
   Config,
   Todo,
   Command,
-  Permission,
+  PermissionRequest,
   LspStatus,
   McpStatus,
   FormatterStatus,
@@ -39,7 +39,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: Agent[]
       command: Command[]
       permission: {
-        [sessionID: string]: Permission[]
+        [sessionID: string]: PermissionRequest[]
       }
       config: Config
       session: Session[]
@@ -97,36 +97,38 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
-        case "permission.updated": {
-          const permissions = store.permission[event.properties.sessionID]
-          if (!permissions) {
-            setStore("permission", event.properties.sessionID, [event.properties])
-            break
-          }
-          const match = Binary.search(permissions, event.properties.id, (p) => p.id)
-          setStore(
-            "permission",
-            event.properties.sessionID,
-            produce((draft) => {
-              if (match.found) {
-                draft[match.index] = event.properties
-                return
-              }
-              draft.push(event.properties)
-            }),
-          )
-          break
-        }
-
         case "permission.replied": {
-          const permissions = store.permission[event.properties.sessionID]
-          const match = Binary.search(permissions, event.properties.permissionID, (p) => p.id)
+          const requests = store.permission[event.properties.sessionID]
+          if (!requests) break
+          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
           if (!match.found) break
           setStore(
             "permission",
             event.properties.sessionID,
             produce((draft) => {
               draft.splice(match.index, 1)
+            }),
+          )
+          break
+        }
+
+        case "permission.asked": {
+          const request = event.properties
+          const requests = store.permission[request.sessionID]
+          if (!requests) {
+            setStore("permission", request.sessionID, [request])
+            break
+          }
+          const match = Binary.search(requests, request.id, (r) => r.id)
+          if (match.found) {
+            setStore("permission", request.sessionID, match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "permission",
+            request.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
             }),
           )
           break
