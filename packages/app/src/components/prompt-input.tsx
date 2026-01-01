@@ -3,7 +3,15 @@ import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Mat
 import { createStore, produce } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { ContentPart, DEFAULT_PROMPT, isPromptEqual, Prompt, usePrompt, ImageAttachmentPart } from "@/context/prompt"
+import {
+  ContentPart,
+  DEFAULT_PROMPT,
+  isPromptEqual,
+  Prompt,
+  usePrompt,
+  ImageAttachmentPart,
+  AgentPart,
+} from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useNavigate, useParams } from "@solidjs/router"
@@ -11,18 +19,19 @@ import { useSync } from "@/context/sync"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { DialogSelectModel } from "@/components/dialog-select-model"
+import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { usePermission } from "@/context/permission"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -80,6 +89,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const dialog = useDialog()
   const providers = useProviders()
   const command = useCommand()
+  const permission = usePermission()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
@@ -126,7 +136,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const working = createMemo(() => status()?.type !== "idle")
 
   const [store, setStore] = createStore<{
-    popover: "file" | "slash" | null
+    popover: "at" | "slash" | null
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
@@ -169,6 +179,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     prompt.map((part) => {
       if (part.type === "text") return { ...part }
       if (part.type === "image") return { ...part }
+      if (part.type === "agent") return { ...part }
       return {
         ...part,
         selection: part.selection ? { ...part.selection } : undefined,
@@ -319,15 +330,43 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!isFocused()) setStore("popover", null)
   })
 
-  const handleFileSelect = (path: string | undefined) => {
-    if (!path) return
-    addPart({ type: "file", path, content: "@" + path, start: 0, end: 0 })
+  type AtOption = { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string }
+
+  const agentList = createMemo(() =>
+    sync.data.agent
+      .filter((agent) => !agent.hidden && agent.mode !== "primary")
+      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
+  )
+
+  const handleAtSelect = (option: AtOption | undefined) => {
+    if (!option) return
+    if (option.type === "agent") {
+      addPart({ type: "agent", name: option.name, content: "@" + option.name, start: 0, end: 0 })
+    } else {
+      addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
+    }
   }
 
-  const { flat, active, onInput, onKeyDown } = useFilteredList<string>({
-    items: local.file.searchFilesAndDirectories,
-    key: (x) => x,
-    onSelect: handleFileSelect,
+  const atKey = (x: AtOption | undefined) => {
+    if (!x) return ""
+    return x.type === "agent" ? `agent:${x.name}` : `file:${x.path}`
+  }
+
+  const {
+    flat: atFlat,
+    active: atActive,
+    onInput: atOnInput,
+    onKeyDown: atOnKeyDown,
+  } = useFilteredList<AtOption>({
+    items: async (query) => {
+      const agents = agentList()
+      const files = await local.file.searchFilesAndDirectories(query)
+      const fileOptions: AtOption[] = files.map((path) => ({ type: "file", path, display: path }))
+      return [...agents, ...fileOptions]
+    },
+    key: atKey,
+    filterKeys: ["display"],
+    onSelect: handleAtSelect,
   })
 
   const slashCommands = createMemo<SlashCommand[]>(() => {
@@ -413,6 +452,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           if (node.nodeType !== Node.ELEMENT_NODE) return false
           const el = node as HTMLElement
           if (el.dataset.type === "file") return true
+          if (el.dataset.type === "agent") return true
           return el.tagName === "BR"
         })
         if (normalized && isPromptEqual(currentParts, domParts)) return
@@ -432,6 +472,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             pill.textContent = part.content
             pill.setAttribute("data-type", "file")
             pill.setAttribute("data-path", part.path)
+            pill.setAttribute("contenteditable", "false")
+            pill.style.userSelect = "text"
+            pill.style.cursor = "default"
+            editorRef.appendChild(pill)
+          } else if (part.type === "agent") {
+            const pill = document.createElement("span")
+            pill.textContent = part.content
+            pill.setAttribute("data-type", "agent")
+            pill.setAttribute("data-name", part.name)
             pill.setAttribute("contenteditable", "false")
             pill.style.userSelect = "text"
             pill.style.cursor = "default"
@@ -471,6 +520,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       position += content.length
     }
 
+    const pushAgent = (agent: HTMLElement) => {
+      const content = agent.textContent ?? ""
+      parts.push({
+        type: "agent",
+        name: agent.dataset.name!,
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         buffer += node.textContent ?? ""
@@ -482,6 +543,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (el.dataset.type === "file") {
         flushText()
         pushFile(el)
+        return
+      }
+      if (el.dataset.type === "agent") {
+        flushText()
+        pushAgent(el)
         return
       }
       if (el.tagName === "BR") {
@@ -537,8 +603,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
-        onInput(atMatch[1])
-        setStore("popover", "file")
+        atOnInput(atMatch[1])
+        setStore("popover", "at")
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
         setStore("popover", "slash")
@@ -556,6 +622,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     prompt.set(rawParts, cursorPosition)
     queueScroll()
+  }
+
+  const setRangeEdge = (range: Range, edge: "start" | "end", offset: number) => {
+    let remaining = offset
+    const nodes = Array.from(editorRef.childNodes)
+
+    for (const node of nodes) {
+      const length = getNodeLength(node)
+      const isText = node.nodeType === Node.TEXT_NODE
+      const isPill =
+        node.nodeType === Node.ELEMENT_NODE &&
+        ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+      const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
+
+      if (isText && remaining <= length) {
+        if (edge === "start") range.setStart(node, remaining)
+        if (edge === "end") range.setEnd(node, remaining)
+        return
+      }
+
+      if ((isPill || isBreak) && remaining <= length) {
+        if (edge === "start" && remaining === 0) range.setStartBefore(node)
+        if (edge === "start" && remaining > 0) range.setStartAfter(node)
+        if (edge === "end" && remaining === 0) range.setEndBefore(node)
+        if (edge === "end" && remaining > 0) range.setEndAfter(node)
+        return
+      }
+
+      remaining -= length
+    }
   }
 
   const addPart = (part: ContentPart) => {
@@ -580,38 +676,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const gap = document.createTextNode(" ")
       const range = selection.getRangeAt(0)
 
-      const setEdge = (edge: "start" | "end", offset: number) => {
-        let remaining = offset
-        const nodes = Array.from(editorRef.childNodes)
-
-        for (const node of nodes) {
-          const length = getNodeLength(node)
-          const isText = node.nodeType === Node.TEXT_NODE
-          const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
-          const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
-
-          if (isText && remaining <= length) {
-            if (edge === "start") range.setStart(node, remaining)
-            if (edge === "end") range.setEnd(node, remaining)
-            return
-          }
-
-          if ((isFile || isBreak) && remaining <= length) {
-            if (edge === "start" && remaining === 0) range.setStartBefore(node)
-            if (edge === "start" && remaining > 0) range.setStartAfter(node)
-            if (edge === "end" && remaining === 0) range.setEndBefore(node)
-            if (edge === "end" && remaining > 0) range.setEndAfter(node)
-            return
-          }
-
-          remaining -= length
-        }
+      if (atMatch) {
+        const start = atMatch.index ?? cursorPosition - atMatch[0].length
+        setRangeEdge(range, "start", start)
+        setRangeEdge(range, "end", cursorPosition)
       }
+
+      range.deleteContents()
+      range.insertNode(gap)
+      range.insertNode(pill)
+      range.setStartAfter(gap)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    } else if (part.type === "agent") {
+      const pill = document.createElement("span")
+      pill.textContent = part.content
+      pill.setAttribute("data-type", "agent")
+      pill.setAttribute("data-name", part.name)
+      pill.setAttribute("contenteditable", "false")
+      pill.style.userSelect = "text"
+      pill.style.cursor = "default"
+
+      const gap = document.createTextNode(" ")
+      const range = selection.getRangeAt(0)
 
       if (atMatch) {
         const start = atMatch.index ?? cursorPosition - atMatch[0].length
-        setEdge("start", start)
-        setEdge("end", cursorPosition)
+        setRangeEdge(range, "start", start)
+        setRangeEdge(range, "end", cursorPosition)
       }
 
       range.deleteContents()
@@ -832,8 +925,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
-      if (store.popover === "file") {
-        onKeyDown(event)
+      if (store.popover === "at") {
+        atOnKeyDown(event)
       } else {
         slashOnKeyDown(event)
       }
@@ -1073,11 +1166,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!existing) return
 
     const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
-    const attachments = currentPrompt.filter(
+    const fileAttachments = currentPrompt.filter(
       (part) => part.type === "file",
     ) as import("@/context/prompt").FileAttachmentPart[]
+    const agentAttachments = currentPrompt.filter((part) => part.type === "agent") as AgentPart[]
 
-    const fileAttachmentParts = attachments.map((attachment) => {
+    const fileAttachmentParts = fileAttachments.map((attachment) => {
       const absolute = toAbsolutePath(attachment.path)
       const query = attachment.selection
         ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
@@ -1099,6 +1193,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         },
       }
     })
+
+    const agentAttachmentParts = agentAttachments.map((attachment) => ({
+      id: Identifier.ascending("part"),
+      type: "agent" as const,
+      name: attachment.name,
+      source: {
+        value: attachment.content,
+        start: attachment.start,
+        end: attachment.end,
+      },
+    }))
 
     const imageAttachmentParts = store.imageAttachments.map((attachment) => ({
       id: Identifier.ascending("part"),
@@ -1169,7 +1274,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       type: "text" as const,
       text,
     }
-    const requestParts = [textPart, ...fileAttachmentParts, ...imageAttachmentParts]
+    const requestParts = [textPart, ...fileAttachmentParts, ...agentAttachmentParts, ...imageAttachmentParts]
     const optimisticParts = requestParts.map((part) => ({
       ...part,
       sessionID: existing.id,
@@ -1207,24 +1312,46 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                  border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
         >
           <Switch>
-            <Match when={store.popover === "file"}>
-              <Show when={flat().length > 0} fallback={<div class="text-text-weak px-2 py-1">No matching files</div>}>
-                <For each={flat()}>
-                  {(i) => (
+            <Match when={store.popover === "at"}>
+              <Show
+                when={atFlat().length > 0}
+                fallback={<div class="text-text-weak px-2 py-1">No matching results</div>}
+              >
+                <For each={atFlat().slice(0, 10)}>
+                  {(item) => (
                     <button
                       classList={{
                         "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
-                        "bg-surface-raised-base-hover": active() === i,
+                        "bg-surface-raised-base-hover": atActive() === atKey(item),
                       }}
-                      onClick={() => handleFileSelect(i)}
+                      onClick={() => handleAtSelect(item)}
                     >
-                      <FileIcon node={{ path: i, type: "file" }} class="shrink-0 size-4" />
-                      <div class="flex items-center text-14-regular min-w-0">
-                        <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(i)}</span>
-                        <Show when={!i.endsWith("/")}>
-                          <span class="text-text-strong whitespace-nowrap">{getFilename(i)}</span>
-                        </Show>
-                      </div>
+                      <Show
+                        when={item.type === "agent"}
+                        fallback={
+                          <>
+                            <FileIcon
+                              node={{ path: (item as { type: "file"; path: string }).path, type: "file" }}
+                              class="shrink-0 size-4"
+                            />
+                            <div class="flex items-center text-14-regular min-w-0">
+                              <span class="text-text-weak whitespace-nowrap truncate min-w-0">
+                                {getDirectory((item as { type: "file"; path: string }).path)}
+                              </span>
+                              <Show when={!(item as { type: "file"; path: string }).path.endsWith("/")}>
+                                <span class="text-text-strong whitespace-nowrap">
+                                  {getFilename((item as { type: "file"; path: string }).path)}
+                                </span>
+                              </Show>
+                            </div>
+                          </>
+                        }
+                      >
+                        <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
+                        <span class="text-14-regular text-text-strong whitespace-nowrap">
+                          @{(item as { type: "agent"; name: string }).name}
+                        </span>
+                      </Show>
                     </button>
                   )}
                 </For>
@@ -1271,6 +1398,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       <form
         onSubmit={handleSubmit}
         classList={{
+          "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-md overflow-clip focus-within:shadow-xs-border": true,
           "border-icon-info-active border-dashed": store.dragging,
@@ -1332,7 +1460,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             classList={{
               "select-text": true,
               "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-              "[&_[data-type=file]]:text-icon-info-active": true,
+              "[&_[data-type=file]]:text-syntax-property": true,
+              "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
@@ -1343,12 +1472,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
             </div>
           </Show>
-          <div class="absolute top-4.5 right-4">
-            <SessionContextUsage />
-          </div>
         </div>
         <div class="relative p-3 flex items-center justify-between">
-          <div class="flex items-center justify-start gap-1">
+          <div class="flex items-center justify-start gap-0.5">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -1358,15 +1484,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </div>
               </Match>
               <Match when={store.mode === "normal"}>
-                <Tooltip
-                  placement="top"
-                  value={
-                    <div class="flex items-center gap-2">
-                      <span>Cycle agent</span>
-                      <span class="text-icon-base text-12-medium">{command.keybind("agent.cycle")}</span>
-                    </div>
-                  }
-                >
+                <TooltipKeybind placement="top" title="Cycle agent" keybind={command.keybind("agent.cycle")}>
                   <Select
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
@@ -1374,54 +1492,69 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     class="capitalize"
                     variant="ghost"
                   />
-                </Tooltip>
-                <Tooltip
-                  placement="top"
-                  value={
-                    <div class="flex flex-col gap-1">
-                      <div class="flex items-center gap-2">
-                        <span>Choose model</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("model.choose")}</span>
-                      </div>
-                      <Show when={local.model.current()?.provider.name}>
-                        <span class="text-text-weak">{local.model.current()?.provider.name}</span>
-                      </Show>
-                    </div>
+                </TooltipKeybind>
+                <Show
+                  when={providers.paid().length > 0}
+                  fallback={
+                    <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
+                      <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
+                        {local.model.current()?.name ?? "Select model"}
+                        <Icon name="chevron-down" size="small" />
+                      </Button>
+                    </TooltipKeybind>
                   }
                 >
-                  <Button
-                    as="div"
-                    variant="ghost"
-                    onClick={() =>
-                      dialog.show(() =>
-                        providers.paid().length > 0 ? <DialogSelectModel /> : <DialogSelectModelUnpaid />,
-                      )
-                    }
-                  >
-                    {local.model.current()?.name ?? "Select model"}
-                    <Icon name="chevron-down" size="small" />
-                  </Button>
-                </Tooltip>
+                  <ModelSelectorPopover>
+                    <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
+                      <Button as="div" variant="ghost">
+                        {local.model.current()?.name ?? "Select model"}
+                        <Icon name="chevron-down" size="small" />
+                      </Button>
+                    </TooltipKeybind>
+                  </ModelSelectorPopover>
+                </Show>
                 <Show when={local.model.variant.list().length > 0}>
-                  <Tooltip placement="top" value="Cycle effort level">
+                  <TooltipKeybind
+                    placement="top"
+                    title="Thinking effort"
+                    keybind={command.keybind("model.variant.cycle")}
+                  >
                     <Button
                       variant="ghost"
+                      class="text-text-base _hidden group-hover/prompt-input:inline-block"
                       onClick={() => local.model.variant.cycle()}
+                    >
+                      <span class="capitalize text-12-regular">{local.model.variant.current() ?? "Default"}</span>
+                    </Button>
+                  </TooltipKeybind>
+                </Show>
+                <Show when={permission.permissionsEnabled() && params.id}>
+                  <TooltipKeybind
+                    placement="top"
+                    title="Auto-accept edits"
+                    keybind={command.keybind("permissions.autoaccept")}
+                  >
+                    <Button
+                      variant="ghost"
+                      onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
                       classList={{
-                        "text-icon-warning": !!local.model.variant.current(),
+                        "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
+                        "text-text-base": !permission.isAutoAccepting(params.id!),
+                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!),
                       }}
                     >
-                      <Icon name="brain" size="small" />
-                      <Show when={local.model.variant.current()}>
-                        <span class="text-12-regular">{local.model.variant.current()}</span>
-                      </Show>
+                      <Icon
+                        name="chevron-double-right"
+                        size="small"
+                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!) }}
+                      />
                     </Button>
-                  </Tooltip>
+                  </TooltipKeybind>
                 </Show>
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-1 absolute right-2 bottom-2">
+          <div class="flex items-center gap-3 absolute right-2 bottom-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -1433,17 +1566,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <Show when={store.mode === "normal"}>
-              <Tooltip placement="top" value="Attach image">
-                <IconButton
-                  type="button"
-                  icon="photo"
-                  variant="ghost"
-                  class="h-10 w-8"
-                  onClick={() => fileInputRef.click()}
-                />
-              </Tooltip>
-            </Show>
+            <div class="flex items-center gap-2">
+              <SessionContextUsage />
+              <Show when={store.mode === "normal"}>
+                <Tooltip placement="top" value="Attach image">
+                  <Button type="button" variant="ghost" class="size-6" onClick={() => fileInputRef.click()}>
+                    <Icon name="photo" class="size-4.5" />
+                  </Button>
+                </Tooltip>
+              </Show>
+            </div>
             <Tooltip
               placement="top"
               inactive={!prompt.dirty() && !working()}
@@ -1469,7 +1601,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="h-10 w-8"
+                class="h-6 w-4.5"
               />
             </Tooltip>
           </div>
@@ -1527,7 +1659,9 @@ function setCursorPosition(parent: HTMLElement, position: number) {
   while (node) {
     const length = getNodeLength(node)
     const isText = node.nodeType === Node.TEXT_NODE
-    const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+    const isPill =
+      node.nodeType === Node.ELEMENT_NODE &&
+      ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
     const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
     if (isText && remaining <= length) {
@@ -1540,13 +1674,13 @@ function setCursorPosition(parent: HTMLElement, position: number) {
       return
     }
 
-    if ((isFile || isBreak) && remaining <= length) {
+    if ((isPill || isBreak) && remaining <= length) {
       const range = document.createRange()
       const selection = window.getSelection()
       if (remaining === 0) {
         range.setStartBefore(node)
       }
-      if (remaining > 0 && isFile) {
+      if (remaining > 0 && isPill) {
         range.setStartAfter(node)
       }
       if (remaining > 0 && isBreak) {
