@@ -1,6 +1,5 @@
 [data-component="diff"] {
   content-visibility: auto;
-  contain-intrinsic-size: 0 300px;
 
   [data-slot="diff-hunk-separator-line-number"] {
     position: sticky;
