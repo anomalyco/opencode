@@ -10,6 +10,7 @@ import {
   on,
   createRenderEffect,
   batch,
+  createSignal,
 } from "solid-js"
 
 import { Dynamic } from "solid-js/web"
@@ -27,6 +28,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
+
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -579,70 +581,135 @@ export default function Page() {
     tabs().setActive(activeTab())
   })
 
-  const mobileWorking = createMemo(() => status().type !== "idle")
-  const mobileAutoScroll = createAutoScroll({
-    working: mobileWorking,
+  const isWorking = createMemo(() => status().type !== "idle")
+  const autoScroll = createAutoScroll({
+    working: isWorking,
     onUserInteracted: () => setStore("userInteracted", true),
   })
 
-  const MobileTurns = () => (
-    <div
-      ref={mobileAutoScroll.scrollRef}
-      onScroll={mobileAutoScroll.handleScroll}
-      onClick={mobileAutoScroll.handleInteraction}
-      class="relative mt-2 min-w-0 w-full h-full overflow-y-auto no-scrollbar pb-12"
-    >
-      <div ref={mobileAutoScroll.contentRef} class="flex flex-col gap-45 items-start justify-start mt-4">
-        <For each={visibleUserMessages()}>
-          {(message) => (
-            <SessionTurn
-              sessionID={params.id!}
-              messageID={message.id}
-              lastUserMessageID={lastUserMessage()?.id}
-              stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
-              onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
-              onUserInteracted={() => setStore("userInteracted", true)}
-              classes={{
-                root: "min-w-0 w-full relative",
-                content:
-                  "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                container: "px-4",
-              }}
-            />
-          )}
-        </For>
+  // Mobile tab state for Session/Review switching (only affects mobile layout)
+  const [mobileTab, setMobileTab] = createSignal<"session" | "review">("session")
+
+  // Track message element refs for scrolling
+  const messageRefs = new Map<string, HTMLDivElement>()
+  const [ignoreScrollSpy, setIgnoreScrollSpy] = createSignal(false)
+  let scrollTimer: number
+
+  const scrollToMessage = (message: UserMessage) => {
+    setIgnoreScrollSpy(true)
+    setActiveMessage(message)
+    const el = messageRefs.get(message.id)
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+    window.clearTimeout(scrollTimer)
+    scrollTimer = window.setTimeout(() => setIgnoreScrollSpy(false), 1000)
+  }
+
+  const handleScrollSpy = (e: Event) => {
+    if (ignoreScrollSpy()) return
+    const container = e.target as HTMLDivElement
+    const scrollTop = container.scrollTop
+    const threshold = 100
+
+    let activeId: string | undefined
+    for (const message of visibleUserMessages()) {
+      const el = messageRefs.get(message.id)
+      if (!el) continue
+
+      if (el.offsetTop <= scrollTop + threshold) {
+        activeId = message.id
+      } else {
+        break
+      }
+    }
+
+    if (activeId && activeId !== activeMessage()?.id) {
+      setActiveMessage(visibleUserMessages().find((m) => m.id === activeId))
+    }
+  }
+
+  createEffect(() => {
+    const msgs = visibleUserMessages()
+    if (msgs.length === 0) return
+    // Wait for refs to be populated
+    requestAnimationFrame(() => {
+      const container = autoScroll.scrollRef
+      if (!container) return
+      // Manually trigger spy once to set initial active message based on scroll position
+      handleScrollSpy({ target: container } as unknown as Event)
+    })
+  })
+
+  // Unified SessionTurns component - works for both mobile and desktop
+  const SessionTurns = () => (
+    <div class="relative w-full h-full min-w-0">
+      {/* Message rail - hidden on mobile, positioned absolutely over the content */}
+      <div class="hidden md:block absolute inset-0 pointer-events-none z-10">
+        <SessionMessageRail
+          messages={visibleUserMessages()}
+          current={activeMessage()}
+          onMessageSelect={scrollToMessage}
+          wide={!showTabs()}
+          class="pointer-events-auto"
+        />
+      </div>
+      <div
+        ref={autoScroll.scrollRef}
+        onScroll={(e) => {
+          autoScroll.handleScroll()
+          handleScrollSpy(e)
+        }}
+        onClick={autoScroll.handleInteraction}
+        class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar snap-y snap-proximity"
+      >
+        <div
+          ref={autoScroll.contentRef}
+          class="flex flex-col gap-45 items-start justify-start pb-32 md:pb-40 transition-[margin]"
+          classList={{
+            "mt-0.5": !showTabs(),
+            "mt-1": showTabs(),
+          }}
+        >
+          <For each={visibleUserMessages()}>
+            {(message) => (
+              <div
+                ref={(el) => messageRefs.set(message.id, el)}
+                class="min-w-0 w-full max-w-full snap-start scroll-m-4 last:min-h-[80vh]"
+              >
+                <SessionTurn
+                  sessionID={params.id!}
+                  messageID={message.id}
+                  lastUserMessageID={lastUserMessage()?.id}
+                  stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
+                  onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
+                  onUserInteracted={() => setStore("userInteracted", true)}
+                  classes={{
+                    root: "min-w-0 w-full relative",
+                    content:
+                      "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                    container:
+                      "px-4 md:px-6 " +
+                      (!showTabs()
+                        ? "md:max-w-200 md:mx-auto"
+                        : visibleUserMessages().length > 1
+                          ? "md:pr-6 md:pl-18"
+                          : ""),
+                  }}
+                />
+              </div>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   )
 
-  const DesktopSessionContent = () => (
+  // Session content component - unified for mobile and desktop
+  const SessionContent = () => (
     <Switch>
       <Match when={params.id}>
-        <div class="flex items-start justify-start h-full min-h-0">
-          <SessionMessageRail
-            messages={visibleUserMessages()}
-            current={activeMessage()}
-            onMessageSelect={setActiveMessage}
-            wide={!showTabs()}
-          />
-          <Show when={activeMessage()}>
-            <SessionTurn
-              sessionID={params.id!}
-              messageID={activeMessage()!.id}
-              lastUserMessageID={lastUserMessage()?.id}
-              stepsExpanded={store.stepsExpanded}
-              onStepsExpandedToggle={() => setStore("stepsExpanded", (x) => !x)}
-              onUserInteracted={() => setStore("userInteracted", true)}
-              classes={{
-                root: "pb-20 flex-1 min-w-0",
-                content: "pb-20",
-                container:
-                  "w-full " +
-                  (!showTabs() ? "max-w-200 mx-auto px-6" : visibleUserMessages().length > 1 ? "pr-6 pl-18" : "px-6"),
-              }}
-            />
-          </Show>
-        </div>
+        <SessionTurns />
       </Match>
       <Match when={true}>
         <NewSessionView />
@@ -650,77 +717,78 @@ export default function Page() {
     </Switch>
   )
 
+  // Review panel content - used on both mobile (via tabs) and desktop (side panel)
+  const ReviewPanel = () => (
+    <div class="relative h-full overflow-y-auto no-scrollbar">
+      <SessionReview
+        diffs={diffs()}
+        diffStyle={layout.review.diffStyle()}
+        onDiffStyleChange={layout.review.setDiffStyle}
+        open={view().review.open()}
+        onOpenChange={view().review.setOpen}
+        classes={{
+          root: "pb-32",
+          header: "px-4",
+          container: "px-4",
+        }}
+      />
+    </div>
+  )
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div class="md:hidden flex-1 min-h-0 flex flex-col bg-background-stronger">
-        <Switch>
-          <Match when={!params.id}>
-            <div class="flex-1 min-h-0 overflow-hidden">
-              <NewSessionView />
-            </div>
-          </Match>
-          <Match when={diffs().length > 0}>
-            <Tabs class="flex-1 min-h-0 flex flex-col pb-28">
-              <Tabs.List>
-                <Tabs.Trigger value="session" class="w-1/2" classes={{ button: "w-full" }}>
-                  Session
-                </Tabs.Trigger>
-                <Tabs.Trigger value="review" class="w-1/2 !border-r-0" classes={{ button: "w-full" }}>
-                  {diffs().length} Files Changed
-                </Tabs.Trigger>
-              </Tabs.List>
-              <Tabs.Content value="session" class="flex-1 !overflow-hidden">
-                <MobileTurns />
-              </Tabs.Content>
-              <Tabs.Content forceMount value="review" class="flex-1 !overflow-hidden hidden data-[selected]:block">
-                <div class="relative h-full mt-6 overflow-y-auto no-scrollbar">
-                  <SessionReview
-                    diffs={diffs()}
-                    diffStyle={layout.review.diffStyle()}
-                    onDiffStyleChange={layout.review.setDiffStyle}
-                    open={view().review.open()}
-                    onOpenChange={view().review.setOpen}
-                    classes={{
-                      root: "pb-32",
-                      header: "px-4",
-                      container: "px-4",
-                    }}
-                  />
-                </div>
-              </Tabs.Content>
-            </Tabs>
-          </Match>
-          <Match when={true}>
-            <div class="flex-1 min-h-0 overflow-hidden">
-              <MobileTurns />
-            </div>
-          </Match>
-        </Switch>
-        <div class="absolute inset-x-0 bottom-4 flex flex-col justify-center items-center z-50 px-4">
-          <div class="w-full">
-            <PromptInput
-              ref={(el) => {
-                inputRef = el
-              }}
-            />
-          </div>
-        </div>
-      </div>
 
-      <div class="hidden md:flex min-h-0 grow w-full">
+      {/* Main content area - responsive layout */}
+      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
+        {/* Mobile tab bar - only shown on mobile when there are diffs */}
+        <Show when={diffs().length > 0}>
+          <div class="md:hidden flex border-b border-border-weak-base bg-background-base">
+            <button
+              type="button"
+              class="flex-1 py-3 text-14-medium border-b-2 transition-colors"
+              classList={{
+                "border-text-base text-text-base": mobileTab() === "session",
+                "border-transparent text-text-weak": mobileTab() !== "session",
+              }}
+              onClick={() => setMobileTab("session")}
+            >
+              Session
+            </button>
+            <button
+              type="button"
+              class="flex-1 py-3 text-14-medium border-b-2 transition-colors"
+              classList={{
+                "border-text-base text-text-base": mobileTab() === "review",
+                "border-transparent text-text-weak": mobileTab() !== "review",
+              }}
+              onClick={() => setMobileTab("review")}
+            >
+              {diffs().length} Files Changed
+            </button>
+          </div>
+        </Show>
+
+        {/* Session panel */}
         <div
-          class="@container relative shrink-0 py-3 flex flex-col gap-6 min-h-0 h-full bg-background-stronger"
+          class="@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger md:py-3"
+          classList={{
+            // Mobile: hide when review tab is active and there are diffs
+            "hidden md:flex": diffs().length > 0 && mobileTab() === "review",
+            "flex-1 md:flex-none": true,
+          }}
           style={{ width: showTabs() ? `${layout.session.width()}px` : "100%" }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
-            <DesktopSessionContent />
+            <SessionContent />
           </div>
-          <div class="absolute inset-x-0 bottom-8 flex flex-col justify-center items-center z-50">
+
+          {/* Prompt input */}
+          <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none">
             <div
               classList={{
-                "w-full px-6": true,
-                "max-w-200": !showTabs(),
+                "w-full md:px-6 pointer-events-auto": true,
+                "md:max-w-200": !showTabs(),
               }}
             >
               <PromptInput
@@ -730,6 +798,7 @@ export default function Page() {
               />
             </div>
           </div>
+
           <Show when={showTabs()}>
             <ResizeHandle
               direction="horizontal"
@@ -741,8 +810,16 @@ export default function Page() {
           </Show>
         </div>
 
+        {/* Mobile review panel - only shown on mobile when review tab is active */}
+        <Show when={diffs().length > 0 && mobileTab() === "review"}>
+          <div class="md:hidden flex-1 min-h-0 mt-6 pb-32">
+            <ReviewPanel />
+          </div>
+        </Show>
+
+        {/* Desktop tabs panel (Review + Context + Files) - hidden on mobile */}
         <Show when={showTabs()}>
-          <div class="relative flex-1 min-w-0 h-full border-l border-border-weak-base">
+          <div class="hidden md:block relative flex-1 min-w-0 h-full border-l border-border-weak-base">
             <DragDropProvider
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
