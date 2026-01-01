@@ -449,7 +449,7 @@ export namespace ACP {
 
         for (const msg of messages ?? []) {
           log.debug("replay message", msg)
-          await this.processMessage(msg)
+          await this.processMessage(msg, true)
         }
 
         return mode
@@ -464,7 +464,7 @@ export namespace ACP {
       }
     }
 
-    private async processMessage(message: SessionMessageResponse) {
+    private async processMessage(message: SessionMessageResponse, isReplay: boolean = false) {
       log.debug("process message", message)
       if (message.info.role !== "assistant" && message.info.role !== "user") return
       const sessionId = message.info.sessionID
@@ -484,6 +484,7 @@ export namespace ACP {
                     status: "pending",
                     locations: [],
                     rawInput: {},
+                    ...(isReplay && { _meta: { isReplay: true } }),
                   },
                 })
                 .catch((err) => {
@@ -500,6 +501,7 @@ export namespace ACP {
                     status: "in_progress",
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
+                    ...(isReplay && { _meta: { isReplay: true } }),
                   },
                 })
                 .catch((err) => {
@@ -553,6 +555,7 @@ export namespace ACP {
                             content: todo.content,
                           }
                         }),
+                        ...(isReplay && { _meta: { isReplay: true } }),
                       },
                     })
                     .catch((err) => {
@@ -577,6 +580,7 @@ export namespace ACP {
                       output: part.state.output,
                       metadata: part.state.metadata,
                     },
+                    ...(isReplay && { _meta: { isReplay: true } }),
                   },
                 })
                 .catch((err) => {
@@ -603,6 +607,7 @@ export namespace ACP {
                     rawOutput: {
                       error: part.state.error,
                     },
+                    ...(isReplay && { _meta: { isReplay: true } }),
                   },
                 })
                 .catch((err) => {
@@ -621,6 +626,7 @@ export namespace ACP {
                     type: "text",
                     text: part.text,
                   },
+                  ...(isReplay && { _meta: { isReplay: true } }),
                 },
               })
               .catch((err) => {
@@ -638,6 +644,7 @@ export namespace ACP {
                     type: "text",
                     text: part.text,
                   },
+                  ...(isReplay && { _meta: { isReplay: true } }),
                 },
               })
               .catch((err) => {
@@ -774,11 +781,11 @@ export namespace ACP {
     }
 
     async setSessionModel(params: SetSessionModelRequest) {
-      const session = this.sessionManager.get(params.sessionId)
+      const session = await this.sessionManager.get(params.sessionId)
 
       const model = Provider.parseModel(params.modelId)
 
-      this.sessionManager.setModel(session.id, {
+      await this.sessionManager.setModel(session.id, {
         providerID: model.providerID,
         modelID: model.modelID,
       })
@@ -789,25 +796,25 @@ export namespace ACP {
     }
 
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
-      this.sessionManager.get(params.sessionId)
+      await this.sessionManager.get(params.sessionId)
       await this.config.sdk.app
         .agents({}, { throwOnError: true })
         .then((x) => x.data)
         .then((agent) => {
           if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
         })
-      this.sessionManager.setMode(params.sessionId, params.modeId)
+      await this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
     async prompt(params: PromptRequest) {
       const sessionID = params.sessionId
-      const session = this.sessionManager.get(sessionID)
+      const session = await this.sessionManager.get(sessionID)
       const directory = session.cwd
 
       const current = session.model
       const model = current ?? (await defaultModel(this.config, directory))
       if (!current) {
-        this.sessionManager.setModel(session.id, model)
+        await this.sessionManager.setModel(session.id, model)
       }
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
@@ -928,7 +935,7 @@ export namespace ACP {
     }
 
     async cancel(params: CancelNotification) {
-      const session = this.sessionManager.get(params.sessionId)
+      const session = await this.sessionManager.get(params.sessionId)
       await this.config.sdk.session.abort(
         {
           sessionID: params.sessionId,
