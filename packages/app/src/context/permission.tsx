@@ -1,17 +1,17 @@
-import { createEffect, createRoot, onCleanup } from "solid-js"
+import { createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { Permission } from "@opencode-ai/sdk/v2/client"
 import { persisted } from "@/utils/persist"
-
-type PermissionsBySession = {
-  [sessionID: string]: Permission[]
-}
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "./global-sync"
+import { useParams } from "@solidjs/router"
 
 type PermissionRespondFn = (input: {
   sessionID: string
   permissionID: string
   response: "once" | "always" | "reject"
+  directory?: string
 }) => void
 
 const AUTO_ACCEPT_TYPES = new Set(["edit", "write"])
@@ -22,109 +22,102 @@ function shouldAutoAccept(perm: Permission) {
 
 export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
   name: "Permission",
-  init: (props: { permissions: PermissionsBySession; onRespond: PermissionRespondFn }) => {
+  init: () => {
+    const params = useParams()
+    const globalSDK = useGlobalSDK()
+    const globalSync = useGlobalSync()
+
+    const permissionsEnabled = createMemo(() => {
+      if (!params.dir) return false
+      const [store] = globalSync.child(params.dir)
+      return store.config.permission !== undefined
+    })
+
     const [store, setStore, _, ready] = persisted(
-      "permission.v1",
+      "permission.v3",
       createStore({
         autoAcceptEdits: {} as Record<string, boolean>,
       }),
     )
 
     const responded = new Set<string>()
-    const watches = new Map<string, () => void>()
 
-    function respond(perm: Permission) {
-      if (responded.has(perm.id)) return
-      responded.add(perm.id)
-      props.onRespond({
-        sessionID: perm.sessionID,
-        permissionID: perm.id,
-        response: "once",
+    const respond: PermissionRespondFn = (input) => {
+      globalSDK.client.permission.respond(input).catch(() => {
+        responded.delete(input.permissionID)
       })
     }
 
-    function watch(sessionID: string) {
-      if (watches.has(sessionID)) return
+    function respondOnce(permission: Permission, directory?: string) {
+      if (responded.has(permission.id)) return
+      responded.add(permission.id)
+      respond({
+        sessionID: permission.sessionID,
+        permissionID: permission.id,
+        response: "once",
+        directory,
+      })
+    }
 
-      const dispose = createRoot((dispose) => {
-        createEffect(() => {
-          if (!store.autoAcceptEdits[sessionID]) return
+    function isAutoAccepting(sessionID: string) {
+      return store.autoAcceptEdits[sessionID] ?? false
+    }
 
-          const permissions = props.permissions[sessionID] ?? []
-          permissions.length
+    const unsubscribe = globalSDK.event.listen((e) => {
+      const event = e.details
+      if (event?.type !== "permission.updated") return
 
-          for (const perm of permissions) {
+      const perm = event.properties
+      if (!isAutoAccepting(perm.sessionID)) return
+      if (!shouldAutoAccept(perm)) return
+
+      respondOnce(perm, e.name)
+    })
+    onCleanup(unsubscribe)
+
+    function enable(sessionID: string, directory: string) {
+      setStore("autoAcceptEdits", sessionID, true)
+
+      globalSDK.client.permission
+        .list({ directory })
+        .then((x) => {
+          for (const perm of x.data ?? []) {
+            if (!perm?.id) continue
+            if (perm.sessionID !== sessionID) continue
             if (!shouldAutoAccept(perm)) continue
-            respond(perm)
+            respondOnce(perm, directory)
           }
         })
-
-        return dispose
-      })
-
-      watches.set(sessionID, dispose)
-    }
-
-    function unwatch(sessionID: string) {
-      const dispose = watches.get(sessionID)
-      if (!dispose) return
-      dispose()
-      watches.delete(sessionID)
-    }
-
-    createEffect(() => {
-      if (!ready()) return
-
-      for (const sessionID in store.autoAcceptEdits) {
-        if (!store.autoAcceptEdits[sessionID]) continue
-        watch(sessionID)
-      }
-    })
-
-    onCleanup(() => {
-      for (const dispose of watches.values()) dispose()
-      watches.clear()
-    })
-
-    function enable(sessionID: string) {
-      setStore("autoAcceptEdits", sessionID, true)
-      watch(sessionID)
-
-      const permissions = props.permissions[sessionID] ?? []
-      for (const perm of permissions) {
-        if (!shouldAutoAccept(perm)) continue
-        respond(perm)
-      }
+        .catch(() => undefined)
     }
 
     function disable(sessionID: string) {
       setStore("autoAcceptEdits", sessionID, false)
-      unwatch(sessionID)
     }
 
     return {
-      get permissions() {
-        return props.permissions
+      ready,
+      respond,
+      autoResponds(permission: Permission) {
+        return isAutoAccepting(permission.sessionID) && shouldAutoAccept(permission)
       },
-      respond: props.onRespond,
-      isAutoAccepting(sessionID: string) {
-        return store.autoAcceptEdits[sessionID] ?? false
-      },
-      toggleAutoAccept(sessionID: string) {
-        if (store.autoAcceptEdits[sessionID]) {
+      isAutoAccepting,
+      toggleAutoAccept(sessionID: string, directory: string) {
+        if (isAutoAccepting(sessionID)) {
           disable(sessionID)
           return
         }
 
-        enable(sessionID)
+        enable(sessionID, directory)
       },
-      enableAutoAccept(sessionID: string) {
-        if (store.autoAcceptEdits[sessionID]) return
-        enable(sessionID)
+      enableAutoAccept(sessionID: string, directory: string) {
+        if (isAutoAccepting(sessionID)) return
+        enable(sessionID, directory)
       },
       disableAutoAccept(sessionID: string) {
         disable(sessionID)
       },
+      permissionsEnabled,
     }
   },
 })

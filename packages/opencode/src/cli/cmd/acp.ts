@@ -9,13 +9,6 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 
 const log = Log.create({ service: "acp-command" })
 
-process.on("unhandledRejection", (reason, promise) => {
-  log.error("Unhandled rejection", {
-    promise,
-    reason,
-  })
-})
-
 export const AcpCommand = cmd({
   command: "acp",
   describe: "start ACP (Agent Client Protocol) server",

@@ -17,11 +17,12 @@ import { Dynamic } from "solid-js/web"
 import { useLocal, type LocalFile } from "@/context/local"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
+import { SessionContextUsage } from "@/components/session-context-usage"
 import { DateTime } from "luxon"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -30,6 +31,10 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
+import { Markdown } from "@opencode-ai/ui/markdown"
+import { Accordion } from "@opencode-ai/ui/accordion"
+import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
+import { Code } from "@opencode-ai/ui/code"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -70,7 +75,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { iife } from "@opencode-ai/util/iife"
-import { Session } from "@opencode-ai/sdk/v2/client"
+import { AssistantMessage, Session, type Message, type Part } from "@opencode-ai/sdk/v2/client"
 
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
@@ -149,17 +154,9 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
             />
           </div>
           <Show when={currentSession()}>
-            <Tooltip
-              class="hidden xl:block"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>New session</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
-                </div>
-              }
-            >
+            <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
-            </Tooltip>
+            </TooltipKeybind>
           </Show>
         </div>
         <div class="flex items-center gap-3">
@@ -187,14 +184,10 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
           </div>
           <div class="flex items-center gap-1">
             <Show when={currentSession()?.summary?.files}>
-              <Tooltip
+              <TooltipKeybind
                 class="hidden md:block shrink-0"
-                value={
-                  <div class="flex items-center gap-2">
-                    <span>Toggle review</span>
-                    <span class="text-icon-base text-12-medium">{command.keybind("review.toggle")}</span>
-                  </div>
-                }
+                title="Toggle review"
+                keybind={command.keybind("review.toggle")}
               >
                 <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
                   <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -215,16 +208,12 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
                     />
                   </div>
                 </Button>
-              </Tooltip>
+              </TooltipKeybind>
             </Show>
-            <Tooltip
+            <TooltipKeybind
               class="hidden md:block shrink-0"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle terminal</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("terminal.toggle")}</span>
-                </div>
-              }
+              title="Toggle terminal"
+              keybind={command.keybind("terminal.toggle")}
             >
               <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
                 <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -245,7 +234,7 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
                   />
                 </div>
               </Button>
-            </Tooltip>
+            </TooltipKeybind>
           </div>
           <Show when={shareEnabled() && currentSession()}>
             <Popover
@@ -463,21 +452,6 @@ export default function Page() {
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
-    // {
-    //   id: "theme.toggle",
-    //   title: "Toggle theme",
-    //   description: "Switch between themes",
-    //   category: "View",
-    //   keybind: "ctrl+t",
-    //   slash: "theme",
-    //   onSelect: () => {
-    //     const currentTheme = localStorage.getItem("theme") ?? "oc-1"
-    //     const themes = ["oc-1", "oc-2-paper"]
-    //     const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
-    //     localStorage.setItem("theme", nextTheme)
-    //     document.documentElement.setAttribute("data-theme", nextTheme)
-    //   },
-    // },
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
@@ -567,16 +541,32 @@ export default function Page() {
       onSelect: () => local.agent.move(-1),
     },
     {
+      id: "model.variant.cycle",
+      title: "Cycle thinking effort",
+      description: "Switch to the next effort level",
+      category: "Model",
+      keybind: "shift+mod+t",
+      onSelect: () => {
+        local.model.variant.cycle()
+        showToast({
+          title: "Thinking effort changed",
+          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
+        })
+      },
+    },
+    {
       id: "permissions.autoaccept",
       title: params.id && permission.isAutoAccepting(params.id) ? "Stop auto-accepting edits" : "Auto-accept edits",
       category: "Permissions",
-      disabled: !params.id,
+      keybind: "mod+shift+a",
+      disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
-        if (!params.id) return
-        permission.toggleAutoAccept(params.id)
+        const sessionID = params.id
+        if (!sessionID) return
+        permission.toggleAutoAccept(sessionID, sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(params.id) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
-          description: permission.isAutoAccepting(params.id)
+          title: permission.isAutoAccepting(sessionID) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(sessionID)
             ? "Edit and write permissions will be automatically approved"
             : "Edit and write permissions will require approval",
         })
@@ -832,7 +822,23 @@ export default function Page() {
     )
   }
 
-  const showTabs = createMemo(() => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0))
+  const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
+  const openedTabs = createMemo(() =>
+    tabs()
+      .all()
+      .filter((tab) => tab !== "context"),
+  )
+
+  const showTabs = createMemo(
+    () => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0 || contextOpen()),
+  )
+
+  const activeTab = createMemo(() => {
+    const active = tabs().active()
+    if (active) return active
+    if (diffs().length > 0) return "review"
+    return tabs().all()[0] ?? "review"
+  })
 
   const mobileWorking = createMemo(() => status().type !== "idle")
   const mobileAutoScroll = createAutoScroll({
@@ -930,6 +936,347 @@ export default function Page() {
       </Match>
     </Switch>
   )
+
+  const ContextTab = () => {
+    const ctx = createMemo(() => {
+      const last = messages().findLast((x) => {
+        if (x.role !== "assistant") return false
+        const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
+        return total > 0
+      }) as AssistantMessage
+      if (!last) return
+
+      const provider = sync.data.provider.all.find((x) => x.id === last.providerID)
+      const model = provider?.models[last.modelID]
+      const limit = model?.limit.context
+
+      const input = last.tokens.input
+      const output = last.tokens.output
+      const reasoning = last.tokens.reasoning
+      const cacheRead = last.tokens.cache.read
+      const cacheWrite = last.tokens.cache.write
+      const total = input + output + reasoning + cacheRead + cacheWrite
+      const usage = limit ? Math.round((total / limit) * 100) : null
+
+      return {
+        message: last,
+        provider,
+        model,
+        limit,
+        input,
+        output,
+        reasoning,
+        cacheRead,
+        cacheWrite,
+        total,
+        usage,
+      }
+    })
+
+    const cost = createMemo(() => {
+      const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+      }).format(total)
+    })
+
+    const counts = createMemo(() => {
+      const all = messages()
+      const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
+      const assistant = all.reduce((count, x) => count + (x.role === "assistant" ? 1 : 0), 0)
+      return {
+        all: all.length,
+        user,
+        assistant,
+      }
+    })
+
+    const systemPrompt = createMemo(() => {
+      const msg = visibleUserMessages().findLast((m) => !!m.system)
+      const system = msg?.system
+      if (!system) return
+      const trimmed = system.trim()
+      if (!trimmed) return
+      return trimmed
+    })
+
+    const number = (value: number | null | undefined) => {
+      if (value === undefined) return "—"
+      if (value === null) return "—"
+      return value.toLocaleString()
+    }
+
+    const percent = (value: number | null | undefined) => {
+      if (value === undefined) return "—"
+      if (value === null) return "—"
+      return value.toString() + "%"
+    }
+
+    const time = (value: number | undefined) => {
+      if (!value) return "—"
+      return DateTime.fromMillis(value).toLocaleString(DateTime.DATETIME_MED)
+    }
+
+    const providerLabel = createMemo(() => {
+      const c = ctx()
+      if (!c) return "—"
+      return c.provider?.name ?? c.message.providerID
+    })
+
+    const modelLabel = createMemo(() => {
+      const c = ctx()
+      if (!c) return "—"
+      if (c.model?.name) return c.model.name
+      return c.message.modelID
+    })
+
+    const breakdown = createMemo(
+      on(
+        () => [ctx()?.message.id, ctx()?.input, messages().length, systemPrompt()],
+        () => {
+          const c = ctx()
+          if (!c) return []
+          const input = c.input
+          if (!input) return []
+
+          const out = {
+            system: systemPrompt()?.length ?? 0,
+            user: 0,
+            assistant: 0,
+            tool: 0,
+          }
+
+          for (const msg of messages()) {
+            const parts = (sync.data.part[msg.id] ?? []) as Part[]
+
+            if (msg.role === "user") {
+              for (const part of parts) {
+                if (part.type === "text") out.user += part.text.length
+                if (part.type === "file") out.user += part.source?.text.value.length ?? 0
+                if (part.type === "agent") out.user += part.source?.value.length ?? 0
+              }
+              continue
+            }
+
+            if (msg.role === "assistant") {
+              for (const part of parts) {
+                if (part.type === "text") out.assistant += part.text.length
+                if (part.type === "reasoning") out.assistant += part.text.length
+                if (part.type === "tool") {
+                  out.tool += Object.keys(part.state.input).length * 16
+                  if (part.state.status === "pending") out.tool += part.state.raw.length
+                  if (part.state.status === "completed") out.tool += part.state.output.length
+                  if (part.state.status === "error") out.tool += part.state.error.length
+                }
+              }
+            }
+          }
+
+          const estimateTokens = (chars: number) => Math.ceil(chars / 4)
+          const system = estimateTokens(out.system)
+          const user = estimateTokens(out.user)
+          const assistant = estimateTokens(out.assistant)
+          const tool = estimateTokens(out.tool)
+          const estimated = system + user + assistant + tool
+
+          const pct = (tokens: number) => (tokens / input) * 100
+          const pctLabel = (tokens: number) => (Math.round(pct(tokens) * 10) / 10).toString() + "%"
+
+          const build = (tokens: { system: number; user: number; assistant: number; tool: number; other: number }) => {
+            return [
+              {
+                key: "system",
+                label: "System",
+                tokens: tokens.system,
+                width: pct(tokens.system),
+                percent: pctLabel(tokens.system),
+                color: "var(--syntax-info)",
+              },
+              {
+                key: "user",
+                label: "User",
+                tokens: tokens.user,
+                width: pct(tokens.user),
+                percent: pctLabel(tokens.user),
+                color: "var(--syntax-success)",
+              },
+              {
+                key: "assistant",
+                label: "Assistant",
+                tokens: tokens.assistant,
+                width: pct(tokens.assistant),
+                percent: pctLabel(tokens.assistant),
+                color: "var(--syntax-property)",
+              },
+              {
+                key: "tool",
+                label: "Tool Calls",
+                tokens: tokens.tool,
+                width: pct(tokens.tool),
+                percent: pctLabel(tokens.tool),
+                color: "var(--syntax-warning)",
+              },
+              {
+                key: "other",
+                label: "Other",
+                tokens: tokens.other,
+                width: pct(tokens.other),
+                percent: pctLabel(tokens.other),
+                color: "var(--syntax-comment)",
+              },
+            ].filter((x) => x.tokens > 0)
+          }
+
+          if (estimated <= input) {
+            return build({ system, user, assistant, tool, other: input - estimated })
+          }
+
+          const scale = input / estimated
+          const scaled = {
+            system: Math.floor(system * scale),
+            user: Math.floor(user * scale),
+            assistant: Math.floor(assistant * scale),
+            tool: Math.floor(tool * scale),
+          }
+          const scaledTotal = scaled.system + scaled.user + scaled.assistant + scaled.tool
+          return build({ ...scaled, other: Math.max(0, input - scaledTotal) })
+        },
+      ),
+    )
+
+    function Stat(props: { label: string; value: JSX.Element }) {
+      return (
+        <div class="flex flex-col gap-1">
+          <div class="text-12-regular text-text-weak">{props.label}</div>
+          <div class="text-12-medium text-text-strong">{props.value}</div>
+        </div>
+      )
+    }
+
+    const stats = createMemo(() => {
+      const c = ctx()
+      const count = counts()
+      return [
+        { label: "Session", value: info()?.title ?? params.id ?? "—" },
+        { label: "Messages", value: count.all.toLocaleString() },
+        { label: "Provider", value: providerLabel() },
+        { label: "Model", value: modelLabel() },
+        { label: "Context Limit", value: number(c?.limit) },
+        { label: "Total Tokens", value: number(c?.total) },
+        { label: "Usage", value: percent(c?.usage) },
+        { label: "Input Tokens", value: number(c?.input) },
+        { label: "Output Tokens", value: number(c?.output) },
+        { label: "Reasoning Tokens", value: number(c?.reasoning) },
+        { label: "Cache Tokens (read/write)", value: `${number(c?.cacheRead)} / ${number(c?.cacheWrite)}` },
+        { label: "User Messages", value: count.user.toLocaleString() },
+        { label: "Assistant Messages", value: count.assistant.toLocaleString() },
+        { label: "Total Cost", value: cost() },
+        { label: "Session Created", value: time(info()?.time.created) },
+        { label: "Last Activity", value: time(c?.message.time.created) },
+      ] satisfies { label: string; value: JSX.Element }[]
+    })
+
+    function RawMessageContent(props: { message: Message }) {
+      const file = createMemo(() => {
+        const parts = (sync.data.part[props.message.id] ?? []) as Part[]
+        const contents = JSON.stringify({ message: props.message, parts }, null, 2)
+        return {
+          name: `${props.message.role}-${props.message.id}.json`,
+          contents,
+          cacheKey: checksum(contents),
+        }
+      })
+
+      return <Code file={file()} overflow="wrap" class="select-text" />
+    }
+
+    function RawMessage(props: { message: Message }) {
+      return (
+        <Accordion.Item value={props.message.id}>
+          <StickyAccordionHeader>
+            <Accordion.Trigger>
+              <div class="flex items-center justify-between gap-2 w-full">
+                <div class="min-w-0 truncate">
+                  {props.message.role} <span class="text-text-base">• {props.message.id}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="shrink-0 text-12-regular text-text-weak">{time(props.message.time.created)}</div>
+                  <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
+                </div>
+              </div>
+            </Accordion.Trigger>
+          </StickyAccordionHeader>
+          <Accordion.Content class="bg-background-base">
+            <div class="p-3">
+              <RawMessageContent message={props.message} />
+            </div>
+          </Accordion.Content>
+        </Accordion.Item>
+      )
+    }
+
+    return (
+      <div class="@container h-full overflow-y-auto no-scrollbar pb-10">
+        <div class="px-6 pt-4 flex flex-col gap-10">
+          <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
+            <For each={stats()}>{(stat) => <Stat label={stat.label} value={stat.value} />}</For>
+          </div>
+
+          <Show when={breakdown().length > 0}>
+            <div class="flex flex-col gap-2">
+              <div class="text-12-regular text-text-weak">Context Breakdown</div>
+              <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden flex">
+                <For each={breakdown()}>
+                  {(segment) => (
+                    <div
+                      class="h-full"
+                      style={{
+                        width: `${segment.width}%`,
+                        "background-color": segment.color,
+                      }}
+                    />
+                  )}
+                </For>
+              </div>
+              <div class="flex flex-wrap gap-x-3 gap-y-1">
+                <For each={breakdown()}>
+                  {(segment) => (
+                    <div class="flex items-center gap-1 text-11-regular text-text-weak">
+                      <div class="size-2 rounded-sm" style={{ "background-color": segment.color }} />
+                      <div>{segment.label}</div>
+                      <div class="text-text-weaker">{segment.percent}</div>
+                    </div>
+                  )}
+                </For>
+              </div>
+              <div class="hidden text-11-regular text-text-weaker">
+                Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.
+              </div>
+            </div>
+          </Show>
+
+          <Show when={systemPrompt()}>
+            {(prompt) => (
+              <div class="flex flex-col gap-2">
+                <div class="text-12-regular text-text-weak">System Prompt</div>
+                <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
+                  <Markdown text={prompt()} class="text-12-regular" />
+                </div>
+              </div>
+            )}
+          </Show>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-12-regular text-text-weak">Raw messages</div>
+            <Accordion multiple>
+              <For each={messages()}>{(message) => <RawMessage message={message} />}</For>
+            </Accordion>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
@@ -1030,7 +1377,7 @@ export default function Page() {
             >
               <DragDropSensors />
               <ConstrainDragYAxis />
-              <Tabs value={tabs().active() ?? "review"} onChange={tabs().open}>
+              <Tabs value={activeTab()} onChange={tabs().open}>
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
                     <Show when={diffs().length}>
@@ -1050,19 +1397,31 @@ export default function Page() {
                         </div>
                       </Tabs.Trigger>
                     </Show>
-                    <SortableProvider ids={tabs().all() ?? []}>
-                      <For each={tabs().all() ?? []}>
+                    <Show when={contextOpen()}>
+                      <Tabs.Trigger
+                        value="context"
+                        closeButton={
+                          <Tooltip value="Close tab" placement="bottom">
+                            <IconButton icon="close" variant="ghost" onClick={() => tabs().close("context")} />
+                          </Tooltip>
+                        }
+                        hideCloseButton
+                      >
+                        <div class="flex items-center gap-2">
+                          <SessionContextUsage variant="indicator" />
+                          <div>Context</div>
+                        </div>
+                      </Tabs.Trigger>
+                    </Show>
+                    <SortableProvider ids={openedTabs()}>
+                      <For each={openedTabs()}>
                         {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={tabs().close} />}
                       </For>
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                      <Tooltip
-                        value={
-                          <div class="flex items-center gap-2">
-                            <span>Open file</span>
-                            <span class="text-icon-base text-12-medium">{command.keybind("file.open")}</span>
-                          </div>
-                        }
+                      <TooltipKeybind
+                        title="Open file"
+                        keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
                         <IconButton
@@ -1071,7 +1430,7 @@ export default function Page() {
                           iconSize="large"
                           onClick={() => dialog.show(() => <DialogSelectFile />)}
                         />
-                      </Tooltip>
+                      </TooltipKeybind>
                     </div>
                   </Tabs.List>
                 </div>
@@ -1091,7 +1450,14 @@ export default function Page() {
                     </div>
                   </Tabs.Content>
                 </Show>
-                <For each={tabs().all()}>
+                <Show when={contextOpen()}>
+                  <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
+                    <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                      <ContextTab />
+                    </div>
+                  </Tabs.Content>
+                </Show>
+                <For each={openedTabs()}>
                   {(tab) => {
                     const [file] = createResource(
                       () => tab,
@@ -1178,17 +1544,13 @@ export default function Page() {
                   <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                 </SortableProvider>
                 <div class="h-full flex items-center justify-center">
-                  <Tooltip
-                    value={
-                      <div class="flex items-center gap-2">
-                        <span>New terminal</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("terminal.new")}</span>
-                      </div>
-                    }
+                  <TooltipKeybind
+                    title="New terminal"
+                    keybind={command.keybind("terminal.new")}
                     class="flex items-center"
                   >
                     <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                  </Tooltip>
+                  </TooltipKeybind>
                 </div>
               </Tabs.List>
               <For each={terminal.all()}>
