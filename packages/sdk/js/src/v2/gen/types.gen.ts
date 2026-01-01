@@ -1454,6 +1454,38 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Show thinking blocks in assistant responses
+     */
+    show_thinking?: boolean
+    /**
+     * Show detailed tool call information
+     */
+    show_tool_details?: boolean
+    /**
+     * Sidebar visibility mode
+     */
+    sidebar?: "show" | "hide" | "auto"
+    /**
+     * Show message timestamps
+     */
+    timestamps?: "show" | "hide"
+    /**
+     * Show username in message headers
+     */
+    show_username?: boolean
+    /**
+     * Show scrollbar in message list
+     */
+    show_scrollbar?: boolean
+    /**
+     * Enable TUI animations
+     */
+    animations?: boolean
+    /**
+     * Render user messages as markdown
+     */
+    user_message_markdown?: boolean
   }
   server?: ServerConfig
   /**
