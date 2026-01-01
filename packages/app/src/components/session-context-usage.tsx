@@ -35,20 +35,25 @@ export function SessionContextUsage() {
       {(ctx) => (
         <Tooltip
           value={
-            <div class="grid grid-cols-2 gap-x-3 gap-y-1">
-              <span class="opacity-70 text-right">Tokens</span>
-              <span class="text-left">{ctx().tokens}</span>
-              <span class="opacity-70 text-right">Usage</span>
-              <span class="text-left">{ctx().percentage ?? 0}%</span>
-              <span class="opacity-70 text-right">Cost</span>
-              <span class="text-left">{cost()}</span>
+            <div class="">
+              <div class="flex items-center gap-2">
+                <span class="text-text-invert-strong">{ctx().tokens}</span>
+                <span class="text-text-invert-base">Tokens</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-text-invert-strong">{ctx().percentage ?? 0}%</span>
+                <span class="text-text-invert-base">Usage</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-text-invert-strong">{cost()}</span>
+                <span class="text-text-invert-base">Cost</span>
+              </div>
             </div>
           }
           placement="top"
         >
-          <div class="flex items-center gap-1.5">
+          <div class="p-1">
             <ProgressCircle size={16} strokeWidth={2} percentage={ctx().percentage ?? 0} />
-            {/* <span class="text-12-medium text-text-weak">{`${ctx().percentage ?? 0}%`}</span> */}
           </div>
         </Tooltip>
       )}

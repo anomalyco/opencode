@@ -21,7 +21,7 @@ import { DateTime } from "luxon"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -149,17 +149,9 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
             />
           </div>
           <Show when={currentSession()}>
-            <Tooltip
-              class="hidden xl:block"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>New session</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
-                </div>
-              }
-            >
+            <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
-            </Tooltip>
+            </TooltipKeybind>
           </Show>
         </div>
         <div class="flex items-center gap-3">
@@ -187,14 +179,10 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
           </div>
           <div class="flex items-center gap-1">
             <Show when={currentSession()?.summary?.files}>
-              <Tooltip
+              <TooltipKeybind
                 class="hidden md:block shrink-0"
-                value={
-                  <div class="flex items-center gap-2">
-                    <span>Toggle review</span>
-                    <span class="text-icon-base text-12-medium">{command.keybind("review.toggle")}</span>
-                  </div>
-                }
+                title="Toggle review"
+                keybind={command.keybind("review.toggle")}
               >
                 <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
                   <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -215,16 +203,12 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
                     />
                   </div>
                 </Button>
-              </Tooltip>
+              </TooltipKeybind>
             </Show>
-            <Tooltip
+            <TooltipKeybind
               class="hidden md:block shrink-0"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle terminal</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("terminal.toggle")}</span>
-                </div>
-              }
+              title="Toggle terminal"
+              keybind={command.keybind("terminal.toggle")}
             >
               <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
                 <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
@@ -245,7 +229,7 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
                   />
                 </div>
               </Button>
-            </Tooltip>
+            </TooltipKeybind>
           </div>
           <Show when={shareEnabled() && currentSession()}>
             <Popover
@@ -463,21 +447,6 @@ export default function Page() {
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
-    // {
-    //   id: "theme.toggle",
-    //   title: "Toggle theme",
-    //   description: "Switch between themes",
-    //   category: "View",
-    //   keybind: "ctrl+t",
-    //   slash: "theme",
-    //   onSelect: () => {
-    //     const currentTheme = localStorage.getItem("theme") ?? "oc-1"
-    //     const themes = ["oc-1", "oc-2-paper"]
-    //     const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
-    //     localStorage.setItem("theme", nextTheme)
-    //     document.documentElement.setAttribute("data-theme", nextTheme)
-    //   },
-    // },
     {
       id: "terminal.toggle",
       title: "Toggle terminal",
@@ -567,16 +536,32 @@ export default function Page() {
       onSelect: () => local.agent.move(-1),
     },
     {
+      id: "model.variant.cycle",
+      title: "Cycle thinking effort",
+      description: "Switch to the next effort level",
+      category: "Model",
+      keybind: "shift+mod+t",
+      onSelect: () => {
+        local.model.variant.cycle()
+        showToast({
+          title: "Thinking effort changed",
+          description: "The thinking effort has been changed to " + (local.model.variant.current() ?? "Default"),
+        })
+      },
+    },
+    {
       id: "permissions.autoaccept",
       title: params.id && permission.isAutoAccepting(params.id) ? "Stop auto-accepting edits" : "Auto-accept edits",
       category: "Permissions",
-      disabled: !params.id,
+      keybind: "mod+shift+a",
+      disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
-        if (!params.id) return
-        permission.toggleAutoAccept(params.id)
+        const sessionID = params.id
+        if (!sessionID) return
+        permission.toggleAutoAccept(sessionID, sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(params.id) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
-          description: permission.isAutoAccepting(params.id)
+          title: permission.isAutoAccepting(sessionID) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(sessionID)
             ? "Edit and write permissions will be automatically approved"
             : "Edit and write permissions will require approval",
         })
@@ -1056,13 +1041,9 @@ export default function Page() {
                       </For>
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
-                      <Tooltip
-                        value={
-                          <div class="flex items-center gap-2">
-                            <span>Open file</span>
-                            <span class="text-icon-base text-12-medium">{command.keybind("file.open")}</span>
-                          </div>
-                        }
+                      <TooltipKeybind
+                        title="Open file"
+                        keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
                         <IconButton
@@ -1071,7 +1052,7 @@ export default function Page() {
                           iconSize="large"
                           onClick={() => dialog.show(() => <DialogSelectFile />)}
                         />
-                      </Tooltip>
+                      </TooltipKeybind>
                     </div>
                   </Tabs.List>
                 </div>
@@ -1178,17 +1159,13 @@ export default function Page() {
                   <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
                 </SortableProvider>
                 <div class="h-full flex items-center justify-center">
-                  <Tooltip
-                    value={
-                      <div class="flex items-center gap-2">
-                        <span>New terminal</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("terminal.new")}</span>
-                      </div>
-                    }
+                  <TooltipKeybind
+                    title="New terminal"
+                    keybind={command.keybind("terminal.new")}
                     class="flex items-center"
                   >
                     <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                  </Tooltip>
+                  </TooltipKeybind>
                 </div>
               </Tabs.List>
               <For each={terminal.all()}>
