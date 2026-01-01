@@ -34,6 +34,7 @@ import { createCohere } from "@ai-sdk/cohere"
 import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
+import { createVercel } from "@ai-sdk/vercel"
 import { ProviderTransform } from "./transform"
 
 export namespace Provider {
@@ -58,6 +59,7 @@ export namespace Provider {
     "@ai-sdk/gateway": createGateway,
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
+    "@ai-sdk/vercel": createVercel,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
@@ -499,7 +501,7 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? provider.id,
+        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -644,7 +646,11 @@ export namespace Provider {
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
-              model.provider?.npm ?? provider.npm ?? existingModel?.api.npm ?? modelsDev[providerID]?.npm ?? providerID,
+              model.provider?.npm ??
+              provider.npm ??
+              existingModel?.api.npm ??
+              modelsDev[providerID]?.npm ??
+              "@ai-sdk/openai-compatible",
             url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
@@ -1016,6 +1022,7 @@ export namespace Provider {
         "claude-haiku-4.5",
         "3-5-haiku",
         "3.5-haiku",
+        "gemini-3-flash",
         "gemini-2.5-flash",
         "gpt-5-nano",
       ]
