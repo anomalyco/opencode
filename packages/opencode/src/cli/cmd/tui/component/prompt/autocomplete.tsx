@@ -259,7 +259,7 @@ export function Autocomplete(props: {
     const s = session()
     for (const command of sync.data.command) {
       results.push({
-        display: "/" + command.name,
+        display: "/" + command.name + (command.mcp ? " (MCP)" : ""),
         description: command.description,
         onSelect: () => {
           const newText = "/" + command.name + " "

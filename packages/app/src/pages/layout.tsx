@@ -22,10 +22,11 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { Mark } from "@opencode-ai/ui/logo"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session } from "@opencode-ai/sdk/v2/client"
@@ -44,14 +45,18 @@ import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
+import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
-import { Header } from "@/components/header"
+
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
+import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -86,7 +91,9 @@ export default function Layout(props: ParentProps) {
   const globalSync = useGlobalSync()
   const layout = useLayout()
   const platform = usePlatform()
+  const server = useServer()
   const notification = useNotification()
+  const permission = usePermission()
   const navigate = useNavigate()
   const providers = useProviders()
   const dialog = useDialog()
@@ -127,11 +134,15 @@ export default function Layout(props: ParentProps) {
     })
   }
 
-  onMount(async () => {
-    if (platform.checkUpdate && platform.update && platform.restart) {
-      const { updateAvailable, version } = await platform.checkUpdate()
-      if (updateAvailable) {
-        showToast({
+  onMount(() => {
+    if (!platform.checkUpdate || !platform.update || !platform.restart) return
+
+    let toastId: number | undefined
+
+    async function pollUpdate() {
+      const { updateAvailable, version } = await platform.checkUpdate!()
+      if (updateAvailable && toastId === undefined) {
+        toastId = showToast({
           persistent: true,
           icon: "download",
           title: "Update available",
@@ -152,36 +163,59 @@ export default function Layout(props: ParentProps) {
         })
       }
     }
+
+    pollUpdate()
+    const interval = setInterval(pollUpdate, 10 * 60 * 1000)
+    onCleanup(() => clearInterval(interval))
   })
 
   onMount(() => {
-    const seenSessions = new Set<string>()
     const toastBySession = new Map<string, number>()
+    const alertedAtBySession = new Map<string, number>()
+    const permissionAlertCooldownMs = 5000
+
     const unsub = globalSDK.event.listen((e) => {
       if (e.details?.type !== "permission.updated") return
       const directory = e.name
-      const permission = e.details.properties
-      const sessionKey = `${directory}:${permission.sessionID}`
-      if (seenSessions.has(sessionKey)) return
-      seenSessions.add(sessionKey)
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
-      const currentSession = params.id
-      if (directory === currentDir && permission.sessionID === currentSession) return
+      const perm = e.details.properties
+      if (permission.autoResponds(perm)) return
+
+      const sessionKey = `${directory}:${perm.sessionID}`
       const [store] = globalSync.child(directory)
-      const session = store.session.find((s) => s.id === permission.sessionID)
-      if (directory === currentDir && session?.parentID === currentSession) return
+      const session = store.session.find((s) => s.id === perm.sessionID)
+
       const sessionTitle = session?.title ?? "New session"
       const projectName = getFilename(directory)
+      const description = `${sessionTitle} in ${projectName} needs permission`
+      const href = `/${base64Encode(directory)}/session/${perm.sessionID}`
+
+      const now = Date.now()
+      const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
+      if (now - lastAlerted < permissionAlertCooldownMs) return
+      alertedAtBySession.set(sessionKey, now)
+
+      void platform.notify("Permission required", description, href)
+
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      if (directory === currentDir && perm.sessionID === currentSession) return
+      if (directory === currentDir && session?.parentID === currentSession) return
+
+      const existingToastId = toastBySession.get(sessionKey)
+      if (existingToastId !== undefined) {
+        toaster.dismiss(existingToastId)
+      }
+
       const toastId = showToast({
         persistent: true,
         icon: "checklist",
         title: "Permission required",
-        description: `${sessionTitle} in ${projectName} needs permission`,
+        description,
         actions: [
           {
             label: "Go to session",
             onClick: () => {
-              navigate(`/${base64Encode(directory)}/session/${permission.sessionID}`)
+              navigate(href)
             },
           },
           {
@@ -203,7 +237,7 @@ export default function Layout(props: ParentProps) {
       if (toastId !== undefined) {
         toaster.dismiss(toastId)
         toastBySession.delete(sessionKey)
-        seenSessions.delete(sessionKey)
+        alertedAtBySession.delete(sessionKey)
       }
       const [store] = globalSync.child(currentDir)
       const childSessions = store.session.filter((s) => s.parentID === currentSession)
@@ -213,7 +247,7 @@ export default function Layout(props: ParentProps) {
         if (childToastId !== undefined) {
           toaster.dismiss(childToastId)
           toastBySession.delete(childKey)
-          seenSessions.delete(childKey)
+          alertedAtBySession.delete(childKey)
         }
       }
     })
@@ -332,22 +366,24 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
       },
-      ...(platform.openDirectoryPickerDialog
-        ? [
-            {
-              id: "project.open",
-              title: "Open project",
-              category: "Project",
-              keybind: "mod+o",
-              onSelect: () => chooseProject(),
-            },
-          ]
-        : []),
+      {
+        id: "project.open",
+        title: "Open project",
+        category: "Project",
+        keybind: "mod+o",
+        onSelect: () => chooseProject(),
+      },
       {
         id: "provider.connect",
         title: "Connect provider",
         category: "Provider",
         onSelect: () => connectProvider(),
+      },
+      {
+        id: "server.switch",
+        title: "Switch server",
+        category: "Server",
+        onSelect: () => openServer(),
       },
       {
         id: "session.previous",
@@ -424,6 +460,10 @@ export default function Layout(props: ParentProps) {
     dialog.show(() => <DialogSelectProvider />)
   }
 
+  function openServer() {
+    dialog.show(() => <DialogSelectServer />)
+  }
+
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
     const lastSession = store.lastSession[directory]
@@ -451,17 +491,28 @@ export default function Layout(props: ParentProps) {
   }
 
   async function chooseProject() {
-    const result = await platform.openDirectoryPickerDialog?.({
-      title: "Open project",
-      multiple: true,
-    })
-    if (Array.isArray(result)) {
-      for (const directory of result) {
-        openProject(directory, false)
+    function resolve(result: string | string[] | null) {
+      if (Array.isArray(result)) {
+        for (const directory of result) {
+          openProject(directory, false)
+        }
+        navigateToProject(result[0])
+      } else if (result) {
+        openProject(result)
       }
-      navigateToProject(result[0])
-    } else if (result) {
-      openProject(result)
+    }
+
+    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+      const result = await platform.openDirectoryPickerDialog?.({
+        title: "Open project",
+        multiple: true,
+      })
+      resolve(result)
+    } else {
+      dialog.show(
+        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
+        () => resolve(null),
+      )
     }
   }
 
@@ -681,17 +732,13 @@ export default function Layout(props: ParentProps) {
             </A>
           </Tooltip>
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
-            <Tooltip
+            <TooltipKeybind
               placement={props.mobile ? "bottom" : "right"}
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Archive session</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("session.archive")}</span>
-                </div>
-              }
+              title="Archive session"
+              keybind={command.keybind("session.archive")}
             >
               <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
-            </Tooltip>
+            </TooltipKeybind>
           </div>
         </div>
       </>
@@ -759,17 +806,9 @@ export default function Layout(props: ParentProps) {
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <Tooltip
-                    placement="top"
-                    value={
-                      <div class="flex items-center gap-2">
-                        <span>New session</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
-                      </div>
-                    }
-                  >
+                  <TooltipKeybind placement="top" title="New session" keybind={command.keybind("session.new")}>
                     <IconButton as={A} href={`${slug()}/session`} icon="plus-small" variant="ghost" />
-                  </Tooltip>
+                  </TooltipKeybind>
                 </div>
               </Button>
               <Collapsible.Content>
@@ -847,15 +886,16 @@ export default function Layout(props: ParentProps) {
       <>
         <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
           <Show when={!sidebarProps.mobile}>
-            <Tooltip
+            <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2" data-tauri-drag-region>
+              <Mark class="shrink-0" />
+            </A>
+          </Show>
+          <Show when={!sidebarProps.mobile}>
+            <TooltipKeybind
               class="shrink-0"
               placement="right"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle sidebar</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("sidebar.toggle")}</span>
-                </div>
-              }
+              title="Toggle sidebar"
+              keybind={command.keybind("sidebar.toggle")}
               inactive={expanded()}
             >
               <Button
@@ -887,7 +927,7 @@ export default function Layout(props: ParentProps) {
                   </div>
                 </Show>
               </Button>
-            </Tooltip>
+            </TooltipKeybind>
           </Show>
           <DragDropProvider
             onDragStart={handleDragStart}
@@ -949,30 +989,28 @@ export default function Layout(props: ParentProps) {
               </Tooltip>
             </Match>
           </Switch>
-          <Show when={platform.openDirectoryPickerDialog}>
-            <Tooltip
-              placement="right"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Open project</span>
-                  <Show when={!sidebarProps.mobile}>
-                    <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
-                  </Show>
-                </div>
-              }
-              inactive={expanded()}
+          <Tooltip
+            placement="right"
+            value={
+              <div class="flex items-center gap-2">
+                <span>Open project</span>
+                <Show when={!sidebarProps.mobile}>
+                  <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
+                </Show>
+              </div>
+            }
+            inactive={expanded()}
+          >
+            <Button
+              class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
+              variant="ghost"
+              size="large"
+              icon="folder-add-left"
+              onClick={chooseProject}
             >
-              <Button
-                class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
-                variant="ghost"
-                size="large"
-                icon="folder-add-left"
-                onClick={chooseProject}
-              >
-                <Show when={expanded()}>Open project</Show>
-              </Button>
-            </Tooltip>
-          </Show>
+              <Show when={expanded()}>Open project</Show>
+            </Button>
+          </Tooltip>
           <Tooltip placement="right" value="Share feedback" inactive={expanded()}>
             <Button
               as={"a"}
@@ -992,12 +1030,7 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative flex-1 min-h-0 flex flex-col">
-      <Header
-        navigateToProject={navigateToProject}
-        navigateToSession={navigateToSession}
-        onMobileMenuToggle={mobileSidebar.toggle}
-      />
+    <div class="relative flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <div class="flex-1 min-h-0 flex">
         <div
           classList={{

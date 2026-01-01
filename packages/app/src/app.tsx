@@ -1,5 +1,5 @@
 import "@/index.css"
-import { ErrorBoundary, Show } from "solid-js"
+import { ErrorBoundary, Show, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
@@ -10,8 +10,10 @@ import { Diff } from "@opencode-ai/ui/diff"
 import { Code } from "@opencode-ai/ui/code"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
+import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
+import { ServerProvider, useServer } from "@/context/server"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { NotificationProvider } from "@/context/notification"
@@ -30,7 +32,7 @@ declare global {
   }
 }
 
-const url = iife(() => {
+const defaultServerUrl = iife(() => {
   const param = new URLSearchParams(document.location.search).get("url")
   if (param) return param
 
@@ -42,6 +44,15 @@ const url = iife(() => {
   return window.location.origin
 })
 
+function ServerKey(props: ParentProps) {
+  const server = useServer()
+  return (
+    <Show when={server.url} keyed>
+      {props.children}
+    </Show>
+  )
+}
+
 export function App() {
   return (
     <MetaProvider>
@@ -52,15 +63,21 @@ export function App() {
             <MarkedProvider>
               <DiffComponentProvider component={Diff}>
                 <CodeComponentProvider component={Code}>
-                  <GlobalSDKProvider url={url}>
-                    <GlobalSyncProvider>
-                      <LayoutProvider>
-                        <NotificationProvider>
+                  <ServerProvider defaultUrl={defaultServerUrl}>
+                    <ServerKey>
+                      <GlobalSDKProvider>
+                        <GlobalSyncProvider>
                           <Router
                             root={(props) => (
-                              <CommandProvider>
-                                <Layout>{props.children}</Layout>
-                              </CommandProvider>
+                              <PermissionProvider>
+                                <LayoutProvider>
+                                  <NotificationProvider>
+                                    <CommandProvider>
+                                      <Layout>{props.children}</Layout>
+                                    </CommandProvider>
+                                  </NotificationProvider>
+                                </LayoutProvider>
+                              </PermissionProvider>
                             )}
                           >
                             <Route path="/" component={Home} />
@@ -80,10 +97,10 @@ export function App() {
                               />
                             </Route>
                           </Router>
-                        </NotificationProvider>
-                      </LayoutProvider>
-                    </GlobalSyncProvider>
-                  </GlobalSDKProvider>
+                        </GlobalSyncProvider>
+                      </GlobalSDKProvider>
+                    </ServerKey>
+                  </ServerProvider>
                 </CodeComponentProvider>
               </DiffComponentProvider>
             </MarkedProvider>
