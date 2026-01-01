@@ -5,10 +5,11 @@ export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000
   export const RETRY_BACKOFF_FACTOR = 2
   export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
+  export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(resolve, ms)
+      const timeout = setTimeout(resolve, Math.min(ms, RETRY_MAX_DELAY))
       signal.addEventListener(
         "abort",
         () => {

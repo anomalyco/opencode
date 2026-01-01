@@ -501,7 +501,7 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? provider.id,
+        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -646,7 +646,11 @@ export namespace Provider {
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
-              model.provider?.npm ?? provider.npm ?? existingModel?.api.npm ?? modelsDev[providerID]?.npm ?? providerID,
+              model.provider?.npm ??
+              provider.npm ??
+              existingModel?.api.npm ??
+              modelsDev[providerID]?.npm ??
+              "@ai-sdk/openai-compatible",
             url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
