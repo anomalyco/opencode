@@ -549,6 +549,14 @@ export namespace SessionPrompt {
         model,
       })
       if (result === "stop") break
+      if (result === "compact") {
+        await SessionCompaction.create({
+          sessionID,
+          agent: lastUser.agent,
+          model: lastUser.model,
+          auto: true,
+        })
+      }
       continue
     }
     SessionCompaction.prune({ sessionID })
