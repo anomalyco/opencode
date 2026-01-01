@@ -243,7 +243,7 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+        const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || Global.Path.home
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
