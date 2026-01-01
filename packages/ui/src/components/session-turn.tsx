@@ -321,11 +321,10 @@ export function SessionTurn(
     return s
   })
 
-  const summary = createMemo(() => message()?.summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
   const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
-  const hideResponsePart = createMemo(() => !working() && !summary() && !!responsePartId())
+  const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   function duration() {
     const msg = message()
@@ -356,7 +355,6 @@ export function SessionTurn(
     retrySeconds: 0,
     status: rawStatus(),
     duration: duration(),
-    summaryWaitTimedOut: false,
   })
 
   createEffect(() => {
@@ -397,12 +395,6 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  createEffect(() => {
-    if (working()) {
-      setStore("summaryWaitTimedOut", false)
-    }
-  })
-
   createEffect(
     on(permissionCount, (count, prev) => {
       if (!count) return
@@ -410,42 +402,6 @@ export function SessionTurn(
       autoScroll.forceScrollToBottom()
     }),
   )
-
-  createEffect(() => {
-    if (working() || !isLastUserMessage()) return
-
-    const diffs = message()?.summary?.diffs
-    if (!diffs?.length) return
-    if (summary()) return
-    if (store.summaryWaitTimedOut) return
-
-    const completed = lastAssistantMessage()?.time.completed
-    if (completed && Date.now() - completed > 2000) {
-      setStore("summaryWaitTimedOut", true)
-      return
-    }
-
-    const timer = setTimeout(() => {
-      setStore("summaryWaitTimedOut", true)
-    }, 6000)
-    onCleanup(() => clearTimeout(timer))
-  })
-
-  const waitingForSummary = createMemo(() => {
-    if (!isLastUserMessage()) return false
-    if (working()) return false
-
-    const diffs = message()?.summary?.diffs
-    if (!diffs?.length) return false
-    if (summary()) return false
-
-    return !store.summaryWaitTimedOut
-  })
-
-  const showSummarySection = createMemo(() => {
-    if (working()) return false
-    return !waitingForSummary()
-  })
 
   let lastStatusChange = Date.now()
   let statusTimeout: number | undefined
@@ -523,7 +479,7 @@ export function SessionTurn(
                           size="small"
                           onClick={props.onStepsExpandedToggle ?? (() => {})}
                         >
-                          <Show when={working() || waitingForSummary()}>
+                          <Show when={working()}>
                             <Spinner />
                           </Show>
                           <Switch>
@@ -540,7 +496,6 @@ export function SessionTurn(
                               </span>
                               <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                             </Match>
-                            <Match when={waitingForSummary()}>Generating summary</Match>
                             <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                             <Match when={props.stepsExpanded}>Hide steps</Match>
                             <Match when={!props.stepsExpanded}>Show steps</Match>
@@ -580,36 +535,12 @@ export function SessionTurn(
                         </For>
                       </div>
                     </Show>
-                    {/* Summary */}
-                    <Show when={showSummarySection()}>
+                    {/* Response */}
+                    <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
-                          <Switch>
-                            <Match when={summary()}>
-                              {(summary) => (
-                                <>
-                                  <h2 data-slot="session-turn-summary-title">Summary</h2>
-                                  <Markdown
-                                    data-slot="session-turn-markdown"
-                                    data-diffs={hasDiffs()}
-                                    text={summary()}
-                                  />
-                                </>
-                              )}
-                            </Match>
-                            <Match when={response()}>
-                              {(response) => (
-                                <>
-                                  <h2 data-slot="session-turn-summary-title">Response</h2>
-                                  <Markdown
-                                    data-slot="session-turn-markdown"
-                                    data-diffs={hasDiffs()}
-                                    text={response()}
-                                  />
-                                </>
-                              )}
-                            </Match>
-                          </Switch>
+                          <h2 data-slot="session-turn-summary-title">Response</h2>
+                          <Markdown data-slot="session-turn-markdown" data-diffs={hasDiffs()} text={response() ?? ""} />
                         </div>
                         <Accordion data-slot="session-turn-accordion" multiple>
                           <For each={msg().summary?.diffs ?? []}>
