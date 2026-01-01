@@ -93,53 +93,19 @@ export const WebFetchTool = Tool.define("webfetch", {
     const contentType = response.headers.get("content-type") || ""
 
     const title = `${params.url} (${contentType})`
+    const isHtml = contentType.includes("text/html")
 
-    // Handle content based on requested format and actual content type
-    switch (params.format) {
-      case "markdown":
-        if (contentType.includes("text/html")) {
-          const markdown = convertHTMLToMarkdown(content)
-          return {
-            output: markdown,
-            title,
-            metadata: {},
-          }
-        }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+    const raw = params.format === "markdown" && isHtml
+      ? convertHTMLToMarkdown(content)
+      : params.format === "text" && isHtml
+        ? await extractTextFromHTML(content)
+        : content
 
-      case "text":
-        if (contentType.includes("text/html")) {
-          const text = await extractTextFromHTML(content)
-          return {
-            output: text,
-            title,
-            metadata: {},
-          }
-        }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+    const output = raw.length > 30_000
+      ? raw.slice(0, 30_000) + `\n\n[Output truncated: exceeded 30000 char limit]`
+      : raw
 
-      case "html":
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-
-      default:
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
-    }
+    return { output, title, metadata: {} }
   },
 })
 

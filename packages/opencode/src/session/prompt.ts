@@ -549,6 +549,14 @@ export namespace SessionPrompt {
         model,
       })
       if (result === "stop") break
+      if (result === "compact") {
+        await SessionCompaction.create({
+          sessionID,
+          agent: lastUser.agent,
+          model: lastUser.model,
+          auto: true,
+        })
+      }
       continue
     }
     SessionCompaction.prune({ sessionID })
@@ -696,12 +704,17 @@ export namespace SessionPrompt {
           // Add support for other types if needed
         }
 
+        const text = textParts.join("\n\n")
+        const output = text.length > 30_000
+          ? text.slice(0, 30_000) + `\n\n[MCP output truncated: exceeded 30000 char limit]`
+          : text
+
         return {
           title: "",
           metadata: result.metadata ?? {},
-          output: textParts.join("\n\n"),
+          output,
           attachments,
-          content: result.content, // directly return content to preserve ordering when outputting to model
+          content: result.content,
         }
       }
       item.toModelOutput = (result) => {
