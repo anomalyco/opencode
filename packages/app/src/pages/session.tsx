@@ -5,8 +5,8 @@ import {
   Show,
   Match,
   Switch,
-  createResource,
   createMemo,
+  createResource,
   createEffect,
   on,
   createRenderEffect,
@@ -14,7 +14,8 @@ import {
 } from "solid-js"
 
 import { Dynamic } from "solid-js/web"
-import { useLocal, type LocalFile } from "@/context/local"
+import { useLocal } from "@/context/local"
+import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -276,6 +277,7 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
 export default function Page() {
   const layout = useLayout()
   const local = useLocal()
+  const file = useFile()
   const sync = useSync()
   const terminal = useTerminal()
   const dialog = useDialog()
@@ -289,6 +291,58 @@ export default function Page() {
   const permission = usePermission()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
+
+  function normalizeTab(tab: string) {
+    if (!tab.startsWith("file://")) return tab
+    return file.tab(tab)
+  }
+
+  function normalizeTabs(list: string[]) {
+    const seen = new Set<string>()
+    const next: string[] = []
+    for (const item of list) {
+      const value = normalizeTab(item)
+      if (seen.has(value)) continue
+      seen.add(value)
+      next.push(value)
+    }
+    return next
+  }
+
+  const openTab = (value: string) => {
+    const next = normalizeTab(value)
+    tabs().open(next)
+
+    const path = file.pathFromTab(next)
+    if (path) file.load(path)
+  }
+
+  createEffect(() => {
+    const active = tabs().active()
+    if (!active) return
+
+    const path = file.pathFromTab(active)
+    if (path) file.load(path)
+  })
+
+  createEffect(() => {
+    const current = tabs().all()
+    if (current.length === 0) return
+
+    const next = normalizeTabs(current)
+    if (same(current, next)) return
+
+    tabs().setAll(next)
+
+    const active = tabs().active()
+    if (!active) return
+    if (!active.startsWith("file://")) return
+
+    const normalized = normalizeTab(active)
+    if (active === normalized) return
+    tabs().setActive(normalized)
+  })
+
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
@@ -322,7 +376,6 @@ export default function Page() {
   )
 
   const [store, setStore] = createStore({
-    clickTimer: undefined as number | undefined,
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
     userInteracted: false,
@@ -659,30 +712,6 @@ export default function Page() {
     document.removeEventListener("keydown", handleKeyDown)
   })
 
-  const resetClickTimer = () => {
-    if (!store.clickTimer) return
-    clearTimeout(store.clickTimer)
-    setStore("clickTimer", undefined)
-  }
-
-  const startClickTimer = () => {
-    const newClickTimer = setTimeout(() => {
-      setStore("clickTimer", undefined)
-    }, 300)
-    setStore("clickTimer", newClickTimer as unknown as number)
-  }
-
-  const handleTabClick = async (tab: string) => {
-    if (store.clickTimer) {
-      resetClickTimer()
-    } else {
-      if (tab.startsWith("file://")) {
-        local.file.open(tab.replace("file://", ""))
-      }
-      startClickTimer()
-    }
-  }
-
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
     if (!id) return
@@ -748,57 +777,24 @@ export default function Page() {
     )
   }
 
-  const FileVisual = (props: { file: LocalFile; active?: boolean }): JSX.Element => {
+  const FileVisual = (props: { path: string; active?: boolean }): JSX.Element => {
     return (
       <div class="flex items-center gap-x-1.5">
         <FileIcon
-          node={props.file}
+          node={{ path: props.path, type: "file" }}
           classList={{
             "grayscale-100 group-data-[selected]/tab:grayscale-0": !props.active,
             "grayscale-0": props.active,
           }}
         />
-        <span
-          classList={{
-            "text-14-medium": true,
-            "text-primary": !!props.file.status?.status,
-            italic: !props.file.pinned,
-          }}
-        >
-          {props.file.name}
-        </span>
-        <span class="hidden opacity-70">
-          <Switch>
-            <Match when={props.file.status?.status === "modified"}>
-              <span class="text-primary">M</span>
-            </Match>
-            <Match when={props.file.status?.status === "added"}>
-              <span class="text-success">A</span>
-            </Match>
-            <Match when={props.file.status?.status === "deleted"}>
-              <span class="text-error">D</span>
-            </Match>
-          </Switch>
-        </span>
+        <span class="text-14-medium">{getFilename(props.path)}</span>
       </div>
     )
   }
 
-  const SortableTab = (props: {
-    tab: string
-    onTabClick: (tab: string) => void
-    onTabClose: (tab: string) => void
-  }): JSX.Element => {
+  const SortableTab = (props: { tab: string; onTabClose: (tab: string) => void }): JSX.Element => {
     const sortable = createSortable(props.tab)
-    const [file] = createResource(
-      () => props.tab,
-      async (tab) => {
-        if (tab.startsWith("file://")) {
-          return local.file.node(tab.replace("file://", ""))
-        }
-        return undefined
-      },
-    )
+    const path = createMemo(() => file.pathFromTab(props.tab))
     return (
       // @ts-ignore
       <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
@@ -811,11 +807,8 @@ export default function Page() {
               </Tooltip>
             }
             hideCloseButton
-            onClick={() => props.onTabClick(props.tab)}
           >
-            <Switch>
-              <Match when={file()}>{(f) => <FileVisual file={f()} />}</Match>
-            </Switch>
+            <Show when={path()}>{(p) => <FileVisual path={p()} />}</Show>
           </Tabs.Trigger>
         </div>
       </div>
@@ -1377,7 +1370,7 @@ export default function Page() {
             >
               <DragDropSensors />
               <ConstrainDragYAxis />
-              <Tabs value={activeTab()} onChange={tabs().open}>
+              <Tabs value={activeTab()} onChange={openTab}>
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
                     <Show when={diffs().length}>
@@ -1414,9 +1407,7 @@ export default function Page() {
                       </Tabs.Trigger>
                     </Show>
                     <SortableProvider ids={openedTabs()}>
-                      <For each={openedTabs()}>
-                        {(tab) => <SortableTab tab={tab} onTabClick={handleTabClick} onTabClose={tabs().close} />}
-                      </For>
+                      <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
                       <TooltipKeybind
@@ -1459,31 +1450,143 @@ export default function Page() {
                 </Show>
                 <For each={openedTabs()}>
                   {(tab) => {
-                    const [file] = createResource(
-                      () => tab,
-                      async (tab) => {
-                        if (tab.startsWith("file://")) {
-                          return local.file.node(tab.replace("file://", ""))
-                        }
-                        return undefined
-                      },
+                    let scroll: HTMLDivElement | undefined
+                    let scrollFrame: number | undefined
+                    let pendingTop: number | undefined
+
+                    const path = createMemo(() => file.pathFromTab(tab))
+                    const state = createMemo(() => {
+                      const p = path()
+                      if (!p) return
+                      return file.get(p)
+                    })
+                    const contents = createMemo(() => state()?.content?.content ?? "")
+                    const selectedLines = createMemo(() => {
+                      const p = path()
+                      if (!p) return null
+                      return file.selectedLines(p) ?? null
+                    })
+                    const selection = createMemo(() => {
+                      const range = selectedLines()
+                      if (!range) return
+                      return selectionFromLines(range)
+                    })
+                    const selectionLabel = createMemo(() => {
+                      const sel = selection()
+                      if (!sel) return
+                      if (sel.startLine === sel.endLine) return `L${sel.startLine}`
+                      return `L${sel.startLine}-${sel.endLine}`
+                    })
+
+                    const restoreScroll = () => {
+                      const el = scroll
+                      const p = path()
+                      if (!el || !p) return
+
+                      const top = file.scrollTop(p)
+                      if (top === undefined) return
+                      if (el.scrollTop === top) return
+                      el.scrollTop = top
+                    }
+
+                    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+                      const p = path()
+                      if (!p) return
+
+                      pendingTop = event.currentTarget.scrollTop
+                      if (scrollFrame !== undefined) return
+
+                      scrollFrame = requestAnimationFrame(() => {
+                        scrollFrame = undefined
+
+                        const top = pendingTop
+                        pendingTop = undefined
+                        if (top === undefined) return
+
+                        file.setScrollTop(p, top)
+                      })
+                    }
+
+                    createEffect(
+                      on(
+                        () => state()?.loaded,
+                        (loaded) => {
+                          if (!loaded) return
+                          requestAnimationFrame(restoreScroll)
+                        },
+                        { defer: true },
+                      ),
                     )
+
+                    createEffect(
+                      on(
+                        () => file.ready(),
+                        (ready) => {
+                          if (!ready) return
+                          requestAnimationFrame(restoreScroll)
+                        },
+                        { defer: true },
+                      ),
+                    )
+
+                    onCleanup(() => {
+                      if (scrollFrame === undefined) return
+                      cancelAnimationFrame(scrollFrame)
+                    })
+
                     return (
-                      <Tabs.Content value={tab} class="mt-3">
-                        <Switch>
-                          <Match when={file()}>
-                            {(f) => (
-                              <Dynamic
-                                component={codeComponent}
-                                file={{
-                                  name: f().path,
-                                  contents: f().content?.content ?? "",
-                                  cacheKey: checksum(f().content?.content ?? ""),
+                      <Tabs.Content
+                        value={tab}
+                        class="mt-3"
+                        ref={(el: HTMLDivElement) => {
+                          scroll = el
+                          restoreScroll()
+                        }}
+                        onScroll={handleScroll}
+                      >
+                        <Show when={selection()}>
+                          {(sel) => (
+                            <div class="sticky top-0 z-10 px-6 py-2 flex justify-end bg-background-base border-b border-border-weak-base">
+                              <button
+                                type="button"
+                                class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
+                                onClick={() => {
+                                  const p = path()
+                                  if (!p) return
+                                  prompt.context.add({ type: "file", path: p, selection: sel() })
                                 }}
-                                overflow="scroll"
-                                class="select-text pb-40"
-                              />
-                            )}
+                              >
+                                <Icon name="plus-small" size="small" />
+                                <span>Add {selectionLabel()} to context</span>
+                              </button>
+                            </div>
+                          )}
+                        </Show>
+                        <Switch>
+                          <Match when={state()?.loaded}>
+                            <Dynamic
+                              component={codeComponent}
+                              file={{
+                                name: path() ?? "",
+                                contents: contents(),
+                                cacheKey: checksum(contents()),
+                              }}
+                              enableLineSelection
+                              selectedLines={selectedLines()}
+                              onLineSelected={(range: SelectedLineRange | null) => {
+                                const p = path()
+                                if (!p) return
+                                file.setSelectedLines(p, range)
+                              }}
+                              overflow="scroll"
+                              class="select-text pb-40"
+                            />
+                          </Match>
+                          <Match when={state()?.loading}>
+                            <div class="px-6 py-4 text-text-weak">Loading...</div>
+                          </Match>
+                          <Match when={state()?.error}>
+                            {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
                           </Match>
                         </Switch>
                       </Tabs.Content>
@@ -1493,19 +1596,11 @@ export default function Page() {
               </Tabs>
               <DragOverlay>
                 <Show when={store.activeDraggable}>
-                  {(draggedFile) => {
-                    const [file] = createResource(
-                      () => draggedFile(),
-                      async (tab) => {
-                        if (tab.startsWith("file://")) {
-                          return local.file.node(tab.replace("file://", ""))
-                        }
-                        return undefined
-                      },
-                    )
+                  {(tab) => {
+                    const path = createMemo(() => file.pathFromTab(tab()))
                     return (
                       <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
-                        <Show when={file()}>{(f) => <FileVisual active file={f()} />}</Show>
+                        <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
                       </div>
                     )
                   }}

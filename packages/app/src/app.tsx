@@ -16,6 +16,7 @@ import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
+import { FileProvider } from "@/context/file"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
@@ -88,9 +89,11 @@ export function App() {
                                 component={(p) => (
                                   <Show when={p.params.id ?? "new"} keyed>
                                     <TerminalProvider>
-                                      <PromptProvider>
-                                        <Session />
-                                      </PromptProvider>
+                                      <FileProvider>
+                                        <PromptProvider>
+                                          <Session />
+                                        </PromptProvider>
+                                      </FileProvider>
                                     </TerminalProvider>
                                   </Show>
                                 )}
