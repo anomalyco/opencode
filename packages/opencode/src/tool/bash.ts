@@ -108,6 +108,7 @@ export const BashTool = Tool.define("bash", async () => {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
+              .cwd(cwd)
               .quiet()
               .nothrow()
               .text()
