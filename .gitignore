@@ -19,3 +19,5 @@ Session.vim
 opencode.json
 a.out
 target
+/tests
+/references

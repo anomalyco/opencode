@@ -1,0 +1,1 @@
+import{r as o,c as n,t as r,i as a,S as s}from"./SettingsPanel-BaMbaNof.js";var i=r("<div class=options-container>");function l(){return(()=>{var t=i();return a(t,n(s,{isModal:!1})),t})()}const e=document.getElementById("root");e&&o(()=>n(l,{}),e);

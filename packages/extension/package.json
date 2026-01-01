@@ -1,0 +1,28 @@
+{
+  "name": "@eidorail/extension",
+  "version": "0.1.0",
+  "description": "Eidorail - AI Chat Sidebar Browser Extension",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "typescript": "catalog:",
+    "wxt": "^0.20.5"
+  },
+  "dependencies": {
+    "@mozilla/readability": "0.6.0",
+    "@solidjs/router": "catalog:",
+    "@types/turndown": "5.0.6",
+    "solid-js": "catalog:",
+    "turndown": "7.2.2",
+    "vite-plugin-solid": "catalog:"
+  }
+}

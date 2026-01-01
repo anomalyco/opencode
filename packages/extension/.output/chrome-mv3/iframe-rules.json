@@ -1,0 +1,182 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||claude.ai/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||chatgpt.com/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||gemini.google.com/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 4,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||perplexity.ai/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 5,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||chat.openai.com/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 6,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||poe.com/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||you.com/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 8,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||huggingface.co/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 9,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||copilot.microsoft.com/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 10,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||chat.deepseek.com/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 11,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||openrouter.ai/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  },
+  {
+    "id": 12,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "content-security-policy", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||localhost:4096/*",
+      "resourceTypes": ["main_frame", "sub_frame", "xmlhttprequest", "websocket"]
+    }
+  }
+]
