@@ -1,25 +1,4 @@
-/**
- * TDD Tests for File Permission Patterns
- *
- * This test file defines the expected behavior for the new file permission pattern system
- * that will add glob/regex-based permission controls for OpenCode's `edit`, `write`, and `read` tools.
- *
- * These tests are EXPECTED TO FAIL initially - this is TDD (Test-Driven Development).
- * The implementation will be added separately to make these tests pass.
- *
- * The feature adds pattern-based permissions similar to how `bash` permissions work:
- * ```jsonc
- * "permission": {
- *   "edit": {
- *     "*.env": "deny",
- *     ".github/workflows/*": "ask",
- *     "*.md": "allow"
- *   }
- * }
- * ```
- */
-
-import { describe, it, expect, test, beforeEach } from "bun:test"
+import { describe, it, expect } from "bun:test"
 import path from "path"
 import { Config } from "../src/config/config"
 import { Wildcard } from "../src/util/wildcard"
@@ -31,7 +10,6 @@ import { WriteTool } from "../src/tool/write"
 import { ReadTool } from "../src/tool/read"
 import { FileTime } from "../src/file/time"
 
-// Test context for tool execution
 const ctx = {
   sessionID: "test-session",
   messageID: "test-message",
@@ -41,16 +19,9 @@ const ctx = {
   metadata: () => {},
 }
 
-// =============================================================================
-// PART 1: Config Schema Tests
-// =============================================================================
-
 describe("File Permission Patterns - Config Schema", () => {
   describe("edit permission patterns", () => {
     it("should accept pattern-based edit permissions", async () => {
-      // This test verifies that the config schema accepts pattern-based permissions for edit
-      // Currently, edit only accepts simple Permission values ("ask", "allow", "deny")
-      // The new feature should allow a record of patterns to permissions
       await using tmp = await tmpdir({
         init: async (dir) => {
           await Bun.write(
@@ -71,7 +42,6 @@ describe("File Permission Patterns - Config Schema", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          // Once implemented, edit should accept a record of patterns
           expect(config.permission?.edit).toEqual({
             "*.env": "deny",
             "*.md": "allow",
@@ -82,7 +52,6 @@ describe("File Permission Patterns - Config Schema", () => {
     })
 
     it("should maintain backward compatibility with simple edit permissions", async () => {
-      // The old format (simple string) should still work
       await using tmp = await tmpdir({
         init: async (dir) => {
           await Bun.write(
@@ -107,8 +76,6 @@ describe("File Permission Patterns - Config Schema", () => {
 
   describe("write permission patterns", () => {
     it("should accept pattern-based write permissions", async () => {
-      // Write tool should have its own permission configuration
-      // Currently write uses the edit permission, but it should have its own
       await using tmp = await tmpdir({
         init: async (dir) => {
           await Bun.write(
@@ -129,7 +96,6 @@ describe("File Permission Patterns - Config Schema", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          // Once implemented, write should have its own permission patterns
           expect(config.permission?.write).toEqual({
             "*.env": "deny",
             "credentials.json": "deny",
@@ -164,7 +130,6 @@ describe("File Permission Patterns - Config Schema", () => {
 
   describe("read permission patterns", () => {
     it("should accept pattern-based read permissions", async () => {
-      // Read tool should have configurable patterns instead of hardcoded .env blocking
       await using tmp = await tmpdir({
         init: async (dir) => {
           await Bun.write(
@@ -185,7 +150,6 @@ describe("File Permission Patterns - Config Schema", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          // Once implemented, read should have configurable permission patterns
           expect(config.permission?.read).toEqual({
             "*.env": "deny",
             ".env.sample": "allow",
@@ -219,10 +183,6 @@ describe("File Permission Patterns - Config Schema", () => {
   })
 })
 
-// =============================================================================
-// PART 2: Wildcard Matching Tests for File Paths
-// =============================================================================
-
 describe("File Permission Patterns - Wildcard Matching", () => {
   describe("*.env pattern matching", () => {
     // TODO: Wildcard.all doesn't match .env.local with *.env pattern (needs glob enhancement)
@@ -253,7 +213,6 @@ describe("File Permission Patterns - Wildcard Matching", () => {
         "*.env": "deny",
         "*": "ask",
       }
-      // More specific pattern should win
       expect(Wildcard.all(".env.sample", patterns)).toBe("allow")
       expect(Wildcard.all(".env", patterns)).toBe("deny")
       expect(Wildcard.all(".env.local", patterns)).toBe("deny")
@@ -300,7 +259,6 @@ describe("File Permission Patterns - Wildcard Matching", () => {
         "*.ts": "allow",
         "src/*.ts": "ask",
       }
-      // More specific patterns should override general ones
       expect(Wildcard.all("src/index.ts", patterns)).toBe("ask")
       expect(Wildcard.all("lib/index.ts", patterns)).toBe("allow")
       expect(Wildcard.all("readme.md", patterns)).toBe("deny")
@@ -323,7 +281,6 @@ describe("File Permission Patterns - Wildcard Matching", () => {
   describe("edge cases", () => {
     it("should handle empty pattern object (allow all)", () => {
       const patterns = {}
-      // Empty patterns should return undefined (no match)
       expect(Wildcard.all("any-file.txt", patterns)).toBeUndefined()
     })
 
@@ -338,10 +295,6 @@ describe("File Permission Patterns - Wildcard Matching", () => {
     })
   })
 })
-
-// =============================================================================
-// PART 3: Edit Tool Permission Tests
-// =============================================================================
 
 describe("File Permission Patterns - Edit Tool", () => {
   it("should deny editing files matching deny pattern", async () => {
@@ -365,7 +318,6 @@ describe("File Permission Patterns - Edit Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const edit = await EditTool.init()
-        // Editing .env should be denied based on pattern
         await expect(
           edit.execute(
             {
@@ -401,10 +353,8 @@ describe("File Permission Patterns - Edit Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const edit = await EditTool.init()
-        // Manually mark file as read to satisfy FileTime.assert
         FileTime.read(ctx.sessionID, path.join(tmp.path, "readme.md"))
 
-        // Editing .md files should be allowed without prompting
         const result = await edit.execute(
           {
             filePath: path.join(tmp.path, "readme.md"),
@@ -428,7 +378,7 @@ describe("File Permission Patterns - Edit Tool", () => {
           JSON.stringify({
             permission: {
               edit: {
-                ".env.sample": "allow", // More specific - should override
+                ".env.sample": "allow",
                 "*.env": "deny",
                 "*": "ask",
               },
@@ -441,7 +391,6 @@ describe("File Permission Patterns - Edit Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const edit = await EditTool.init()
-        // .env.sample should be allowed (more specific pattern)
         FileTime.read(ctx.sessionID, path.join(tmp.path, ".env.sample"))
         const result = await edit.execute(
           {
@@ -453,7 +402,6 @@ describe("File Permission Patterns - Edit Tool", () => {
         )
         expect(result.metadata.diff).toContain("newvalue")
 
-        // .env.local should be denied (matches *.env pattern)
         await expect(
           edit.execute(
             {
@@ -491,7 +439,6 @@ describe("File Permission Patterns - Edit Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const edit = await EditTool.init()
-        // Workflow files should be denied
         await expect(
           edit.execute(
             {
@@ -503,7 +450,6 @@ describe("File Permission Patterns - Edit Tool", () => {
           ),
         ).rejects.toThrow()
 
-        // src files should be allowed
         FileTime.read(ctx.sessionID, path.join(tmp.path, "src/index.ts"))
         const result = await edit.execute(
           {
@@ -519,22 +465,16 @@ describe("File Permission Patterns - Edit Tool", () => {
   })
 })
 
-// =============================================================================
-// PART 4: Write Tool Permission Tests
-// =============================================================================
-
 describe("File Permission Patterns - Write Tool", () => {
   it("should have its OWN permission separate from edit", async () => {
-    // Write should have separate permissions from edit
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(
           path.join(dir, "opencode.json"),
           JSON.stringify({
             permission: {
-              edit: "allow", // Edit allows everything
+              edit: "allow",
               write: {
-                // Write has pattern restrictions
                 "*.env": "deny",
                 "*": "allow",
               },
@@ -547,7 +487,6 @@ describe("File Permission Patterns - Write Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const write = await WriteTool.init()
-        // Writing .env should be denied by write permission (not edit)
         await expect(
           write.execute(
             {
@@ -582,7 +521,6 @@ describe("File Permission Patterns - Write Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const write = await WriteTool.init()
-        // credentials.json should be denied
         await expect(
           write.execute(
             {
@@ -616,7 +554,6 @@ describe("File Permission Patterns - Write Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const write = await WriteTool.init()
-        // Writing .ts files should be allowed
         const result = await write.execute(
           {
             filePath: path.join(tmp.path, "new-file.ts"),
@@ -650,7 +587,6 @@ describe("File Permission Patterns - Write Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const write = await WriteTool.init()
-        // Writing to .git should be denied
         await expect(
           write.execute(
             {
@@ -665,13 +601,8 @@ describe("File Permission Patterns - Write Tool", () => {
   })
 })
 
-// =============================================================================
-// PART 5: Read Tool Permission Tests
-// =============================================================================
-
 describe("File Permission Patterns - Read Tool", () => {
   it("should use configurable patterns instead of hardcoded .env blocking", async () => {
-    // Currently read has hardcoded .env blocking - this should be configurable
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, ".env"), "SECRET=value")
@@ -682,7 +613,7 @@ describe("File Permission Patterns - Read Tool", () => {
             permission: {
               read: {
                 "*.env": "deny",
-                "config.json": "deny", // Also deny config.json via pattern
+                "config.json": "deny",
                 "*": "allow",
               },
             },
@@ -694,7 +625,6 @@ describe("File Permission Patterns - Read Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        // .env should still be denied
         await expect(
           read.execute(
             {
@@ -704,7 +634,6 @@ describe("File Permission Patterns - Read Tool", () => {
           ),
         ).rejects.toThrow()
 
-        // config.json should ALSO be denied via pattern
         await expect(
           read.execute(
             {
@@ -718,7 +647,6 @@ describe("File Permission Patterns - Read Tool", () => {
   })
 
   it("should allow .env.sample via pattern override", async () => {
-    // The new system should allow overriding the .env block with more specific patterns
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, ".env.sample"), "SAMPLE_KEY=example_value")
@@ -727,7 +655,7 @@ describe("File Permission Patterns - Read Tool", () => {
           JSON.stringify({
             permission: {
               read: {
-                ".env.sample": "allow", // Explicitly allow
+                ".env.sample": "allow",
                 ".env.example": "allow",
                 "*.env": "deny",
                 "*": "allow",
@@ -741,7 +669,6 @@ describe("File Permission Patterns - Read Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        // .env.sample should be allowed via pattern override
         const result = await read.execute(
           {
             filePath: path.join(tmp.path, ".env.sample"),
@@ -775,7 +702,6 @@ describe("File Permission Patterns - Read Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        // secrets/* should be denied
         await expect(
           read.execute(
             {
@@ -785,7 +711,6 @@ describe("File Permission Patterns - Read Tool", () => {
           ),
         ).rejects.toThrow()
 
-        // public/* should be allowed
         const result = await read.execute(
           {
             filePath: path.join(tmp.path, "public/readme.txt"),
@@ -798,7 +723,6 @@ describe("File Permission Patterns - Read Tool", () => {
   })
 
   it("should support simple read permission (backward compatible)", async () => {
-    // Simple "deny" should deny all reads
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, "test.txt"), "content")
@@ -816,7 +740,6 @@ describe("File Permission Patterns - Read Tool", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        // All reads should be denied with simple "deny" permission
         await expect(
           read.execute(
             {
@@ -829,10 +752,6 @@ describe("File Permission Patterns - Read Tool", () => {
     })
   })
 })
-
-// =============================================================================
-// PART 6: Edge Cases and Advanced Scenarios
-// =============================================================================
 
 describe("File Permission Patterns - Edge Cases", () => {
   describe("path handling", () => {
@@ -857,7 +776,6 @@ describe("File Permission Patterns - Edge Cases", () => {
         directory: tmp.path,
         fn: async () => {
           const read = await ReadTool.init()
-          // Absolute path should still match the pattern
           await expect(
             read.execute(
               {
@@ -892,7 +810,6 @@ describe("File Permission Patterns - Edge Cases", () => {
         directory: tmp.path,
         fn: async () => {
           const read = await ReadTool.init()
-          // Relative path should be resolved and matched
           await expect(
             read.execute(
               {
@@ -941,7 +858,6 @@ describe("File Permission Patterns - Edge Cases", () => {
               permission: {
                 edit: {
                   "*.ts": "allow",
-                  // No default "*" pattern
                 },
               },
             }),
@@ -952,10 +868,8 @@ describe("File Permission Patterns - Edge Cases", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          // When no pattern matches, the behavior should fallback to default (ask)
           const edit = config.permission?.edit
           if (typeof edit === "object") {
-            // No pattern matches random.txt, so Wildcard.all returns undefined
             const match = Wildcard.all("random.txt", edit)
             expect(match).toBeUndefined()
           }
@@ -979,7 +893,6 @@ describe("File Permission Patterns - Edge Cases", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          // Empty permission should use defaults
           expect(config.permission?.edit).toBeUndefined()
           expect(config.permission?.write).toBeUndefined()
           expect(config.permission?.read).toBeUndefined()
@@ -1017,7 +930,6 @@ describe("File Permission Patterns - Edge Cases", () => {
         directory: tmp.path,
         fn: async () => {
           const config = await Config.get()
-          // Each tool should have independent permission evaluation
           expect(config.permission?.edit).toEqual({
             "*.config.js": "ask",
             "*": "allow",
@@ -1036,13 +948,8 @@ describe("File Permission Patterns - Edge Cases", () => {
   })
 })
 
-// =============================================================================
-// PART 7: Agent-level Permission Override Tests
-// =============================================================================
-
 describe("File Permission Patterns - Agent-level Overrides", () => {
   it("should allow agent-specific file permission patterns", async () => {
-    // Agent-level permissions should override global permissions
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(
@@ -1058,7 +965,7 @@ describe("File Permission Patterns - Agent-level Overrides", () => {
               build: {
                 permission: {
                   edit: {
-                    "*.env": "ask", // Override: build agent can ask for .env
+                    "*.env": "ask",
                     "*": "allow",
                   },
                 },
@@ -1072,7 +979,6 @@ describe("File Permission Patterns - Agent-level Overrides", () => {
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
-        // Agent should have its own permission override
         expect(config.agent?.build?.permission?.edit).toEqual({
           "*.env": "ask",
           "*": "allow",
