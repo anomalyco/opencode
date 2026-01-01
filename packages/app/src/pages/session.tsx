@@ -84,7 +84,7 @@ function same<T>(a: readonly T[], b: readonly T[]) {
   return a.every((x, i) => x === b[i])
 }
 
-function Header(props: { onMobileMenuToggle?: () => void }) {
+function Header() {
   const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const params = useParams()
@@ -113,7 +113,7 @@ function Header(props: { onMobileMenuToggle?: () => void }) {
       <button
         type="button"
         class="xl:hidden w-12 shrink-0 flex items-center justify-center border-r border-border-weak-base hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors"
-        onClick={props.onMobileMenuToggle}
+        onClick={layout.mobileSidebar.toggle}
       >
         <Icon name="menu" size="small" />
       </button>
@@ -291,6 +291,7 @@ export default function Page() {
   const permission = usePermission()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
+  const view = createMemo(() => layout.view(sessionKey()))
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -822,6 +823,8 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
+  const reviewTab = createMemo(() => diffs().length > 0 || tabs().active() === "review")
+
   const showTabs = createMemo(
     () => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0 || contextOpen()),
   )
@@ -829,8 +832,19 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active) return active
-    if (diffs().length > 0) return "review"
-    return tabs().all()[0] ?? "review"
+    if (reviewTab()) return "review"
+
+    const first = openedTabs()[0]
+    if (first) return first
+    if (contextOpen()) return "context"
+    return "review"
+  })
+
+  createEffect(() => {
+    if (!layout.ready()) return
+    if (tabs().active()) return
+    if (diffs().length === 0 && openedTabs().length === 0 && !contextOpen()) return
+    tabs().setActive(activeTab())
   })
 
   const mobileWorking = createMemo(() => status().type !== "idle")
@@ -1209,8 +1223,63 @@ export default function Page() {
       )
     }
 
+    let scroll: HTMLDivElement | undefined
+    let frame: number | undefined
+    let pending: { x: number; y: number } | undefined
+
+    const restoreScroll = () => {
+      const el = scroll
+      if (!el) return
+
+      const s = view()?.scroll("context")
+      if (!s) return
+
+      if (el.scrollTop !== s.y) el.scrollTop = s.y
+      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+    }
+
+    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+      pending = {
+        x: event.currentTarget.scrollLeft,
+        y: event.currentTarget.scrollTop,
+      }
+      if (frame !== undefined) return
+
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+
+        const next = pending
+        pending = undefined
+        if (!next) return
+
+        view().setScroll("context", next)
+      })
+    }
+
+    createEffect(
+      on(
+        () => messages().length,
+        () => {
+          requestAnimationFrame(restoreScroll)
+        },
+        { defer: true },
+      ),
+    )
+
+    onCleanup(() => {
+      if (frame === undefined) return
+      cancelAnimationFrame(frame)
+    })
+
     return (
-      <div class="@container h-full overflow-y-auto no-scrollbar pb-10">
+      <div
+        class="@container h-full overflow-y-auto no-scrollbar pb-10"
+        ref={(el) => {
+          scroll = el
+          restoreScroll()
+        }}
+        onScroll={handleScroll}
+      >
         <div class="px-6 pt-4 flex flex-col gap-10">
           <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
             <For each={stats()}>{(stat) => <Stat label={stat.label} value={stat.value} />}</For>
@@ -1271,6 +1340,79 @@ export default function Page() {
     )
   }
 
+  const ReviewTab = () => {
+    let scroll: HTMLDivElement | undefined
+    let frame: number | undefined
+    let pending: { x: number; y: number } | undefined
+
+    const restoreScroll = () => {
+      const el = scroll
+      console.log("restoreScroll", el)
+      if (!el) return
+
+      const s = view().scroll("review")
+      console.log("restoreScroll", s)
+      if (!s) return
+
+      console.log("restoreScroll", el.scrollTop, s.y)
+      if (el.scrollTop !== s.y) el.scrollTop = s.y
+      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+    }
+
+    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+      pending = {
+        x: event.currentTarget.scrollLeft,
+        y: event.currentTarget.scrollTop,
+      }
+      if (frame !== undefined) return
+
+      frame = requestAnimationFrame(() => {
+        frame = undefined
+
+        const next = pending
+        pending = undefined
+        if (!next) return
+
+        view().setScroll("review", next)
+      })
+    }
+
+    createEffect(
+      on(
+        () => diffs().length,
+        () => {
+          requestAnimationFrame(restoreScroll)
+        },
+        { defer: true },
+      ),
+    )
+
+    onCleanup(() => {
+      if (frame === undefined) return
+      cancelAnimationFrame(frame)
+    })
+
+    return (
+      <SessionReview
+        scrollRef={(el) => {
+          scroll = el
+          restoreScroll()
+        }}
+        onScroll={handleScroll}
+        open={view().review.open()}
+        onOpenChange={view().review.setOpen}
+        classes={{
+          root: "pb-40",
+          header: "px-6",
+          container: "px-6",
+        }}
+        diffs={diffs()}
+        diffStyle={layout.review.diffStyle()}
+        onDiffStyleChange={layout.review.setDiffStyle}
+      />
+    )
+  }
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <Header />
@@ -1300,6 +1442,8 @@ export default function Page() {
                     diffs={diffs()}
                     diffStyle={layout.review.diffStyle()}
                     onDiffStyleChange={layout.review.setDiffStyle}
+                    open={view().review.open()}
+                    onOpenChange={view().review.setOpen}
                     classes={{
                       root: "pb-32",
                       header: "px-4",
@@ -1373,7 +1517,7 @@ export default function Page() {
               <Tabs value={activeTab()} onChange={openTab}>
                 <div class="sticky top-0 shrink-0 flex">
                   <Tabs.List>
-                    <Show when={diffs().length}>
+                    <Show when={reviewTab()}>
                       <Tabs.Trigger value="review">
                         <div class="flex items-center gap-3">
                           <Show when={diffs()}>
@@ -1425,19 +1569,10 @@ export default function Page() {
                     </div>
                   </Tabs.List>
                 </div>
-                <Show when={diffs().length}>
+                <Show when={reviewTab()}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <SessionReview
-                        classes={{
-                          root: "pb-40",
-                          header: "px-6",
-                          container: "px-6",
-                        }}
-                        diffs={diffs()}
-                        diffStyle={layout.review.diffStyle()}
-                        onDiffStyleChange={layout.review.setDiffStyle}
-                      />
+                      <ReviewTab />
                     </div>
                   </Tabs.Content>
                 </Show>
@@ -1452,7 +1587,7 @@ export default function Page() {
                   {(tab) => {
                     let scroll: HTMLDivElement | undefined
                     let scrollFrame: number | undefined
-                    let pendingTop: number | undefined
+                    let pending: { x: number; y: number } | undefined
 
                     const path = createMemo(() => file.pathFromTab(tab))
                     const state = createMemo(() => {
@@ -1480,30 +1615,30 @@ export default function Page() {
 
                     const restoreScroll = () => {
                       const el = scroll
-                      const p = path()
-                      if (!el || !p) return
+                      if (!el) return
 
-                      const top = file.scrollTop(p)
-                      if (top === undefined) return
-                      if (el.scrollTop === top) return
-                      el.scrollTop = top
+                      const s = view()?.scroll(tab)
+                      if (!s) return
+
+                      if (el.scrollTop !== s.y) el.scrollTop = s.y
+                      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
                     }
 
                     const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-                      const p = path()
-                      if (!p) return
-
-                      pendingTop = event.currentTarget.scrollTop
+                      pending = {
+                        x: event.currentTarget.scrollLeft,
+                        y: event.currentTarget.scrollTop,
+                      }
                       if (scrollFrame !== undefined) return
 
                       scrollFrame = requestAnimationFrame(() => {
                         scrollFrame = undefined
 
-                        const top = pendingTop
-                        pendingTop = undefined
-                        if (top === undefined) return
+                        const next = pending
+                        pending = undefined
+                        if (!next) return
 
-                        file.setScrollTop(p, top)
+                        view().setScroll(tab, next)
                       })
                     }
 
