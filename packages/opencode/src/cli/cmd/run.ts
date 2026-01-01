@@ -87,8 +87,15 @@ export const RunCommand = cmd({
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
       })
+      .option("project-dir", {
+        type: "string",
+        describe: "project directory to run in (defaults to current working directory)",
+      })
   },
   handler: async (args) => {
+    // Use --project-dir if provided, otherwise fall back to cwd
+    const cwd = args.projectDir ? path.resolve(args.projectDir) : process.cwd()
+    
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
@@ -98,7 +105,7 @@ export const RunCommand = cmd({
       const files = Array.isArray(args.file) ? args.file : [args.file]
 
       for (const filePath of files) {
-        const resolvedPath = path.resolve(process.cwd(), filePath)
+        const resolvedPath = path.resolve(cwd, filePath)
         const file = Bun.file(resolvedPath)
         const stats = await file.stat().catch(() => {})
         if (!stats) {
@@ -311,9 +318,9 @@ export const RunCommand = cmd({
       return await execute(sdk, sessionID)
     }
 
-    await bootstrap(process.cwd(), async () => {
+    await bootstrap(cwd, async () => {
       const server = Server.listen({ port: args.port ?? 0, hostname: "127.0.0.1" })
-      const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}` })
+      const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}`, directory: cwd })
 
       if (args.command) {
         const exists = await Command.get(args.command)
