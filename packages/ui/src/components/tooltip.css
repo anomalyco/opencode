@@ -2,15 +2,29 @@
   display: flex;
 }
 
+[data-slot="tooltip-keybind"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+[data-slot="tooltip-keybind-key"] {
+  color: var(--text-invert-base);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-large);
+}
+
 [data-component="tooltip"] {
   z-index: 1000;
   max-width: 320px;
   border-radius: var(--radius-md);
   background-color: var(--surface-float-base);
-  color: var(--text-inverted-base);
-  color: rgba(253, 252, 252, 0.94);
-  padding: 2px 8px;
-  border: 0.5px solid rgba(253, 252, 252, 0.2);
+  color: var(--text-invert-strong);
+  background: var(--surface-float-base);
+  padding: 6px 12px;
+  border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
+
   box-shadow: var(--shadow-md);
   pointer-events: none !important;
   /* transition: all 150ms ease-out; */
