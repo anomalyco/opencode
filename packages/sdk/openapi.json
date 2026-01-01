@@ -8304,6 +8304,40 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
+              },
+              "show_thinking": {
+                "description": "Show thinking blocks in assistant responses",
+                "type": "boolean"
+              },
+              "show_tool_details": {
+                "description": "Show detailed tool call information",
+                "type": "boolean"
+              },
+              "sidebar": {
+                "description": "Sidebar visibility mode",
+                "type": "string",
+                "enum": ["show", "hide", "auto"]
+              },
+              "timestamps": {
+                "description": "Show message timestamps",
+                "type": "string",
+                "enum": ["show", "hide"]
+              },
+              "show_username": {
+                "description": "Show username in message headers",
+                "type": "boolean"
+              },
+              "show_scrollbar": {
+                "description": "Show scrollbar in message list",
+                "type": "boolean"
+              },
+              "animations": {
+                "description": "Enable TUI animations",
+                "type": "boolean"
+              },
+              "user_message_markdown": {
+                "description": "Render user messages as markdown",
+                "type": "boolean"
               }
             }
           },

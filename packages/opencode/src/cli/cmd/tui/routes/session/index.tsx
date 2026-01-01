@@ -118,16 +118,36 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
+  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(
+    sync.data.config.tui?.sidebar ?? kv.get("sidebar", "auto"),
+  )
   const [conceal, setConceal] = createSignal(true)
-  const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
-  const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
-  const [usernameVisible, setUsernameVisible] = createSignal(kv.get("username_visible", true))
-  const [showDetails, setShowDetails] = createSignal(kv.get("tool_details_visibility", true))
-  const [showScrollbar, setShowScrollbar] = createSignal(kv.get("scrollbar_visible", false))
-  const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(kv.get("user_message_markdown", true))
+  const [showThinking, setShowThinking] = createSignal(
+    sync.data.config.tui?.show_thinking ?? kv.get("thinking_visibility", true),
+  )
+  const [showTimestamps, setShowTimestamps] = createSignal(
+    sync.data.config.tui?.timestamps === "show"
+      ? true
+      : sync.data.config.tui?.timestamps === "hide"
+        ? false
+        : kv.get("timestamps", "hide") === "show",
+  )
+  const [usernameVisible, setUsernameVisible] = createSignal(
+    sync.data.config.tui?.show_username ?? kv.get("username_visible", true),
+  )
+  const [showDetails, setShowDetails] = createSignal(
+    sync.data.config.tui?.show_tool_details ?? kv.get("tool_details_visibility", true),
+  )
+  const [showScrollbar, setShowScrollbar] = createSignal(
+    sync.data.config.tui?.show_scrollbar ?? kv.get("scrollbar_visible", false),
+  )
+  const [userMessageMarkdown, setUserMessageMarkdown] = createSignal(
+    sync.data.config.tui?.user_message_markdown ?? kv.get("user_message_markdown", true),
+  )
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
-  const [animationsEnabled, setAnimationsEnabled] = createSignal(kv.get("animations_enabled", true))
+  const [animationsEnabled, setAnimationsEnabled] = createSignal(
+    sync.data.config.tui?.animations ?? kv.get("animations_enabled", true),
+  )
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {

@@ -577,6 +577,14 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    show_thinking: z.boolean().optional().describe("Show thinking blocks in assistant responses"),
+    show_tool_details: z.boolean().optional().describe("Show detailed tool call information"),
+    sidebar: z.enum(["show", "hide", "auto"]).optional().describe("Sidebar visibility mode"),
+    timestamps: z.enum(["show", "hide"]).optional().describe("Show message timestamps"),
+    show_username: z.boolean().optional().describe("Show username in message headers"),
+    show_scrollbar: z.boolean().optional().describe("Show scrollbar in message list"),
+    animations: z.boolean().optional().describe("Enable TUI animations"),
+    user_message_markdown: z.boolean().optional().describe("Render user messages as markdown"),
   })
 
   export const Server = z
