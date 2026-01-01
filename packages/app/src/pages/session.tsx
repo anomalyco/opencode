@@ -1,18 +1,4 @@
-import {
-  For,
-  onCleanup,
-  onMount,
-  Show,
-  Match,
-  Switch,
-  createMemo,
-  createEffect,
-  on,
-  createRenderEffect,
-  batch,
-  createSignal,
-} from "solid-js"
-
+import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on, createRenderEffect, batch } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
@@ -28,7 +14,6 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
-
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -80,7 +65,6 @@ export default function Page() {
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
-
   const permission = usePermission()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
@@ -140,6 +124,11 @@ export default function Page() {
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const messagesReady = createMemo(() => {
+    const id = params.id
+    if (!id) return true
+    return sync.data.message[id] !== undefined
+  })
   const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
@@ -176,11 +165,13 @@ export default function Page() {
     stepsExpanded: true,
     mobileStepsExpanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
+    mobileTab: "session" as "session" | "review",
+    ignoreScrollSpy: false,
+    initialScrollDone: !params.id,
   })
 
   const activeMessage = createMemo(() => {
     if (!store.messageId) return lastUserMessage()
-    // If the stored message is no longer visible (e.g., was reverted), fall back to last visible
     const found = visibleUserMessages()?.find((m) => m.id === store.messageId)
     return found ?? lastUserMessage()
   })
@@ -204,11 +195,12 @@ export default function Page() {
 
     if (targetIndex < 0 || targetIndex >= msgs.length) return
 
-    setActiveMessage(msgs[targetIndex])
+    scrollToMessage(msgs[targetIndex], "auto")
   }
 
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
 
+  const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
 
   createEffect(() => {
@@ -235,8 +227,6 @@ export default function Page() {
       { defer: true },
     ),
   )
-
-  const idle = { type: "idle" as const }
 
   createEffect(
     on(
@@ -498,14 +488,6 @@ export default function Page() {
     }
   }
 
-  onMount(() => {
-    document.addEventListener("keydown", handleKeyDown)
-  })
-
-  onCleanup(() => {
-    document.removeEventListener("keydown", handleKeyDown)
-  })
-
   const handleDragStart = (event: unknown) => {
     const id = getDraggableId(event)
     if (!id) return
@@ -587,27 +569,68 @@ export default function Page() {
     onUserInteracted: () => setStore("userInteracted", true),
   })
 
-  // Mobile tab state for Session/Review switching (only affects mobile layout)
-  const [mobileTab, setMobileTab] = createSignal<"session" | "review">("session")
+  let scrollContainer: HTMLDivElement | undefined
+  let initialScrollFrame: number | undefined
+  let initialScrollTarget: string | undefined
 
-  // Track message element refs for scrolling
+  const cancelInitialScroll = () => {
+    if (initialScrollFrame === undefined) return
+    cancelAnimationFrame(initialScrollFrame)
+    initialScrollFrame = undefined
+  }
+
+  const ensureInitialScroll = () => {
+    cancelInitialScroll()
+    initialScrollFrame = requestAnimationFrame(() => {
+      initialScrollFrame = undefined
+      if (!params.id) {
+        initialScrollTarget = undefined
+        setStore("initialScrollDone", true)
+        return
+      }
+      const msgs = visibleUserMessages()
+      if (msgs.length === 0) {
+        if (!messagesReady()) {
+          ensureInitialScroll()
+          return
+        }
+        initialScrollTarget = undefined
+        setStore("initialScrollDone", true)
+        return
+      }
+      const last = msgs[msgs.length - 1]
+      const el = messageRefs.get(last.id)
+      if (!el || !scrollContainer) {
+        ensureInitialScroll()
+        return
+      }
+      scrollToMessage(last, "auto")
+      initialScrollTarget = last.id
+      setStore("initialScrollDone", true)
+    })
+  }
+
+  const setScrollRef = (el: HTMLDivElement | undefined) => {
+    scrollContainer = el
+    autoScroll.scrollRef(el)
+  }
+
   const messageRefs = new Map<string, HTMLDivElement>()
-  const [ignoreScrollSpy, setIgnoreScrollSpy] = createSignal(false)
   let scrollTimer: number
 
-  const scrollToMessage = (message: UserMessage) => {
-    setIgnoreScrollSpy(true)
+  const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
+    setStore("ignoreScrollSpy", true)
     setActiveMessage(message)
     const el = messageRefs.get(message.id)
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" })
+      el.scrollIntoView({ behavior, block: "start" })
     }
     window.clearTimeout(scrollTimer)
-    scrollTimer = window.setTimeout(() => setIgnoreScrollSpy(false), 1000)
+    scrollTimer = window.setTimeout(() => setStore("ignoreScrollSpy", false), 1000)
   }
 
   const handleScrollSpy = (e: Event) => {
-    if (ignoreScrollSpy()) return
+    if (store.ignoreScrollSpy) return
     const container = e.target as HTMLDivElement
     const scrollTop = container.scrollTop
     const threshold = 100
@@ -616,7 +639,6 @@ export default function Page() {
     for (const message of visibleUserMessages()) {
       const el = messageRefs.get(message.id)
       if (!el) continue
-
       if (el.offsetTop <= scrollTop + threshold) {
         activeId = message.id
       } else {
@@ -629,117 +651,69 @@ export default function Page() {
     }
   }
 
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        cancelInitialScroll()
+        messageRefs.clear()
+        initialScrollTarget = undefined
+        setStore("initialScrollDone", !id)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    const msgs = visibleUserMessages()
+    const target = msgs.at(-1)?.id
+    const ready = messagesReady()
+
+    if (!params.id) {
+      setStore("initialScrollDone", true)
+      initialScrollTarget = undefined
+      return
+    }
+
+    if (!ready) {
+      setStore("initialScrollDone", false)
+      ensureInitialScroll()
+      return
+    }
+
+    if (!store.initialScrollDone) {
+      ensureInitialScroll()
+      return
+    }
+
+    if (!initialScrollTarget && target) {
+      setStore("initialScrollDone", false)
+      ensureInitialScroll()
+    }
+  })
+
   createEffect(() => {
     const msgs = visibleUserMessages()
     if (msgs.length === 0) return
-    // Wait for refs to be populated
     requestAnimationFrame(() => {
-      const container = autoScroll.scrollRef
-      if (!container) return
+      if (!scrollContainer) return
       // Manually trigger spy once to set initial active message based on scroll position
-      handleScrollSpy({ target: container } as unknown as Event)
+      handleScrollSpy({ target: scrollContainer } as unknown as Event)
     })
   })
 
-  // Unified SessionTurns component - works for both mobile and desktop
-  const SessionTurns = () => (
-    <div class="relative w-full h-full min-w-0">
-      {/* Message rail - hidden on mobile, positioned absolutely over the content */}
-      <div class="hidden md:block absolute inset-0 pointer-events-none z-10">
-        <SessionMessageRail
-          messages={visibleUserMessages()}
-          current={activeMessage()}
-          onMessageSelect={scrollToMessage}
-          wide={!showTabs()}
-          class="pointer-events-auto"
-        />
-      </div>
-      <div
-        ref={autoScroll.scrollRef}
-        onScroll={(e) => {
-          autoScroll.handleScroll()
-          handleScrollSpy(e)
-        }}
-        onClick={autoScroll.handleInteraction}
-        class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar snap-y snap-proximity"
-      >
-        <div
-          ref={autoScroll.contentRef}
-          class="flex flex-col gap-45 items-start justify-start pb-32 md:pb-40 transition-[margin]"
-          classList={{
-            "mt-0.5": !showTabs(),
-            "mt-1": showTabs(),
-          }}
-        >
-          <For each={visibleUserMessages()}>
-            {(message) => (
-              <div
-                ref={(el) => messageRefs.set(message.id, el)}
-                class="min-w-0 w-full max-w-full snap-start scroll-m-4 last:min-h-[80vh]"
-              >
-                <SessionTurn
-                  sessionID={params.id!}
-                  messageID={message.id}
-                  lastUserMessageID={lastUserMessage()?.id}
-                  stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
-                  onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
-                  onUserInteracted={() => setStore("userInteracted", true)}
-                  classes={{
-                    root: "min-w-0 w-full relative",
-                    content:
-                      "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                    container:
-                      "px-4 md:px-6 " +
-                      (!showTabs()
-                        ? "md:max-w-200 md:mx-auto"
-                        : visibleUserMessages().length > 1
-                          ? "md:pr-6 md:pl-18"
-                          : ""),
-                  }}
-                />
-              </div>
-            )}
-          </For>
-        </div>
-      </div>
-    </div>
-  )
+  createEffect(() => {
+    document.addEventListener("keydown", handleKeyDown)
+  })
 
-  // Session content component - unified for mobile and desktop
-  const SessionContent = () => (
-    <Switch>
-      <Match when={params.id}>
-        <SessionTurns />
-      </Match>
-      <Match when={true}>
-        <NewSessionView />
-      </Match>
-    </Switch>
-  )
-
-  // Review panel content - used on both mobile (via tabs) and desktop (side panel)
-  const ReviewPanel = () => (
-    <div class="relative h-full overflow-y-auto no-scrollbar">
-      <SessionReview
-        diffs={diffs()}
-        diffStyle={layout.review.diffStyle()}
-        onDiffStyleChange={layout.review.setDiffStyle}
-        open={view().review.open()}
-        onOpenChange={view().review.setOpen}
-        classes={{
-          root: "pb-32",
-          header: "px-4",
-          container: "px-4",
-        }}
-      />
-    </div>
-  )
+  onCleanup(() => {
+    document.removeEventListener("keydown", handleKeyDown)
+    cancelInitialScroll()
+  })
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-
-      {/* Main content area - responsive layout */}
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Mobile tab bar - only shown on mobile when there are diffs */}
         <Show when={diffs().length > 0}>
@@ -748,10 +722,10 @@ export default function Page() {
               type="button"
               class="flex-1 py-3 text-14-medium border-b-2 transition-colors"
               classList={{
-                "border-text-base text-text-base": mobileTab() === "session",
-                "border-transparent text-text-weak": mobileTab() !== "session",
+                "border-text-base text-text-base": store.mobileTab === "session",
+                "border-transparent text-text-weak": store.mobileTab !== "session",
               }}
-              onClick={() => setMobileTab("session")}
+              onClick={() => setStore("mobileTab", "session")}
             >
               Session
             </button>
@@ -759,10 +733,10 @@ export default function Page() {
               type="button"
               class="flex-1 py-3 text-14-medium border-b-2 transition-colors"
               classList={{
-                "border-text-base text-text-base": mobileTab() === "review",
-                "border-transparent text-text-weak": mobileTab() !== "review",
+                "border-text-base text-text-base": store.mobileTab === "review",
+                "border-transparent text-text-weak": store.mobileTab !== "review",
               }}
-              onClick={() => setMobileTab("review")}
+              onClick={() => setStore("mobileTab", "review")}
             >
               {diffs().length} Files Changed
             </button>
@@ -774,13 +748,83 @@ export default function Page() {
           class="@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger md:py-3"
           classList={{
             // Mobile: hide when review tab is active and there are diffs
-            "hidden md:flex": diffs().length > 0 && mobileTab() === "review",
+            "hidden md:flex": diffs().length > 0 && store.mobileTab === "review",
             "flex-1 md:flex-none": true,
           }}
           style={{ width: showTabs() ? `${layout.session.width()}px` : "100%" }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
-            <SessionContent />
+            <Show when={activeMessage()}>
+              <Switch>
+                <Match when={params.id}>
+                  <div class="relative w-full h-full min-w-0">
+                    <div class="hidden md:block absolute inset-0 pointer-events-none z-10">
+                      <SessionMessageRail
+                        messages={visibleUserMessages()}
+                        current={activeMessage()}
+                        onMessageSelect={scrollToMessage}
+                        wide={!showTabs()}
+                        class="pointer-events-auto"
+                      />
+                    </div>
+                    <div
+                      ref={setScrollRef}
+                      onScroll={(e) => {
+                        autoScroll.handleScroll()
+                        handleScrollSpy(e)
+                      }}
+                      onClick={autoScroll.handleInteraction}
+                      class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
+                      classList={{
+                        "opacity-0 pointer-events-none": !store.initialScrollDone,
+                      }}
+                    >
+                      <div
+                        ref={autoScroll.contentRef}
+                        class="flex flex-col gap-45 items-start justify-start pb-32 md:pb-40 transition-[margin]"
+                        classList={{
+                          "mt-0.5": !showTabs(),
+                          "mt-0": showTabs(),
+                        }}
+                      >
+                        <For each={visibleUserMessages()}>
+                          {(message) => (
+                            <div
+                              ref={(el) => messageRefs.set(message.id, el)}
+                              class="min-w-0 w-full max-w-full last:min-h-[80vh]"
+                            >
+                              <SessionTurn
+                                sessionID={params.id!}
+                                messageID={message.id}
+                                lastUserMessageID={lastUserMessage()?.id}
+                                stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
+                                onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
+                                onUserInteracted={() => setStore("userInteracted", true)}
+                                classes={{
+                                  root: "min-w-0 w-full relative",
+                                  content:
+                                    "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                  container:
+                                    "px-4 md:px-6 " +
+                                    (!showTabs()
+                                      ? "md:max-w-200 md:mx-auto"
+                                      : visibleUserMessages().length > 1
+                                        ? "md:pr-6 md:pl-18"
+                                        : ""),
+                                }}
+                              />
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+                  </div>
+                </Match>
+                <Match when={true}>
+                  <NewSessionView />
+                </Match>
+              </Switch>
+            </Show>
           </div>
 
           {/* Prompt input */}
@@ -811,9 +855,22 @@ export default function Page() {
         </div>
 
         {/* Mobile review panel - only shown on mobile when review tab is active */}
-        <Show when={diffs().length > 0 && mobileTab() === "review"}>
+        <Show when={diffs().length > 0 && store.mobileTab === "review"}>
           <div class="md:hidden flex-1 min-h-0 mt-6 pb-32">
-            <ReviewPanel />
+            <div class="relative h-full overflow-y-auto no-scrollbar">
+              <SessionReview
+                diffs={diffs()}
+                diffStyle={layout.review.diffStyle()}
+                onDiffStyleChange={layout.review.setDiffStyle}
+                open={view().review.open()}
+                onOpenChange={view().review.setOpen}
+                classes={{
+                  root: "pb-32",
+                  header: "px-4",
+                  container: "px-4",
+                }}
+              />
+            </div>
           </div>
         </Show>
 
