@@ -10,6 +10,7 @@ import { Diff } from "@opencode-ai/ui/diff"
 import { Code } from "@opencode-ai/ui/code"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
+import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
@@ -66,34 +67,36 @@ export function App() {
                     <ServerKey>
                       <GlobalSDKProvider>
                         <GlobalSyncProvider>
-                          <LayoutProvider>
-                            <NotificationProvider>
-                              <Router
-                                root={(props) => (
-                                  <CommandProvider>
-                                    <Layout>{props.children}</Layout>
-                                  </CommandProvider>
+                          <Router
+                            root={(props) => (
+                              <PermissionProvider>
+                                <LayoutProvider>
+                                  <NotificationProvider>
+                                    <CommandProvider>
+                                      <Layout>{props.children}</Layout>
+                                    </CommandProvider>
+                                  </NotificationProvider>
+                                </LayoutProvider>
+                              </PermissionProvider>
+                            )}
+                          >
+                            <Route path="/" component={Home} />
+                            <Route path="/:dir" component={DirectoryLayout}>
+                              <Route path="/" component={() => <Navigate href="session" />} />
+                              <Route
+                                path="/session/:id?"
+                                component={(p) => (
+                                  <Show when={p.params.id ?? "new"} keyed>
+                                    <TerminalProvider>
+                                      <PromptProvider>
+                                        <Session />
+                                      </PromptProvider>
+                                    </TerminalProvider>
+                                  </Show>
                                 )}
-                              >
-                                <Route path="/" component={Home} />
-                                <Route path="/:dir" component={DirectoryLayout}>
-                                  <Route path="/" component={() => <Navigate href="session" />} />
-                                  <Route
-                                    path="/session/:id?"
-                                    component={(p) => (
-                                      <Show when={p.params.id ?? "new"} keyed>
-                                        <TerminalProvider>
-                                          <PromptProvider>
-                                            <Session />
-                                          </PromptProvider>
-                                        </TerminalProvider>
-                                      </Show>
-                                    )}
-                                  />
-                                </Route>
-                              </Router>
-                            </NotificationProvider>
-                          </LayoutProvider>
+                              />
+                            </Route>
+                          </Router>
                         </GlobalSyncProvider>
                       </GlobalSDKProvider>
                     </ServerKey>
