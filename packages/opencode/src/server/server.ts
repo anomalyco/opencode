@@ -2657,12 +2657,32 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://app.opencode.ai${c.req.path}`, {
-          ...c.req,
+        const res = await proxy(`https://app.opencode.ai${c.req.path}`, {
+          raw: c.req.raw,
           headers: {
             host: "app.opencode.ai",
           },
         })
+        // Cloudflare doesn't return Content-Type for static assets, so we need to set it based on extension
+        if (!res.headers.get("content-type")) {
+          const path = c.req.path
+          let contentType: string | undefined
+          if (path.endsWith(".js")) contentType = "application/javascript"
+          else if (path.endsWith(".css")) contentType = "text/css"
+          else if (path.endsWith(".html")) contentType = "text/html"
+          else if (path.endsWith(".json")) contentType = "application/json"
+          else if (path.endsWith(".svg")) contentType = "image/svg+xml"
+          else if (path.endsWith(".png")) contentType = "image/png"
+          else if (path.endsWith(".ico")) contentType = "image/x-icon"
+          else if (path.endsWith(".woff2")) contentType = "font/woff2"
+          else if (path.endsWith(".woff")) contentType = "font/woff"
+          if (contentType) {
+            const headers = new Headers(res.headers)
+            headers.set("content-type", contentType)
+            return new Response(res.body, { status: res.status, statusText: res.statusText, headers })
+          }
+        }
+        return res
       }),
   )
 
