@@ -28,8 +28,6 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 
-const cancel = new AbortController()
-
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
     e: e instanceof Error ? e.message : e,
@@ -152,6 +150,10 @@ try {
     console.error(e)
   }
   process.exitCode = 1
+} finally {
+  // Some subprocesses don't react properly to SIGTERM and similar signals.
+  // Most notably, some docker-container-based MCP servers don't handle such signals unless
+  // run using `docker run --init`.
+  // Explicitly exit to avoid any hanging subprocesses.
+  process.exit()
 }
-
-cancel.abort()
