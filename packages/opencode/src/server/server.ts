@@ -2666,10 +2666,10 @@ export namespace Server {
         })
         // Cloudflare doesn't return Content-Type for static assets, so we need to add it
         const mimeTypes: Record<string, string> = {
-          ".js": "application/javascript",
-          ".mjs": "application/javascript",
-          ".css": "text/css",
-          ".json": "application/json",
+          ".js": "application/javascript; charset=utf-8",
+          ".mjs": "application/javascript; charset=utf-8",
+          ".css": "text/css; charset=utf-8",
+          ".json": "application/json; charset=utf-8",
           ".wasm": "application/wasm",
           ".svg": "image/svg+xml",
           ".png": "image/png",
@@ -2683,8 +2683,10 @@ export namespace Server {
           ".ttf": "font/ttf",
           ".eot": "application/vnd.ms-fontobject",
         }
+        // Extract pathname without query parameters or hash fragments
+        const pathname = path.split("?")[0].split("#")[0]
         for (const [ext, mime] of Object.entries(mimeTypes)) {
-          if (path.endsWith(ext)) {
+          if (pathname.endsWith(ext)) {
             const headers = new Headers(response.headers)
             headers.set("Content-Type", mime)
             return new Response(response.body, {
