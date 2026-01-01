@@ -12,6 +12,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
+  AgentPart,
   AssistantMessage,
   FilePart,
   Message as MessageType,
@@ -300,6 +301,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     }),
   )
 
+  const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
+
   const openImagePreview = (url: string, alt?: string) => {
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
   }
@@ -337,33 +340,40 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       </Show>
       <Show when={text()}>
         <div data-slot="user-message-text">
-          <HighlightedText text={text()} references={inlineFiles()} />
+          <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
         </div>
       </Show>
     </div>
   )
 }
 
-function HighlightedText(props: { text: string; references: FilePart[] }) {
+type HighlightSegment = { text: string; type?: "file" | "agent" }
+
+function HighlightedText(props: { text: string; references: FilePart[]; agents: AgentPart[] }) {
   const segments = createMemo(() => {
     const text = props.text
-    const refs = [...props.references].sort((a, b) => (a.source?.text?.start ?? 0) - (b.source?.text?.start ?? 0))
 
-    const result: { text: string; highlight?: boolean }[] = []
+    const allRefs: { start: number; end: number; type: "file" | "agent" }[] = [
+      ...props.references
+        .filter((r) => r.source?.text?.start !== undefined && r.source?.text?.end !== undefined)
+        .map((r) => ({ start: r.source!.text!.start, end: r.source!.text!.end, type: "file" as const })),
+      ...props.agents
+        .filter((a) => a.source?.start !== undefined && a.source?.end !== undefined)
+        .map((a) => ({ start: a.source!.start, end: a.source!.end, type: "agent" as const })),
+    ].sort((a, b) => a.start - b.start)
+
+    const result: HighlightSegment[] = []
     let lastIndex = 0
 
-    for (const ref of refs) {
-      const start = ref.source?.text?.start
-      const end = ref.source?.text?.end
+    for (const ref of allRefs) {
+      if (ref.start < lastIndex) continue
 
-      if (start === undefined || end === undefined || start < lastIndex) continue
-
-      if (start > lastIndex) {
-        result.push({ text: text.slice(lastIndex, start) })
+      if (ref.start > lastIndex) {
+        result.push({ text: text.slice(lastIndex, ref.start) })
       }
 
-      result.push({ text: text.slice(start, end), highlight: true })
-      lastIndex = end
+      result.push({ text: text.slice(ref.start, ref.end), type: ref.type })
+      lastIndex = ref.end
     }
 
     if (lastIndex < text.length) {
@@ -375,7 +385,16 @@ function HighlightedText(props: { text: string; references: FilePart[] }) {
 
   return (
     <For each={segments()}>
-      {(segment) => <span classList={{ "text-text-strong font-medium": segment.highlight }}>{segment.text}</span>}
+      {(segment) => (
+        <span
+          classList={{
+            "text-syntax-property": segment.type === "file",
+            "text-syntax-type": segment.type === "agent",
+          }}
+        >
+          {segment.text}
+        </span>
+      )}
     </For>
   )
 }
