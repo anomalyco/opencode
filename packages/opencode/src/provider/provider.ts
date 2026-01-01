@@ -59,7 +59,7 @@ export namespace Provider {
     "@ai-sdk/gateway": createGateway,
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
-    "@ai-sdk/vercel": createVercel as any,
+    "@ai-sdk/vercel": createVercel,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
