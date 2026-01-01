@@ -4,6 +4,7 @@ import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
+import { Config } from "@/config/config"
 import { Global } from "@/global"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -584,34 +585,15 @@ function App() {
     })
   })
 
-  // Fetch and display config warnings after sync completes
-  let warningsShown = false
-  createEffect(
-    on(
-      () => sync.status === "complete",
-      (isComplete) => {
-        if (!isComplete || warningsShown) return
-        warningsShown = true
-        sdk.client.config
-          .warnings()
-          .then((response) => {
-            const warnings = response.data ?? []
-            if (warnings.length > 0) {
-              const messages = warnings.map((w) => w.message)
-              toast.show({
-                variant: "warning",
-                title: "Config Warning",
-                message: messages.join("\n"),
-                duration: 5000,
-              })
-            }
-          })
-          .catch(() => {
-            // Silently ignore errors fetching warnings
-          })
-      },
-    ),
-  )
+  // Subscribe to config warning events
+  sdk.event.on(Config.Event.Warning.type, (evt) => {
+    toast.show({
+      variant: "warning",
+      title: "Config Warning",
+      message: evt.properties.message,
+      duration: 5000,
+    })
+  })
 
   return (
     <box

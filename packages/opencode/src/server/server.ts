@@ -476,28 +476,6 @@ export namespace Server {
         },
       )
       .get(
-        "/config/warnings",
-        describeRoute({
-          summary: "Get configuration warnings",
-          description:
-            "Retrieve any warnings generated during configuration loading, such as unknown keybind commands.",
-          operationId: "config.warnings",
-          responses: {
-            200: {
-              description: "List of configuration warnings",
-              content: {
-                "application/json": {
-                  schema: resolver(Config.Warning.array()),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          return c.json(await Config.warnings())
-        },
-      )
-      .get(
         "/experimental/tool/ids",
         describeRoute({
           summary: "List tool IDs",
@@ -2648,6 +2626,18 @@ export namespace Server {
                 properties: {},
               }),
             })
+
+            // Send config warnings to newly connected client
+            const warnings = await Config.warnings()
+            for (const warning of warnings) {
+              stream.writeSSE({
+                data: JSON.stringify({
+                  type: Config.Event.Warning.type,
+                  properties: warning,
+                }),
+              })
+            }
+
             const unsub = Bus.subscribeAll(async (event) => {
               await stream.writeSSE({
                 data: JSON.stringify(event),

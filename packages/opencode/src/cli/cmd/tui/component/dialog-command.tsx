@@ -2,10 +2,8 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "@tui/ui/dialog-select"
 import {
   createContext,
-  createEffect,
   createMemo,
   createSignal,
-  on,
   onCleanup,
   useContext,
   type Accessor,
@@ -14,9 +12,9 @@ import {
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
 import { useToast } from "@tui/ui/toast"
-import { useSync } from "@tui/context/sync"
 import { useSDK } from "@tui/context/sdk"
 import { Keybind } from "@/util/keybind"
+import { Config } from "@/config/config"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 type Context = ReturnType<typeof init>
@@ -39,36 +37,18 @@ function init() {
   const dialog = useDialog()
   const keybind = useKeybind()
   const toast = useToast()
-  const sync = useSync()
   const sdk = useSDK()
 
-  // Fetch unknown keybinds from warnings when sync completes
-  let warningsFetched = false
-  createEffect(
-    on(
-      () => sync.status === "complete",
-      (isComplete) => {
-        if (!isComplete || warningsFetched) return
-        warningsFetched = true
-        sdk.client.config
-          .warnings()
-          .then((response) => {
-            const warnings = response.data ?? []
-            for (const warning of warnings) {
-              if (warning.type === "unknown_keybind" && warning.keybinds) {
-                const parsed = warning.keybinds.map((kb) => ({
-                  name: kb.name,
-                  parsed: Keybind.parse(kb.binding),
-                }))
-                setUnknownKeybinds(parsed)
-                break
-              }
-            }
-          })
-          .catch(() => {})
-      },
-    ),
-  )
+  // Subscribe to config warning events to get unknown keybinds
+  sdk.event.on(Config.Event.Warning.type, (evt) => {
+    if (evt.properties.type === "unknown_keybind" && evt.properties.keybinds) {
+      const parsed = evt.properties.keybinds.map((kb) => ({
+        name: kb.name,
+        parsed: Keybind.parse(kb.binding),
+      }))
+      setUnknownKeybinds(parsed)
+    }
+  })
 
   const options = createMemo(() => {
     const all = registrations().flatMap((x) => x())

@@ -1,3 +1,4 @@
+import { BusEvent } from "../bus/bus-event"
 import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -607,6 +608,10 @@ export namespace Config {
     })
     .meta({ ref: "ConfigWarning" })
   export type Warning = z.infer<typeof Warning>
+
+  export const Event = {
+    Warning: BusEvent.define("config.warning", Warning),
+  }
 
   export const TUI = z.object({
     scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
