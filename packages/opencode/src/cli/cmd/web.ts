@@ -4,6 +4,7 @@ import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import open from "open"
 import { networkInterfaces } from "os"
+import { Global } from "../../global"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -32,6 +33,9 @@ export const WebCommand = cmd({
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
   handler: async (args) => {
+    // Change cwd to home directory to ensure shell commands without explicit cwd
+    // don't fail when the server is started from a nested/temporary directory
+    process.chdir(Global.Path.home)
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
     UI.empty()
