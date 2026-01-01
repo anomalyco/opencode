@@ -30,6 +30,8 @@ type SessionTabs = {
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
+export type ReviewDiffStyle = "unified" | "split"
+
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   init: () => {
@@ -49,6 +51,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           opened: true,
+          diffStyle: "split" as ReviewDiffStyle,
         },
         session: {
           width: 600,
@@ -156,6 +159,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       },
       review: {
         opened: createMemo(() => store.review?.opened ?? true),
+        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
+        setDiffStyle(diffStyle: ReviewDiffStyle) {
+          if (!store.review) {
+            setStore("review", { opened: true, diffStyle })
+            return
+          }
+          setStore("review", "diffStyle", diffStyle)
+        },
         open() {
           setStore("review", "opened", true)
         },
@@ -198,38 +209,58 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           async open(tab: string) {
             const current = store.sessionTabs[sessionKey] ?? { all: [] }
-            if (tab !== "review") {
-              if (!current.all.includes(tab)) {
-                if (!store.sessionTabs[sessionKey]) {
-                  setStore("sessionTabs", sessionKey, { all: [tab], active: tab })
-                } else {
-                  setStore("sessionTabs", sessionKey, "all", [...current.all, tab])
-                  setStore("sessionTabs", sessionKey, "active", tab)
-                }
+
+            if (tab === "review") {
+              if (!store.sessionTabs[sessionKey]) {
+                setStore("sessionTabs", sessionKey, { all: [], active: tab })
                 return
               }
-            }
-            if (!store.sessionTabs[sessionKey]) {
-              setStore("sessionTabs", sessionKey, { all: [], active: tab })
-            } else {
               setStore("sessionTabs", sessionKey, "active", tab)
+              return
             }
+
+            if (tab === "context") {
+              const all = [tab, ...current.all.filter((x) => x !== tab)]
+              if (!store.sessionTabs[sessionKey]) {
+                setStore("sessionTabs", sessionKey, { all, active: tab })
+                return
+              }
+              setStore("sessionTabs", sessionKey, "all", all)
+              setStore("sessionTabs", sessionKey, "active", tab)
+              return
+            }
+
+            if (!current.all.includes(tab)) {
+              if (!store.sessionTabs[sessionKey]) {
+                setStore("sessionTabs", sessionKey, { all: [tab], active: tab })
+                return
+              }
+              setStore("sessionTabs", sessionKey, "all", [...current.all, tab])
+              setStore("sessionTabs", sessionKey, "active", tab)
+              return
+            }
+
+            if (!store.sessionTabs[sessionKey]) {
+              setStore("sessionTabs", sessionKey, { all: current.all, active: tab })
+              return
+            }
+            setStore("sessionTabs", sessionKey, "active", tab)
           },
           close(tab: string) {
             const current = store.sessionTabs[sessionKey]
             if (!current) return
+
+            const all = current.all.filter((x) => x !== tab)
             batch(() => {
-              setStore(
-                "sessionTabs",
-                sessionKey,
-                "all",
-                current.all.filter((x) => x !== tab),
-              )
-              if (current.active === tab) {
-                const index = current.all.findIndex((f) => f === tab)
-                const previous = current.all[Math.max(0, index - 1)]
-                setStore("sessionTabs", sessionKey, "active", previous)
+              setStore("sessionTabs", sessionKey, "all", all)
+              if (current.active !== tab) return
+
+              const index = current.all.findIndex((f) => f === tab)
+              if (index <= 0) {
+                setStore("sessionTabs", sessionKey, "active", undefined)
+                return
               }
+              setStore("sessionTabs", sessionKey, "active", current.all[index - 1])
             })
           },
           move(tab: string, to: number) {
