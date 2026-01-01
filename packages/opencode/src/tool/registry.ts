@@ -16,7 +16,7 @@ import { Tool } from "./tool"
 import { Instance } from "../project/instance"
 import { Config } from "../config/config"
 import path from "path"
-import { type ToolDefinition } from "@opencode-ai/plugin"
+import { type ToolDefinition, type ToolResult } from "@opencode-ai/plugin"
 import z from "zod"
 import { Plugin } from "../plugin"
 import { WebSearchTool } from "./websearch"
@@ -58,15 +58,6 @@ export namespace ToolRegistry {
     return { custom }
   })
 
-  function isStructuredResult(result: unknown): result is Partial<Tool.Result> & { output: string } {
-    return (
-      typeof result === "object" &&
-      result !== null &&
-      "output" in result &&
-      typeof (result as Record<string, unknown>).output === "string"
-    )
-  }
-
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
       id,
@@ -75,23 +66,24 @@ export namespace ToolRegistry {
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
-          if (isStructuredResult(result)) {
-            const out = await Truncate.output(result.output, {}, initCtx?.agent)
+          if (typeof result === "string") {
+            const out = await Truncate.output(result, {}, initCtx?.agent)
             return {
-              title: result.title ?? "",
-              metadata: {
-                ...result.metadata,
-                truncated: out.truncated,
-                outputPath: out.truncated ? out.outputPath : undefined,
-              },
-              output: out.truncated ? out.content : result.output,
+              title: "",
+              output: out.truncated ? out.content : result,
+              metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
             }
           }
-          const out = await Truncate.output(result as string, {}, initCtx?.agent)
+          const out = await Truncate.output(result.output, {}, initCtx?.agent)
           return {
-            title: "",
-            output: out.truncated ? out.content : (result as string),
-            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+            title: result.title ?? "",
+            metadata: {
+              ...result.metadata,
+              truncated: out.truncated,
+              outputPath: out.truncated ? out.outputPath : undefined,
+            },
+            output: out.truncated ? out.content : result.output,
+            attachments: result.attachments,
           }
         },
       }),

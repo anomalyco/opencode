@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { FilePart } from "@opencode-ai/sdk"
 
 export type ToolContext = {
   sessionID: string
@@ -20,6 +21,8 @@ export interface ToolResult {
   metadata: Record<string, unknown>
   /** The text output returned to the model */
   output: string
+  /** Optional file attachments to include with the result */
+  attachments?: FilePart[]
 }
 
 export function tool<Args extends z.ZodRawShape>(input: {
