@@ -6,7 +6,6 @@ import {
   Match,
   Switch,
   createMemo,
-  createResource,
   createEffect,
   on,
   createRenderEffect,
@@ -19,8 +18,6 @@ import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/f
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import { DateTime } from "luxon"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -32,24 +29,11 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { SessionReview } from "@opencode-ai/ui/session-review"
-import { Markdown } from "@opencode-ai/ui/markdown"
-import { Accordion } from "@opencode-ai/ui/accordion"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { Code } from "@opencode-ai/ui/code"
-import {
-  DragDropProvider,
-  DragDropSensors,
-  DragOverlay,
-  SortableProvider,
-  closestCenter,
-  createSortable,
-} from "@thisbeyond/solid-dnd"
+import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Terminal } from "@/components/terminal"
 import { checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -57,7 +41,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { useCommand } from "@/context/command"
-import { A, useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
@@ -65,213 +49,20 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
-import { useServer } from "@/context/server"
-import { Button } from "@opencode-ai/ui/button"
-import { DialogSelectServer } from "@/components/dialog-select-server"
-import { SessionLspIndicator } from "@/components/session-lsp-indicator"
-import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { Popover } from "@opencode-ai/ui/popover"
-import { Select } from "@opencode-ai/ui/select"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { base64Encode } from "@opencode-ai/util/encode"
-import { iife } from "@opencode-ai/util/iife"
-import { AssistantMessage, Session, type Message, type Part } from "@opencode-ai/sdk/v2/client"
+import {
+  SessionHeader,
+  SessionContextTab,
+  SessionReviewTab,
+  SortableTab,
+  FileVisual,
+  SortableTerminalTab,
+  NewSessionView,
+} from "@/components/session"
 
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
-}
-
-function Header() {
-  const globalSDK = useGlobalSDK()
-  const layout = useLayout()
-  const params = useParams()
-  const navigate = useNavigate()
-  const command = useCommand()
-  const server = useServer()
-  const dialog = useDialog()
-  const sync = useSync()
-
-  const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
-  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
-  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const branch = createMemo(() => sync.data.vcs?.branch)
-
-  function navigateToProject(directory: string) {
-    navigate(`/${base64Encode(directory)}`)
-  }
-
-  function navigateToSession(session: Session | undefined) {
-    if (!session) return
-    navigate(`/${params.dir}/session/${session.id}`)
-  }
-
-  return (
-    <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
-      <button
-        type="button"
-        class="xl:hidden w-12 shrink-0 flex items-center justify-center border-r border-border-weak-base hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors"
-        onClick={layout.mobileSidebar.toggle}
-      >
-        <Icon name="menu" size="small" />
-      </button>
-      <div class="px-4 flex items-center justify-between gap-4 w-full">
-        <div class="flex items-center gap-3 min-w-0">
-          <div class="flex items-center gap-2 min-w-0">
-            <div class="hidden xl:flex items-center gap-2">
-              <Select
-                options={layout.projects.list().map((project) => project.worktree)}
-                current={sync.directory}
-                label={(x) => {
-                  const name = getFilename(x)
-                  const b = x === sync.directory ? branch() : undefined
-                  return b ? `${name}:${b}` : name
-                }}
-                onSelect={(x) => (x ? navigateToProject(x) : undefined)}
-                class="text-14-regular text-text-base"
-                variant="ghost"
-              >
-                {/* @ts-ignore */}
-                {(i) => (
-                  <div class="flex items-center gap-2">
-                    <Icon name="folder" size="small" />
-                    <div class="text-text-strong">{getFilename(i)}</div>
-                  </div>
-                )}
-              </Select>
-              <div class="text-text-weaker">/</div>
-            </div>
-            <Select
-              options={sessions()}
-              current={currentSession()}
-              placeholder="New session"
-              label={(x) => x.title}
-              value={(x) => x.id}
-              onSelect={navigateToSession}
-              class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
-              variant="ghost"
-            />
-          </div>
-          <Show when={currentSession()}>
-            <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
-              <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
-            </TooltipKeybind>
-          </Show>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="hidden md:flex items-center gap-1">
-            <Button
-              size="small"
-              variant="ghost"
-              onClick={() => {
-                dialog.show(() => <DialogSelectServer />)
-              }}
-            >
-              <div
-                classList={{
-                  "size-1.5 rounded-full": true,
-                  "bg-icon-success-base": server.healthy() === true,
-                  "bg-icon-critical-base": server.healthy() === false,
-                  "bg-border-weak-base": server.healthy() === undefined,
-                }}
-              />
-              <Icon name="server" size="small" class="text-icon-weak" />
-              <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span>
-            </Button>
-            <SessionLspIndicator />
-            <SessionMcpIndicator />
-          </div>
-          <div class="flex items-center gap-1">
-            <Show when={currentSession()?.summary?.files}>
-              <TooltipKeybind
-                class="hidden md:block shrink-0"
-                title="Toggle review"
-                keybind={command.keybind("review.toggle")}
-              >
-                <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
-                  <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                    <Icon
-                      name={layout.review.opened() ? "layout-right" : "layout-left"}
-                      size="small"
-                      class="group-hover/review-toggle:hidden"
-                    />
-                    <Icon
-                      name={layout.review.opened() ? "layout-right-partial" : "layout-left-partial"}
-                      size="small"
-                      class="hidden group-hover/review-toggle:inline-block"
-                    />
-                    <Icon
-                      name={layout.review.opened() ? "layout-right-full" : "layout-left-full"}
-                      size="small"
-                      class="hidden group-active/review-toggle:inline-block"
-                    />
-                  </div>
-                </Button>
-              </TooltipKeybind>
-            </Show>
-            <TooltipKeybind
-              class="hidden md:block shrink-0"
-              title="Toggle terminal"
-              keybind={command.keybind("terminal.toggle")}
-            >
-              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
-                <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                  <Icon
-                    size="small"
-                    name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
-                    class="group-hover/terminal-toggle:hidden"
-                  />
-                  <Icon
-                    size="small"
-                    name="layout-bottom-partial"
-                    class="hidden group-hover/terminal-toggle:inline-block"
-                  />
-                  <Icon
-                    size="small"
-                    name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
-                    class="hidden group-active/terminal-toggle:inline-block"
-                  />
-                </div>
-              </Button>
-            </TooltipKeybind>
-          </div>
-          <Show when={shareEnabled() && currentSession()}>
-            <Popover
-              title="Share session"
-              trigger={
-                <Tooltip class="shrink-0" value="Share session">
-                  <IconButton icon="share" variant="ghost" class="" />
-                </Tooltip>
-              }
-            >
-              {iife(() => {
-                const [url] = createResource(
-                  () => currentSession(),
-                  async (session) => {
-                    if (!session) return
-                    let shareURL = session.share?.url
-                    if (!shareURL) {
-                      shareURL = await globalSDK.client.session
-                        .share({ sessionID: session.id, directory: sync.directory })
-                        .then((r) => r.data?.share?.url)
-                        .catch((e) => {
-                          console.error("Failed to share session", e)
-                          return undefined
-                        })
-                    }
-                    return shareURL
-                  },
-                )
-                return <Show when={url()}>{(url) => <TextField value={url()} readOnly copyable class="w-72" />}</Show>
-              })}
-            </Popover>
-          </Show>
-        </div>
-      </div>
-    </header>
-  )
 }
 
 export default function Page() {
@@ -757,65 +548,6 @@ export default function Page() {
     setStore("activeTerminalDraggable", undefined)
   }
 
-  const SortableTerminalTab = (props: { terminal: LocalPTY }): JSX.Element => {
-    const sortable = createSortable(props.terminal.id)
-    return (
-      // @ts-ignore
-      <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
-        <div class="relative h-full">
-          <Tabs.Trigger
-            value={props.terminal.id}
-            closeButton={
-              terminal.all().length > 1 && (
-                <IconButton icon="close" variant="ghost" onClick={() => terminal.close(props.terminal.id)} />
-              )
-            }
-          >
-            {props.terminal.title}
-          </Tabs.Trigger>
-        </div>
-      </div>
-    )
-  }
-
-  const FileVisual = (props: { path: string; active?: boolean }): JSX.Element => {
-    return (
-      <div class="flex items-center gap-x-1.5">
-        <FileIcon
-          node={{ path: props.path, type: "file" }}
-          classList={{
-            "grayscale-100 group-data-[selected]/tab:grayscale-0": !props.active,
-            "grayscale-0": props.active,
-          }}
-        />
-        <span class="text-14-medium">{getFilename(props.path)}</span>
-      </div>
-    )
-  }
-
-  const SortableTab = (props: { tab: string; onTabClose: (tab: string) => void }): JSX.Element => {
-    const sortable = createSortable(props.tab)
-    const path = createMemo(() => file.pathFromTab(props.tab))
-    return (
-      // @ts-ignore
-      <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
-        <div class="relative h-full">
-          <Tabs.Trigger
-            value={props.tab}
-            closeButton={
-              <Tooltip value="Close tab" placement="bottom">
-                <IconButton icon="close" variant="ghost" onClick={() => props.onTabClose(props.tab)} />
-              </Tooltip>
-            }
-            hideCloseButton
-          >
-            <Show when={path()}>{(p) => <FileVisual path={p()} />}</Show>
-          </Tabs.Trigger>
-        </div>
-      </div>
-    )
-  }
-
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
   const openedTabs = createMemo(() =>
     tabs()
@@ -883,32 +615,6 @@ export default function Page() {
     </div>
   )
 
-  const NewSessionView = () => (
-    <div class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6">
-      <div class="text-20-medium text-text-weaker">New session</div>
-      <div class="flex justify-center items-center gap-3">
-        <Icon name="folder" size="small" />
-        <div class="text-12-medium text-text-weak">
-          {getDirectory(sync.data.path.directory)}
-          <span class="text-text-strong">{getFilename(sync.data.path.directory)}</span>
-        </div>
-      </div>
-      <Show when={sync.project}>
-        {(project) => (
-          <div class="flex justify-center items-center gap-3">
-            <Icon name="pencil-line" size="small" />
-            <div class="text-12-medium text-text-weak">
-              Last modified&nbsp;
-              <span class="text-text-strong">
-                {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
-              </span>
-            </div>
-          </div>
-        )}
-      </Show>
-    </div>
-  )
-
   const DesktopSessionContent = () => (
     <Switch>
       <Match when={params.id}>
@@ -944,478 +650,9 @@ export default function Page() {
     </Switch>
   )
 
-  const ContextTab = () => {
-    const ctx = createMemo(() => {
-      const last = messages().findLast((x) => {
-        if (x.role !== "assistant") return false
-        const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
-        return total > 0
-      }) as AssistantMessage
-      if (!last) return
-
-      const provider = sync.data.provider.all.find((x) => x.id === last.providerID)
-      const model = provider?.models[last.modelID]
-      const limit = model?.limit.context
-
-      const input = last.tokens.input
-      const output = last.tokens.output
-      const reasoning = last.tokens.reasoning
-      const cacheRead = last.tokens.cache.read
-      const cacheWrite = last.tokens.cache.write
-      const total = input + output + reasoning + cacheRead + cacheWrite
-      const usage = limit ? Math.round((total / limit) * 100) : null
-
-      return {
-        message: last,
-        provider,
-        model,
-        limit,
-        input,
-        output,
-        reasoning,
-        cacheRead,
-        cacheWrite,
-        total,
-        usage,
-      }
-    })
-
-    const cost = createMemo(() => {
-      const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-      }).format(total)
-    })
-
-    const counts = createMemo(() => {
-      const all = messages()
-      const user = all.reduce((count, x) => count + (x.role === "user" ? 1 : 0), 0)
-      const assistant = all.reduce((count, x) => count + (x.role === "assistant" ? 1 : 0), 0)
-      return {
-        all: all.length,
-        user,
-        assistant,
-      }
-    })
-
-    const systemPrompt = createMemo(() => {
-      const msg = visibleUserMessages().findLast((m) => !!m.system)
-      const system = msg?.system
-      if (!system) return
-      const trimmed = system.trim()
-      if (!trimmed) return
-      return trimmed
-    })
-
-    const number = (value: number | null | undefined) => {
-      if (value === undefined) return "—"
-      if (value === null) return "—"
-      return value.toLocaleString()
-    }
-
-    const percent = (value: number | null | undefined) => {
-      if (value === undefined) return "—"
-      if (value === null) return "—"
-      return value.toString() + "%"
-    }
-
-    const time = (value: number | undefined) => {
-      if (!value) return "—"
-      return DateTime.fromMillis(value).toLocaleString(DateTime.DATETIME_MED)
-    }
-
-    const providerLabel = createMemo(() => {
-      const c = ctx()
-      if (!c) return "—"
-      return c.provider?.name ?? c.message.providerID
-    })
-
-    const modelLabel = createMemo(() => {
-      const c = ctx()
-      if (!c) return "—"
-      if (c.model?.name) return c.model.name
-      return c.message.modelID
-    })
-
-    const breakdown = createMemo(
-      on(
-        () => [ctx()?.message.id, ctx()?.input, messages().length, systemPrompt()],
-        () => {
-          const c = ctx()
-          if (!c) return []
-          const input = c.input
-          if (!input) return []
-
-          const out = {
-            system: systemPrompt()?.length ?? 0,
-            user: 0,
-            assistant: 0,
-            tool: 0,
-          }
-
-          for (const msg of messages()) {
-            const parts = (sync.data.part[msg.id] ?? []) as Part[]
-
-            if (msg.role === "user") {
-              for (const part of parts) {
-                if (part.type === "text") out.user += part.text.length
-                if (part.type === "file") out.user += part.source?.text.value.length ?? 0
-                if (part.type === "agent") out.user += part.source?.value.length ?? 0
-              }
-              continue
-            }
-
-            if (msg.role === "assistant") {
-              for (const part of parts) {
-                if (part.type === "text") out.assistant += part.text.length
-                if (part.type === "reasoning") out.assistant += part.text.length
-                if (part.type === "tool") {
-                  out.tool += Object.keys(part.state.input).length * 16
-                  if (part.state.status === "pending") out.tool += part.state.raw.length
-                  if (part.state.status === "completed") out.tool += part.state.output.length
-                  if (part.state.status === "error") out.tool += part.state.error.length
-                }
-              }
-            }
-          }
-
-          const estimateTokens = (chars: number) => Math.ceil(chars / 4)
-          const system = estimateTokens(out.system)
-          const user = estimateTokens(out.user)
-          const assistant = estimateTokens(out.assistant)
-          const tool = estimateTokens(out.tool)
-          const estimated = system + user + assistant + tool
-
-          const pct = (tokens: number) => (tokens / input) * 100
-          const pctLabel = (tokens: number) => (Math.round(pct(tokens) * 10) / 10).toString() + "%"
-
-          const build = (tokens: { system: number; user: number; assistant: number; tool: number; other: number }) => {
-            return [
-              {
-                key: "system",
-                label: "System",
-                tokens: tokens.system,
-                width: pct(tokens.system),
-                percent: pctLabel(tokens.system),
-                color: "var(--syntax-info)",
-              },
-              {
-                key: "user",
-                label: "User",
-                tokens: tokens.user,
-                width: pct(tokens.user),
-                percent: pctLabel(tokens.user),
-                color: "var(--syntax-success)",
-              },
-              {
-                key: "assistant",
-                label: "Assistant",
-                tokens: tokens.assistant,
-                width: pct(tokens.assistant),
-                percent: pctLabel(tokens.assistant),
-                color: "var(--syntax-property)",
-              },
-              {
-                key: "tool",
-                label: "Tool Calls",
-                tokens: tokens.tool,
-                width: pct(tokens.tool),
-                percent: pctLabel(tokens.tool),
-                color: "var(--syntax-warning)",
-              },
-              {
-                key: "other",
-                label: "Other",
-                tokens: tokens.other,
-                width: pct(tokens.other),
-                percent: pctLabel(tokens.other),
-                color: "var(--syntax-comment)",
-              },
-            ].filter((x) => x.tokens > 0)
-          }
-
-          if (estimated <= input) {
-            return build({ system, user, assistant, tool, other: input - estimated })
-          }
-
-          const scale = input / estimated
-          const scaled = {
-            system: Math.floor(system * scale),
-            user: Math.floor(user * scale),
-            assistant: Math.floor(assistant * scale),
-            tool: Math.floor(tool * scale),
-          }
-          const scaledTotal = scaled.system + scaled.user + scaled.assistant + scaled.tool
-          return build({ ...scaled, other: Math.max(0, input - scaledTotal) })
-        },
-      ),
-    )
-
-    function Stat(props: { label: string; value: JSX.Element }) {
-      return (
-        <div class="flex flex-col gap-1">
-          <div class="text-12-regular text-text-weak">{props.label}</div>
-          <div class="text-12-medium text-text-strong">{props.value}</div>
-        </div>
-      )
-    }
-
-    const stats = createMemo(() => {
-      const c = ctx()
-      const count = counts()
-      return [
-        { label: "Session", value: info()?.title ?? params.id ?? "—" },
-        { label: "Messages", value: count.all.toLocaleString() },
-        { label: "Provider", value: providerLabel() },
-        { label: "Model", value: modelLabel() },
-        { label: "Context Limit", value: number(c?.limit) },
-        { label: "Total Tokens", value: number(c?.total) },
-        { label: "Usage", value: percent(c?.usage) },
-        { label: "Input Tokens", value: number(c?.input) },
-        { label: "Output Tokens", value: number(c?.output) },
-        { label: "Reasoning Tokens", value: number(c?.reasoning) },
-        { label: "Cache Tokens (read/write)", value: `${number(c?.cacheRead)} / ${number(c?.cacheWrite)}` },
-        { label: "User Messages", value: count.user.toLocaleString() },
-        { label: "Assistant Messages", value: count.assistant.toLocaleString() },
-        { label: "Total Cost", value: cost() },
-        { label: "Session Created", value: time(info()?.time.created) },
-        { label: "Last Activity", value: time(c?.message.time.created) },
-      ] satisfies { label: string; value: JSX.Element }[]
-    })
-
-    function RawMessageContent(props: { message: Message }) {
-      const file = createMemo(() => {
-        const parts = (sync.data.part[props.message.id] ?? []) as Part[]
-        const contents = JSON.stringify({ message: props.message, parts }, null, 2)
-        return {
-          name: `${props.message.role}-${props.message.id}.json`,
-          contents,
-          cacheKey: checksum(contents),
-        }
-      })
-
-      return <Code file={file()} overflow="wrap" class="select-text" />
-    }
-
-    function RawMessage(props: { message: Message }) {
-      return (
-        <Accordion.Item value={props.message.id}>
-          <StickyAccordionHeader>
-            <Accordion.Trigger>
-              <div class="flex items-center justify-between gap-2 w-full">
-                <div class="min-w-0 truncate">
-                  {props.message.role} <span class="text-text-base">• {props.message.id}</span>
-                </div>
-                <div class="flex items-center gap-3">
-                  <div class="shrink-0 text-12-regular text-text-weak">{time(props.message.time.created)}</div>
-                  <Icon name="chevron-grabber-vertical" size="small" class="shrink-0 text-text-weak" />
-                </div>
-              </div>
-            </Accordion.Trigger>
-          </StickyAccordionHeader>
-          <Accordion.Content class="bg-background-base">
-            <div class="p-3">
-              <RawMessageContent message={props.message} />
-            </div>
-          </Accordion.Content>
-        </Accordion.Item>
-      )
-    }
-
-    let scroll: HTMLDivElement | undefined
-    let frame: number | undefined
-    let pending: { x: number; y: number } | undefined
-
-    const restoreScroll = () => {
-      const el = scroll
-      if (!el) return
-
-      const s = view()?.scroll("context")
-      if (!s) return
-
-      if (el.scrollTop !== s.y) el.scrollTop = s.y
-      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
-    }
-
-    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-      pending = {
-        x: event.currentTarget.scrollLeft,
-        y: event.currentTarget.scrollTop,
-      }
-      if (frame !== undefined) return
-
-      frame = requestAnimationFrame(() => {
-        frame = undefined
-
-        const next = pending
-        pending = undefined
-        if (!next) return
-
-        view().setScroll("context", next)
-      })
-    }
-
-    createEffect(
-      on(
-        () => messages().length,
-        () => {
-          requestAnimationFrame(restoreScroll)
-        },
-        { defer: true },
-      ),
-    )
-
-    onCleanup(() => {
-      if (frame === undefined) return
-      cancelAnimationFrame(frame)
-    })
-
-    return (
-      <div
-        class="@container h-full overflow-y-auto no-scrollbar pb-10"
-        ref={(el) => {
-          scroll = el
-          restoreScroll()
-        }}
-        onScroll={handleScroll}
-      >
-        <div class="px-6 pt-4 flex flex-col gap-10">
-          <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
-            <For each={stats()}>{(stat) => <Stat label={stat.label} value={stat.value} />}</For>
-          </div>
-
-          <Show when={breakdown().length > 0}>
-            <div class="flex flex-col gap-2">
-              <div class="text-12-regular text-text-weak">Context Breakdown</div>
-              <div class="h-2 w-full rounded-full bg-surface-base overflow-hidden flex">
-                <For each={breakdown()}>
-                  {(segment) => (
-                    <div
-                      class="h-full"
-                      style={{
-                        width: `${segment.width}%`,
-                        "background-color": segment.color,
-                      }}
-                    />
-                  )}
-                </For>
-              </div>
-              <div class="flex flex-wrap gap-x-3 gap-y-1">
-                <For each={breakdown()}>
-                  {(segment) => (
-                    <div class="flex items-center gap-1 text-11-regular text-text-weak">
-                      <div class="size-2 rounded-sm" style={{ "background-color": segment.color }} />
-                      <div>{segment.label}</div>
-                      <div class="text-text-weaker">{segment.percent}</div>
-                    </div>
-                  )}
-                </For>
-              </div>
-              <div class="hidden text-11-regular text-text-weaker">
-                Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.
-              </div>
-            </div>
-          </Show>
-
-          <Show when={systemPrompt()}>
-            {(prompt) => (
-              <div class="flex flex-col gap-2">
-                <div class="text-12-regular text-text-weak">System Prompt</div>
-                <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
-                  <Markdown text={prompt()} class="text-12-regular" />
-                </div>
-              </div>
-            )}
-          </Show>
-
-          <div class="flex flex-col gap-2">
-            <div class="text-12-regular text-text-weak">Raw messages</div>
-            <Accordion multiple>
-              <For each={messages()}>{(message) => <RawMessage message={message} />}</For>
-            </Accordion>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const ReviewTab = () => {
-    let scroll: HTMLDivElement | undefined
-    let frame: number | undefined
-    let pending: { x: number; y: number } | undefined
-
-    const restoreScroll = () => {
-      const el = scroll
-      console.log("restoreScroll", el)
-      if (!el) return
-
-      const s = view().scroll("review")
-      console.log("restoreScroll", s)
-      if (!s) return
-
-      console.log("restoreScroll", el.scrollTop, s.y)
-      if (el.scrollTop !== s.y) el.scrollTop = s.y
-      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
-    }
-
-    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-      pending = {
-        x: event.currentTarget.scrollLeft,
-        y: event.currentTarget.scrollTop,
-      }
-      if (frame !== undefined) return
-
-      frame = requestAnimationFrame(() => {
-        frame = undefined
-
-        const next = pending
-        pending = undefined
-        if (!next) return
-
-        view().setScroll("review", next)
-      })
-    }
-
-    createEffect(
-      on(
-        () => diffs().length,
-        () => {
-          requestAnimationFrame(restoreScroll)
-        },
-        { defer: true },
-      ),
-    )
-
-    onCleanup(() => {
-      if (frame === undefined) return
-      cancelAnimationFrame(frame)
-    })
-
-    return (
-      <SessionReview
-        scrollRef={(el) => {
-          scroll = el
-          restoreScroll()
-        }}
-        onScroll={handleScroll}
-        open={view().review.open()}
-        onOpenChange={view().review.setOpen}
-        classes={{
-          root: "pb-40",
-          header: "px-6",
-          container: "px-6",
-        }}
-        diffs={diffs()}
-        diffStyle={layout.review.diffStyle()}
-        onDiffStyleChange={layout.review.setDiffStyle}
-      />
-    )
-  }
-
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      <Header />
+      <SessionHeader />
       <div class="md:hidden flex-1 min-h-0 flex flex-col bg-background-stronger">
         <Switch>
           <Match when={!params.id}>
@@ -1572,14 +809,19 @@ export default function Page() {
                 <Show when={reviewTab()}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <ReviewTab />
+                      <SessionReviewTab diffs={diffs} view={view} />
                     </div>
                   </Tabs.Content>
                 </Show>
                 <Show when={contextOpen()}>
                   <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
                     <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <ContextTab />
+                      <SessionContextTab
+                        messages={messages}
+                        visibleUserMessages={visibleUserMessages}
+                        view={view}
+                        info={info}
+                      />
                     </div>
                   </Tabs.Content>
                 </Show>
