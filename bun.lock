@@ -294,7 +294,7 @@
         "@zip.js/zip.js": "2.7.62",
         "ai": "catalog:",
         "bonjour-service": "1.3.0",
-        "bun-pty": "0.4.2",
+        "bun-pty": "0.4.4",
         "chokidar": "4.0.3",
         "clipboardy": "4.0.0",
         "decimal.js": "10.5.0",
@@ -2044,7 +2044,7 @@
 
     "bun-ffi-structs": ["bun-ffi-structs@0.1.2", "", { "peerDependencies": { "typescript": "^5" } }, "sha512-Lh1oQAYHDcnesJauieA4UNkWGXY9hYck7OA5IaRwE3Bp6K2F2pJSNYqq+hIy7P3uOvo3km3oxS8304g5gDMl/w=="],
 
-    "bun-pty": ["bun-pty@0.4.2", "", {}, "sha512-sHImDz6pJDsHAroYpC9ouKVgOyqZ7FP3N+stX5IdMddHve3rf9LIZBDomQcXrACQ7sQDNuwZQHG8BKR7w8krkQ=="],
+    "bun-pty": ["bun-pty@0.4.4", "", {}, "sha512-WK4G6uWsZgu1v4hKIlw6G1q2AOf8Rbga2Yr7RnxArVjjyb+mtVa/CFc9GOJf+OYSJSH8k7LonAtQOVeNAddRyg=="],
 
     "bun-types": ["bun-types@1.3.4", "", { "dependencies": { "@types/node": "*" } }, "sha512-5ua817+BZPZOlNaRgGBpZJOSAQ9RQ17pkwPD0yR7CfJg+r8DgIILByFifDTa+IPDDxzf5VNhtNlcKqFzDgJvlQ=="],
 
