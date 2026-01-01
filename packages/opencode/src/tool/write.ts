@@ -10,6 +10,7 @@ import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Agent } from "../agent/agent"
+import { Wildcard } from "@/util/wildcard"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -57,7 +58,22 @@ export const WriteTool = Tool.define("write", {
     const exists = await file.exists()
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
-    if (agent.permission.edit === "ask")
+    const relativePath = path.relative(Instance.directory, filepath)
+    const permission = agent.permission.write ?? agent.permission.edit
+
+    const action = typeof permission === "object" ? Wildcard.all(relativePath, permission) : permission
+
+    if (action === "deny") {
+      throw new Permission.RejectedError(
+        ctx.sessionID,
+        "write",
+        ctx.callID,
+        { filepath },
+        `Writing to ${filepath} is denied by permission pattern`,
+      )
+    }
+
+    if (action === "ask") {
       await Permission.ask({
         type: "write",
         sessionID: ctx.sessionID,
@@ -70,6 +86,7 @@ export const WriteTool = Tool.define("write", {
           exists,
         },
       })
+    }
 
     await Bun.write(filepath, params.content)
     await Bus.publish(File.Event.Edited, {

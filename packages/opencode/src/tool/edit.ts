@@ -15,6 +15,7 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { Wildcard } from "../util/wildcard"
 import { Agent } from "../agent/agent"
 import { Snapshot } from "@/snapshot"
 
@@ -73,6 +74,20 @@ export const EditTool = Tool.define("edit", {
       }
     }
 
+    const relativePath = path.relative(Instance.directory, filePath)
+    const editPermission = agent.permission.edit
+    const action = typeof editPermission === "object" ? Wildcard.all(relativePath, editPermission) : editPermission
+
+    if (action === "deny") {
+      throw new Permission.RejectedError(
+        ctx.sessionID,
+        "edit",
+        ctx.callID,
+        { filePath },
+        `Editing ${filePath} is denied by permission pattern`,
+      )
+    }
+
     let diff = ""
     let contentOld = ""
     let contentNew = ""
@@ -80,7 +95,7 @@ export const EditTool = Tool.define("edit", {
       if (params.oldString === "") {
         contentNew = params.newString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
-        if (agent.permission.edit === "ask") {
+        if (action === "ask") {
           await Permission.ask({
             type: "edit",
             sessionID: ctx.sessionID,
@@ -112,7 +127,7 @@ export const EditTool = Tool.define("edit", {
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )
-      if (agent.permission.edit === "ask") {
+      if (action === "ask") {
         await Permission.ask({
           type: "edit",
           sessionID: ctx.sessionID,

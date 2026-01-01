@@ -28,7 +28,9 @@ export namespace Agent {
       temperature: z.number().optional(),
       color: z.string().optional(),
       permission: z.object({
-        edit: Config.Permission,
+        edit: z.union([Config.Permission, z.record(z.string(), Config.Permission)]),
+        write: z.union([Config.Permission, z.record(z.string(), Config.Permission)]).optional(),
+        read: z.union([Config.Permission, z.record(z.string(), Config.Permission)]).optional(),
         bash: z.record(z.string(), Config.Permission),
         skill: z.record(z.string(), Config.Permission),
         webfetch: Config.Permission.optional(),
@@ -387,6 +389,8 @@ function mergeAgentPermissions(basePermission: any, overridePermission: any): Ag
 
   const result: Agent.Info["permission"] = {
     edit: merged.edit ?? "allow",
+    write: merged.write,
+    read: merged.read,
     webfetch: merged.webfetch ?? "allow",
     bash: mergedBash ?? { "*": "allow" },
     skill: mergedSkill ?? { "*": "allow" },

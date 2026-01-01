@@ -11,6 +11,7 @@ import { Identifier } from "../id/id"
 import { Permission } from "../permission"
 import { Agent } from "@/agent/agent"
 import { iife } from "@/util/iife"
+import { Wildcard } from "@/util/wildcard"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -59,19 +60,37 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const block = iife(() => {
-      const basename = path.basename(filepath)
-      const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
+    const relativePath = path.relative(Instance.directory, filepath)
+    const readPermission = agent.permission.read
 
-      if (whitelist.some((w) => basename.endsWith(w))) return false
-      // Block .env, .env.local, .env.production, etc. but not .envrc
-      if (/^\.env(\.|$)/.test(basename)) return true
+    const action = readPermission
+      ? typeof readPermission === "object"
+        ? Wildcard.all(relativePath, readPermission)
+        : readPermission
+      : iife(() => {
+          // Default behavior: block .env files
+          const basename = path.basename(filepath)
+          const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
+          if (whitelist.some((w) => basename.endsWith(w))) return undefined
+          if (/^\.env(\.|$)/.test(basename)) return "deny"
+          return undefined
+        })
 
-      return false
-    })
-
-    if (block) {
+    if (action === "deny") {
       throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
+    }
+
+    if (action === "ask") {
+      await Permission.ask({
+        type: "read",
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        callID: ctx.callID,
+        title: `Read file: ${filepath}`,
+        metadata: {
+          filepath,
+        },
+      })
     }
 
     const file = Bun.file(filepath)
