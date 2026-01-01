@@ -45,7 +45,6 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
-import type { BunWebSocketData } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
@@ -58,6 +57,7 @@ export namespace Server {
   const log = Log.create({ service: "server" })
 
   let _url: URL | undefined
+  let _corsWhitelist: string[] = []
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
@@ -117,6 +117,10 @@ export namespace Server {
             if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
               return input
             }
+            if (_corsWhitelist.includes(input)) {
+              return input
+            }
+
             return
           },
         }),
@@ -2653,12 +2657,44 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://app.opencode.ai${c.req.path}`, {
+        const path = c.req.path
+        const response = await proxy(`https://app.opencode.ai${path}`, {
           ...c.req,
           headers: {
             host: "app.opencode.ai",
           },
         })
+        // Cloudflare doesn't return Content-Type for static assets, so we need to add it
+        const mimeTypes: Record<string, string> = {
+          ".js": "application/javascript",
+          ".mjs": "application/javascript",
+          ".css": "text/css",
+          ".json": "application/json",
+          ".wasm": "application/wasm",
+          ".svg": "image/svg+xml",
+          ".png": "image/png",
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".gif": "image/gif",
+          ".ico": "image/x-icon",
+          ".webp": "image/webp",
+          ".woff": "font/woff",
+          ".woff2": "font/woff2",
+          ".ttf": "font/ttf",
+          ".eot": "application/vnd.ms-fontobject",
+        }
+        for (const [ext, mime] of Object.entries(mimeTypes)) {
+          if (path.endsWith(ext)) {
+            const headers = new Headers(response.headers)
+            headers.set("Content-Type", mime)
+            return new Response(response.body, {
+              status: response.status,
+              statusText: response.statusText,
+              headers,
+            })
+          }
+        }
+        return response
       }),
   )
 
@@ -2676,7 +2712,9 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+    _corsWhitelist = opts.cors ?? []
+
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
@@ -2702,7 +2740,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!)
+      MDNS.publish(server.port!, `opencode-${server.port!}`)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }

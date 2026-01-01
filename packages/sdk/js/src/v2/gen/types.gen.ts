@@ -1177,6 +1177,10 @@ export type ServerConfig = {
    * Enable mDNS service discovery
    */
   mdns?: boolean
+  /**
+   * Additional domains to allow for CORS
+   */
+  cors?: Array<string>
 }
 
 export type AgentConfig = {
@@ -1729,8 +1733,10 @@ export type Command = {
   description?: string
   agent?: string
   model?: string
+  mcp?: boolean
   template: string
   subtask?: boolean
+  hints: Array<string>
 }
 
 export type Model = {
