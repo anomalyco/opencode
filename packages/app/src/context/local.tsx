@@ -378,9 +378,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const relative = (path: string) => path.replace(sync.data.path.directory + "/", "")
 
+      const loading = new Map<string, Promise<void>>()
+
       const load = async (path: string) => {
         const relativePath = relative(path)
-        await sdk.client.file
+        const existing = loading.get(relativePath)
+        if (existing) return existing
+        const promise = sdk.client.file
           .read({ path: relativePath })
           .then((x) => {
             if (!store.node[relativePath]) return
@@ -400,14 +404,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               description: e.message,
             })
           })
+          .finally(() => {
+            loading.delete(relativePath)
+          })
+        loading.set(relativePath, promise)
+        return promise
       }
 
       const fetch = async (path: string) => {
         const relativePath = relative(path)
         const parent = relativePath.split("/").slice(0, -1).join("/")
-        if (parent) {
-          await list(parent)
-        }
+        await list(parent)
       }
 
       const init = async (path: string) => {
@@ -437,9 +444,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return load(relativePath)
       }
 
+      const listing = new Map<string, Promise<void>>()
+
       const list = async (path: string) => {
-        return sdk.client.file
-          .list({ path: path + "/" })
+        const listPath = path ? path + "/" : ""
+        const existing = listing.get(listPath)
+        if (existing) return existing
+        const promise = sdk.client.file
+          .list({ path: listPath })
           .then((x) => {
             setStore(
               "node",
@@ -452,6 +464,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             )
           })
           .catch(() => {})
+          .finally(() => {
+            listing.delete(listPath)
+          })
+        listing.set(listPath, promise)
+        return promise
       }
 
       const searchFiles = (query: string) => sdk.client.find.files({ query, dirs: "false" }).then((x) => x.data!)

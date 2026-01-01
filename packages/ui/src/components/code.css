@@ -1,4 +1,5 @@
 [data-component="code"] {
   content-visibility: auto;
+  contain-intrinsic-size: 0 300px;
   overflow: hidden;
 }
