@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.220",
+  "version": "1.0.222",
   "name": "opencode",
   "type": "module",
   "private": true,
@@ -89,7 +89,7 @@
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
     "bonjour-service": "1.3.0",
-    "bun-pty": "0.4.2",
+    "bun-pty": "0.4.4",
     "chokidar": "4.0.3",
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
