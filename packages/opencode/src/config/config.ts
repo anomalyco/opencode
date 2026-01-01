@@ -91,7 +91,6 @@ export namespace Config {
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
     }
 
-    const promises: Promise<void>[] = []
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
@@ -104,13 +103,12 @@ export namespace Config {
         }
       }
 
-      promises.push(installDependencies(dir))
+      installDependencies(dir)
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
     }
-    await Promise.allSettled(promises)
 
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
