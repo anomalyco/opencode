@@ -117,6 +117,7 @@ a {
 
 .page-description {
   color: var(--color-text) !important;
+  margin-top: 0;
 }
 
 .right-sidebar {

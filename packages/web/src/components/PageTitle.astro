@@ -1,0 +1,245 @@
+---
+// @ts-check
+import { Icon } from '@astrojs/starlight/components';
+import type { Props } from "@astrojs/starlight/props";
+
+const {
+	entry: {
+		data: { title, description },
+	},
+} = Astro.locals.starlightRoute;
+---
+
+<Fragment>
+  <div class="page-title-container">
+    <h1 id="_top">{title}</h1>
+    <div class="copy-dropdown">
+      <button class="copy-button-primary" data-action="copy-markdown" aria-label="Copy page">
+        <Icon name="document" size="1rem" />
+        <span>Copy page</span>
+      </button>
+      <span class="copy-separator" aria-hidden="true"></span>
+      <button class="copy-button-dropdown" aria-label="More options">
+        <Icon name="down-caret" size="1rem" />
+      </button>
+      <div class="dropdown-menu">
+        <button class="dropdown-item" data-action="copy-markdown">
+          <Icon name="document" size="1rem" />
+          Copy Page as Markdown
+        </button>
+        <button class="dropdown-item" data-action="view-markdown">
+          <Icon name="external" size="1rem" />
+          View as Markdown
+        </button>
+      </div>
+    </div>
+  </div>
+  { description && <p class="page-description">{description}</p> }
+</Fragment>
+
+<style>
+.page-title-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0;
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--sl-text-h1);
+  font-weight: 700;
+  line-height: var(--sl-line-height-headings);
+  color: var(--sl-color-text);
+}
+
+.copy-dropdown {
+  position: relative;
+  display: flex;
+}
+
+.copy-button-primary {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--sl-color-border);
+  border-right: none;
+  border-radius: 0.25rem 0 0 0.25rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font-size: var(--sl-text-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copy-button-primary:hover {
+  background: var(--sl-color-bg-hover);
+  border-color: var(--sl-color-border-hover);
+}
+
+.copy-button-dropdown {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.5rem;
+  border: 1px solid var(--sl-color-border);
+  border-left: none;
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copy-button-dropdown:hover {
+  background: var(--sl-color-bg-hover);
+  border-color: var(--sl-color-border-hover);
+}
+
+.copy-separator {
+  width: 1px;
+  background: var(--sl-color-border);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 1000;
+  display: none;
+  min-width: 200px;
+  background: var(--sl-color-bg);
+  border: 1px solid var(--sl-color-border);
+  border-radius: 0.25rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  padding: 0.25rem 0;
+  width: max-content;
+}
+
+.copy-dropdown.open .dropdown-menu {
+  display: block;
+}
+
+.dropdown-item {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  color: var(--sl-color-text);
+  font-size: var(--sl-text-sm);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.dropdown-item:hover {
+  background: var(--sl-color-bg-hover);
+}
+
+.copy-dropdown.open .copy-button-dropdown svg {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 50rem) {
+.page-title-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+  .copy-dropdown {
+    align-self: flex-end;
+  }
+}
+</style>
+
+<script>
+  function initCopyDropdown() {
+    const getMdUrl = () => {
+      const pathname = window.location.pathname.replace(/\/$/, '');
+      const origin = window.location.origin;
+      let mdUrl = `${origin}${pathname}.md`;
+
+      if (pathname.endsWith("/docs")) {
+        mdUrl = `${origin}/docs/index.md`;
+      }
+
+      return mdUrl;
+    };
+
+    const copyMarkdown = async (primaryButton: Element | null) => {
+      const mdUrl = getMdUrl();
+      try {
+        const response = await fetch(mdUrl);
+        if (!response.ok) throw new Error('Failed to fetch markdown');
+
+        const markdown = await response.text();
+        await navigator.clipboard.writeText(markdown);
+        const buttonSpan = primaryButton?.querySelector('span');
+        const originalText = buttonSpan?.textContent;
+
+        if (buttonSpan) {
+          buttonSpan.textContent = "Copied!";
+          setTimeout(() => {
+            buttonSpan.textContent = originalText || "Copy page";
+          }, 2000);
+        }
+      } catch (err) {
+        console.error('Failed to copy markdown:', err);
+      }
+    };
+
+    const containers = document.querySelectorAll('.copy-dropdown');
+
+    containers.forEach(container => {
+      const primaryButton = container.querySelector('.copy-button-primary');
+      const dropdownButton = container.querySelector('.copy-button-dropdown');
+      const dropdown = container.querySelector('.dropdown-menu');
+
+      primaryButton?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await copyMarkdown(primaryButton);
+      });
+
+      dropdownButton?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        container.classList.toggle('open');
+      });
+
+      dropdown?.querySelectorAll('.dropdown-item').forEach(item => {
+        item.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const action = (item as HTMLElement).dataset.action;
+
+          if (action === 'copy-markdown') {
+            await copyMarkdown(primaryButton);
+          } else if (action === 'view-markdown') {
+            const mdUrl = getMdUrl();
+            window.open(mdUrl, '_blank');
+          }
+
+          container.classList.remove('open');
+        });
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      containers.forEach(container => {
+        if (!container.contains(e.target as Node)) {
+          container.classList.remove('open');
+        }
+      });
+    });
+  }
+
+  initCopyDropdown();
+  document.addEventListener('astro:page-load', initCopyDropdown);
+</script>

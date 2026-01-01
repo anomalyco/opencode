@@ -93,6 +93,7 @@ export default defineConfig({
         Head: "./src/components/Head.astro",
         Header: "./src/components/Header.astro",
         SiteTitle: "./src/components/SiteTitle.astro",
+        PageTitle: "./src/components/PageTitle.astro",
       },
       plugins: [
         theme({
