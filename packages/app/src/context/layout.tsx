@@ -23,9 +23,26 @@ export function getAvatarColors(key?: string) {
   }
 }
 
+function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
 type SessionTabs = {
   active?: string
   all: string[]
+}
+
+type SessionScroll = {
+  x: number
+  y: number
+}
+
+type SessionView = {
+  scroll: Record<string, SessionScroll>
+  reviewOpen?: string[]
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
@@ -39,7 +56,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSync = useGlobalSync()
     const server = useServer()
     const [store, setStore, _, ready] = persisted(
-      "layout.v4",
+      "layout.v6",
       createStore({
         sidebar: {
           opened: false,
@@ -56,7 +73,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         session: {
           width: 600,
         },
+        mobileSidebar: {
+          opened: false,
+        },
         sessionTabs: {} as Record<string, SessionTabs>,
+        sessionView: {} as Record<string, SessionView>,
       }),
     )
 
@@ -182,10 +203,54 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resize(width: number) {
           if (!store.session) {
             setStore("session", { width })
-          } else {
-            setStore("session", "width", width)
+            return
           }
+          setStore("session", "width", width)
         },
+      },
+      mobileSidebar: {
+        opened: createMemo(() => store.mobileSidebar?.opened ?? false),
+        show() {
+          setStore("mobileSidebar", "opened", true)
+        },
+        hide() {
+          setStore("mobileSidebar", "opened", false)
+        },
+        toggle() {
+          setStore("mobileSidebar", "opened", (x) => !x)
+        },
+      },
+      view(sessionKey: string) {
+        const s = createMemo(() => store.sessionView[sessionKey] ?? { scroll: {} })
+        return {
+          scroll(tab: string) {
+            return s().scroll?.[tab]
+          },
+          setScroll(tab: string, pos: SessionScroll) {
+            const current = store.sessionView[sessionKey]
+            if (!current) {
+              setStore("sessionView", sessionKey, { scroll: { [tab]: pos } })
+              return
+            }
+
+            const prev = current.scroll?.[tab]
+            if (prev?.x === pos.x && prev?.y === pos.y) return
+            setStore("sessionView", sessionKey, "scroll", tab, pos)
+          },
+          review: {
+            open: createMemo(() => s().reviewOpen),
+            setOpen(open: string[]) {
+              const current = store.sessionView[sessionKey]
+              if (!current) {
+                setStore("sessionView", sessionKey, { scroll: {}, reviewOpen: open })
+                return
+              }
+
+              if (same(current.reviewOpen, open)) return
+              setStore("sessionView", sessionKey, "reviewOpen", open)
+            },
+          },
+        }
       },
       tabs(sessionKey: string) {
         const tabs = createMemo(() => store.sessionTabs[sessionKey] ?? { all: [] })
@@ -256,11 +321,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               if (current.active !== tab) return
 
               const index = current.all.findIndex((f) => f === tab)
-              if (index <= 0) {
-                setStore("sessionTabs", sessionKey, "active", undefined)
-                return
-              }
-              setStore("sessionTabs", sessionKey, "active", current.all[index - 1])
+              const next = all[index - 1] ?? all[0]
+              setStore("sessionTabs", sessionKey, "active", next)
             })
           },
           move(tab: string, to: number) {

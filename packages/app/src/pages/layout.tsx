@@ -62,16 +62,8 @@ export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
     lastSession: {} as { [directory: string]: string },
     activeDraggable: undefined as string | undefined,
-    mobileSidebarOpen: false,
     mobileProjectsExpanded: {} as Record<string, boolean>,
   })
-
-  const mobileSidebar = {
-    open: () => store.mobileSidebarOpen,
-    show: () => setStore("mobileSidebarOpen", true),
-    hide: () => setStore("mobileSidebarOpen", false),
-    toggle: () => setStore("mobileSidebarOpen", (x) => !x),
-  }
 
   const mobileProjects = {
     expanded: (directory: string) => store.mobileProjectsExpanded[directory] ?? true,
@@ -468,13 +460,13 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const lastSession = store.lastSession[directory]
     navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
-    mobileSidebar.hide()
+    layout.mobileSidebar.hide()
   }
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
     navigate(`/${params.dir}/session/${session?.id}`)
-    mobileSidebar.hide()
+    layout.mobileSidebar.hide()
   }
 
   function openProject(directory: string, navigate = true) {
@@ -1064,18 +1056,18 @@ export default function Layout(props: ParentProps) {
           <div
             classList={{
               "fixed inset-0 bg-black/50 z-40 transition-opacity duration-200": true,
-              "opacity-100 pointer-events-auto": mobileSidebar.open(),
-              "opacity-0 pointer-events-none": !mobileSidebar.open(),
+              "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
+              "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
             onClick={(e) => {
-              if (e.target === e.currentTarget) mobileSidebar.hide()
+              if (e.target === e.currentTarget) layout.mobileSidebar.hide()
             }}
           />
           <div
             classList={{
               "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pt-12 pb-5 transition-transform duration-200 ease-out": true,
-              "translate-x-0": mobileSidebar.open(),
-              "-translate-x-full": !mobileSidebar.open(),
+              "translate-x-0": layout.mobileSidebar.opened(),
+              "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
             onClick={(e) => e.stopPropagation()}
           >
