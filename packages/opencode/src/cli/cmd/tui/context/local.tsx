@@ -36,24 +36,52 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = iife(() => {
       const route = useRoute()
-      const agents = createMemo(() => {
-        const isSubagentSession = (() => {
-          if (route.data.type !== "session") return false
-          const session = sync.session.get(route.data.sessionID)
-          return !!session?.parentID
-        })()
 
+      const isSubagentSession = createMemo(() => {
+        if (route.data.type !== "session") return false
+        const session = sync.session.get(route.data.sessionID)
+        return !!session?.parentID
+      })
+
+      const agents = createMemo(() => {
         return sync.data.agent.filter((x) => {
           if (x.hidden) return false
-          if (x.mode === "subagent" && !isSubagentSession) return false
+          if (x.mode === "subagent" && !isSubagentSession()) return false
           return true
         })
       })
+
       const [agentStore, setAgentStore] = createStore<{
-        current: string
+        perSession: Record<string, string>
       }>({
-        current: agents().find((x) => x.default)?.name ?? agents()[0].name,
+        perSession: {},
       })
+
+      const sessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : "home"))
+
+      const sessionAgent = createMemo(() => {
+        if (route.data.type !== "session") return undefined
+        if (!isSubagentSession()) return undefined
+        const messages = sync.data.message[route.data.sessionID]
+        return messages?.[0]?.agent
+      })
+
+      const currentAgent = createMemo(() => {
+        const list = agents()
+
+        const subAgent = sessionAgent()
+        if (subAgent && list.some((x) => x.name === subAgent)) {
+          return list.find((x) => x.name === subAgent)!
+        }
+
+        const stored = agentStore.perSession[sessionID()]
+        if (stored && list.some((x) => x.name === stored)) {
+          return list.find((x) => x.name === stored)!
+        }
+
+        return list.find((x) => x.default) ?? list[0]
+      })
+
       const { theme } = useTheme()
       const colors = createMemo(() => [
         theme.secondary,
@@ -63,35 +91,41 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.primary,
         theme.error,
       ])
+
       return {
         list() {
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          return currentAgent()
         },
         set(name: string) {
-          if (!agents().some((x) => x.name === name))
+          const list = agents()
+          if (!list.some((x) => x.name === name)) {
             return toast.show({
               variant: "warning",
               message: `Agent not found: ${name}`,
               duration: 3000,
             })
-          setAgentStore("current", name)
+          }
+          setAgentStore("perSession", sessionID(), name)
         },
         move(direction: 1 | -1) {
           batch(() => {
-            let next = agents().findIndex((x) => x.name === agentStore.current) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
-            setAgentStore("current", value.name)
+            const list = agents()
+            const current = currentAgent()
+            let next = list.findIndex((x) => x.name === current.name) + direction
+            if (next < 0) next = list.length - 1
+            if (next >= list.length) next = 0
+            const value = list[next]
+            setAgentStore("perSession", sessionID(), value.name)
           })
         },
         color(name: string) {
-          const agent = agents().find((x) => x.name === name)
+          const list = agents()
+          const agent = list.find((x) => x.name === name)
           if (agent?.color) return RGBA.fromHex(agent.color)
-          const index = agents().findIndex((x) => x.name === name)
+          const index = list.findIndex((x) => x.name === name)
           if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
@@ -377,24 +411,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
       },
     }
-
-    // Automatically update model when agent changes
-    createEffect(() => {
-      const value = agent.current()
-      if (value.model) {
-        if (isModelValid(value.model))
-          model.set({
-            providerID: value.model.providerID,
-            modelID: value.model.modelID,
-          })
-        else
-          toast.show({
-            variant: "warning",
-            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
-            duration: 3000,
-          })
-      }
-    })
 
     const result = {
       model,
