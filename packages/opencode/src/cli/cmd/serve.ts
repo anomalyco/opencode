@@ -8,8 +8,6 @@ export const ServeCommand = cmd({
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
   handler: async (args) => {
-    // Change cwd to home directory to ensure shell commands without explicit cwd
-    // don't fail when the server is started from a nested/temporary directory
     process.chdir(Global.Path.home)
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
