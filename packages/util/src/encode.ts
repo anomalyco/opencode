@@ -20,6 +20,7 @@ export async function hash(content: string, algorithm = "SHA-256"): Promise<stri
 }
 
 export function checksum(content: string): string {
+  if (!content) return ""
   let hash = 0x811c9dc5
   for (let i = 0; i < content.length; i++) {
     hash ^= content.charCodeAt(i)
