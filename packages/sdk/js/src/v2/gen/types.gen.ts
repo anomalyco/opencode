@@ -593,6 +593,16 @@ export type EventTuiToastShow = {
   }
 }
 
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -766,6 +776,7 @@ export type Event =
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
+  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventCommandExecuted
   | EventSessionCreated
@@ -2780,6 +2791,39 @@ export type SessionAbortResponses = {
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
 
+export type SessionSelectData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/select"
+}
+
+export type SessionSelectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSelectError = SessionSelectErrors[keyof SessionSelectErrors]
+
+export type SessionSelectResponses = {
+  /**
+   * Session selected successfully
+   */
+  200: boolean
+}
+
+export type SessionSelectResponse = SessionSelectResponses[keyof SessionSelectResponses]
+
 export type SessionUnshareData = {
   body?: never
   path: {
@@ -4288,7 +4332,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow
+  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
   path?: never
   query?: {
     directory?: string

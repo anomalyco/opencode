@@ -19,6 +19,7 @@ import type {
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
+  EventTuiSessionSelect,
   EventTuiToastShow,
   FileListResponses,
   FilePartInput,
@@ -106,6 +107,8 @@ import type {
   SessionPromptResponses,
   SessionRevertErrors,
   SessionRevertResponses,
+  SessionSelectErrors,
+  SessionSelectResponses,
   SessionShareErrors,
   SessionShareResponses,
   SessionShellErrors,
@@ -1038,6 +1041,36 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionAbortResponses, SessionAbortErrors, ThrowOnError>({
       url: "/session/{sessionID}/abort",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Select session
+   *
+   * Navigate the TUI to display the specified session.
+   */
+  public select<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionSelectResponses, SessionSelectErrors, ThrowOnError>({
+      url: "/session/{sessionID}/select",
       ...options,
       ...params,
     })
@@ -2644,7 +2677,7 @@ export class Tui extends HeyApiClient {
   public publish<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow
+      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
     },
     options?: Options<never, ThrowOnError>,
   ) {

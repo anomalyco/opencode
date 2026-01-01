@@ -975,6 +975,37 @@ export namespace Server {
         },
       )
       .post(
+        "/session/:sessionID/select",
+        describeRoute({
+          summary: "Select session",
+          description: "Navigate the TUI to display the specified session.",
+          operationId: "session.select",
+          responses: {
+            200: {
+              description: "Session selected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            sessionID: Session.get.schema,
+          }),
+        ),
+        async (c) => {
+          const sessionID = c.req.valid("param").sessionID
+          await Session.get(sessionID)
+          await Bus.publish(TuiEvent.SessionSelect, { sessionID })
+          return c.json(true)
+        },
+      )
+      .post(
         "/session/:sessionID/share",
         describeRoute({
           summary: "Share session",
