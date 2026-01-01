@@ -5162,6 +5162,47 @@
         },
         "required": ["type", "properties"]
       },
+      "ConfigWarning": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["unknown_keybind"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "keybinds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "binding": {
+                  "type": "string"
+                }
+              },
+              "required": ["name", "binding"]
+            }
+          }
+        },
+        "required": ["type", "message"]
+      },
+      "Event.config.warning": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "config.warning"
+          },
+          "properties": {
+            "$ref": "#/components/schemas/ConfigWarning"
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.server.instance.disposed": {
         "type": "object",
         "properties": {
@@ -7178,6 +7219,9 @@
           },
           {
             "$ref": "#/components/schemas/Event.project.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.config.warning"
           },
           {
             "$ref": "#/components/schemas/Event.server.instance.disposed"
