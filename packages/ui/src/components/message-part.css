@@ -78,10 +78,9 @@
   [data-slot="user-message-text"] {
     white-space: pre-wrap;
     overflow: hidden;
-    background: var(--surface-inset-base);
-    padding: 6px 12px;
+    background: var(--surface-base);
+    padding: 8px 12px;
     border-radius: 4px;
-    border: 0.5px solid var(--border-weak-base);
   }
 
   .text-text-strong {
@@ -386,6 +385,7 @@
 [data-component="write-content"],
 [data-component="todos"],
 [data-component="diagnostics"] {
+  -webkit-user-select: text;
   user-select: text;
 }
 
@@ -468,14 +468,6 @@
   padding: 8px 12px;
   background-color: var(--surface-raised-strong);
   border-radius: 0 0 6px 6px;
-
-  [data-slot="permission-message"] {
-    display: none;
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-  }
 
   [data-slot="permission-actions"] {
     display: flex;
