@@ -1,38 +1,35 @@
 import z from "zod"
 import { Tool } from "./tool"
 import * as path from "path"
+import * as fs from "fs/promises"
 import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
-import { Ripgrep } from "../file/ripgrep"
 
 export const IGNORE_PATTERNS = [
-  "node_modules/",
-  "__pycache__/",
-  ".git/",
-  "dist/",
-  "build/",
-  "target/",
-  "vendor/",
-  "bin/",
-  "obj/",
-  ".idea/",
-  ".vscode/",
-  ".zig-cache/",
+  "node_modules",
+  "__pycache__",
+  ".git",
+  "dist",
+  "build",
+  "target",
+  "vendor",
+  "bin",
+  "obj",
+  ".idea",
+  ".vscode",
+  ".zig-cache",
   "zig-out",
   ".coverage",
-  "coverage/",
-  "vendor/",
-  "tmp/",
-  "temp/",
-  ".cache/",
-  "cache/",
-  "logs/",
-  ".venv/",
-  "venv/",
-  "env/",
+  "coverage",
+  "tmp",
+  "temp",
+  ".cache",
+  "cache",
+  "logs",
+  ".venv",
+  "venv",
+  "env",
 ]
-
-const LIMIT = 100
 
 export const ListTool = Tool.define("list", {
   description: DESCRIPTION,
@@ -43,66 +40,45 @@ export const ListTool = Tool.define("list", {
   async execute(params) {
     const searchPath = path.resolve(Instance.directory, params.path || ".")
 
-    const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
-    const files = []
-    for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs })) {
-      files.push(file)
-      if (files.length >= LIMIT) break
-    }
+    // Read immediate children only (no recursion)
+    const entries = await fs.readdir(searchPath, { withFileTypes: true })
 
-    // Build directory structure
-    const dirs = new Set<string>()
-    const filesByDir = new Map<string, string[]>()
+    // Combine default ignore patterns with user-provided ones
+    const ignorePatterns = [...IGNORE_PATTERNS, ...(params.ignore || [])]
 
-    for (const file of files) {
-      const dir = path.dirname(file)
-      const parts = dir === "." ? [] : dir.split("/")
+    // Filter entries based on ignore patterns
+    const filtered = entries.filter((entry) => {
+      // Check if entry name matches any ignore pattern
+      return !ignorePatterns.some((pattern) => {
+        // Remove trailing slashes for comparison
+        const cleanPattern = pattern.replace(/\/+$/, "")
+        return entry.name === cleanPattern || entry.name.startsWith(cleanPattern + ".")
+      })
+    })
 
-      // Add all parent directories
-      for (let i = 0; i <= parts.length; i++) {
-        const dirPath = i === 0 ? "." : parts.slice(0, i).join("/")
-        dirs.add(dirPath)
-      }
+    // Sort: directories first (with trailing /), then files
+    const sorted = filtered.sort((a, b) => {
+      // Directories come first
+      if (a.isDirectory() && !b.isDirectory()) return -1
+      if (!a.isDirectory() && b.isDirectory()) return 1
+      // Within same type, sort alphabetically
+      return a.name.localeCompare(b.name)
+    })
 
-      // Add file to its directory
-      if (!filesByDir.has(dir)) filesByDir.set(dir, [])
-      filesByDir.get(dir)!.push(path.basename(file))
-    }
+    // Format output
+    const items = sorted.map((entry) => {
+      const name = entry.isDirectory() ? `${entry.name}/` : entry.name
+      return `  ${name}`
+    })
 
-    function renderDir(dirPath: string, depth: number): string {
-      const indent = "  ".repeat(depth)
-      let output = ""
-
-      if (depth > 0) {
-        output += `${indent}${path.basename(dirPath)}/\n`
-      }
-
-      const childIndent = "  ".repeat(depth + 1)
-      const children = Array.from(dirs)
-        .filter((d) => path.dirname(d) === dirPath && d !== dirPath)
-        .sort()
-
-      // Render subdirectories first
-      for (const child of children) {
-        output += renderDir(child, depth + 1)
-      }
-
-      // Render files
-      const files = filesByDir.get(dirPath) || []
-      for (const file of files.sort()) {
-        output += `${childIndent}${file}\n`
-      }
-
-      return output
-    }
-
-    const output = `${searchPath}/\n` + renderDir(".", 0)
+    const output = `${searchPath}/\n${items.join("\n")}`
 
     return {
-      title: path.relative(Instance.worktree, searchPath),
+      title: path.relative(Instance.worktree, searchPath) || ".",
       metadata: {
-        count: files.length,
-        truncated: files.length >= LIMIT,
+        count: filtered.length,
+        directories: filtered.filter((e) => e.isDirectory()).length,
+        files: filtered.filter((e) => !e.isDirectory()).length,
       },
       output,
     }
