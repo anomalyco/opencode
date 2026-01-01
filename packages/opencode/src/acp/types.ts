@@ -11,6 +11,7 @@ export interface ACPSessionState {
     modelID: string
   }
   modeId?: string
+  cleanup?: () => void
 }
 
 export interface ACPConfig {

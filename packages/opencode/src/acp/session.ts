@@ -98,4 +98,16 @@ export class ACPSessionManager {
     this.sessions.set(sessionId, session)
     return session
   }
+
+  delete(sessionId: string) {
+    const session = this.sessions.get(sessionId)
+    if (session?.cleanup) {
+      try {
+        session.cleanup()
+      } catch (err) {
+        log.error("error cleaning up session", { error: err })
+      }
+    }
+    this.sessions.delete(sessionId)
+  }
 }
