@@ -1026,10 +1026,6 @@ export namespace Provider {
         "gemini-2.5-flash",
         "gpt-5-nano",
       ]
-      // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
-      if (providerID === "github-copilot") {
-        priority = priority.filter((m) => m !== "claude-haiku-4.5")
-      }
       if (providerID.startsWith("opencode")) {
         priority = ["gpt-5-nano"]
       }
