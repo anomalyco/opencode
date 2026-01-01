@@ -119,7 +119,7 @@ export const BashTool = Tool.define("bash", async () => {
                 process.platform === "win32" && resolved.match(/^\/[a-z]\//)
                   ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
                   : resolved
-              directories.add(normalized)
+              if (!Filesystem.contains(Instance.directory, normalized)) directories.add(normalized)
             }
           }
         }

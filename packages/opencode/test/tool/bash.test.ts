@@ -147,6 +147,36 @@ describe("tool.bash permissions", () => {
     })
   })
 
+  test("does not ask for external_directory permission when rm inside project", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+
+        await Bun.write(path.join(tmp.path, "tmpfile"), "x")
+
+        await bash.execute(
+          {
+            command: "rm tmpfile",
+            description: "Remove tmpfile",
+          },
+          testCtx,
+        )
+
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeUndefined()
+      },
+    })
+  })
+
   test("includes always patterns for auto-approval", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
