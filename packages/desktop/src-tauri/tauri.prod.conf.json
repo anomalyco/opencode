@@ -15,6 +15,13 @@
       "nsis": {
         "installerIcon": "icons/prod/icon.ico"
       }
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/ai.opencode.opencode.metainfo.xml": "release/appstream.metainfo.xml"
+        }
+      }
     }
   },
   "plugins": {
