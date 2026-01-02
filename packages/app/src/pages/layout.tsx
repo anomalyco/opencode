@@ -1034,13 +1034,20 @@ export default function Layout(props: ParentProps) {
       <div class="flex-1 min-h-0 flex">
         <div
           classList={{
-            "hidden xl:flex": true,
-            "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
-            "flex-col gap-5.5 items-start self-stretch justify-between": true,
-            "border-r border-border-weak-base contain-strict": true,
+            "hidden xl:block": true,
+            "relative shrink-0": true,
           }}
-          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
+          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : "48px" }}
         >
+          <div
+            classList={{
+              "@container w-full h-full pb-5 bg-background-base": true,
+              "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
+              "border-r border-border-weak-base contain-strict": true,
+            }}
+          >
+            <SidebarContent />
+          </div>
           <Show when={layout.sidebar.opened()}>
             <ResizeHandle
               direction="horizontal"
@@ -1052,7 +1059,6 @@ export default function Layout(props: ParentProps) {
               onCollapse={layout.sidebar.close}
             />
           </Show>
-          <SidebarContent />
         </div>
         <div class="xl:hidden">
           <div
