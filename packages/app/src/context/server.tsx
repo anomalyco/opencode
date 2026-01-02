@@ -30,6 +30,26 @@ function projectsKey(url: string) {
   return url
 }
 
+/**
+ * Check if the current platform is Windows.
+ * Windows paths are case-insensitive, so we need special handling.
+ */
+function isWindows(): boolean {
+  return typeof navigator !== "undefined" && navigator.platform?.toLowerCase().includes("win")
+}
+
+/**
+ * Compare two file paths for equality.
+ * On Windows, paths are compared case-insensitively.
+ * On other platforms, paths are compared case-sensitively.
+ */
+function pathsEqual(path1: string, path2: string): boolean {
+  if (isWindows()) {
+    return path1.toLowerCase() === path2.toLowerCase()
+  }
+  return path1 === path2
+}
+
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   init: (props: { defaultUrl: string }) => {
@@ -141,7 +161,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          if (current.find((x) => x.worktree === directory)) return
+          // Use case-insensitive comparison on Windows to prevent duplicate entries
+          if (current.find((x) => pathsEqual(x.worktree, directory))) return
           setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
         },
         close(directory: string) {
@@ -151,28 +172,32 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           setStore(
             "projects",
             key,
-            current.filter((x) => x.worktree !== directory),
+            // Use case-insensitive comparison on Windows
+            current.filter((x) => !pathsEqual(x.worktree, directory)),
           )
         },
         expand(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          // Use case-insensitive comparison on Windows
+          const index = current.findIndex((x) => pathsEqual(x.worktree, directory))
           if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
         collapse(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          // Use case-insensitive comparison on Windows
+          const index = current.findIndex((x) => pathsEqual(x.worktree, directory))
           if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const fromIndex = current.findIndex((x) => x.worktree === directory)
+          // Use case-insensitive comparison on Windows
+          const fromIndex = current.findIndex((x) => pathsEqual(x.worktree, directory))
           if (fromIndex === -1 || fromIndex === toIndex) return
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
