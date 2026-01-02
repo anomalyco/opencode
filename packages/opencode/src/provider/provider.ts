@@ -70,12 +70,14 @@ export namespace Provider {
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
+      const enable1MContext = Env.get("ANTHROPIC_1M_CONTEXT") === "true"
+      const baseBetas = "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
+      const betas = enable1MContext ? `context-1m-2025-08-07,${baseBetas}` : baseBetas
       return {
         autoload: false,
         options: {
           headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": betas,
           },
         },
       }
@@ -291,6 +293,7 @@ export namespace Provider {
     "google-vertex-anthropic": async () => {
       const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
       const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
+      const enable1MContext = Env.get("VERTEX_ANTHROPIC_1M_CONTEXT") === "true"
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       return {
@@ -298,6 +301,11 @@ export namespace Provider {
         options: {
           project,
           location,
+          ...(enable1MContext && {
+            headers: {
+              "anthropic-beta": "context-1m-2025-08-07",
+            },
+          }),
         },
         async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()
@@ -506,7 +514,14 @@ export namespace Provider {
           : undefined,
       },
       limit: {
-        context: model.limit.context,
+        context:
+          // Override context limit to 1M for Claude 4+ when 1M context env var is enabled
+          model.id.includes("claude-") &&
+          model.id.match(/claude-(opus|sonnet|haiku)-4(\.\d+|-\d{8})?/) &&
+          ((provider.id === "anthropic" && Env.get("ANTHROPIC_1M_CONTEXT") === "true") ||
+            (provider.id === "google-vertex-anthropic" && Env.get("VERTEX_ANTHROPIC_1M_CONTEXT") === "true"))
+            ? 1000000
+            : model.limit.context,
         output: model.limit.output,
       },
       capabilities: {
