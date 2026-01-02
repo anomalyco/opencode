@@ -77,10 +77,10 @@ import { base64Encode } from "@opencode-ai/util/encode"
 import { iife } from "@opencode-ai/util/iife"
 import { AssistantMessage, Session, type Message, type Part } from "@opencode-ai/sdk/v2/client"
 
-function same<T>(a: readonly T[], b: readonly T[]) {
+function same<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
+  return a.every((x, i) => x.id === b[i].id)
 }
 
 function Header(props: { onMobileMenuToggle?: () => void }) {
@@ -292,12 +292,21 @@ export default function Page() {
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
-  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[])
-  const visibleUserMessages = createMemo(() => {
-    const revert = revertMessageID()
-    if (!revert) return userMessages()
-    return userMessages().filter((m) => m.id < revert)
-  })
+  const emptyUserMessages: UserMessage[] = []
+  const userMessages = createMemo(
+    () => messages().filter((m) => m.role === "user") as UserMessage[],
+    emptyUserMessages,
+    { equals: same },
+  )
+  const visibleUserMessages = createMemo(
+    () => {
+      const revert = revertMessageID()
+      if (!revert) return userMessages()
+      return userMessages().filter((m) => m.id < revert)
+    },
+    emptyUserMessages,
+    { equals: same },
+  )
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
   createEffect(

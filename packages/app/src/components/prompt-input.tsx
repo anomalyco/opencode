@@ -635,13 +635,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shellMode = store.mode === "shell"
 
     if (!shellMode) {
-      // Check if there's a command pill that's no longer at the start - convert back to text
       const commandPartIndex = rawParts.findIndex((p) => p.type === "command")
       const commandPillNotAtStart =
         commandPartIndex > 0 ||
         (commandPartIndex === 0 && rawParts[0].type === "command" && (rawParts[0] as CommandPart).start > 0)
       if (commandPillNotAtStart) {
-        // There's text before the command pill - convert everything to plain text
         const textPart = {
           type: "text" as const,
           content: rawText,
@@ -656,10 +654,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
       const slashMatch = rawText.match(/^\/(\S*)$/)
-      // Match "/commandname " - a slash command followed by a space at the start
       const slashWithSpaceMatch = rawText.match(/^\/(\S+)\s/)
 
-      // Check if user typed a custom command followed by space - convert to command part
       if (slashWithSpaceMatch && !rawParts.some((p) => p.type === "command")) {
         const cmdName = slashWithSpaceMatch[1]
         const customCmd = sync.data.command.find((c) => c.name === cmdName)
@@ -672,7 +668,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             start: 0,
             end: content.length,
           }
-          // Get text after the command
           const afterCommand = rawText.slice(content.length)
           const textPart = {
             type: "text" as const,
@@ -1338,7 +1333,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // Check if there's a command pill in the prompt
     const commandPart = currentPrompt.find((p) => p.type === "command") as CommandPart | undefined
     if (commandPart) {
       const argsText = currentPrompt
