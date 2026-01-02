@@ -284,6 +284,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     createEffect(() => {
+      const theme = sync.data.config.theme
+      console.log("theme", theme)
+      if (theme) setStore("active", theme)
+    })
+
+    createEffect(() => {
       getCustomThemes()
         .then((custom) => {
           setStore(

@@ -77,6 +77,9 @@ export const TuiThreadCommand = cmd({
     process.on("unhandledRejection", (e) => {
       Log.Default.error(e)
     })
+    process.on("SIGUSR2", async () => {
+      await client.call("reload", undefined)
+    })
     const opts = await resolveNetworkOptions(args)
     const server = await client.call("server", opts)
     const prompt = await iife(async () => {
