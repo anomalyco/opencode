@@ -6,6 +6,8 @@ import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
+import { useExit } from "../../context/exit"
+import { useKeybind } from "../../context/keybind"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Locale } from "@/util/locale"
@@ -145,6 +147,12 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             </Switch>
           }
           options={{ confirm: "Confirm", cancel: "Cancel" }}
+          onExit={async () => {
+            await sdk.client.permission.reply({
+              reply: "reject",
+              requestID: props.request.id,
+            })
+          }}
           onSelect={(option) => {
             setStore("always", false)
             if (option === "cancel") return
@@ -210,6 +218,12 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             </Switch>
           }
           options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+          onExit={async () => {
+            await sdk.client.permission.reply({
+              reply: "reject",
+              requestID: props.request.id,
+            })
+          }}
           onSelect={(option) => {
             if (option === "always") {
               setStore("always", true)
@@ -231,14 +245,24 @@ function Prompt<const T extends Record<string, string>>(props: {
   body: JSX.Element
   options: T
   onSelect: (option: keyof T) => void
+  onExit?: () => Promise<void>
 }) {
   const { theme } = useTheme()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
   })
+  const exit = useExit()
+  const keybind = useKeybind()
 
-  useKeyboard((evt) => {
+  useKeyboard(async (evt) => {
+    if (keybind.match("app_exit", evt)) {
+      evt.preventDefault()
+      if (props.onExit) await props.onExit()
+      exit()
+      return
+    }
+
     if (evt.name === "left" || evt.name == "h") {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)
