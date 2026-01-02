@@ -899,16 +899,16 @@ export default function Layout(props: ParentProps) {
           <Show when={!sidebarProps.mobile}>
             <div
               classList={{
-                "border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75": true,
+                "border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75 shrink-0": true,
                 "justify-start": expanded(),
               }}
             >
-              <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2" data-tauri-drag-region>
+              <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2 w-full" data-tauri-drag-region>
                 <Mark class="shrink-0" />
               </A>
             </div>
           </Show>
-          <div class="flex flex-col items-start self-stretch gap-4 px-2 ">
+          <div class="flex flex-col items-start self-stretch gap-4 px-2 overflow-hidden min-h-0">
             <Show when={!sidebarProps.mobile}>
               <TooltipKeybind
                 class="shrink-0"
