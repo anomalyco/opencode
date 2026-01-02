@@ -69,6 +69,7 @@ export namespace Command {
       },
       [Default.REVIEW]: {
         name: Default.REVIEW,
+        agent: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
         get template() {
           return PROMPT_REVIEW.replace("${path}", Instance.worktree)

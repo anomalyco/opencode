@@ -8,6 +8,7 @@ import { Instance } from "../project/instance"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
+import PROMPT_REVIEW from "../command/template/review.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
@@ -112,6 +113,30 @@ export namespace Agent {
         options: {},
         mode: "subagent",
         native: true,
+      },
+      review: {
+        name: "review",
+        description: "Specialized agent for reviewing code changes",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            todowrite: "allow",
+            todoread: "allow",
+            grep: "allow",
+            glob: "allow",
+            bash: "allow",
+            webfetch: "allow",
+            websearch: "allow",
+            codesearch: "allow",
+            read: "allow",
+          }),
+          user,
+        ),
+        prompt: PROMPT_REVIEW,
+        options: {},
+        mode: "subagent",
+        native: true,
+        hidden: true,
       },
       compaction: {
         name: "compaction",
