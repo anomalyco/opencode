@@ -6,6 +6,11 @@ import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 interface SessionReviewTabProps {
   diffs: () => FileDiff[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
+  classes?: {
+    root?: string
+    header?: string
+    container?: string
+  }
 }
 
 export function SessionReviewTab(props: SessionReviewTabProps) {
@@ -69,9 +74,9 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
-        root: "pb-40",
-        header: "px-6",
-        container: "px-6",
+        root: props.classes?.root ?? "pb-40",
+        header: props.classes?.header ?? "px-6",
+        container: props.classes?.container ?? "px-6",
       }}
       diffs={props.diffs()}
       diffStyle={layout.review.diffStyle()}
