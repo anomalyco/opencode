@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
-import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useTheme } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
@@ -38,11 +38,13 @@ function EditBody(props: { request: PermissionRequest }) {
   // This allows the permission dialog to become responsive immediately
   const [showDiff, setShowDiff] = createSignal(false)
   onMount(() => {
-    // Use requestAnimationFrame to defer diff rendering
-    // This lets the UI paint first, making it feel responsive
-    requestAnimationFrame(() => {
+    // Use setTimeout with a small delay to ensure the UI is fully painted
+    // and responsive before starting to render the potentially heavy diff.
+    // requestAnimationFrame alone isn't enough as the diff render itself
+    // can still block during the next frame.
+    setTimeout(() => {
       setShowDiff(true)
-    })
+    }, 16) // ~1 frame delay to allow UI to stabilize
   })
 
   const view = createMemo(() => {
@@ -253,12 +255,34 @@ function Prompt<const T extends Record<string, string>>(props: {
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
+  const renderer = useRenderer()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
   })
 
+  // Track when the component is ready to handle keyboard events
+  // This prevents race conditions during component mounting
+  const [ready, setReady] = createSignal(false)
+
+  onMount(() => {
+    // Blur any currently focused element to prevent keyboard conflicts
+    const currentFocus = renderer.currentFocusedRenderable
+    if (currentFocus) {
+      currentFocus.blur()
+    }
+
+    // Small delay to ensure the component is fully mounted and stable
+    // before accepting keyboard input
+    setTimeout(() => {
+      setReady(true)
+    }, 50)
+  })
+
   useKeyboard((evt) => {
+    // Don't process events until component is ready
+    if (!ready()) return
+
     if (evt.name === "left" || evt.name == "h") {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)
