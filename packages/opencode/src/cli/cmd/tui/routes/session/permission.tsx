@@ -1,6 +1,7 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useKeybind } from "../../context/keybind"
 import { useTheme } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
@@ -145,6 +146,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             </Switch>
           }
           options={{ confirm: "Confirm", cancel: "Cancel" }}
+          escapeKey="cancel"
           onSelect={(option) => {
             setStore("always", false)
             if (option === "cancel") return
@@ -199,7 +201,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                 <TextBody icon="◇" title={`Exa Code Search "` + (input().query ?? "") + `"`} />
               </Match>
               <Match when={props.request.permission === "external_directory"}>
-                <TextBody icon="⚠" title={`Access external directory ` + normalizePath(input().path as string)} />
+                <TextBody icon="←" title={`Access external directory ` + normalizePath(input().path as string)} />
               </Match>
               <Match when={props.request.permission === "doom_loop"}>
                 <TextBody icon="⟳" title="Continue after repeated failures" />
@@ -210,6 +212,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
             </Switch>
           }
           options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+          escapeKey="reject"
           onSelect={(option) => {
             if (option === "always") {
               setStore("always", true)
@@ -230,9 +233,11 @@ function Prompt<const T extends Record<string, string>>(props: {
   title: string
   body: JSX.Element
   options: T
+  escapeKey?: keyof T
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
+  const keybind = useKeybind()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
@@ -256,6 +261,11 @@ function Prompt<const T extends Record<string, string>>(props: {
     if (evt.name === "return") {
       evt.preventDefault()
       props.onSelect(store.selected)
+    }
+
+    if (props.escapeKey && (evt.name === "escape" || keybind.match("app_exit", evt))) {
+      evt.preventDefault()
+      props.onSelect(props.escapeKey)
     }
   })
 
