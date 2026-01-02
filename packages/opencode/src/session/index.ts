@@ -72,6 +72,8 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      messageCount: z.number().optional(),
+      firstUserMessage: z.string().optional(),
     })
     .meta({
       ref: "Session",
@@ -289,7 +291,28 @@ export namespace Session {
   export async function* list() {
     const project = Instance.project
     for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+      const session = await Storage.read<Info>(item)
+
+      let messageCount = 0
+      let firstUserMessage: string | undefined
+
+      for await (const msg of MessageV2.stream(session.id)) {
+        messageCount++
+        if (!firstUserMessage && msg.info.role === "user") {
+          const textParts = msg.parts.filter((p) => p.type === "text") as MessageV2.TextPart[]
+          if (textParts.length > 0) {
+            firstUserMessage = textParts[0].text
+          }
+        }
+      }
+
+      const qaPairs = Math.floor(messageCount / 2)
+
+      yield {
+        ...session,
+        messageCount: qaPairs,
+        firstUserMessage,
+      }
     }
   }
 

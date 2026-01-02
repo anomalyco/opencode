@@ -41,8 +41,12 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
+
+        const displayTitle = x.firstUserMessage ? Locale.truncate(x.firstUserMessage, 60) : x.title
+        const qaCount = x.messageCount !== undefined && x.messageCount > 0 ? ` • ${x.messageCount} Q/A` : ""
+
         return {
-          title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
+          title: isDeleting ? `Press ${deleteKeybind} again to confirm` : displayTitle + qaCount,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,

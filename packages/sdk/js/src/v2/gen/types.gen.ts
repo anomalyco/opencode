@@ -648,6 +648,8 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  messageCount?: number
+  firstUserMessage?: string
 }
 
 export type EventSessionCreated = {

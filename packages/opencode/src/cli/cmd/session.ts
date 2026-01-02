@@ -107,13 +107,19 @@ function formatSessionTable(sessions: Session.Info[]): string {
   const lines: string[] = []
 
   const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
-  const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
+  const titlesWithPreview = sessions.map((s) => {
+    const displayTitle = s.firstUserMessage ? Locale.truncate(s.firstUserMessage, 50) : s.title
+    const qaCount = s.messageCount !== undefined && s.messageCount > 0 ? ` (${s.messageCount} Q/A)` : ""
+    return displayTitle + qaCount
+  })
+  const maxTitleWidth = Math.max(25, ...titlesWithPreview.map((t) => t.length))
 
   const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Updated`
   lines.push(header)
   lines.push("─".repeat(header.length))
-  for (const session of sessions) {
-    const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i]
+    const truncatedTitle = Locale.truncate(titlesWithPreview[i], maxTitleWidth)
     const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
     const line = `${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${timeStr}`
     lines.push(line)
@@ -126,6 +132,8 @@ function formatSessionJSON(sessions: Session.Info[]): string {
   const jsonData = sessions.map((session) => ({
     id: session.id,
     title: session.title,
+    firstUserMessage: session.firstUserMessage,
+    messageCount: session.messageCount,
     updated: session.time.updated,
     created: session.time.created,
     projectId: session.projectID,
