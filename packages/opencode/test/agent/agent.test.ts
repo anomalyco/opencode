@@ -7,7 +7,7 @@ import { PermissionNext } from "../../src/permission/next"
 // Helper to evaluate permission for a tool with wildcard pattern
 function evalPerm(agent: Agent.Info | undefined, permission: string): PermissionNext.Action | undefined {
   if (!agent) return undefined
-  return PermissionNext.evaluate(permission, "*", agent.permission)
+  return PermissionNext.evaluate(permission, "*", agent.permission).action
 }
 
 test("returns default native agents when no config", async () => {
@@ -53,7 +53,7 @@ test("plan agent denies edits except .opencode/plan/*", async () => {
       // Wildcard is denied
       expect(evalPerm(plan, "edit")).toBe("deny")
       // But specific path is allowed
-      expect(PermissionNext.evaluate("edit", ".opencode/plan/foo.md", plan!.permission)).toBe("allow")
+      expect(PermissionNext.evaluate("edit", ".opencode/plan/foo.md", plan!.permission).action).toBe("allow")
     },
   })
 })
@@ -201,7 +201,7 @@ test("agent permission config merges with defaults", async () => {
       const build = await Agent.get("build")
       expect(build).toBeDefined()
       // Specific pattern is denied
-      expect(PermissionNext.evaluate("bash", "rm -rf *", build!.permission)).toBe("deny")
+      expect(PermissionNext.evaluate("bash", "rm -rf *", build!.permission).action).toBe("deny")
       // Edit still allowed
       expect(evalPerm(build, "edit")).toBe("allow")
     },
