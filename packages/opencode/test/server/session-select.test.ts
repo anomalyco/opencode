@@ -8,7 +8,7 @@ import { Server } from "../../src/server/server"
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
-describe("session.select endpoint", () => {
+describe("tui.selectSession endpoint", () => {
   test("should return 200 when called with valid session", async () => {
     await Instance.provide({
       directory: projectRoot,
@@ -18,8 +18,10 @@ describe("session.select endpoint", () => {
 
         // #when
         const app = Server.App()
-        const response = await app.request(`/session/${session.id}/select`, {
+        const response = await app.request("/tui/select-session", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id }),
         })
 
         // #then
@@ -41,8 +43,10 @@ describe("session.select endpoint", () => {
 
         // #when
         const app = Server.App()
-        const response = await app.request(`/session/${nonExistentSessionID}/select`, {
+        const response = await app.request("/tui/select-session", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: nonExistentSessionID }),
         })
 
         // #then
@@ -60,8 +64,10 @@ describe("session.select endpoint", () => {
 
         // #when
         const app = Server.App()
-        const response = await app.request(`/session/${invalidSessionID}/select`, {
+        const response = await app.request("/tui/select-session", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: invalidSessionID }),
         })
 
         // #then
