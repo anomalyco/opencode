@@ -1,0 +1,72 @@
+Ask the user a clarifying question when you need their input to make a decision.
+
+## When to Use
+
+Use this tool when:
+- Multiple valid implementation approaches exist
+- The specification is ambiguous about a key detail
+- You're about to make an architectural decision with significant impact
+- User preference genuinely matters for the outcome
+- You're in "interview mode" building a spec
+
+## When NOT to Use
+
+Do NOT use this tool for:
+- Trivial decisions you can reasonably make yourself
+- Questions already answered in the conversation or context
+- Every small implementation detail (be autonomous)
+- Confirming things that are obvious from context
+- Asking the same question twice
+
+## Best Practices
+
+1. **Be specific**: "Which date library?" not "How should I handle dates?"
+2. **Provide context**: Explain why the choice matters
+3. **Limit options**: 2-4 options is ideal, max 6
+4. **Unique values**: Each option needs a distinct `value` field
+5. **Helpful descriptions**: Add descriptions for non-obvious options
+
+## Example
+
+Good question:
+```json
+{
+  "question": "How should we handle authentication token storage?",
+  "options": [
+    {
+      "value": "httponly_cookie",
+      "label": "HttpOnly Cookie",
+      "description": "Most secure. Automatic CSRF protection needed."
+    },
+    {
+      "value": "localstorage",
+      "label": "LocalStorage",
+      "description": "Easier to implement. XSS vulnerable."
+    },
+    {
+      "value": "memory",
+      "label": "In-Memory Only",
+      "description": "Most secure but lost on refresh."
+    }
+  ],
+  "context": "This affects security posture and will require different middleware."
+}
+```
+
+Bad question:
+```json
+{
+  "question": "Should I continue?",
+  "options": [
+    {"value": "yes", "label": "Yes"},
+    {"value": "no", "label": "No"}
+  ]
+}
+```
+
+## Behavior
+
+- Tool execution pauses until user responds
+- User can cancel with Esc (throws UserCancelledError)
+- Response includes the selected value and label
+- Use the response to guide your next steps

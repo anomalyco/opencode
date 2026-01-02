@@ -69,6 +69,7 @@ import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { DialogAsk } from "../../ui/dialog-ask"
 
 addDefaultParsers(parsers.parsers)
 
@@ -118,6 +119,11 @@ export function Session() {
   const permissions = createMemo(() => {
     if (session().parentID) return sync.data.permission[route.sessionID] ?? []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+  })
+
+  const askRequests = createMemo(() => {
+    if (session().parentID) return sync.data.ask[route.sessionID] ?? []
+    return children().flatMap((x) => sync.data.ask[x.id] ?? [])
   })
 
   const pending = createMemo(() => {
@@ -1024,13 +1030,34 @@ export function Session() {
               <Show when={permissions().length > 0}>
                 <PermissionPrompt request={permissions()[0]} />
               </Show>
+              <Show when={permissions().length === 0 && askRequests().length > 0}>
+                <DialogAsk
+                  request={askRequests()[0]}
+                  onSelect={(value) => {
+                    const request = askRequests()[0]
+                    sdk.client.ask.reply({
+                      id: request.id,
+                      sessionID: request.sessionID,
+                      selected: value,
+                    })
+                  }}
+                  onCancel={() => {
+                    const request = askRequests()[0]
+                    sdk.client.ask.reply({
+                      id: request.id,
+                      sessionID: request.sessionID,
+                      cancelled: true,
+                    })
+                  }}
+                />
+              </Show>
               <Prompt
-                visible={!session().parentID && permissions().length === 0}
+                visible={!session().parentID && permissions().length === 0 && askRequests().length === 0}
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
                 }}
-                disabled={permissions().length > 0}
+                disabled={permissions().length > 0 || askRequests().length > 0}
                 onSubmit={() => {
                   toBottom()
                 }}

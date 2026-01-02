@@ -16,6 +16,7 @@ import type {
   ProviderAuthMethod,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
+import type { AskRequest } from "@/tool/ask"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
@@ -40,6 +41,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       command: Command[]
       permission: {
         [sessionID: string]: PermissionRequest[]
+      }
+      ask: {
+        [sessionID: string]: AskRequest[]
       }
       config: Config
       session: Session[]
@@ -76,6 +80,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       status: "loading",
       agent: [],
       permission: {},
+      ask: {},
       command: [],
       provider: [],
       provider_default: {},
@@ -132,6 +137,44 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             request.sessionID,
             produce((draft) => {
               draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "askuser.question": {
+          const request = event.properties as AskRequest
+          const requests = store.ask[request.sessionID]
+          if (!requests) {
+            setStore("ask", request.sessionID, [request])
+            break
+          }
+          const match = Binary.search(requests, request.id, (r) => r.id)
+          if (match.found) {
+            setStore("ask", request.sessionID, match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "ask",
+            request.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "askuser.answer":
+        case "askuser.cancelled": {
+          const requests = store.ask[event.properties.sessionID]
+          if (!requests) break
+          const match = Binary.search(requests, event.properties.id, (r) => r.id)
+          if (!match.found) break
+          setStore(
+            "ask",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
             }),
           )
           break

@@ -48,6 +48,7 @@ import { errors } from "./error"
 import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
 import { Installation } from "@/installation"
+import { AskUser } from "@/tool/ask"
 import { MDNS } from "./mdns"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
@@ -1611,6 +1612,56 @@ export namespace Server {
         async (c) => {
           const permissions = await PermissionNext.list()
           return c.json(permissions)
+        },
+      )
+      .post(
+        "/ask/:id/reply",
+        describeRoute({
+          summary: "Respond to ask request",
+          description: "Respond to an ask_user question from the AI assistant.",
+          operationId: "ask.reply",
+          responses: {
+            200: {
+              description: "Response processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            id: z.string(),
+          }),
+        ),
+        validator(
+          "json",
+          z.object({
+            sessionID: z.string(),
+            selected: z.string().optional(),
+            cancelled: z.boolean().optional(),
+          }),
+        ),
+        async (c) => {
+          const params = c.req.valid("param")
+          const json = c.req.valid("json")
+          if (json.cancelled) {
+            await Bus.publish(AskUser.Event.Cancelled, {
+              id: params.id,
+              sessionID: json.sessionID,
+            })
+          } else if (json.selected) {
+            await Bus.publish(AskUser.Event.Answered, {
+              id: params.id,
+              sessionID: json.sessionID,
+              selected: json.selected,
+            })
+          }
+          return c.json(true)
         },
       )
       .get(
