@@ -20,7 +20,6 @@ import { LSP } from "../lsp"
 import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
-import { Permission } from "../permission"
 import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
@@ -45,9 +44,9 @@ import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "@/session/summary"
 import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
-import type { BunWebSocketData } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
+import { PermissionNext } from "@/permission/next"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 
@@ -56,6 +55,13 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
   const log = Log.create({ service: "server" })
+
+  let _url: URL | undefined
+  let _corsWhitelist: string[] = []
+
+  export function url(): URL {
+    return _url ?? new URL("http://localhost:4096")
+  }
 
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
@@ -98,7 +104,27 @@ export namespace Server {
           timer.stop()
         }
       })
-      .use(cors())
+      .use(
+        cors({
+          origin(input) {
+            if (!input) return
+
+            if (input.startsWith("http://localhost:")) return input
+            if (input.startsWith("http://127.0.0.1:")) return input
+            if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
+
+            // *.opencode.ai (https only, adjust if needed)
+            if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
+              return input
+            }
+            if (_corsWhitelist.includes(input)) {
+              return input
+            }
+
+            return
+          },
+        }),
+      )
       .get(
         "/global/health",
         describeRoute({
@@ -1084,6 +1110,8 @@ export namespace Server {
         async (c) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
+          const session = await Session.get(sessionID)
+          await SessionRevert.cleanup(session)
           const msgs = await Session.messages({ sessionID })
           let currentAgent = await Agent.defaultAgent()
           for (let i = msgs.length - 1; i >= 0; i--) {
@@ -1496,6 +1524,7 @@ export namespace Server {
         "/session/:sessionID/permissions/:permissionID",
         describeRoute({
           summary: "Respond to permission",
+          deprecated: true,
           description: "Approve or deny a permission request from the AI assistant.",
           operationId: "permission.respond",
           responses: {
@@ -1517,17 +1546,71 @@ export namespace Server {
             permissionID: z.string(),
           }),
         ),
-        validator("json", z.object({ response: Permission.Response })),
+        validator("json", z.object({ response: PermissionNext.Reply })),
         async (c) => {
           const params = c.req.valid("param")
-          const sessionID = params.sessionID
-          const permissionID = params.permissionID
-          Permission.respond({
-            sessionID,
-            permissionID,
-            response: c.req.valid("json").response,
+          PermissionNext.reply({
+            requestID: params.permissionID,
+            reply: c.req.valid("json").response,
           })
           return c.json(true)
+        },
+      )
+      .post(
+        "/permission/:requestID/reply",
+        describeRoute({
+          summary: "Respond to permission request",
+          description: "Approve or deny a permission request from the AI assistant.",
+          operationId: "permission.reply",
+          responses: {
+            200: {
+              description: "Permission processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            requestID: z.string(),
+          }),
+        ),
+        validator("json", z.object({ reply: PermissionNext.Reply })),
+        async (c) => {
+          const params = c.req.valid("param")
+          const json = c.req.valid("json")
+          await PermissionNext.reply({
+            requestID: params.requestID,
+            reply: json.reply,
+          })
+          return c.json(true)
+        },
+      )
+      .get(
+        "/permission",
+        describeRoute({
+          summary: "List pending permissions",
+          description: "Get all pending permission requests across all sessions.",
+          operationId: "permission.list",
+          responses: {
+            200: {
+              description: "List of pending permissions",
+              content: {
+                "application/json": {
+                  schema: resolver(PermissionNext.Request.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const permissions = await PermissionNext.list()
+          return c.json(permissions)
         },
       )
       .get(
@@ -1771,7 +1854,7 @@ export namespace Server {
         "/find/file",
         describeRoute({
           summary: "Find files",
-          description: "Search for files by name or pattern in the project directory.",
+          description: "Search for files or directories by name or pattern in the project directory.",
           operationId: "find.files",
           responses: {
             200: {
@@ -1789,15 +1872,20 @@ export namespace Server {
           z.object({
             query: z.string(),
             dirs: z.enum(["true", "false"]).optional(),
+            type: z.enum(["file", "directory"]).optional(),
+            limit: z.coerce.number().int().min(1).max(200).optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query").query
           const dirs = c.req.valid("query").dirs
+          const type = c.req.valid("query").type
+          const limit = c.req.valid("query").limit
           const results = await File.search({
             query,
-            limit: 10,
+            limit: limit ?? 10,
             dirs: dirs !== "false",
+            type,
           })
           return c.json(results)
         },
@@ -2602,12 +2690,44 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://app.opencode.ai${c.req.path}`, {
+        const path = c.req.path
+        const response = await proxy(`https://app.opencode.ai${path}`, {
           ...c.req,
           headers: {
             host: "app.opencode.ai",
           },
         })
+        // Cloudflare doesn't return Content-Type for static assets, so we need to add it
+        const mimeTypes: Record<string, string> = {
+          ".js": "application/javascript",
+          ".mjs": "application/javascript",
+          ".css": "text/css",
+          ".json": "application/json",
+          ".wasm": "application/wasm",
+          ".svg": "image/svg+xml",
+          ".png": "image/png",
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".gif": "image/gif",
+          ".ico": "image/x-icon",
+          ".webp": "image/webp",
+          ".woff": "font/woff",
+          ".woff2": "font/woff2",
+          ".ttf": "font/ttf",
+          ".eot": "application/vnd.ms-fontobject",
+        }
+        for (const [ext, mime] of Object.entries(mimeTypes)) {
+          if (path.endsWith(ext)) {
+            const headers = new Headers(response.headers)
+            headers.set("Content-Type", mime)
+            return new Response(response.body, {
+              status: response.status,
+              statusText: response.statusText,
+              headers,
+            })
+          }
+        }
+        return response
       }),
   )
 
@@ -2625,7 +2745,9 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+    _corsWhitelist = opts.cors ?? []
+
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
@@ -2642,6 +2764,8 @@ export namespace Server {
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
+    _url = server.url
+
     const shouldPublishMDNS =
       opts.mdns &&
       server.port &&
@@ -2649,7 +2773,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!)
+      MDNS.publish(server.port!, `opencode-${server.port!}`)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }
