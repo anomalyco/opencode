@@ -6,6 +6,7 @@ import { Log } from "../util/log"
 import { Instance } from "../project/instance"
 import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
+import { basename } from "path"
 
 import { $ } from "bun"
 import { Filesystem } from "@/util/filesystem"
@@ -75,7 +76,7 @@ export const BashTool = Tool.define("bash", async () => {
       return process.platform === "win32" ? "cmd" : "bash"
     }
     if (typeof shell === "string") {
-      let name = path.basename(shell)
+      let name = basename(shell)
       // Handle Windows paths (both forward and back slashes)
       if (shell.includes("\\") || shell.includes("/")) {
         // Extract the last part after both types of separators
