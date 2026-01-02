@@ -2,6 +2,44 @@
 
 The core OpenCode CLI package built with Bun and TypeScript.
 
+## GeoComply Fork Features
+
+This fork includes the following enhancements:
+
+### 1M Token Context Window
+
+Enable 1,000,000 token context window for Claude Sonnet 4.5 models:
+
+**For Anthropic Direct API:**
+
+```bash
+export ANTHROPIC_1M_CONTEXT=true
+```
+
+**For Google Vertex AI Anthropic:**
+
+```bash
+export VERTEX_ANTHROPIC_1M_CONTEXT=true
+```
+
+### Direct GitHub Checkout Support
+
+Run OpenCode directly from a GitHub checkout without installation:
+
+```bash
+# Clone the repository
+git clone git@github.com:GeoComply/opencode.git
+cd opencode/packages/opencode
+
+# Install dependencies
+bun install
+
+# Run directly
+bun dev
+```
+
+The `/bin/opencode` wrapper automatically detects and runs from the local `dist/` folder when built, making development and testing seamless.
+
 ## Prerequisites
 
 - [Bun](https://bun.sh) v1.2.12 or later
