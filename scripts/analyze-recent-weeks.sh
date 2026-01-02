@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-REPO="sst/opencode"
+REPO="anomalyco/opencode"
 GITHUB_API="https://api.github.com/repos"
 
 # Start from Dec 15

@@ -76,7 +76,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sst/opencode"
+    "url": "https://github.com/anomalyco/opencode"
   },
   "license": "MIT",
   "prettier": {
