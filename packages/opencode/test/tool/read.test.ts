@@ -3,6 +3,7 @@ import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import type { PermissionNext } from "../../src/permission/next"
 
 const ctx = {
   sessionID: "test",
@@ -11,6 +12,7 @@ const ctx = {
   agent: "build",
   abort: AbortSignal.any([]),
   metadata: () => {},
+  ask: async () => {},
 }
 
 describe("tool.read external_directory permission", () => {
@@ -18,14 +20,6 @@ describe("tool.read external_directory permission", () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, "test.txt"), "hello world")
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            permission: {
-              external_directory: "deny",
-            },
-          }),
-        )
       },
     })
     await Instance.provide({
@@ -42,14 +36,6 @@ describe("tool.read external_directory permission", () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, "subdir", "test.txt"), "nested content")
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            permission: {
-              external_directory: "deny",
-            },
-          }),
-        )
       },
     })
     await Instance.provide({
@@ -62,83 +48,74 @@ describe("tool.read external_directory permission", () => {
     })
   })
 
-  test("denies reading absolute path outside project directory", async () => {
+  test("asks for external_directory permission when reading absolute path outside project", async () => {
     await using outerTmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(path.join(dir, "secret.txt"), "secret data")
       },
     })
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            permission: {
-              external_directory: "deny",
-            },
-          }),
-        )
-      },
-    })
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        await expect(read.execute({ filePath: path.join(outerTmp.path, "secret.txt") }, ctx)).rejects.toThrow(
-          "not in the current working directory",
-        )
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(outerTmp.path, "secret.txt") }, testCtx)
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeDefined()
+        expect(extDirReq!.patterns.some((p) => p.includes(outerTmp.path))).toBe(true)
       },
     })
   })
 
-  test("denies reading relative path that traverses outside project directory", async () => {
-    await using tmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            permission: {
-              external_directory: "deny",
-            },
-          }),
-        )
-      },
-    })
+  test("asks for external_directory permission when reading relative path outside project", async () => {
+    await using tmp = await tmpdir({ git: true })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        await expect(read.execute({ filePath: "../../../etc/passwd" }, ctx)).rejects.toThrow(
-          "not in the current working directory",
-        )
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        // This will fail because file doesn't exist, but we can check if permission was asked
+        await read.execute({ filePath: "../outside.txt" }, testCtx).catch(() => {})
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeDefined()
       },
     })
   })
 
-  test("allows reading outside project directory when external_directory is allow", async () => {
-    await using outerTmp = await tmpdir({
-      init: async (dir) => {
-        await Bun.write(path.join(dir, "external.txt"), "external content")
-      },
-    })
+  test("does not ask for external_directory permission when reading inside project", async () => {
     await using tmp = await tmpdir({
+      git: true,
       init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            permission: {
-              external_directory: "allow",
-            },
-          }),
-        )
+        await Bun.write(path.join(dir, "internal.txt"), "internal content")
       },
     })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(outerTmp.path, "external.txt") }, ctx)
-        expect(result.output).toContain("external content")
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(tmp.path, "internal.txt") }, testCtx)
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeUndefined()
       },
     })
   })
