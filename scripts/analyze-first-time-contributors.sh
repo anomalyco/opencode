@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-REPO="sst/opencode"
+REPO="anomalyco/opencode"
 GITHUB_API="https://api.github.com/repos"
 FOUR_WEEKS_AGO=$(date -u -v-28d '+%Y-%m-%dT00:00:00Z' 2>/dev/null || date -u -d '4 weeks ago' '+%Y-%m-%dT00:00:00Z')
 
