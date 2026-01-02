@@ -22,12 +22,18 @@ export const WriteTool = Tool.define("write", {
   }),
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
-    /* TODO
     if (!Filesystem.contains(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
-      ...
+      await ctx.ask({
+        permission: "external_directory",
+        patterns: [parentDir],
+        always: [parentDir + "/*"],
+        metadata: {
+          filepath,
+          parentDir,
+        },
+      })
     }
-    */
 
     const file = Bun.file(filepath)
     const exists = await file.exists()
