@@ -396,7 +396,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run opencode
-        uses: sst/opencode/github@latest${envStr}
+        uses: anomalyco/opencode/github@latest${envStr}
         with:
           model: ${provider}/${model}`,
             )
