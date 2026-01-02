@@ -6,6 +6,7 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import type { BunWebSocketData } from "hono/bun"
+import { Config } from "@/config/config"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -50,6 +51,10 @@ export const rpc = {
         await upgrade().catch(() => {})
       },
     })
+  },
+  async reload() {
+    Config.global.reset()
+    await Instance.disposeAll()
   },
   async shutdown() {
     Log.Default.info("worker shutting down")

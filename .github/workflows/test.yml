@@ -2,11 +2,9 @@ name: test
 
 on:
   push:
-    branches-ignore:
-      - production
+    branches:
+      - dev
   pull_request:
-    branches-ignore:
-      - production
   workflow_dispatch:
 jobs:
   test:
