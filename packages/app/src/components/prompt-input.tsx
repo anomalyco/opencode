@@ -1231,7 +1231,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         ? sdk.client
         : createOpencodeClient({
             baseUrl: sdk.url,
-            signal: AbortSignal.timeout(1000 * 60 * 10),
             fetch: platform.fetch,
             directory: sessionDirectory,
             throwOnError: true,
