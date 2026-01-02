@@ -22,13 +22,14 @@ import { ConfigMarkdown } from "./markdown"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
-  // Custom merge function that concatenates plugin arrays instead of replacing them
-  function mergeConfigWithPlugins(target: Info, source: Info): Info {
+  // Custom merge function that concatenates array fields instead of replacing them
+  function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
-    // If both configs have plugin arrays, concatenate them instead of replacing
     if (target.plugin && source.plugin) {
-      const pluginSet = new Set([...target.plugin, ...source.plugin])
-      merged.plugin = Array.from(pluginSet)
+      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
+    }
+    if (target.instructions && source.instructions) {
+      merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
     return merged
   }
@@ -39,19 +40,19 @@ export namespace Config {
 
     // Override with custom config if provided
     if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
+      result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
-        result = mergeConfigWithPlugins(result, await loadFile(resolved))
+        result = mergeConfigConcatArrays(result, await loadFile(resolved))
       }
     }
 
     if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigWithPlugins(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
@@ -59,7 +60,7 @@ export namespace Config {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        result = mergeConfigConcatArrays(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
       }
     }
 
@@ -94,7 +95,7 @@ export namespace Config {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
+          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
