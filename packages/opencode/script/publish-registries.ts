@@ -58,7 +58,7 @@ if (!Script.preview) {
     "provides=('opencode')",
     "conflicts=('opencode-bin')",
     "depends=('ripgrep')",
-    "makedepends=('git' 'bun-bin' 'go')",
+    "makedepends=('git' 'bun' 'go')",
     "",
     `source=("opencode-\${pkgver}.tar.gz::https://github.com/sst/opencode/archive/v\${pkgver}\${_subver}.tar.gz")`,
     `sha256sums=('SKIP')`,
