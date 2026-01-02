@@ -12,6 +12,8 @@ function calculateFrecency(entry?: { frequency: number; lastOpen: number }): num
   return entry.frequency * weight
 }
 
+const MAX_FRECENCY_ENTRIES = 1000
+
 export const { use: useFrecency, provider: FrecencyProvider } = createSimpleContext({
   name: "Frecency",
   init: () => {
@@ -38,18 +40,19 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
         {} as Record<string, { path: string; frequency: number; lastOpen: number }>,
       )
 
+      const sorted = Object.values(latest)
+        .sort((a, b) => b.lastOpen - a.lastOpen)
+        .slice(0, MAX_FRECENCY_ENTRIES)
+
       setStore(
         "data",
         Object.fromEntries(
-          Object.entries(latest).map(([k, v]) => [k, { frequency: v.frequency, lastOpen: v.lastOpen }]),
+          sorted.map((entry) => [entry.path, { frequency: entry.frequency, lastOpen: entry.lastOpen }]),
         ),
       )
 
-      if (Object.keys(latest).length > 0) {
-        const content =
-          Object.values(latest)
-            .map((entry) => JSON.stringify(entry))
-            .join("\n") + "\n"
+      if (sorted.length > 0) {
+        const content = sorted.map((entry) => JSON.stringify(entry)).join("\n") + "\n"
         Bun.write(frecencyFile, content).catch(() => {})
       }
     })
@@ -66,6 +69,15 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
       }
       setStore("data", absolutePath, newEntry)
       appendFile(frecencyFile.name!, JSON.stringify({ path: absolutePath, ...newEntry }) + "\n").catch(() => {})
+
+      if (Object.keys(store.data).length > MAX_FRECENCY_ENTRIES) {
+        const sorted = Object.entries(store.data)
+          .sort(([, a], [, b]) => b.lastOpen - a.lastOpen)
+          .slice(0, MAX_FRECENCY_ENTRIES)
+        setStore("data", Object.fromEntries(sorted))
+        const content = sorted.map(([path, entry]) => JSON.stringify({ path, ...entry })).join("\n") + "\n"
+        Bun.write(frecencyFile, content).catch(() => {})
+      }
     }
 
     return {
