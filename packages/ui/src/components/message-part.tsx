@@ -365,7 +365,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
           </div>
         )}
       </Show>
-      <Show when={text() && !hasSubtask()}>
+      <Show when={text()}>
         <div data-slot="user-message-text">
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
         </div>
