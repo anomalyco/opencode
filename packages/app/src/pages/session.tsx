@@ -15,6 +15,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
+import { SessionReview } from "@opencode-ai/ui/session-review"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -31,6 +32,7 @@ import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
+import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
@@ -40,7 +42,6 @@ import { showToast } from "@opencode-ai/ui/toast"
 import {
   SessionHeader,
   SessionContextTab,
-  SessionReviewTab,
   SortableTab,
   FileVisual,
   SortableTerminalTab,
@@ -51,6 +52,90 @@ function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
   return a.every((x, i) => x === b[i])
+}
+
+type DiffStyle = "unified" | "split"
+
+interface SessionReviewTabProps {
+  diffs: () => FileDiff[]
+  view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
+  diffStyle: DiffStyle
+  onDiffStyleChange?: (style: DiffStyle) => void
+  classes?: {
+    root?: string
+    header?: string
+    container?: string
+  }
+}
+
+function SessionReviewTab(props: SessionReviewTabProps) {
+  let scroll: HTMLDivElement | undefined
+  let frame: number | undefined
+  let pending: { x: number; y: number } | undefined
+
+  const restoreScroll = () => {
+    const el = scroll
+    if (!el) return
+
+    const s = props.view().scroll("review")
+    if (!s) return
+
+    if (el.scrollTop !== s.y) el.scrollTop = s.y
+    if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+  }
+
+  const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+    pending = {
+      x: event.currentTarget.scrollLeft,
+      y: event.currentTarget.scrollTop,
+    }
+    if (frame !== undefined) return
+
+    frame = requestAnimationFrame(() => {
+      frame = undefined
+
+      const next = pending
+      pending = undefined
+      if (!next) return
+
+      props.view().setScroll("review", next)
+    })
+  }
+
+  createEffect(
+    on(
+      () => props.diffs().length,
+      () => {
+        requestAnimationFrame(restoreScroll)
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+  })
+
+  return (
+    <SessionReview
+      scrollRef={(el) => {
+        scroll = el
+        restoreScroll()
+      }}
+      onScroll={handleScroll}
+      open={props.view().review.open()}
+      onOpenChange={props.view().review.setOpen}
+      classes={{
+        root: props.classes?.root ?? "pb-40",
+        header: props.classes?.header ?? "px-6",
+        container: props.classes?.container ?? "px-6",
+      }}
+      diffs={props.diffs()}
+      diffStyle={props.diffStyle}
+      onDiffStyleChange={props.onDiffStyleChange}
+    />
+  )
 }
 
 export default function Page() {
@@ -829,6 +914,7 @@ export default function Page() {
                         <SessionReviewTab
                           diffs={diffs}
                           view={view}
+                          diffStyle="unified"
                           classes={{
                             root: "pb-32",
                             header: "px-4",
@@ -1007,7 +1093,12 @@ export default function Page() {
                 <Show when={reviewTab()}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <SessionReviewTab diffs={diffs} view={view} />
+                      <SessionReviewTab
+                        diffs={diffs}
+                        view={view}
+                        diffStyle={layout.review.diffStyle()}
+                        onDiffStyleChange={layout.review.setDiffStyle}
+                      />
                     </div>
                   </Tabs.Content>
                 </Show>
