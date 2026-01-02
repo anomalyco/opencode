@@ -1406,7 +1406,7 @@ function InlineTool(props: { icon: string; complete: any; pending: string; child
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
 
-  const denied = createMemo(() => error()?.includes("rejected permission"))
+  const denied = createMemo(() => error()?.includes("rejected permission") || error()?.includes("specified a rule"))
 
   return (
     <box

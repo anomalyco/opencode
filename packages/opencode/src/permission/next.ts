@@ -121,10 +121,11 @@ export namespace PermissionNext {
       const s = await state()
       const { ruleset, ...request } = input
       for (const pattern of request.patterns ?? []) {
-        const action = evaluate(request.permission, pattern, ruleset, s.approved)
-        log.info("evaluated", { permission: request.permission, pattern, action })
-        if (action === "deny") throw new RejectedError()
-        if (action === "ask") {
+        const rule = evaluate(request.permission, pattern, ruleset, s.approved)
+        log.info("evaluated", { permission: request.permission, pattern, action: rule })
+        if (rule.action === "deny")
+          throw new AutoRejectedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
+        if (rule.action === "ask") {
           const id = input.id ?? Identifier.ascending("permission")
           return new Promise<void>((resolve, reject) => {
             const info: Request = {
@@ -139,7 +140,7 @@ export namespace PermissionNext {
             Bus.publish(Event.Asked, info)
           })
         }
-        if (action === "allow") continue
+        if (rule.action === "allow") continue
       }
     },
   )
@@ -195,7 +196,7 @@ export namespace PermissionNext {
         for (const [id, pending] of Object.entries(s.pending)) {
           if (pending.info.sessionID !== sessionID) continue
           const ok = pending.info.patterns.every(
-            (pattern) => evaluate(pending.info.permission, pattern, s.approved) === "allow",
+            (pattern) => evaluate(pending.info.permission, pattern, s.approved).action === "allow",
           )
           if (!ok) continue
           delete s.pending[id]
@@ -215,13 +216,13 @@ export namespace PermissionNext {
     },
   )
 
-  export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Action {
+  export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const merged = merge(...rulesets)
     log.info("evaluate", { permission, pattern, ruleset: merged })
     const match = merged.findLast(
       (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
     )
-    return match?.action ?? "ask"
+    return match ?? { action: "allow", permission, pattern: "*" }
   }
 
   const EDIT_TOOLS = ["edit", "write", "patch", "multiedit"]
@@ -230,7 +231,7 @@ export namespace PermissionNext {
     const result = new Set<string>()
     for (const tool of tools) {
       const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
-      if (evaluate(permission, "*", ruleset) === "deny") {
+      if (evaluate(permission, "*", ruleset).action === "deny") {
         result.add(tool)
       }
     }
@@ -238,11 +239,15 @@ export namespace PermissionNext {
   }
 
   export class RejectedError extends Error {
-    constructor(public readonly reason?: string) {
+    constructor() {
+      super(`The user rejected permission to use this specific tool call. You may try again with different parameters.`)
+    }
+  }
+
+  export class AutoRejectedError extends Error {
+    constructor(public readonly ruleset: Ruleset) {
       super(
-        reason !== undefined
-          ? reason
-          : `The user rejected permission to use this specific tool call. You may try again with different parameters.`,
+        `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(ruleset)}`,
       )
     }
   }
