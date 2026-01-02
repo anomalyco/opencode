@@ -36,7 +36,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   const method = plugin.auth.methods[index]
 
   // Handle prompts for all auth types
-  await new Promise((resolve) => setTimeout(resolve, 10))
+  await Bun.sleep(10)
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {
