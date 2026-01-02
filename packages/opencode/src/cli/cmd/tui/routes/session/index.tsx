@@ -1447,10 +1447,11 @@ function InlineTool(props: { icon: string; complete: any; pending: string; child
   )
 }
 
-function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void }) {
+function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void; part?: ToolPart }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
+  const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
       border={["left"]}
@@ -1473,6 +1474,9 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
         {props.title}
       </text>
       {props.children}
+      <Show when={error()}>
+        <text fg={theme.error}>{error()}</text>
+      </Show>
     </box>
   )
 }
@@ -1483,7 +1487,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
-        <BlockTool title={"# " + (props.input.description ?? "Shell")}>
+        <BlockTool title={"# " + (props.input.description ?? "Shell")} part={props.part}>
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <text fg={theme.text}>{output()}</text>
@@ -1514,7 +1518,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)}>
+        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
@@ -1629,6 +1633,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
               ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
               : undefined
           }
+          part={props.part}
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
@@ -1685,7 +1690,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)}>
+        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -1735,7 +1740,7 @@ function Patch(props: ToolProps<typeof PatchTool>) {
   return (
     <Switch>
       <Match when={props.output !== undefined}>
-        <BlockTool title="# Patch">
+        <BlockTool title="# Patch" part={props.part}>
           <box>
             <text fg={theme.text}>{props.output?.trim()}</text>
           </box>
@@ -1754,7 +1759,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.todos?.length}>
-        <BlockTool title="# Todos">
+        <BlockTool title="# Todos" part={props.part}>
           <box>
             <For each={props.input.todos ?? []}>
               {(todo) => <TodoItem status={todo.status} content={todo.content} />}
