@@ -11,7 +11,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     const globalSDK = useGlobalSDK()
     const sdk = createOpencodeClient({
       baseUrl: globalSDK.url,
-      signal: AbortSignal.timeout(1000 * 60 * 10),
       fetch: platform.fetch,
       directory: props.directory,
       throwOnError: true,

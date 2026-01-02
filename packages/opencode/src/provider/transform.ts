@@ -279,7 +279,7 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
         if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
-        if (id.includes("gpt-5")) {
+        if (id.includes("gpt-5-") || id === "gpt-5") {
           azureEfforts.unshift("minimal")
         }
         return Object.fromEntries(
@@ -296,8 +296,11 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
-          if (model.id.includes("codex")) return WIDELY_SUPPORTED_EFFORTS
-          const arr = ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
+          if (id.includes("codex")) return WIDELY_SUPPORTED_EFFORTS
+          const arr = [...WIDELY_SUPPORTED_EFFORTS]
+          if (id.includes("gpt-5-") || id === "gpt-5") {
+            arr.unshift("minimal")
+          }
           if (model.release_date >= "2025-11-13") {
             arr.unshift("none")
           }
