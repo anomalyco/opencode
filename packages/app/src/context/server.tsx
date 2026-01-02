@@ -100,7 +100,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         const sdk = createOpencodeClient({
           baseUrl: url,
           fetch: platform.fetch,
-          signal: AbortSignal.timeout(2000),
+          signal: AbortSignal.timeout(3000),
         })
         return sdk.global
           .health()
