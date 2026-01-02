@@ -130,6 +130,7 @@ export function Prompt(props: PromptProps) {
   })
 
   // Initialize agent/model/variant from last user message when session changes
+  // Skip syncing for subagent sessions to prevent model/agent bleed to parent
   let syncedSessionID: string | undefined
   createEffect(() => {
     const sessionID = props.sessionID
@@ -140,11 +141,11 @@ export function Prompt(props: PromptProps) {
 
       syncedSessionID = sessionID
 
-      // Only set agent if it's a primary agent (not a subagent)
-      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
-      if (msg.agent && isPrimaryAgent) {
-        local.agent.set(msg.agent)
-      }
+      // Don't sync model/agent for subagent sessions (sessions with parentID)
+      const session = sync.data.session.find((s) => s.id === sessionID)
+      if (session?.parentID) return
+
+      if (msg.agent) local.agent.set(msg.agent)
       if (msg.model) local.model.set(msg.model)
       if (msg.variant) local.model.variant.set(msg.variant)
     }
