@@ -1,4 +1,3 @@
-import { type Tool } from "ai"
 import { experimental_createMCPClient } from "@ai-sdk/mcp"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
@@ -72,6 +71,8 @@ export namespace MCP {
     })
   export type Status = z.infer<typeof Status>
   type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
+  type ToolRecord = Awaited<ReturnType<MCPClient["tools"]>>
+  type ToolValue = ToolRecord[string]
 
   // Store transports for OAuth servers to allow finishing auth
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
@@ -382,7 +383,7 @@ export namespace MCP {
   }
 
   export async function tools() {
-    const result: Record<string, Tool> = {}
+    const result: Record<string, ToolValue> = {}
     const s = await state()
     const clientsSnapshot = await clients()
 

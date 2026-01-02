@@ -117,7 +117,7 @@ function OpenCodeNotRunning(props: { onRetry: () => void; isRetrying: boolean; r
 function OpenChamberNotRunning(props: { onRetry: () => void; isRetrying: boolean; retryAttempt: number }) {
   const [activeTab, setActiveTab] = createSignal<"bun" | "npm" | "curl">("bun")
   const [copied, setCopied] = createSignal<string | null>(null)
-  const startCommand = getStartCommand()
+  const startCommand = () => getStartCommand()
 
   const installCommands = {
     bun: "bun add -g @openchamber/web",
@@ -177,8 +177,8 @@ function OpenChamberNotRunning(props: { onRetry: () => void; isRetrying: boolean
           <h3>Already installed?</h3>
           <p>Start OpenChamber:</p>
           <div class="command-display">
-            <code>{startCommand}</code>
-            <button class="copy-btn-small" onClick={() => copyCmd(startCommand, "start")}>
+            <code>{startCommand()}</code>
+            <button class="copy-btn-small" onClick={() => copyCmd(startCommand(), "start")}>
               {copied() === "start" ? "✓" : "Copy"}
             </button>
           </div>

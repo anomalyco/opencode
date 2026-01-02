@@ -1,10 +1,7 @@
 import { defineConfig } from "wxt"
-import solid from "vite-plugin-solid"
 
 export default defineConfig({
-  vite: () => ({
-    plugins: [solid()],
-  }),
+  modules: ["@wxt-dev/module-solid"],
   manifest: {
     name: "Eidorail - AI Chat Sidebar",
     version: "0.1.0",

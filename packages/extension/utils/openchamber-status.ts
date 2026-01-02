@@ -11,8 +11,26 @@ const OPENCHAMBER_CHECK_TIMEOUT = 2000 // 2 seconds
 const OPENCHAMBER_PORT_KEY = "eidorail-openchamber-port"
 const OPENCHAMBER_URL_KEY = "eidorail-openchamber-url"
 const OPENCHAMBER_MODE_KEY = "eidorail-openchamber-mode" // "local" | "remote"
+const OPENCHAMBER_TRY_CF_TUNNEL_KEY = "eidorail-openchamber-try-cf-tunnel"
+const OPENCHAMBER_EXTRA_ARGS_KEY = "eidorail-openchamber-extra-args"
 
 export type OpenChamberConnectionMode = "local" | "remote"
+
+export function getOpenChamberTryCfTunnel(): boolean {
+  return localStorage.getItem(OPENCHAMBER_TRY_CF_TUNNEL_KEY) === "true"
+}
+
+export function setOpenChamberTryCfTunnel(value: boolean): void {
+  localStorage.setItem(OPENCHAMBER_TRY_CF_TUNNEL_KEY, value ? "true" : "false")
+}
+
+export function getOpenChamberExtraArgs(): string {
+  return localStorage.getItem(OPENCHAMBER_EXTRA_ARGS_KEY) || ""
+}
+
+export function setOpenChamberExtraArgs(value: string): void {
+  localStorage.setItem(OPENCHAMBER_EXTRA_ARGS_KEY, value.trim())
+}
 
 /**
  * Get OpenChamber connection mode (local port vs remote URL)
@@ -142,7 +160,16 @@ export async function retryOpenChamberConnection(
 /**
  * Get the command to start OpenChamber
  */
+function joinArgs(...args: Array<string | undefined>) {
+  return args
+    .map((item) => (item || "").trim())
+    .filter(Boolean)
+    .join(" ")
+}
+
 export function getStartCommand(): string {
   const port = getOpenChamberPort()
-  return `openchamber --port ${port}`
+  const maybeTunnel = getOpenChamberTryCfTunnel() ? "--try-cf-tunnel" : undefined
+  const extra = getOpenChamberExtraArgs()
+  return joinArgs(`openchamber --port ${port}`, maybeTunnel, extra)
 }

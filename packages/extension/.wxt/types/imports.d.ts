@@ -3,21 +3,45 @@ export {}
 declare global {
   const ContentScriptContext: typeof import('wxt/utils/content-script-context').ContentScriptContext
   const DEFAULT_PLATFORMS: typeof import('/home/jordan/github/eidorail/packages/extension/utils/shared').DEFAULT_PLATFORMS
+  const Dynamic: typeof import('solid-js/web').Dynamic
+  const ErrorBoundary: typeof import('solid-js').ErrorBoundary
+  const For: typeof import('solid-js').For
+  const Index: typeof import('solid-js').Index
   const InvalidMatchPattern: typeof import('wxt/utils/match-patterns').InvalidMatchPattern
+  const Match: typeof import('solid-js').Match
   const MatchPattern: typeof import('wxt/utils/match-patterns').MatchPattern
   const PLATFORMS: typeof import('/home/jordan/github/eidorail/packages/extension/utils/platforms').PLATFORMS
   const PLATFORM_ICONS: typeof import('/home/jordan/github/eidorail/packages/extension/utils/shared').PLATFORM_ICONS
   const PRESET_PLATFORMS: typeof import('/home/jordan/github/eidorail/packages/extension/utils/shared').PRESET_PLATFORMS
+  const Portal: typeof import('solid-js/web').Portal
   const SettingsPanel: typeof import('/home/jordan/github/eidorail/packages/extension/components/SettingsPanel').SettingsPanel
+  const Show: typeof import('solid-js').Show
+  const Suspense: typeof import('solid-js').Suspense
+  const SuspenseList: typeof import('solid-js').SuspenseList
+  const Switch: typeof import('solid-js').Switch
+  const batch: typeof import('solid-js').batch
   const browser: typeof import('wxt/browser').browser
   const canCaptureUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/browser-context').canCaptureUrl
   const captureScreenshot: typeof import('/home/jordan/github/eidorail/packages/extension/utils/browser-context').captureScreenshot
+  const checkOpenChamberStatus: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').checkOpenChamberStatus
   const checkOpenCodeStatus: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').checkOpenCodeStatus
   const checkUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').checkUrl
+  const children: typeof import('solid-js').children
   const copyToClipboard: typeof import('/home/jordan/github/eidorail/packages/extension/utils/terminal-launcher').copyToClipboard
+  const createContext: typeof import('solid-js').createContext
+  const createDeferred: typeof import('solid-js').createDeferred
+  const createEffect: typeof import('solid-js').createEffect
   const createIframeUi: typeof import('wxt/utils/content-script-ui/iframe').createIframeUi
   const createIntegratedUi: typeof import('wxt/utils/content-script-ui/integrated').createIntegratedUi
+  const createMemo: typeof import('solid-js').createMemo
+  const createMutable: typeof import('solid-js/store').createMutable
+  const createRenderEffect: typeof import('solid-js').createRenderEffect
+  const createResource: typeof import('solid-js').createResource
+  const createRoot: typeof import('solid-js').createRoot
+  const createSelector: typeof import('solid-js').createSelector
   const createShadowRootUi: typeof import('wxt/utils/content-script-ui/shadow-root').createShadowRootUi
+  const createSignal: typeof import('solid-js').createSignal
+  const createStore: typeof import('solid-js/store').createStore
   const defineAppConfig: typeof import('wxt/utils/define-app-config').defineAppConfig
   const defineBackground: typeof import('wxt/utils/define-background').defineBackground
   const defineContentScript: typeof import('wxt/utils/define-content-script').defineContentScript
@@ -28,38 +52,77 @@ declare global {
   const fakeBrowser: typeof import('wxt/testing').fakeBrowser
   const formatCapturedContent: typeof import('/home/jordan/github/eidorail/packages/extension/utils/markdown-converter').formatCapturedContent
   const formatScreenshot: typeof import('/home/jordan/github/eidorail/packages/extension/utils/markdown-converter').formatScreenshot
+  const formatTabTree: typeof import('/home/jordan/github/eidorail/packages/extension/utils/browser-context').formatTabTree
   const getActiveTab: typeof import('/home/jordan/github/eidorail/packages/extension/utils/browser-context').getActiveTab
+  const getAllWindowsTabs: typeof import('/home/jordan/github/eidorail/packages/extension/utils/browser-context').getAllWindowsTabs
   const getBackgroundStartCommand: typeof import('/home/jordan/github/eidorail/packages/extension/utils/terminal-launcher').getBackgroundStartCommand
   const getConnectionMode: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').getConnectionMode
   const getConversationId: typeof import('/home/jordan/github/eidorail/packages/extension/utils/platforms').getConversationId
+  const getCurrentScroll: typeof import('/home/jordan/github/eidorail/packages/extension/utils/full-page-screenshot').getCurrentScroll
   const getCurrentWindowTabs: typeof import('/home/jordan/github/eidorail/packages/extension/utils/browser-context').getCurrentWindowTabs
   const getExportablePlatforms: typeof import('/home/jordan/github/eidorail/packages/extension/utils/platforms').getExportablePlatforms
   const getIcon: typeof import('/home/jordan/github/eidorail/packages/extension/utils/shared').getIcon
+  const getOpenChamberConnectionMode: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').getOpenChamberConnectionMode
+  const getOpenChamberExtraArgs: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').getOpenChamberExtraArgs
+  const getOpenChamberPort: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').getOpenChamberPort
+  const getOpenChamberRemoteUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').getOpenChamberRemoteUrl
+  const getOpenChamberTryCfTunnel: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').getOpenChamberTryCfTunnel
+  const getOpenChamberUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').getOpenChamberUrl
   const getOpenCodePort: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').getOpenCodePort
   const getOpenCodeUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').getOpenCodeUrl
+  const getPageDimensions: typeof import('/home/jordan/github/eidorail/packages/extension/utils/full-page-screenshot').getPageDimensions
   const getPlatformConfig: typeof import('/home/jordan/github/eidorail/packages/extension/utils/platforms').getPlatformConfig
   const getRemoteUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').getRemoteUrl
   const getStartCommand: typeof import('/home/jordan/github/eidorail/packages/extension/utils/terminal-launcher').getStartCommand
   const getWorkspaceDirectory: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').getWorkspaceDirectory
   const htmlToMarkdown: typeof import('/home/jordan/github/eidorail/packages/extension/utils/markdown-converter').htmlToMarkdown
+  const hydrate: typeof import('solid-js/web').hydrate
+  const indexArray: typeof import('solid-js').indexArray
   const injectScript: typeof import('wxt/utils/inject-script').injectScript
   const isConversationPage: typeof import('/home/jordan/github/eidorail/packages/extension/utils/platforms').isConversationPage
   const isExportSupported: typeof import('/home/jordan/github/eidorail/packages/extension/utils/platforms').isExportSupported
+  const isServer: typeof import('solid-js/web').isServer
   const isWorkspaceEnabled: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').isWorkspaceEnabled
   const launchOpenCodeInTerminal: typeof import('/home/jordan/github/eidorail/packages/extension/utils/terminal-launcher').launchOpenCodeInTerminal
   const launchWindowsTerminal: typeof import('/home/jordan/github/eidorail/packages/extension/utils/terminal-launcher').launchWindowsTerminal
+  const lazy: typeof import('solid-js').lazy
   const loadPlatforms: typeof import('/home/jordan/github/eidorail/packages/extension/utils/shared').loadPlatforms
   const manualPortScan: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').manualPortScan
+  const mapArray: typeof import('solid-js').mapArray
+  const mergeProps: typeof import('solid-js').mergeProps
+  const observable: typeof import('solid-js').observable
+  const on: typeof import('solid-js').on
+  const onCleanup: typeof import('solid-js').onCleanup
+  const onError: typeof import('solid-js').onError
+  const onMount: typeof import('solid-js').onMount
+  const produce: typeof import('solid-js/store').produce
+  const reconcile: typeof import('solid-js/store').reconcile
+  const render: typeof import('solid-js/web').render
+  const renderToStream: typeof import('solid-js/web').renderToStream
+  const renderToString: typeof import('solid-js/web').renderToString
+  const renderToStringAsync: typeof import('solid-js/web').renderToStringAsync
   const retryConnection: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').retryConnection
+  const retryOpenChamberConnection: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').retryOpenChamberConnection
+  const saveOpenChamberPort: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').saveOpenChamberPort
   const saveOpenCodePort: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').saveOpenCodePort
   const savePlatformsToStorage: typeof import('/home/jordan/github/eidorail/packages/extension/utils/shared').savePlatformsToStorage
+  const scrollTo: typeof import('/home/jordan/github/eidorail/packages/extension/utils/full-page-screenshot').scrollTo
   const setConnectionMode: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').setConnectionMode
+  const setOpenChamberConnectionMode: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').setOpenChamberConnectionMode
+  const setOpenChamberExtraArgs: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').setOpenChamberExtraArgs
+  const setOpenChamberRemoteUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').setOpenChamberRemoteUrl
+  const setOpenChamberTryCfTunnel: typeof import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status').setOpenChamberTryCfTunnel
   const setRemoteUrl: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').setRemoteUrl
   const setWorkspaceDirectory: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').setWorkspaceDirectory
   const setWorkspaceEnabled: typeof import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status').setWorkspaceEnabled
+  const splitProps: typeof import('solid-js').splitProps
+  const stitchImages: typeof import('/home/jordan/github/eidorail/packages/extension/utils/full-page-screenshot').stitchImages
   const storage: typeof import('wxt/utils/storage').storage
   const turndownService: typeof import('/home/jordan/github/eidorail/packages/extension/utils/markdown-converter').turndownService
+  const untrack: typeof import('solid-js').untrack
   const useAppConfig: typeof import('wxt/utils/app-config').useAppConfig
+  const useContext: typeof import('solid-js').useContext
+  const useTransition: typeof import('solid-js').useTransition
 }
 // for type re-export
 declare global {
@@ -91,8 +154,14 @@ declare global {
   export type { ScriptPublicPath, InjectScriptOptions } from 'wxt/utils/inject-script'
   import('wxt/utils/inject-script')
   // @ts-ignore
-  export type { TabInfo, TabGroup, GroupedTabs, CaptureMessageType, CaptureMessage, CaptureResponse } from '/home/jordan/github/eidorail/packages/extension/utils/browser-context'
+  export type { TabInfo, TabGroup, GroupedTabs, WindowInfo, BrowserTree, CaptureMessageType, CaptureMessage, CaptureResponse } from '/home/jordan/github/eidorail/packages/extension/utils/browser-context'
   import('/home/jordan/github/eidorail/packages/extension/utils/browser-context')
+  // @ts-ignore
+  export type { FullPageCaptureResult, PageDimensions, CaptureProgress, ProgressCallback } from '/home/jordan/github/eidorail/packages/extension/utils/full-page-screenshot'
+  import('/home/jordan/github/eidorail/packages/extension/utils/full-page-screenshot')
+  // @ts-ignore
+  export type { OpenChamberConnectionMode } from '/home/jordan/github/eidorail/packages/extension/utils/openchamber-status'
+  import('/home/jordan/github/eidorail/packages/extension/utils/openchamber-status')
   // @ts-ignore
   export type { ConnectionStatus, ConnectionMode } from '/home/jordan/github/eidorail/packages/extension/utils/opencode-status'
   import('/home/jordan/github/eidorail/packages/extension/utils/opencode-status')

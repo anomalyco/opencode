@@ -16,10 +16,15 @@ declare module '#imports' {
   export { defineWxtPlugin } from 'wxt/utils/define-wxt-plugin';
   export { injectScript, ScriptPublicPath, InjectScriptOptions } from 'wxt/utils/inject-script';
   export { InvalidMatchPattern, MatchPattern } from 'wxt/utils/match-patterns';
+  export { createSignal, createEffect, createMemo, createResource, onMount, onCleanup, onError, untrack, batch, on, createRoot, mergeProps, splitProps, useTransition, observable, mapArray, indexArray, createContext, useContext, children, lazy, createDeferred, createRenderEffect, createSelector, For, Show, Switch, Match, Index, ErrorBoundary, Suspense, SuspenseList } from 'solid-js';
+  export { createStore, produce, reconcile, createMutable } from 'solid-js/store';
+  export { Dynamic, hydrate, render, renderToString, renderToStringAsync, renderToStream, isServer, Portal } from 'solid-js/web';
   export { fakeBrowser } from 'wxt/testing';
   export { SettingsPanel } from '../components/SettingsPanel';
-  export { getCurrentWindowTabs, getActiveTab, captureScreenshot, canCaptureUrl, TabInfo, TabGroup, GroupedTabs, CaptureMessageType, CaptureMessage, CaptureResponse } from '../utils/browser-context';
+  export { getCurrentWindowTabs, getActiveTab, captureScreenshot, canCaptureUrl, getAllWindowsTabs, formatTabTree, TabInfo, TabGroup, GroupedTabs, WindowInfo, BrowserTree, CaptureMessageType, CaptureMessage, CaptureResponse } from '../utils/browser-context';
+  export { getPageDimensions, scrollTo, getCurrentScroll, stitchImages, FullPageCaptureResult, PageDimensions, CaptureProgress, ProgressCallback } from '../utils/full-page-screenshot';
   export { htmlToMarkdown, elementToMarkdown, formatCapturedContent, formatScreenshot, turndownService } from '../utils/markdown-converter';
+  export { getOpenChamberTryCfTunnel, setOpenChamberTryCfTunnel, getOpenChamberExtraArgs, setOpenChamberExtraArgs, getOpenChamberConnectionMode, setOpenChamberConnectionMode, getOpenChamberPort, saveOpenChamberPort, getOpenChamberRemoteUrl, setOpenChamberRemoteUrl, getOpenChamberUrl, checkOpenChamberStatus, retryOpenChamberConnection, OpenChamberConnectionMode } from '../utils/openchamber-status';
   export { getConnectionMode, setConnectionMode, getOpenCodePort, saveOpenCodePort, getRemoteUrl, setRemoteUrl, getWorkspaceDirectory, setWorkspaceDirectory, isWorkspaceEnabled, setWorkspaceEnabled, getOpenCodeUrl, checkUrl, checkOpenCodeStatus, manualPortScan, retryConnection, ConnectionStatus, ConnectionMode } from '../utils/opencode-status';
   export { PLATFORMS, getConversationId, isConversationPage, isExportSupported, getPlatformConfig, getExportablePlatforms, PlatformConfig } from '../utils/platforms';
   export { DEFAULT_PLATFORMS, PRESET_PLATFORMS, PLATFORM_ICONS, getIcon, loadPlatforms, savePlatformsToStorage, OpenCodeStatus } from '../utils/shared';

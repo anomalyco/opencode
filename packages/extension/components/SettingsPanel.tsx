@@ -32,6 +32,10 @@ import {
   setOpenChamberConnectionMode,
   getOpenChamberRemoteUrl,
   setOpenChamberRemoteUrl,
+  getOpenChamberTryCfTunnel,
+  setOpenChamberTryCfTunnel,
+  getOpenChamberExtraArgs,
+  setOpenChamberExtraArgs,
   type OpenChamberConnectionMode,
 } from "../utils/openchamber-status"
 
@@ -61,6 +65,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const [openChamberMode, setOpenChamberMode] = createSignal<OpenChamberConnectionMode>(getOpenChamberConnectionMode())
   const [openChamberPort, setOpenChamberPortState] = createSignal(String(getOpenChamberPort()))
   const [openChamberUrl, setOpenChamberUrlState] = createSignal(getOpenChamberRemoteUrl())
+  const [openChamberTryCfTunnel, setOpenChamberTryCfTunnelState] = createSignal(getOpenChamberTryCfTunnel())
+  const [openChamberExtraArgs, setOpenChamberExtraArgsState] = createSignal(getOpenChamberExtraArgs())
 
   onMount(async () => {
     const connected = await checkOpenCodeStatus()
@@ -77,6 +83,13 @@ export function SettingsPanel(props: SettingsPanelProps) {
     savePlatformsToStorage(p)
     setPlatforms(p)
     props.onPlatformsChange?.(p)
+  }
+
+  function previewOpenChamberCommand() {
+    const base = `openchamber --port ${openChamberPort().trim() || String(getOpenChamberPort())}`
+    const maybeTunnel = openChamberTryCfTunnel() ? "--try-cf-tunnel" : ""
+    const extra = openChamberExtraArgs().trim()
+    return [base, maybeTunnel, extra].filter(Boolean).join(" ")
   }
 
   async function saveConnectionSettings() {
@@ -99,6 +112,9 @@ export function SettingsPanel(props: SettingsPanelProps) {
     } else {
       setOpenChamberRemoteUrl(openChamberUrl())
     }
+
+    setOpenChamberTryCfTunnel(openChamberTryCfTunnel())
+    setOpenChamberExtraArgs(openChamberExtraArgs())
 
     updateOpenCodeUrl()
     await handleRetry()
@@ -423,7 +439,28 @@ export function SettingsPanel(props: SettingsPanelProps) {
                     value={openChamberPort()}
                     onInput={(e) => setOpenChamberPortState(e.currentTarget.value)}
                   />
-                  <p class="setting-hint">Default: 4097. Start with: openchamber --port 4097</p>
+                  <p class="setting-hint">
+                    Start with: <code>{previewOpenChamberCommand()}</code>
+                  </p>
+
+                  <label class="toggle-row" style="margin-top: 12px;">
+                    <span class="toggle-label">Use Cloudflare Tunnel (--try-cf-tunnel)</span>
+                    <input
+                      type="checkbox"
+                      class="toggle-checkbox"
+                      checked={openChamberTryCfTunnel()}
+                      onChange={(e) => setOpenChamberTryCfTunnelState(e.currentTarget.checked)}
+                    />
+                  </label>
+
+                  <label style="display: block; margin-top: 12px;">Extra args</label>
+                  <input
+                    type="text"
+                    placeholder="--host 0.0.0.0"
+                    value={openChamberExtraArgs()}
+                    onInput={(e) => setOpenChamberExtraArgsState(e.currentTarget.value)}
+                  />
+                  <p class="setting-hint">Saved and applied when you click Save & Connect.</p>
                 </Show>
                 <Show when={openChamberMode() === "remote"}>
                   <label>OpenChamber URL</label>

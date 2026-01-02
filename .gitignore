@@ -21,3 +21,10 @@ a.out
 target
 /tests
 /references
+
+# Extension build output
+packages/extension/.output/
+
+# Session files (AI agent artifacts)
+session-*.md
+*-session-*.md

@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",
+    "@wxt-dev/module-solid": "1.1.4",
     "typescript": "catalog:",
     "wxt": "^0.20.5"
   },
@@ -22,7 +23,6 @@
     "@solidjs/router": "catalog:",
     "@types/turndown": "5.0.6",
     "solid-js": "catalog:",
-    "turndown": "7.2.2",
-    "vite-plugin-solid": "catalog:"
+    "turndown": "7.2.2"
   }
 }

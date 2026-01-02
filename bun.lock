@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "opencode",
@@ -207,6 +208,7 @@
       },
       "devDependencies": {
         "@types/chrome": "^0.0.287",
+        "@wxt-dev/module-solid": "1.1.4",
         "typescript": "catalog:",
         "wxt": "^0.20.5",
       },
@@ -1867,6 +1869,8 @@
     "@webgpu/types": ["@webgpu/types@0.1.66", "", {}, "sha512-YA2hLrwLpDsRueNDXIMqN9NTzD6bCDkuXbOSe0heS+f8YE8usA6Gbv1prj81pzVHrbaAma7zObnIC+I6/sXJgA=="],
 
     "@wxt-dev/browser": ["@wxt-dev/browser@0.1.4", "", { "dependencies": { "@types/filesystem": "*", "@types/har-format": "*" } }, "sha512-9x03I15i79XU8qYwjv4le0K2HdMl/Yga2wUBSoUbcrCnamv8P3nvuYxREQ9C5QY/qPAfeEVdAtaTrS3KWak71g=="],
+
+    "@wxt-dev/module-solid": ["@wxt-dev/module-solid@1.1.4", "", { "dependencies": { "vite-plugin-solid": "^2.11.6" }, "peerDependencies": { "wxt": ">=0.19.16" } }, "sha512-lnE7AyJeLkG8XMM58NzbtM1GdzzHH7mqt559WT54RwE+4HxBgnGzQVhe7bdWjTWGOdXlTbCi0HyXZqVtzJ3htA=="],
 
     "@wxt-dev/storage": ["@wxt-dev/storage@1.2.6", "", { "dependencies": { "@wxt-dev/browser": "^0.1.4", "async-mutex": "^0.5.0", "dequal": "^2.0.3" } }, "sha512-f6AknnpJvhNHW4s0WqwSGCuZAj0fjP3EVNPBO5kB30pY+3Zt/nqZGqJN6FgBLCSkYjPJ8VL1hNX5LMVmvxQoDw=="],
 
