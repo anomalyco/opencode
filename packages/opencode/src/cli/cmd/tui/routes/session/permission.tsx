@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
 import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useTheme } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
@@ -34,6 +34,17 @@ function EditBody(props: { request: PermissionRequest }) {
   const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
   const diff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
 
+  // Defer diff rendering to prevent blocking the UI
+  // This allows the permission dialog to become responsive immediately
+  const [showDiff, setShowDiff] = createSignal(false)
+  onMount(() => {
+    // Use requestAnimationFrame to defer diff rendering
+    // This lets the UI paint first, making it feel responsive
+    requestAnimationFrame(() => {
+      setShowDiff(true)
+    })
+  })
+
   const view = createMemo(() => {
     const diffStyle = sync.data.config.tui?.diff_style
     if (diffStyle === "stacked") return "unified"
@@ -42,14 +53,23 @@ function EditBody(props: { request: PermissionRequest }) {
 
   const ft = createMemo(() => filetype(filepath()))
 
+  // Limit initial diff height more aggressively to improve performance
+  const maxDiffHeight = createMemo(() => Math.min(Math.floor(dimensions().height / 4), 15))
+
   return (
     <box flexDirection="column" gap={1}>
       <box flexDirection="row" gap={1} paddingLeft={1}>
         <text fg={theme.textMuted}>{"→"}</text>
         <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
       </box>
-      <Show when={diff()}>
-        <box maxHeight={Math.floor(dimensions().height / 4)} overflow="scroll">
+      <Show when={diff() && showDiff()} fallback={
+        <Show when={diff()}>
+          <box paddingLeft={1}>
+            <text fg={theme.textMuted}>Loading diff...</text>
+          </box>
+        </Show>
+      }>
+        <box maxHeight={maxDiffHeight()} overflow="scroll">
           <diff
             diff={diff()}
             view={view()}

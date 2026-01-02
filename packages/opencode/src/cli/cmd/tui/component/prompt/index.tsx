@@ -799,6 +799,7 @@ export function Prompt(props: PromptProps) {
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
+        disabled={props.disabled}
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box

@@ -69,6 +69,7 @@ export function Autocomplete(props: {
   fileStyleId: number
   agentStyleId: number
   promptPartTypeId: () => number
+  disabled?: boolean
 }) {
   const sdk = useSDK()
   const sync = useSync()
@@ -83,6 +84,13 @@ export function Autocomplete(props: {
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
+
+  // Close autocomplete when disabled (e.g., when permission dialog appears)
+  createEffect(() => {
+    if (props.disabled && store.visible) {
+      hide()
+    }
+  })
 
   createEffect(() => {
     if (store.visible) {
