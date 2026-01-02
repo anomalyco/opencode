@@ -108,6 +108,7 @@ export const BashTool = Tool.define("bash", async () => {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
+              .cwd(cwd)
               .quiet()
               .nothrow()
               .text()
@@ -119,7 +120,7 @@ export const BashTool = Tool.define("bash", async () => {
                 process.platform === "win32" && resolved.match(/^\/[a-z]\//)
                   ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
                   : resolved
-              directories.add(normalized)
+              if (!Filesystem.contains(Instance.directory, normalized)) directories.add(normalized)
             }
           }
         }

@@ -69,6 +69,9 @@ export namespace SessionPrompt {
     async (current) => {
       for (const item of Object.values(current)) {
         item.abort.abort()
+        for (const callback of item.callbacks) {
+          callback.reject()
+        }
       }
     },
   )

@@ -10,7 +10,11 @@
       "options": {},
     },
   },
-  "permission": "ask",
+  "permission": {
+    "bash": {
+      "ls foo": "ask",
+    },
+  },
   "mcp": {
     "context7": {
       "type": "remote",
