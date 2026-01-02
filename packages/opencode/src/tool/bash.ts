@@ -178,8 +178,7 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const appendText = (text: string) => {
-        for (let i = 0; i < text.length; i++) {
-          const char = text[i]
+        for (const char of text) {
           if (char === "\r") {
             state.overwritingLine = true
             continue
