@@ -303,6 +303,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleGlobalDragOver = (event: DragEvent) => {
+    if (dialog.active) return
+
     event.preventDefault()
     const hasFiles = event.dataTransfer?.types.includes("Files")
     if (hasFiles) {
@@ -311,6 +313,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleGlobalDragLeave = (event: DragEvent) => {
+    if (dialog.active) return
+
     // relatedTarget is null when leaving the document window
     if (!event.relatedTarget) {
       setStore("dragging", false)
@@ -318,6 +322,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handleGlobalDrop = async (event: DragEvent) => {
+    if (dialog.active) return
+
     event.preventDefault()
     setStore("dragging", false)
 
