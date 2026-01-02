@@ -2,6 +2,7 @@ import z from "zod"
 import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
+import stripAnsi from "strip-ansi"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -83,16 +84,31 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("Response too large (exceeds 5MB limit)")
     }
 
-    const content = new TextDecoder().decode(arrayBuffer)
     const contentType = response.headers.get("content-type") || ""
+    const type = contentType.split(";")[0].trim().toLowerCase()
+    const bytes = new Uint8Array(arrayBuffer)
 
-    const title = `${params.url} (${contentType})`
+    if (isBinaryContentType(type) || (!isTextContentType(type) && !looksLikeText(bytes))) {
+      return {
+        output: formatBinarySummary({
+          url: params.url,
+          contentType,
+          byteLength: bytes.byteLength,
+        }),
+        title: `${params.url} (${contentType || "unknown"})`,
+        metadata: {},
+      }
+    }
+
+    const content = sanitizeText(new TextDecoder().decode(arrayBuffer))
+
+    const title = `${params.url} (${contentType || "unknown"})`
 
     // Handle content based on requested format and actual content type
     switch (params.format) {
       case "markdown":
         if (contentType.includes("text/html")) {
-          const markdown = convertHTMLToMarkdown(content)
+          const markdown = sanitizeText(convertHTMLToMarkdown(content))
           return {
             output: markdown,
             title,
@@ -107,7 +123,7 @@ export const WebFetchTool = Tool.define("webfetch", {
 
       case "text":
         if (contentType.includes("text/html")) {
-          const text = await extractTextFromHTML(content)
+          const text = sanitizeText(await extractTextFromHTML(content))
           return {
             output: text,
             title,
@@ -179,4 +195,73 @@ function convertHTMLToMarkdown(html: string): string {
   })
   turndownService.remove(["script", "style", "meta", "link"])
   return turndownService.turndown(html)
+}
+
+function isBinaryContentType(type?: string) {
+  if (!type) return false
+  if (type.startsWith("image/")) return true
+  if (type.startsWith("audio/")) return true
+  if (type.startsWith("video/")) return true
+  if (type.startsWith("font/")) return true
+
+  return [
+    "application/pdf",
+    "application/zip",
+    "application/gzip",
+    "application/x-gzip",
+    "application/x-7z-compressed",
+    "application/x-rar-compressed",
+  ].includes(type)
+}
+
+function isTextContentType(type?: string) {
+  if (!type) return false
+  if (type.startsWith("text/")) return true
+
+  return [
+    "application/json",
+    "application/xml",
+    "application/xhtml+xml",
+    "application/javascript",
+    "application/x-javascript",
+    "application/yaml",
+    "application/x-yaml",
+    "application/toml",
+    "application/ld+json",
+    "application/problem+json",
+  ].includes(type)
+}
+
+function looksLikeText(bytes: Uint8Array) {
+  const sample = bytes.subarray(0, Math.min(bytes.length, 1024))
+  let controls = 0
+  let zeros = 0
+
+  for (const byte of sample) {
+    if (byte === 0) zeros++
+    if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) controls++
+    if (byte === 127) controls++
+  }
+
+  if (zeros > 0) return false
+  return controls / Math.max(sample.length, 1) <= 0.1
+}
+
+function sanitizeText(text: string) {
+  return stripAnsi(text)
+    .replaceAll("\r", "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .replace(/[\u0080-\u009F]/g, "")
+}
+
+function formatBinarySummary(input: { url: string; contentType: string; byteLength: number }) {
+  const type = input.contentType || "unknown"
+  const size = input.byteLength.toLocaleString()
+  return [
+    "Binary response omitted to protect the TUI and keep context small.",
+    "",
+    `- url: ${input.url}`,
+    `- content-type: ${type}`,
+    `- bytes: ${size}`,
+  ].join("\n")
 }
