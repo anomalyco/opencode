@@ -134,11 +134,15 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       if (directories.size > 0) {
+        const dirs = Array.from(directories)
         await ctx.ask({
           permission: "external_directory",
-          patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
-          metadata: {},
+          patterns: dirs,
+          always: dirs.map((x) => path.dirname(x) + "*"),
+          metadata: {
+            filepath: dirs.length === 1 ? dirs[0] : undefined,
+            parentDir: dirs.length === 1 ? dirs[0] : undefined,
+          },
         })
       }
 
@@ -147,7 +151,9 @@ export const BashTool = Tool.define("bash", async () => {
           permission: "bash",
           patterns: Array.from(patterns),
           always: Array.from(always),
-          metadata: {},
+          metadata: {
+            command: params.command,
+          },
         })
       }
 

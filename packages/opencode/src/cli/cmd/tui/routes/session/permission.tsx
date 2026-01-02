@@ -76,10 +76,10 @@ function EditBody(props: { request: PermissionRequest }) {
   )
 }
 
-function TextBody(props: { title: string; description?: string; icon?: string }) {
+function PermissionBody(props: { icon?: string; title: string; children?: any }) {
   const { theme } = useTheme()
   return (
-    <>
+    <box flexDirection="column" gap={0}>
       <box flexDirection="row" gap={1} paddingLeft={1}>
         <Show when={props.icon}>
           <text fg={theme.textMuted} flexShrink={0}>
@@ -88,12 +88,10 @@ function TextBody(props: { title: string; description?: string; icon?: string })
         </Show>
         <text fg={theme.textMuted}>{props.title}</text>
       </box>
-      <Show when={props.description}>
-        <box paddingLeft={1}>
-          <text fg={theme.text}>{props.description}</text>
-        </box>
+      <Show when={props.children}>
+        <box paddingLeft={3}>{props.children}</box>
       </Show>
-    </>
+    </box>
   )
 }
 
@@ -126,7 +124,9 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <PermissionBody
+                  title={"This will allow " + props.request.permission + " until OpenCode is restarted."}
+                />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
@@ -159,55 +159,131 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       </Match>
       <Match when={!store.always}>
         <Prompt
-          title="Permission required"
+          title={`Permission required (${props.request.permission})`}
           body={
             <Switch>
               <Match when={props.request.permission === "edit"}>
                 <EditBody request={props.request} />
               </Match>
               <Match when={props.request.permission === "read"}>
-                <TextBody icon="→" title={`Read ` + normalizePath(input().filePath as string)} />
+                <PermissionBody
+                  icon="→"
+                  title={
+                    `Read ` +
+                    normalizePath((props.request.metadata?.filepath as string) ?? (input().filePath as string) ?? "")
+                  }
+                />
               </Match>
               <Match when={props.request.permission === "glob"}>
-                <TextBody icon="✱" title={`Glob "` + (input().pattern ?? "") + `"`} />
+                <PermissionBody
+                  icon="✱"
+                  title={`Glob "` + (props.request.metadata?.pattern ?? input().pattern ?? "") + `"`}
+                />
               </Match>
               <Match when={props.request.permission === "grep"}>
-                <TextBody icon="✱" title={`Grep "` + (input().pattern ?? "") + `"`} />
+                <PermissionBody
+                  icon="✱"
+                  title={`Grep "` + (props.request.metadata?.pattern ?? input().pattern ?? "") + `"`}
+                />
               </Match>
               <Match when={props.request.permission === "list"}>
-                <TextBody icon="→" title={`List ` + normalizePath(input().path as string)} />
+                <PermissionBody
+                  icon="→"
+                  title={
+                    `List ` + normalizePath((props.request.metadata?.path as string) ?? (input().path as string) ?? "")
+                  }
+                />
               </Match>
               <Match when={props.request.permission === "bash"}>
-                <TextBody
-                  icon="#"
-                  title={(input().description as string) ?? ""}
-                  description={("$ " + input().command) as string}
-                />
+                <PermissionBody icon="#" title={(input().description as string) ?? "Run bash command"}>
+                  <box flexDirection="column" gap={0}>
+                    <For each={props.request.patterns as string[]}>
+                      {(pattern) => (
+                        <box flexDirection="row" gap={1}>
+                          <text fg={theme.text}>•</text>
+                          <text fg={theme.text}>{pattern}</text>
+                        </box>
+                      )}
+                    </For>
+                    <Show when={!props.request.patterns?.length && (input().command as string)}>
+                      <text fg={theme.text}>{input().command}</text>
+                    </Show>
+                  </box>
+                </PermissionBody>
               </Match>
               <Match when={props.request.permission === "task"}>
-                <TextBody
+                <PermissionBody
                   icon="#"
                   title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task`}
-                  description={"◉ " + input().description}
-                />
+                >
+                  <text fg={theme.text}>{"◉ " + ((input().description as string) ?? "")}</text>
+                </PermissionBody>
               </Match>
               <Match when={props.request.permission === "webfetch"}>
-                <TextBody icon="%" title={`WebFetch ` + (input().url ?? "")} />
+                <PermissionBody icon="%" title={`WebFetch ` + (props.request.metadata?.url ?? input().url ?? "")} />
               </Match>
               <Match when={props.request.permission === "websearch"}>
-                <TextBody icon="◈" title={`Exa Web Search "` + (input().query ?? "") + `"`} />
+                <PermissionBody
+                  icon="◈"
+                  title={`Exa Web Search "` + (props.request.metadata?.query ?? input().query ?? "") + `"`}
+                />
               </Match>
               <Match when={props.request.permission === "codesearch"}>
-                <TextBody icon="◇" title={`Exa Code Search "` + (input().query ?? "") + `"`} />
+                <PermissionBody
+                  icon="◇"
+                  title={`Exa Code Search "` + (props.request.metadata?.query ?? input().query ?? "") + `"`}
+                />
               </Match>
               <Match when={props.request.permission === "external_directory"}>
-                <TextBody icon="←" title={`Access external directory ` + normalizePath(input().path as string)} />
+                <PermissionBody icon="←" title={`Access external directory`}>
+                  <text fg={theme.text}>
+                    {normalizePath(
+                      (props.request.metadata?.filepath as string) ??
+                        (props.request.metadata?.parentDir as string) ??
+                        (input().path as string) ??
+                        "",
+                    )}
+                  </text>
+                </PermissionBody>
               </Match>
-              <Match when={props.request.permission === "doom_loop"}>
-                <TextBody icon="⟳" title="Continue after repeated failures" />
+              <Match when={props.request.permission === "patch"}>
+                <PermissionBody
+                  icon="◧"
+                  title={
+                    `Apply patch to ` +
+                    normalizePath((props.request.metadata?.filePath as string) ?? (input().patchText ? "(patch)" : ""))
+                  }
+                />
+              </Match>
+              <Match when={props.request.permission === "write"}>
+                <PermissionBody
+                  icon="✎"
+                  title={
+                    `Write to ` +
+                    normalizePath((props.request.metadata?.filepath as string) ?? (input().filePath as string) ?? "")
+                  }
+                />
+              </Match>
+              <Match when={props.request.permission === "skill"}>
+                <PermissionBody icon="◎" title={`Run skill`}>
+                  <text fg={theme.text}>
+                    {(props.request.metadata?.skill as string) ??
+                      (input().name as string) ??
+                      (input().skill as string) ??
+                      ""}
+                  </text>
+                </PermissionBody>
+              </Match>
+              <Match when={props.request.permission === "todowrite"}>
+                <PermissionBody icon="☑" title={`Update todos`}>
+                  <text fg={theme.text}>{`${props.request.metadata?.count ?? "todo"} items`}</text>
+                </PermissionBody>
+              </Match>
+              <Match when={props.request.permission === "todoread"}>
+                <PermissionBody icon="☑" title={`Read todos`} />
               </Match>
               <Match when={true}>
-                <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
+                <PermissionBody icon="⚙" title={`Call tool ` + props.request.permission} />
               </Match>
             </Switch>
           }

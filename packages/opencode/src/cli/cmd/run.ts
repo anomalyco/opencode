@@ -11,6 +11,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { Permission } from "../../permission"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -206,7 +207,11 @@ export const RunCommand = cmd({
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
             const result = await select({
-              message: `Permission required: ${permission.permission} (${permission.patterns.join(", ")})`,
+              message: Permission.formatPermissionMessage(
+                permission.permission,
+                permission.patterns,
+                permission.metadata,
+              ),
               options: [
                 { value: "once", label: "Allow once" },
                 { value: "always", label: "Always allow: " + permission.always.join(", ") },

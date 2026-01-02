@@ -44,7 +44,9 @@ export const ReadTool = Tool.define("read", {
       permission: "read",
       patterns: [filepath],
       always: ["*"],
-      metadata: {},
+      metadata: {
+        filepath,
+      },
     })
 
     const block = iife(() => {

@@ -38,6 +38,62 @@ export namespace Permission {
     })
   export type Info = z.infer<typeof Info>
 
+  export function formatPermissionMessage(
+    type: string,
+    patterns: string | string[] | undefined,
+    metadata: Record<string, unknown>,
+    fallback: string = "",
+  ): string {
+    switch (type) {
+      case "bash":
+        if (patterns) {
+          const pats = Array.isArray(patterns) ? patterns : [patterns]
+          return `Permission required to run bash command matching pattern(s):\n${pats.map((p) => `  ${p}`).join("\n")}`
+        }
+        return `Permission required to run bash command${fallback ? `: ${fallback}` : ""}`
+      case "read":
+        return `Permission required to read file: ${metadata.filepath || fallback}`
+      case "write":
+        return `Permission required to write to: ${metadata.filePath || fallback}`
+      case "edit":
+        return `Permission required to edit: ${metadata.filePath || fallback}`
+      case "patch":
+        return `Permission required to apply patch: ${metadata.filePath || fallback}`
+      case "external_directory":
+        let msg = `Permission required to access paths outside working directory`
+        if (metadata.filepath) {
+          msg += `:\n  ${metadata.filepath}`
+        } else if (metadata.parentDir) {
+          msg += `:\n  ${metadata.parentDir}`
+        }
+        return msg
+      case "webfetch":
+        return `Permission required to fetch URL: ${metadata.url || fallback}`
+      case "websearch":
+        return `Permission required to search web for: ${metadata.query || fallback}`
+      case "grep":
+        return `Permission required to search in files: ${metadata.path || fallback}${
+          metadata.pattern ? `\nSearch pattern: ${metadata.pattern}` : ""
+        }`
+      case "glob":
+        return `Permission required to list files matching: ${metadata.path || fallback}${
+          metadata.pattern ? `\nPattern: ${metadata.pattern}` : ""
+        }`
+      case "list":
+        return `Permission required to list directory: ${metadata.path || fallback}`
+      case "codesearch":
+        return `Permission required for code search: ${metadata.query || fallback}${
+          metadata.path ? `\nIn directory: ${metadata.path}` : ""
+        }`
+      case "doom_loop":
+        return fallback || "Continue after repeated failures"
+      case "skill":
+        return `Permission required to run skill: ${metadata.skill || fallback}`
+      default:
+        return fallback || `Permission required: ${type}`
+    }
+  }
+
   export const Event = {
     Updated: BusEvent.define("permission.updated", Info),
     Replied: BusEvent.define(

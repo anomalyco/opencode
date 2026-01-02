@@ -30,6 +30,7 @@ import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { Permission } from "../permission"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -80,7 +81,11 @@ export namespace ACP {
                     toolCall: {
                       toolCallId: permission.tool?.callID ?? permission.id,
                       status: "pending",
-                      title: permission.permission,
+                      title: Permission.formatPermissionMessage(
+                        permission.permission,
+                        permission.patterns,
+                        permission.metadata,
+                      ),
                       rawInput: permission.metadata,
                       kind: toToolKind(permission.permission),
                       locations: toLocations(permission.permission, permission.metadata),

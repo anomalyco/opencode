@@ -120,28 +120,33 @@ export namespace PermissionNext {
     async (input) => {
       const s = await state()
       const { ruleset, ...request } = input
+      const askPatterns: string[] = []
       for (const pattern of request.patterns ?? []) {
         const rule = evaluate(request.permission, pattern, ruleset, s.approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny")
           throw new AutoRejectedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
-          const id = input.id ?? Identifier.ascending("permission")
-          return new Promise<void>((resolve, reject) => {
-            const info: Request = {
-              id,
-              ...request,
-            }
-            s.pending[id] = {
-              info,
-              resolve,
-              reject,
-            }
-            Bus.publish(Event.Asked, info)
-          })
+          askPatterns.push(pattern)
         }
-        if (rule.action === "allow") continue
+        // if allow, continue
       }
+      // If no patterns need approval, return
+      if (askPatterns.length === 0) return
+      const id = input.id ?? Identifier.ascending("permission")
+      return new Promise<void>((resolve, reject) => {
+        const info: Request = {
+          id,
+          ...request,
+          patterns: askPatterns,
+        }
+        s.pending[id] = {
+          info,
+          resolve,
+          reject,
+        }
+        Bus.publish(Event.Asked, info)
+      })
     },
   )
 
