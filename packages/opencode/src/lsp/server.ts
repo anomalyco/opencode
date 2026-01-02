@@ -1217,7 +1217,7 @@ export namespace LSPServer {
       const distPath = path.join(Global.Path.bin, "kotlin-ls")
       const launcherScript =
         process.platform === "win32" ? path.join(distPath, "kotlin-lsp.cmd") : path.join(distPath, "kotlin-lsp.sh")
-      const installed = await fs.exists(launcherScript)
+      const installed = await Bun.file(launcherScript).exists()
       if (!installed) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("Downloading Kotlin Language Server from GitHub.")
@@ -1280,7 +1280,7 @@ export namespace LSPServer {
         }
         log.info("Installed Kotlin Language Server", { path: launcherScript })
       }
-      if (!(await fs.exists(launcherScript))) {
+      if (!(await Bun.file(launcherScript).exists())) {
         log.error(`Failed to locate the Kotlin LS launcher script in the installed directory: ${distPath}.`)
         return
       }
