@@ -911,6 +911,7 @@ export function Session() {
               viewportOptions={{
                 paddingRight: showScrollbar() ? 1 : 0,
               }}
+              viewportCulling={true}
               verticalScrollbarOptions={{
                 paddingLeft: 1,
                 visible: showScrollbar(),
