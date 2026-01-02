@@ -1460,7 +1460,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </div>
         </Show>
-        <Show when={prompt.context.items().length > 0 || !!activeFile()}>
+        <Show when={false && (prompt.context.items().length > 0 || !!activeFile())}>
           <div class="flex flex-wrap items-center gap-2 px-3 pt-3">
             <Show when={prompt.context.activeTab() ? activeFile() : undefined}>
               {(path) => (
