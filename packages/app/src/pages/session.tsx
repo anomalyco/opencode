@@ -260,6 +260,7 @@ export default function Page() {
     mobileTab: "session" as "session" | "review",
     ignoreScrollSpy: false,
     initialScrollDone: !params.id,
+    newSessionWorktree: "main",
   })
 
   const activeMessage = createMemo(() => {
@@ -362,52 +363,6 @@ export default function Page() {
     return isWorking
   }, working())
 
-  async function createWorktreeSession() {
-    const encoded = params.dir
-    if (!encoded) return
-
-    const projectDirectory = base64Decode(encoded)
-
-    const info = await sdk.client.worktree
-      .create({
-        directory: projectDirectory,
-        worktreeCreateInput: {},
-      })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: "Failed to create worktree",
-          description: err?.data?.message ?? (err instanceof Error ? err.message : "Request failed"),
-        })
-        return
-      })
-
-    if (!info?.directory) return
-
-    const created = await sdk.client.session
-      .create({ directory: projectDirectory })
-      .then((x) => x.data)
-      .catch((err) => {
-        showToast({
-          title: "Failed to create session",
-          description: err?.data?.message ?? (err instanceof Error ? err.message : "Request failed"),
-        })
-        return
-      })
-
-    if (!created?.id) return
-
-    worktree.set(created.id, {
-      directory: info.directory,
-      project: projectDirectory,
-      branch: info.branch,
-      name: info.name,
-    })
-
-    globalSync.child(info.directory)
-    navigate(`/${encoded}/session/${created.id}`)
-  }
-
   command.register(() => [
     {
       id: "session.new",
@@ -417,16 +372,6 @@ export default function Page() {
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
-    },
-    {
-      id: "session.new.worktree",
-      title: "New session in worktree",
-      description: "Create a new session backed by a git worktree",
-      category: "Session",
-      slash: "new-worktree",
-      onSelect: () => {
-        void createWorktreeSession()
-      },
     },
     {
       id: "file.open",
@@ -1077,7 +1022,10 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView />
+                <NewSessionView
+                  worktree={store.newSessionWorktree}
+                  onWorktreeChange={(value) => setStore("newSessionWorktree", value)}
+                />
               </Match>
             </Switch>
           </div>
@@ -1094,6 +1042,8 @@ export default function Page() {
                 ref={(el) => {
                   inputRef = el
                 }}
+                newSessionWorktree={store.newSessionWorktree}
+                onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
               />
             </div>
           </div>

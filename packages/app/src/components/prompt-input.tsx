@@ -33,6 +33,12 @@ import { persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
+import { useGlobalSync } from "@/context/global-sync"
+import { useWorktree } from "@/context/worktree"
+import { usePlatform } from "@/context/platform"
+import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/v2/client"
+import { Binary } from "@opencode-ai/util/binary"
+import { showToast } from "@opencode-ai/ui/toast"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -40,6 +46,8 @@ const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
+  newSessionWorktree?: string
+  onNewSessionWorktreeReset?: () => void
 }
 
 const PLACEHOLDERS = [
@@ -83,6 +91,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
   const sdk = useSDK()
   const sync = useSync()
+  const globalSync = useGlobalSync()
+  const worktree = useWorktree()
+  const platform = usePlatform()
   const local = useLocal()
   const files = useFile()
   const prompt = usePrompt()
@@ -1164,15 +1175,70 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("historyIndex", -1)
     setStore("savedPrompt", null)
 
+    const projectDirectory = sdk.directory
+    const isNewSession = !params.id
+    const selection = props.newSessionWorktree ?? "main"
+
+    let createdWorktree: { name: string; branch: string; directory: string } | undefined
+    let sessionDirectory = projectDirectory
+
+    if (isNewSession) {
+      if (selection === "create") {
+        createdWorktree = await sdk.client.worktree
+          .create({
+            directory: projectDirectory,
+            worktreeCreateInput: {},
+          })
+          .then((x) => x.data)
+          .catch((err) => {
+            showToast({
+              title: "Failed to create worktree",
+              description: err?.data?.message ?? (err instanceof Error ? err.message : "Request failed"),
+            })
+            return undefined
+          })
+
+        if (!createdWorktree?.directory) return
+        sessionDirectory = createdWorktree.directory
+      } else if (selection !== "main") {
+        sessionDirectory = selection
+      }
+    }
+
     let existing = info()
-    if (!existing) {
+    if (!existing && isNewSession) {
       const created = await sdk.client.session.create()
       existing = created.data ?? undefined
-      if (existing) navigate(existing.id)
     }
     if (!existing) return
 
-    const toAbsolutePath = (path: string) => (path.startsWith("/") ? path : sync.absolute(path))
+    if (isNewSession) {
+      if (sessionDirectory !== projectDirectory) {
+        const known = worktree.list(projectDirectory).find((x) => x.directory === sessionDirectory)
+        worktree.set(existing.id, {
+          directory: sessionDirectory,
+          project: projectDirectory,
+          branch: createdWorktree?.branch ?? known?.branch,
+          name: createdWorktree?.name ?? known?.name,
+        })
+        globalSync.child(sessionDirectory)
+      }
+      props.onNewSessionWorktreeReset?.()
+    }
+
+    const client =
+      sessionDirectory === projectDirectory
+        ? sdk.client
+        : createOpencodeClient({
+            baseUrl: sdk.url,
+            signal: AbortSignal.timeout(1000 * 60 * 10),
+            fetch: platform.fetch,
+            directory: sessionDirectory,
+            throwOnError: true,
+          })
+
+    const toAbsolutePath = (path: string) =>
+      path.startsWith("/") ? path : (sessionDirectory + "/" + path).replace("//", "/")
     const fileAttachments = currentPrompt.filter(
       (part) => part.type === "file",
     ) as import("@/context/prompt").FileAttachmentPart[]
@@ -1275,7 +1341,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const variant = local.model.variant.current()
 
     if (isShellMode) {
-      sdk.client.session
+      if (isNewSession) navigate(existing.id)
+      client.session
         .shell({
           sessionID: existing.id,
           agent,
@@ -1293,7 +1360,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
-        sdk.client.session
+        if (isNewSession) navigate(existing.id)
+        client.session
           .command({
             sessionID: existing.id,
             command: commandName,
@@ -1328,15 +1396,56 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       messageID,
     }))
 
-    sync.session.addOptimisticMessage({
+    const addOptimisticMessage = (input: {
+      sessionID: string
+      messageID: string
+      parts: Part[]
+      agent: string
+      model: { providerID: string; modelID: string }
+    }) => {
+      if (sessionDirectory === projectDirectory) {
+        sync.session.addOptimisticMessage(input)
+        return
+      }
+
+      const [, setStore] = globalSync.child(sessionDirectory)
+      const message: Message = {
+        id: input.messageID,
+        sessionID: input.sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: input.agent,
+        model: input.model,
+      }
+
+      setStore(
+        produce((draft) => {
+          const messages = draft.message[input.sessionID]
+          if (!messages) {
+            draft.message[input.sessionID] = [message]
+          } else {
+            const result = Binary.search(messages, input.messageID, (m) => m.id)
+            messages.splice(result.index, 0, message)
+          }
+          draft.part[input.messageID] = input.parts
+            .filter((p) => !!p?.id)
+            .slice()
+            .sort((a, b) => a.id.localeCompare(b.id))
+        }),
+      )
+    }
+
+    addOptimisticMessage({
       sessionID: existing.id,
       messageID,
-      parts: optimisticParts,
+      parts: optimisticParts as unknown as Part[],
       agent,
       model,
     })
 
-    sdk.client.session
+    if (isNewSession) navigate(existing.id)
+
+    client.session
       .prompt({
         sessionID: existing.id,
         agent,

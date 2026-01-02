@@ -11,6 +11,7 @@ import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
+import { Global } from "../global"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -44,7 +45,11 @@ export namespace Project {
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
 
-    const { id, worktree, vcs } = await iife(async () => {
+    const {
+      id,
+      worktree: currentWorktree,
+      vcs,
+    } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
       const git = await matches.next().then((x) => x.value)
       await matches.return()
@@ -106,11 +111,25 @@ export namespace Project {
       }
     })
 
+    const managedRoot = path.resolve(Global.Path.data, "worktree")
+    const isManagedWorktree = (worktree: string) => {
+      const relative = path.relative(managedRoot, path.resolve(worktree))
+      if (!relative) return true
+      if (relative.startsWith("..")) return false
+      if (path.isAbsolute(relative)) return false
+      return true
+    }
+
+    const managed = id !== "global" && isManagedWorktree(currentWorktree)
+
     let existing = await Storage.read<Info>(["project", id]).catch(() => undefined)
+    const storedWorktree =
+      existing && managed && !isManagedWorktree(existing.worktree) ? existing.worktree : currentWorktree
+
     if (!existing) {
       existing = {
         id,
-        worktree,
+        worktree: storedWorktree,
         vcs: vcs as Info["vcs"],
         time: {
           created: Date.now(),
@@ -118,27 +137,31 @@ export namespace Project {
         },
       }
       if (id !== "global") {
-        await migrateFromGlobal(id, worktree)
+        await migrateFromGlobal(id, storedWorktree)
       }
     }
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
-    const result: Info = {
+
+    const stored: Info = {
       ...existing,
-      worktree,
+      worktree: storedWorktree,
       vcs: vcs as Info["vcs"],
       time: {
         ...existing.time,
         updated: Date.now(),
       },
     }
-    await Storage.write<Info>(["project", id], result)
+    await Storage.write<Info>(["project", id], stored)
     GlobalBus.emit("event", {
       payload: {
         type: Event.Updated.type,
-        properties: result,
+        properties: stored,
       },
     })
-    return result
+    return {
+      ...stored,
+      worktree: currentWorktree,
+    }
   }
 
   export async function discover(input: Info) {

@@ -7,7 +7,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { iife } from "@opencode-ai/util/iife"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -30,6 +30,8 @@ export function SessionHeader() {
   const server = useServer()
   const dialog = useDialog()
   const sync = useSync()
+
+  const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
 
   const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
@@ -59,7 +61,7 @@ export function SessionHeader() {
             <div class="hidden xl:flex items-center gap-2">
               <Select
                 options={layout.projects.list().map((project) => project.worktree)}
-                current={sync.directory}
+                current={projectDirectory()}
                 label={(x) => getFilename(x)}
                 onSelect={(x) => (x ? navigateToProject(x) : undefined)}
                 class="text-14-regular text-text-base"
@@ -186,7 +188,7 @@ export function SessionHeader() {
                     let shareURL = session.share?.url
                     if (!shareURL) {
                       shareURL = await globalSDK.client.session
-                        .share({ sessionID: session.id, directory: sync.directory })
+                        .share({ sessionID: session.id, directory: projectDirectory() })
                         .then((r) => r.data?.share?.url)
                         .catch((e) => {
                           console.error("Failed to share session", e)

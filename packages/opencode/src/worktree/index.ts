@@ -183,6 +183,22 @@ export namespace Worktree {
     return $`bash -lc ${cmd}`.nothrow().cwd(directory)
   }
 
+  async function linkOpencodeNodeModules(directory: string) {
+    const opencodeDir = path.join(directory, ".opencode")
+    if (!(await exists(opencodeDir))) return
+
+    const destination = path.join(opencodeDir, "node_modules")
+    if (await exists(destination)) return
+
+    const source = path.join(Instance.worktree, ".opencode", "node_modules")
+    if (!(await exists(source))) return
+
+    const type = process.platform === "win32" ? "junction" : "dir"
+    await fs
+      .symlink(source, destination, type)
+      .catch(() => fs.cp(source, destination, { recursive: true }).catch(() => {}))
+  }
+
   export const create = fn(CreateInput.optional(), async (input) => {
     if (Instance.project.vcs !== "git") {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
@@ -198,6 +214,8 @@ export namespace Worktree {
     if (created.exitCode !== 0) {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
     }
+
+    await linkOpencodeNodeModules(info.directory)
 
     const cmd = input?.startCommand?.trim()
     if (!cmd) return info

@@ -30,6 +30,18 @@ export const { use: useWorktree, provider: WorktreeProvider } = createSimpleCont
       project(sessionID: string) {
         return store.session[sessionID]?.project
       },
+      list(project?: string) {
+        const directories = new Set<string>()
+        const result: Array<WorktreeSession & { sessionID: string }> = []
+        for (const [sessionID, session] of Object.entries(store.session)) {
+          if (project && session.project !== project) continue
+          if (directories.has(session.directory)) continue
+          directories.add(session.directory)
+          result.push({ sessionID, ...session })
+        }
+        result.sort((a, b) => (a.name ?? a.directory).localeCompare(b.name ?? b.directory))
+        return result
+      },
       set(sessionID: string, value: WorktreeSession) {
         setStore("session", sessionID, value)
       },

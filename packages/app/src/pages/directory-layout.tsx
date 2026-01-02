@@ -25,25 +25,29 @@ export default function Layout(props: ParentProps) {
   })
   return (
     <Show when={params.dir} keyed>
-      <SDKProvider directory={directory()}>
-        <SyncProvider>
-          {iife(() => {
-            const sync = useSync()
-            const sdk = useSDK()
-            const respond = (input: {
-              sessionID: string
-              permissionID: string
-              response: "once" | "always" | "reject"
-            }) => sdk.client.permission.respond(input)
+      <Show when={directory()} keyed>
+        {(dir) => (
+          <SDKProvider directory={dir}>
+            <SyncProvider>
+              {iife(() => {
+                const sync = useSync()
+                const sdk = useSDK()
+                const respond = (input: {
+                  sessionID: string
+                  permissionID: string
+                  response: "once" | "always" | "reject"
+                }) => sdk.client.permission.respond(input)
 
-            return (
-              <DataProvider data={sync.data} directory={directory()} onPermissionRespond={respond}>
-                <LocalProvider>{props.children}</LocalProvider>
-              </DataProvider>
-            )
-          })}
-        </SyncProvider>
-      </SDKProvider>
+                return (
+                  <DataProvider data={sync.data} directory={dir} onPermissionRespond={respond}>
+                    <LocalProvider>{props.children}</LocalProvider>
+                  </DataProvider>
+                )
+              })}
+            </SyncProvider>
+          </SDKProvider>
+        )}
+      </Show>
     </Show>
   )
 }

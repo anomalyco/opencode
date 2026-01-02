@@ -827,9 +827,29 @@ export namespace SessionPrompt {
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
-              const stat = await Bun.file(filepath).stat()
+              const file = Bun.file(filepath)
+              const stat = await file.stat().catch(() => undefined)
 
-              if (stat.isDirectory()) {
+              if (!stat && part.mime !== "text/plain") {
+                return [
+                  {
+                    id: Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `File not found: ${filepath}`,
+                  },
+                  {
+                    ...part,
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                  },
+                ]
+              }
+
+              if (stat?.isDirectory()) {
                 part.mime = "application/x-directory"
               }
 
@@ -981,7 +1001,6 @@ export namespace SessionPrompt {
                 ]
               }
 
-              const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
               return [
                 {

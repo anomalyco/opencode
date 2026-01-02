@@ -39,7 +39,11 @@ export namespace ToolRegistry {
         dot: true,
       })) {
         const namespace = path.basename(match, path.extname(match))
-        const mod = await import(match)
+        const mod = await import(match).catch((error) => {
+          log.error("failed to load tool", { error, match })
+          return undefined
+        })
+        if (!mod) continue
         for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
           custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
         }
