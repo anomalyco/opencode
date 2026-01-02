@@ -1,4 +1,4 @@
-import type { Message, Session, Part, FileDiff, SessionStatus, Permission } from "@opencode-ai/sdk/v2"
+import type { Message, Session, Part, FileDiff, SessionStatus, PermissionRequest } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
@@ -14,7 +14,7 @@ type Data = {
     [sessionID: string]: PreloadMultiFileDiffResult<any>[]
   }
   permission?: {
-    [sessionID: string]: Permission[]
+    [sessionID: string]: PermissionRequest[]
   }
   message: {
     [sessionID: string]: Message[]

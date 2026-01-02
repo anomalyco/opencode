@@ -455,8 +455,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   const permission = createMemo(() => {
     const next = data.store.permission?.[props.message.sessionID]?.[0]
-    if (!next) return undefined
-    if (next.callID !== part.callID) return undefined
+    if (!next || !next.tool) return undefined
+    if (next.tool!.callID !== part.callID) return undefined
     return next
   })
 
@@ -732,19 +732,20 @@ ToolRegistry.register({
 
     const childToolPart = createMemo(() => {
       const perm = childPermission()
-      if (!perm) return undefined
+      if (!perm || !perm.tool) return undefined
       const sessionId = childSessionId()
       if (!sessionId) return undefined
       // Find the tool part that matches the permission's callID
       const messages = data.store.message[sessionId] ?? []
-      for (const msg of messages) {
-        const parts = data.store.part[msg.id] ?? []
-        for (const part of parts) {
-          if (part.type === "tool" && (part as ToolPart).callID === perm.callID) {
-            return { part: part as ToolPart, message: msg }
-          }
+      const message = messages.findLast((m) => m.id === perm.tool!.messageID)
+      if (!message) return undefined
+      const parts = data.store.part[message.id] ?? []
+      for (const part of parts) {
+        if (part.type === "tool" && (part as ToolPart).callID === perm.tool!.callID) {
+          return { part: part as ToolPart, message }
         }
       }
+
       return undefined
     })
 
