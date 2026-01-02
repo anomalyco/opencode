@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/steven/dev/opencode/logs/.f89a2826450b50071b6d70f8c4a754ce7416d9a7-audit.json",
+    "files": [
+        {
+            "date": 1767315075212,
+            "name": "/Users/steven/dev/opencode/logs/application-2026-01-01.log",
+            "hash": "d803e101a13614a501f48df1a38748c5a057f01c311fdf9e55c7390405476c46"
+        },
+        {
+            "date": 1767368350917,
+            "name": "/Users/steven/dev/opencode/logs/application-2026-01-02.log",
+            "hash": "7eacc2828d81adcec3be8d942a1a462daf68960f2f590774e3f1bb7372c63874"
+        }
+    ],
+    "hashType": "sha256"
+}
