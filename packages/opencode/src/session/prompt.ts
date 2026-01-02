@@ -37,7 +37,7 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { TaskTool } from "@/tool/task"
+import { TaskTool, filterSubagents, TASK_DESCRIPTION } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
@@ -540,12 +540,20 @@ export namespace SessionPrompt {
         model,
         abort,
       })
+
+      // Track agents explicitly invoked by user via @ autocomplete
+      const userInvokedAgents = msgs
+        .filter((m) => m.info.role === "user")
+        .flatMap((m) => m.parts.filter((p) => p.type === "agent") as MessageV2.AgentPart[])
+        .map((p) => p.name)
+
       const tools = await resolveTools({
         agent,
         session,
         model,
         tools: lastUser.tools,
         processor,
+        userInvokedAgents,
       })
 
       if (step === 1) {
@@ -615,6 +623,7 @@ export namespace SessionPrompt {
     session: Session.Info
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
+    userInvokedAgents: string[]
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -624,7 +633,7 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
-      extra: { model: input.model },
+      extra: { model: input.model, userInvokedAgents: input.userInvokedAgents },
       agent: input.agent.name,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
@@ -767,6 +776,23 @@ export namespace SessionPrompt {
       }
       tools[key] = item
     }
+
+    // Regenerate task tool description with filtered subagents
+    if (tools.task) {
+      const all = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+      const filtered = filterSubagents(all, input.agent.permission)
+      const description = TASK_DESCRIPTION.replace(
+        "{agents}",
+        filtered
+          .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+          .join("\n"),
+      )
+      tools.task = {
+        ...tools.task,
+        description,
+      }
+    }
+
     return tools
   }
 
@@ -1004,6 +1030,9 @@ export namespace SessionPrompt {
         }
 
         if (part.type === "agent") {
+          // Check if this agent would be denied by task permission
+          const perm = PermissionNext.evaluate("task", part.name, agent.permission)
+          const hint = perm === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -1017,9 +1046,12 @@ export namespace SessionPrompt {
               sessionID: input.sessionID,
               type: "text",
               synthetic: true,
+              // An extra space is added here. Otherwise the 'Use' gets appended
+              // to user's last word; making a combined word
               text:
-                "Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name,
+                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
+                part.name +
+                hint,
             },
           ]
         }
