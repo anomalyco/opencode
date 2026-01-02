@@ -8,6 +8,7 @@ import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
+import { ListTool } from "./ls"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import type { Agent } from "../agent/agent"
@@ -94,6 +95,7 @@ export namespace ToolRegistry {
       ReadTool,
       GlobTool,
       GrepTool,
+      ListTool,
       EditTool,
       WriteTool,
       TaskTool,
