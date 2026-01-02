@@ -53,28 +53,36 @@ export const WriteTool = Tool.define("write", {
 
     let output = ""
     await LSP.touchFile(filepath, true)
-    const diagnostics = await LSP.diagnostics()
+    const allDiagnostics = await LSP.diagnostics()
     const normalizedFilepath = Filesystem.normalizePath(filepath)
-    let projectDiagnosticsCount = 0
-    for (const [file, issues] of Object.entries(diagnostics)) {
-      const errors = issues.filter((item) => item.severity === 1)
-      if (errors.length === 0) continue
+    const issues = allDiagnostics[normalizedFilepath] ?? []
+    const errors = issues.filter((item) => item.severity === 1)
+    if (errors.length > 0) {
       const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
       const suffix =
         errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
-      if (file === normalizedFilepath) {
-        output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
-        continue
-      }
-      if (projectDiagnosticsCount >= MAX_PROJECT_DIAGNOSTICS_FILES) continue
-      projectDiagnosticsCount++
+      output += `\nThis file has errors, please fix\n<file_diagnostics>\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</file_diagnostics>\n`
+    }
+
+    const project: string[] = []
+    for (const [file, diagnostics] of Object.entries(allDiagnostics)) {
+      if (file === normalizedFilepath) continue
+      if (project.length >= MAX_PROJECT_DIAGNOSTICS_FILES) break
+      const errors = diagnostics.filter((item) => item.severity === 1)
+      if (errors.length === 0) continue
+      project.push(file)
+      const limited = errors.slice(0, MAX_DIAGNOSTICS_PER_FILE)
+      const suffix =
+        errors.length > MAX_DIAGNOSTICS_PER_FILE ? `\n... and ${errors.length - MAX_DIAGNOSTICS_PER_FILE} more` : ""
       output += `\n<project_diagnostics>\n${file}\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</project_diagnostics>\n`
     }
 
     return {
       title: path.relative(Instance.worktree, filepath),
       metadata: {
-        diagnostics,
+        diagnostics: {
+          [normalizedFilepath]: issues,
+        },
         filepath,
         exists: exists,
       },
