@@ -1319,11 +1319,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // Check if there's a command part (pill) in the prompt
+    // Check if there's a command pill in the prompt
     const commandPart = currentPrompt.find((p) => p.type === "command") as CommandPart | undefined
     if (commandPart) {
-      const commandName = commandPart.name
-      // Get text after the command pill
       const argsText = currentPrompt
         .filter((p) => p.type === "text")
         .map((p) => (p as { content: string }).content)
@@ -1341,7 +1339,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             sessionID: existing.id,
             messageID,
             type: "text" as const,
-            text,
+            text: `/${commandPart.name}${argsText ? " " + argsText : ""}`,
           },
         ],
         agent,
@@ -1351,7 +1349,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       sdk.client.session
         .command({
           sessionID: existing.id,
-          command: commandName,
+          command: commandPart.name,
           arguments: argsText,
           agent,
           model: `${model.providerID}/${model.modelID}`,
@@ -1362,47 +1360,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           console.error("Failed to send command", e)
         })
       return
-    }
-
-    // Fallback: check if text starts with "/" (user typed command without pill conversion)
-    if (text.startsWith("/")) {
-      const [cmdName, ...args] = text.split(" ")
-      const commandName = cmdName.slice(1)
-      const customCommand = sync.data.command.find((c) => c.name === commandName)
-      if (customCommand) {
-        const messageID = Identifier.ascending("message")
-
-        sync.session.addOptimisticMessage({
-          sessionID: existing.id,
-          messageID,
-          parts: [
-            {
-              id: Identifier.ascending("part"),
-              sessionID: existing.id,
-              messageID,
-              type: "text" as const,
-              text,
-            },
-          ],
-          agent,
-          model,
-        })
-
-        sdk.client.session
-          .command({
-            sessionID: existing.id,
-            command: commandName,
-            arguments: args.join(" "),
-            agent,
-            model: `${model.providerID}/${model.modelID}`,
-            variant,
-            messageID,
-          })
-          .catch((e) => {
-            console.error("Failed to send command", e)
-          })
-        return
-      }
     }
 
     const messageID = Identifier.ascending("message")
