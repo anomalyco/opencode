@@ -90,7 +90,6 @@ export namespace Config {
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
     }
 
-    const promises: Promise<void>[] = []
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
@@ -103,13 +102,12 @@ export namespace Config {
         }
       }
 
-      promises.push(installDependencies(dir))
+      installDependencies(dir)
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
     }
-    await Promise.allSettled(promises)
 
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
@@ -125,12 +123,21 @@ export namespace Config {
       result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
     }
 
-    if (!result.username) result.username = os.userInfo().username
-
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
+    // Backwards compatibility: legacy top-level `tools` config
+    if (result.tools) {
+      const perms: Record<string, Config.PermissionAction> = {}
+      for (const [tool, enabled] of Object.entries(result.tools)) {
+        const action: Config.PermissionAction = enabled ? "allow" : "deny"
+        if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+          perms.edit = action
+          continue
+        }
+        perms[tool] = action
+      }
+      result.permission = mergeDeep(perms, result.permission ?? {})
     }
+
+    if (!result.username) result.username = os.userInfo().username
 
     // Handle migration from autoshare to share field
     if (result.autoshare === true && !result.share) {
@@ -370,7 +377,45 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const Permission = z.enum(["ask", "allow", "deny"])
+  export const PermissionAction = z.enum(["ask", "allow", "deny"]).meta({
+    ref: "PermissionActionConfig",
+  })
+  export type PermissionAction = z.infer<typeof PermissionAction>
+
+  export const PermissionObject = z.record(z.string(), PermissionAction).meta({
+    ref: "PermissionObjectConfig",
+  })
+  export type PermissionObject = z.infer<typeof PermissionObject>
+
+  export const PermissionRule = z.union([PermissionAction, PermissionObject]).meta({
+    ref: "PermissionRuleConfig",
+  })
+  export type PermissionRule = z.infer<typeof PermissionRule>
+
+  export const Permission = z
+    .object({
+      read: PermissionRule.optional(),
+      edit: PermissionRule.optional(),
+      glob: PermissionRule.optional(),
+      grep: PermissionRule.optional(),
+      list: PermissionRule.optional(),
+      bash: PermissionRule.optional(),
+      task: PermissionRule.optional(),
+      external_directory: PermissionRule.optional(),
+      todowrite: PermissionAction.optional(),
+      todoread: PermissionAction.optional(),
+      webfetch: PermissionAction.optional(),
+      websearch: PermissionAction.optional(),
+      codesearch: PermissionAction.optional(),
+      lsp: PermissionRule.optional(),
+      doom_loop: PermissionAction.optional(),
+    })
+    .catchall(PermissionRule)
+    .or(PermissionAction)
+    .transform((x) => (typeof x === "string" ? { "*": x } : x))
+    .meta({
+      ref: "PermissionConfig",
+    })
   export type Permission = z.infer<typeof Permission>
 
   export const Command = z.object({
@@ -388,33 +433,70 @@ export namespace Config {
       temperature: z.number().optional(),
       top_p: z.number().optional(),
       prompt: z.string().optional(),
-      tools: z.record(z.string(), z.boolean()).optional(),
+      tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead"),
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
+      options: z.record(z.string(), z.any()).optional(),
       color: z
         .string()
         .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
         .optional()
         .describe("Hex color code for the agent (e.g., #FF5733)"),
-      maxSteps: z
+      steps: z
         .number()
         .int()
         .positive()
         .optional()
         .describe("Maximum number of agentic iterations before forcing text-only response"),
-      permission: z
-        .object({
-          edit: Permission.optional(),
-          bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          webfetch: Permission.optional(),
-          doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
-        })
-        .optional(),
+      maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
+      permission: Permission.optional(),
     })
     .catchall(z.any())
+    .transform((agent, ctx) => {
+      const knownKeys = new Set([
+        "model",
+        "prompt",
+        "description",
+        "temperature",
+        "top_p",
+        "mode",
+        "color",
+        "steps",
+        "maxSteps",
+        "options",
+        "permission",
+        "disable",
+        "tools",
+      ])
+
+      // Extract unknown properties into options
+      const options: Record<string, unknown> = { ...agent.options }
+      for (const [key, value] of Object.entries(agent)) {
+        if (!knownKeys.has(key)) options[key] = value
+      }
+
+      // Convert legacy tools config to permissions
+      const permission: Permission = { ...agent.permission }
+      for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
+        const action = enabled ? "allow" : "deny"
+        // write, edit, patch, multiedit all map to edit permission
+        if (tool === "write" || tool === "edit" || tool === "patch" || tool === "multiedit") {
+          permission.edit = action
+        } else {
+          permission[tool] = action
+        }
+      }
+
+      // Convert legacy maxSteps to steps
+      const steps = agent.steps ?? agent.maxSteps
+
+      return { ...agent, options, permission, steps } as typeof agent & {
+        options?: Record<string, unknown>
+        permission?: Permission
+        steps?: number
+      }
+    })
     .meta({
       ref: "AgentConfig",
     })
@@ -787,16 +869,7 @@ export namespace Config {
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
-      permission: z
-        .object({
-          edit: Permission.optional(),
-          bash: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          skill: z.union([Permission, z.record(z.string(), Permission)]).optional(),
-          webfetch: Permission.optional(),
-          doom_loop: Permission.optional(),
-          external_directory: Permission.optional(),
-        })
-        .optional(),
+      permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({

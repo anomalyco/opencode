@@ -20,7 +20,6 @@ import { LSP } from "../lsp"
 import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
-import { Permission } from "../permission"
 import { Instance } from "../project/instance"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
@@ -47,6 +46,7 @@ import { SessionStatus } from "@/session/status"
 import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
+import { PermissionNext } from "@/permission/next"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 
@@ -1524,6 +1524,7 @@ export namespace Server {
         "/session/:sessionID/permissions/:permissionID",
         describeRoute({
           summary: "Respond to permission",
+          deprecated: true,
           description: "Approve or deny a permission request from the AI assistant.",
           operationId: "permission.respond",
           responses: {
@@ -1545,15 +1546,47 @@ export namespace Server {
             permissionID: z.string(),
           }),
         ),
-        validator("json", z.object({ response: Permission.Response })),
+        validator("json", z.object({ response: PermissionNext.Reply })),
         async (c) => {
           const params = c.req.valid("param")
-          const sessionID = params.sessionID
-          const permissionID = params.permissionID
-          Permission.respond({
-            sessionID,
-            permissionID,
-            response: c.req.valid("json").response,
+          PermissionNext.reply({
+            requestID: params.permissionID,
+            reply: c.req.valid("json").response,
+          })
+          return c.json(true)
+        },
+      )
+      .post(
+        "/permission/:requestID/reply",
+        describeRoute({
+          summary: "Respond to permission request",
+          description: "Approve or deny a permission request from the AI assistant.",
+          operationId: "permission.reply",
+          responses: {
+            200: {
+              description: "Permission processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            requestID: z.string(),
+          }),
+        ),
+        validator("json", z.object({ reply: PermissionNext.Reply })),
+        async (c) => {
+          const params = c.req.valid("param")
+          const json = c.req.valid("json")
+          await PermissionNext.reply({
+            requestID: params.requestID,
+            reply: json.reply,
           })
           return c.json(true)
         },
@@ -1569,14 +1602,14 @@ export namespace Server {
               description: "List of pending permissions",
               content: {
                 "application/json": {
-                  schema: resolver(Permission.Info.array()),
+                  schema: resolver(PermissionNext.Request.array()),
                 },
               },
             },
           },
         }),
         async (c) => {
-          const permissions = Permission.list()
+          const permissions = await PermissionNext.list()
           return c.json(permissions)
         },
       )
@@ -2678,12 +2711,44 @@ export namespace Server {
         },
       )
       .all("/*", async (c) => {
-        return proxy(`https://app.opencode.ai${c.req.path}`, {
+        const path = c.req.path
+        const response = await proxy(`https://app.opencode.ai${path}`, {
           ...c.req,
           headers: {
             host: "app.opencode.ai",
           },
         })
+        // Cloudflare doesn't return Content-Type for static assets, so we need to add it
+        const mimeTypes: Record<string, string> = {
+          ".js": "application/javascript",
+          ".mjs": "application/javascript",
+          ".css": "text/css",
+          ".json": "application/json",
+          ".wasm": "application/wasm",
+          ".svg": "image/svg+xml",
+          ".png": "image/png",
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".gif": "image/gif",
+          ".ico": "image/x-icon",
+          ".webp": "image/webp",
+          ".woff": "font/woff",
+          ".woff2": "font/woff2",
+          ".ttf": "font/ttf",
+          ".eot": "application/vnd.ms-fontobject",
+        }
+        for (const [ext, mime] of Object.entries(mimeTypes)) {
+          if (path.endsWith(ext)) {
+            const headers = new Headers(response.headers)
+            headers.set("Content-Type", mime)
+            return new Response(response.body, {
+              status: response.status,
+              statusText: response.statusText,
+              headers,
+            })
+          }
+        }
+        return response
       }),
   )
 
