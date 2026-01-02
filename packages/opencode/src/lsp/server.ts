@@ -1229,7 +1229,7 @@ export namespace LSPServer {
         }
 
         const release = await releaseResponse.json()
-        const version = release.name.replace(/^v/, '')
+        const version = release.name?.replace(/^v/, '')
 
         if (!version) {
           log.error("Could not determine Kotlin LSP version from release")
