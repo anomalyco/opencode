@@ -1294,6 +1294,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const commandName = cmdName.slice(1)
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
+        const messageID = Identifier.ascending("message")
+        const commandPartId = Identifier.ascending("part")
+        const optimisticParts = [
+          {
+            id: commandPartId,
+            sessionID: existing.id,
+            messageID,
+            type: "command" as const,
+            command: text,
+            prompt: "",
+          },
+        ]
+
+        sync.session.addOptimisticMessage({
+          sessionID: existing.id,
+          messageID,
+          parts: optimisticParts,
+          agent,
+          model,
+        })
+
         sdk.client.session
           .command({
             sessionID: existing.id,
@@ -1302,6 +1323,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
+            messageID,
           })
           .catch((e) => {
             console.error("Failed to send command", e)
