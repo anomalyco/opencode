@@ -68,10 +68,10 @@ function computeStatusFromPart(part: PartType | undefined): string | undefined {
   return undefined
 }
 
-function same<T extends { id: string }>(a: readonly T[], b: readonly T[]) {
+function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
-  return a.every((x, i) => x.id === b[i].id)
+  return a.every((x, i) => x === b[i])
 }
 
 function AssistantMessageItem(props: {
