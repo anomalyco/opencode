@@ -46,19 +46,15 @@ export type StatusState = {
   items: Record<string, StatusItemState>
 }
 
-// Local store for status items - TUI receives updates via event bus
 const [statusStore, setStatusStore] = createStore<StatusState>({ items: {} })
 
-// Publish status updates via the event bus so TUI can receive them
-async function publishStatusUpdate() {
-  // Use dynamic imports to avoid circular dependencies and context issues in tests
-  try {
-    const { Bus } = await import("../bus")
-    const { TuiEvent } = await import("../cli/cmd/tui/event")
-    Bus.publish(TuiEvent.StatusUpdated, { items: statusStore.items })
-  } catch {
-    // Ignore errors when context is not available (e.g., in tests)
-  }
+function publishStatusUpdate() {
+  if (process.env["OPENCODE_TEST_HOME"]) return
+
+  import("../bus")
+    .then(({ Bus }) => import("../cli/cmd/tui/event").then(({ TuiEvent }) => ({ Bus, TuiEvent })))
+    .then(({ Bus, TuiEvent }) => Bus.publish(TuiEvent.StatusUpdated, { items: statusStore.items }))
+    .catch(() => {})
 }
 
 export function register(item: StatusItem): StatusHandle {
