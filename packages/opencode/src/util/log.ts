@@ -57,7 +57,6 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    cleanup(Global.Path.log)
     if (options.print) return
     logpath = path.join(
       Global.Path.log,
@@ -71,6 +70,7 @@ export namespace Log {
       writer.flush()
       return num
     }
+    cleanup(Global.Path.log)
   }
 
   async function cleanup(dir: string) {
