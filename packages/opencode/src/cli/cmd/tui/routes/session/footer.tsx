@@ -1,10 +1,11 @@
-import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, onMount, Show, Switch, For } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import type { StatusColor } from "@/status/registry"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -19,6 +20,18 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
+
+  const pluginStatus = createMemo(() => {
+    const items = Object.values(sync.data.pluginStatus)
+    return items
+      .filter((item) => item.short !== null)
+      .map((item) => ({
+        id: item.id,
+        render: item.short!,
+        priority: item.priority,
+      }))
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+  })
 
   const [store, setStore] = createStore({
     welcome: false,
@@ -63,6 +76,29 @@ export function Footer() {
                 {permissions().length > 1 ? "s" : ""}
               </text>
             </Show>
+            <For each={pluginStatus()}>
+              {(item) => {
+                const color = item.render.color ?? "default"
+                const colorMap = {
+                  default: theme.text,
+                  green: theme.success,
+                  yellow: theme.warning,
+                  red: theme.error,
+                  blue: theme.info,
+                  gray: theme.textMuted,
+                }
+                const textColor = colorMap[color]
+                return (
+                  <text fg={textColor}>
+                    <span style={{ fg: textColor }}>
+                      {item.render.icon ?? ""}
+                      {item.render.icon ? " " : ""}
+                      {item.render.text}
+                    </span>
+                  </text>
+                )
+              }}
+            </For>
             <text fg={theme.text}>
               <span style={{ fg: theme.success }}>•</span> {lsp().length} LSP
             </text>

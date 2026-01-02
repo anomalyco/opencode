@@ -23,6 +23,63 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type StatusRegistry = {
+  register: (item: {
+    id: string
+    priority?: number
+    render: {
+      long: () => {
+        icon?: string
+        text: string
+        color?: "default" | "green" | "yellow" | "red" | "blue" | "gray"
+        detail?: string
+        progress?: number
+        subtext?: string
+      }
+      short?: () => {
+        icon?: string
+        text: string
+        color?: "default" | "green" | "yellow" | "red" | "blue" | "gray"
+      } | null
+    }
+  }) => {
+    update: (render: {
+      long?: Partial<{
+        icon?: string
+        text: string
+        color?: "default" | "green" | "yellow" | "red" | "blue" | "gray"
+        detail?: string
+        progress?: number
+        subtext?: string
+      }>
+      short?: Partial<{
+        icon?: string
+        text: string
+        color?: "default" | "green" | "yellow" | "red" | "blue" | "gray"
+      }> | null
+    }) => void
+    remove: () => void
+  }
+  getAll: () => Array<{ id: string; priority?: number }>
+  getFooterItems: () => Array<{
+    id: string
+    render: { icon?: string; text: string; color?: "default" | "green" | "yellow" | "red" | "blue" | "gray" }
+    priority?: number
+  }>
+  getSidebarItems: () => Array<{
+    id: string
+    render: {
+      icon?: string
+      text: string
+      color?: "default" | "green" | "yellow" | "red" | "blue" | "gray"
+      detail?: string
+      progress?: number
+      subtext?: string
+    }
+    priority?: number
+  }>
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -30,6 +87,7 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  status?: StatusRegistry
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>

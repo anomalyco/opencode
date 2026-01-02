@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import type { StatusColor } from "@/status/registry"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -67,6 +68,17 @@ export function Sidebar(props: { sessionID: string }) {
     sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
   const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
+
+  const pluginStatus = createMemo(() => {
+    const items = Object.values(sync.data.pluginStatus)
+    return items
+      .map((item) => ({
+        id: item.id,
+        render: item.long,
+        priority: item.priority,
+      }))
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+  })
 
   return (
     <Show when={session()}>
@@ -267,6 +279,44 @@ export function Sidebar(props: { sessionID: string }) {
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
+          <Show when={pluginStatus().length > 0}>
+            <For each={pluginStatus()}>
+              {(item) => {
+                const color = item.render.color ?? "default"
+                const colorMap = {
+                  default: theme.text,
+                  green: theme.success,
+                  yellow: theme.warning,
+                  red: theme.error,
+                  blue: theme.info,
+                  gray: theme.textMuted,
+                }
+                const textColor = colorMap[color]
+                return (
+                  <box>
+                    <text fg={textColor}>
+                      {item.render.icon ?? "•"} {item.render.text}
+                    </text>
+                    <Show when={item.render.detail}>
+                      <text fg={theme.textMuted}>
+                        {"  "}
+                        {item.render.detail}
+                      </text>
+                    </Show>
+                    <Show when={item.render.progress !== undefined}>
+                      <text fg={theme.textMuted}> {item.render.progress}%</text>
+                    </Show>
+                    <Show when={item.render.subtext}>
+                      <text fg={theme.textMuted}>
+                        {"  "}
+                        {item.render.subtext}
+                      </text>
+                    </Show>
+                  </box>
+                )
+              }}
+            </For>
+          </Show>
           <Show when={!hasProviders() && !gettingStartedDismissed()}>
             <box
               backgroundColor={theme.backgroundElement}

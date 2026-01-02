@@ -4,6 +4,32 @@ import z from "zod"
 
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  StatusUpdated: BusEvent.define(
+    "tui.status.updated",
+    z.object({
+      items: z.record(
+        z.object({
+          id: z.string(),
+          priority: z.number().optional(),
+          long: z.object({
+            icon: z.string().optional(),
+            text: z.string(),
+            color: z.enum(["default", "green", "yellow", "red", "blue", "gray"]).optional(),
+            detail: z.string().optional(),
+            progress: z.number().optional(),
+            subtext: z.string().optional(),
+          }),
+          short: z
+            .object({
+              icon: z.string().optional(),
+              text: z.string(),
+              color: z.enum(["default", "green", "yellow", "red", "blue", "gray"]).optional(),
+            })
+            .nullable(),
+        }),
+      ),
+    }),
+  ),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({
