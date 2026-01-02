@@ -21,11 +21,13 @@ export function AskUserPrompt(props: { request: AskUserRequest }) {
     answers: AnswerState[]
     showReview: boolean
     otherInputActive: boolean
+    focusedOption: number
   }>({
     currentQuestion: 0,
     answers: questions().map(() => ({ selectedIndices: [], otherText: "" })),
     showReview: false,
     otherInputActive: false,
+    focusedOption: 0,
   })
 
   const currentQ = createMemo(() => questions()[store.currentQuestion])
@@ -70,6 +72,7 @@ export function AskUserPrompt(props: { request: AskUserRequest }) {
     if (store.currentQuestion < questions().length - 1) {
       setStore("currentQuestion", store.currentQuestion + 1)
       setStore("otherInputActive", false)
+      setStore("focusedOption", 0)
     } else {
       setStore("showReview", true)
     }
@@ -78,10 +81,22 @@ export function AskUserPrompt(props: { request: AskUserRequest }) {
   function prevQuestion() {
     if (store.showReview) {
       setStore("showReview", false)
+      setStore("focusedOption", 0)
     } else if (store.currentQuestion > 0) {
       setStore("currentQuestion", store.currentQuestion - 1)
       setStore("otherInputActive", false)
+      setStore("focusedOption", 0)
     }
+  }
+
+  function focusNextOption() {
+    const count = optionCount()
+    setStore("focusedOption", (store.focusedOption + 1) % count)
+  }
+
+  function focusPrevOption() {
+    const count = optionCount()
+    setStore("focusedOption", (store.focusedOption - 1 + count) % count)
   }
 
   function submit() {
@@ -164,10 +179,29 @@ export function AskUserPrompt(props: { request: AskUserRequest }) {
       return
     }
 
+    if (evt.name === "up" || evt.name === "k") {
+      evt.preventDefault()
+      focusPrevOption()
+      return
+    }
+
+    if (evt.name === "down" || evt.name === "j") {
+      evt.preventDefault()
+      focusNextOption()
+      return
+    }
+
+    if (evt.sequence === " ") {
+      evt.preventDefault()
+      toggleOption(store.focusedOption)
+      return
+    }
+
     const numKey = parseInt(evt.sequence ?? "", 10)
     if (numKey >= 1 && numKey <= optionCount()) {
       evt.preventDefault()
       toggleOption(numKey - 1)
+      setStore("focusedOption", numKey - 1)
       return
     }
 
@@ -209,6 +243,7 @@ export function AskUserPrompt(props: { request: AskUserRequest }) {
               question={currentQ()!}
               answer={currentAnswer()}
               otherInputActive={store.otherInputActive}
+              focusedOption={store.focusedOption}
             />
           </Match>
         </Switch>
@@ -261,7 +296,13 @@ export function AskUserPrompt(props: { request: AskUserRequest }) {
         <box flexDirection="row" gap={2}>
           <Show when={!store.otherInputActive}>
             <text fg={theme.text}>
-              {"⇆"} <span style={{ fg: theme.textMuted }}>navigate</span>
+              {"↑↓"} <span style={{ fg: theme.textMuted }}>options</span>
+            </text>
+            <text fg={theme.text}>
+              {"⇆"} <span style={{ fg: theme.textMuted }}>questions</span>
+            </text>
+            <text fg={theme.text}>
+              space <span style={{ fg: theme.textMuted }}>select</span>
             </text>
           </Show>
           <text fg={theme.text}>
@@ -322,7 +363,12 @@ function QuestionTabs(props: {
   )
 }
 
-function QuestionView(props: { question: AskUserQuestion; answer: AnswerState; otherInputActive: boolean }) {
+function QuestionView(props: {
+  question: AskUserQuestion
+  answer: AnswerState
+  otherInputActive: boolean
+  focusedOption: number
+}) {
   const { theme } = useTheme()
   const q = () => props.question
 
@@ -333,12 +379,13 @@ function QuestionView(props: { question: AskUserQuestion; answer: AnswerState; o
         <For each={q().options}>
           {(option, idx) => {
             const selected = () => props.answer.selectedIndices.includes(idx())
+            const focused = () => props.focusedOption === idx()
             const icon = () => (q().multiSelect ? (selected() ? "☑" : "☐") : selected() ? "●" : "○")
             return (
-              <box flexDirection="row" gap={1}>
-                <text fg={selected() ? theme.accent : theme.textMuted}>{idx() + 1}.</text>
-                <text fg={selected() ? theme.text : theme.textMuted}>
-                  {icon()} {option.label}
+              <box flexDirection="row" gap={1} backgroundColor={focused() ? theme.backgroundElement : undefined}>
+                <text fg={selected() ? theme.accent : focused() ? theme.text : theme.textMuted}>{idx() + 1}.</text>
+                <text fg={selected() ? theme.text : focused() ? theme.text : theme.textMuted}>
+                  {focused() ? ">" : " "} {icon()} {option.label}
                 </text>
                 <Show when={option.description}>
                   <text fg={theme.textMuted}>- {option.description}</text>
@@ -353,6 +400,7 @@ function QuestionView(props: { question: AskUserQuestion; answer: AnswerState; o
           otherText={props.answer.otherText}
           inputActive={props.otherInputActive}
           multiSelect={q().multiSelect}
+          focused={props.focusedOption === q().options.length}
         />
       </box>
     </box>
@@ -365,15 +413,20 @@ function OtherOption(props: {
   otherText: string
   inputActive: boolean
   multiSelect: boolean
+  focused: boolean
 }) {
   const { theme } = useTheme()
   const icon = () => (props.multiSelect ? (props.selected ? "☑" : "☐") : props.selected ? "●" : "○")
 
   return (
     <box>
-      <box flexDirection="row" gap={1}>
-        <text fg={props.selected ? theme.accent : theme.textMuted}>{props.index + 1}.</text>
-        <text fg={props.selected ? theme.text : theme.textMuted}>{icon()} Other...</text>
+      <box flexDirection="row" gap={1} backgroundColor={props.focused ? theme.backgroundElement : undefined}>
+        <text fg={props.selected ? theme.accent : props.focused ? theme.text : theme.textMuted}>
+          {props.index + 1}.
+        </text>
+        <text fg={props.selected ? theme.text : props.focused ? theme.text : theme.textMuted}>
+          {props.focused ? ">" : " "} {icon()} Other...
+        </text>
       </box>
       <Show when={props.selected}>
         <box paddingLeft={3} flexDirection="row">
