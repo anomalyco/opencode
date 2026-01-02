@@ -26,7 +26,14 @@ export const LspTool = Tool.define("lsp", {
     line: z.number().int().min(1).describe("The line number (1-based, as shown in editors)"),
     character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
   }),
-  execute: async (args) => {
+  execute: async (args, ctx) => {
+    await ctx.ask({
+      permission: "lsp",
+      patterns: ["*"],
+      always: ["*"],
+      metadata: {},
+    })
+
     const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
     const uri = pathToFileURL(file).href
     const position = {

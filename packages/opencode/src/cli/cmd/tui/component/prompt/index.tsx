@@ -33,6 +33,7 @@ import { useKV } from "../../context/kv"
 
 export type PromptProps = {
   sessionID?: string
+  visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
   ref?: (ref: PromptRef) => void
@@ -373,7 +374,8 @@ export function Prompt(props: PromptProps) {
   })
 
   createEffect(() => {
-    input.focus()
+    if (props.visible !== false) input?.focus()
+    if (props.visible === false) input?.blur()
   })
 
   onMount(() => {
@@ -798,7 +800,7 @@ export function Prompt(props: PromptProps) {
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
-      <box ref={(r) => (anchor = r)}>
+      <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
           border={["left"]}
           borderColor={highlight()}
