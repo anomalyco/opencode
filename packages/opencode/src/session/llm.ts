@@ -83,7 +83,24 @@ export namespace LLM {
 
     const provider = await Provider.getProvider(input.model.providerID)
     const small = input.small ? ProviderTransform.smallOptions(input.model) : {}
-    const variant = input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+
+    // Allow plugins to override variant selection
+    const availableVariants = input.model.variants ? Object.keys(input.model.variants) : []
+    const variantHook = await Plugin.trigger(
+      "chat.variant",
+      {
+        sessionID: input.sessionID,
+        agent: input.agent.name,
+        model: input.model,
+        currentVariant: input.user.variant,
+        availableVariants,
+      },
+      { variant: input.user.variant, options: {} },
+    )
+    const variantName = variantHook.variant
+    const variantOptions = input.model.variants && variantName ? input.model.variants[variantName] : {}
+    const variant = mergeDeep(variantOptions as Record<string, any>, variantHook.options)
+
     const options = pipe(
       ProviderTransform.options(input.model, input.sessionID, provider.options),
       mergeDeep(small),

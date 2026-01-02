@@ -164,6 +164,25 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { temperature: number; topP: number; topK: number; options: Record<string, any> },
   ) => Promise<void>
+  /**
+   * Modify the variant used for LLM requests. Allows plugins to override
+   * thinking/reasoning levels programmatically.
+   *
+   * - `variant`: The variant name (e.g., "high", "max") to select from model's available variants
+   * - `options`: Direct provider options to merge (overrides variant selection)
+   *
+   * If both are set, `options` takes precedence over `variant`.
+   */
+  "chat.variant"?: (
+    input: {
+      sessionID: string
+      agent: string
+      model: Model
+      currentVariant: string | undefined
+      availableVariants: string[]
+    },
+    output: { variant: string | undefined; options: Record<string, any> },
+  ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
