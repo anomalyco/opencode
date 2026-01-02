@@ -12,9 +12,37 @@ interface Context {
 }
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
+const lastAccess = new Map<string, number>()
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000
+
+let cleanupTimer: ReturnType<typeof setInterval> | undefined
+function startCleanupTimer() {
+  if (cleanupTimer) return
+  cleanupTimer = setInterval(async () => {
+    const now = Date.now()
+    for (const [dir, time] of lastAccess) {
+      if (now - time > IDLE_TIMEOUT_MS && cache.has(dir)) {
+        Log.Default.info("disposing idle instance", { directory: dir })
+        const ctx = await cache.get(dir)?.catch(() => undefined)
+        if (ctx) {
+          await context.provide(ctx, async () => {
+            await Instance.dispose()
+          })
+        }
+        lastAccess.delete(dir)
+      }
+    }
+    if (cache.size === 0) {
+      clearInterval(cleanupTimer)
+      cleanupTimer = undefined
+    }
+  }, 60_000)
+}
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
+    lastAccess.set(input.directory, Date.now())
+    startCleanupTimer()
     let existing = cache.get(input.directory)
     if (!existing) {
       Log.Default.info("creating instance", { directory: input.directory })
@@ -33,6 +61,7 @@ export const Instance = {
       cache.set(input.directory, existing)
     }
     const ctx = await existing
+    lastAccess.set(input.directory, Date.now())
     return context.provide(ctx, async () => {
       return input.fn()
     })
@@ -53,6 +82,7 @@ export const Instance = {
     Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
     cache.delete(Instance.directory)
+    lastAccess.delete(Instance.directory)
     GlobalBus.emit("event", {
       directory: Instance.directory,
       payload: {
@@ -74,5 +104,6 @@ export const Instance = {
       }
     }
     cache.clear()
+    lastAccess.clear()
   },
 }

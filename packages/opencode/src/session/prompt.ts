@@ -51,6 +51,7 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace SessionPrompt {
   const log = Log.create({ service: "session.prompt" })
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  const MAX_QUEUED_CALLBACKS = 10
 
   const state = Instance.state(
     () => {
@@ -257,8 +258,11 @@ export namespace SessionPrompt {
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
     const abort = start(sessionID)
     if (!abort) {
+      const callbacks = state()[sessionID].callbacks
+      if (callbacks.length >= MAX_QUEUED_CALLBACKS) {
+        throw new Session.BusyError(sessionID)
+      }
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
-        const callbacks = state()[sessionID].callbacks
         callbacks.push({ resolve, reject })
       })
     }
