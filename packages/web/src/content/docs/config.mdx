@@ -91,9 +91,9 @@ You can enable specific servers in your local config:
 
 ### Global
 
-Place your global OpenCode config in `~/.config/opencode/opencode.json`. Use global config for user-wide preferences like themes, providers, or keybinds.
+Place your global OpenCode config in `$XDG_CONFIG_HOME/opencode/opencode.json`. Use global config for user-wide preferences like themes, providers, or keybinds. Global config overrides remote organizational defaults.
 
-Global config overrides remote organizational defaults.
+If the `XDG_CONFIG_HOME` environment variable is not set, OpenCode uses the default location: `~/.config/opencode/opencode.json`.
 
 ---
 
