@@ -49,6 +49,7 @@ import { errors } from "./error"
 import { Pty } from "@/pty"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
+import { DebugServer } from "../debug"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -2651,6 +2652,180 @@ export namespace Server {
                 unsub()
                 resolve()
                 log.info("event disconnected")
+              })
+            })
+          })
+        },
+      )
+      // Debug log endpoint - receives logs from instrumented code
+      .post(
+        "/debug/log",
+        describeRoute({
+          summary: "Receive debug log",
+          description: "Receives a debug log entry from instrumented code running in user applications.",
+          operationId: "debug.log",
+          responses: {
+            200: {
+              description: "Log received",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ success: z.boolean() })),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            sessionID: z.string(),
+            timestamp: z.number(),
+            level: z.enum(["debug", "info", "warn", "error"]).optional(),
+            message: z.string(),
+            // New compact format
+            location: z.string().optional(), // "file.tsx:42"
+            hypothesisId: z.string().optional(), // "A", "B", etc.
+            // Legacy format
+            file: z.string().optional(),
+            line: z.number().optional(),
+            column: z.number().optional(),
+            functionName: z.string().optional(),
+            data: z.record(z.string(), z.any()).optional(),
+          }),
+        ),
+        async (c) => {
+          const entry = c.req.valid("json")
+          // Auto-start session if not active (so browser logs work without needing debug_watch first)
+          if (!DebugServer.isActive(entry.sessionID)) {
+            DebugServer.startSession(entry.sessionID)
+          }
+          DebugServer.addLog(entry)
+          return c.json({ success: true })
+        },
+      )
+      .post(
+        "/debug/session/:sessionID/start",
+        describeRoute({
+          summary: "Start debug session",
+          description: "Starts a new debug session for collecting logs.",
+          operationId: "debug.session.start",
+          responses: {
+            200: {
+              description: "Session started",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ success: z.boolean(), sessionID: z.string() })),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ sessionID: z.string() })),
+        async (c) => {
+          const { sessionID } = c.req.valid("param")
+          if (!DebugServer.isActive(sessionID)) {
+            DebugServer.startSession(sessionID)
+          }
+          return c.json({ success: true, sessionID })
+        },
+      )
+      .get(
+        "/debug/session/:sessionID/logs",
+        describeRoute({
+          summary: "Get debug session logs",
+          description: "Retrieves all logs collected for a specific debug session.",
+          operationId: "debug.session.logs",
+          responses: {
+            200: {
+              description: "Debug logs",
+              content: {
+                "application/json": {
+                  schema: resolver(DebugServer.LogEntry.array()),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ sessionID: z.string() })),
+        async (c) => {
+          const { sessionID } = c.req.valid("param")
+          const logs = DebugServer.getLogs(sessionID)
+          return c.json(logs)
+        },
+      )
+      .get(
+        "/debug/session/:sessionID/status",
+        describeRoute({
+          summary: "Get debug session status",
+          description: "Check if a debug session is currently active.",
+          operationId: "debug.session.status",
+          responses: {
+            200: {
+              description: "Session status",
+              content: {
+                "application/json": {
+                  schema: resolver(z.object({ active: z.boolean(), logCount: z.number() })),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ sessionID: z.string() })),
+        async (c) => {
+          const { sessionID } = c.req.valid("param")
+          return c.json({
+            active: DebugServer.isActive(sessionID),
+            logCount: DebugServer.getLogs(sessionID).length,
+          })
+        },
+      )
+      .get(
+        "/debug/session/:sessionID/stream",
+        describeRoute({
+          summary: "Stream debug logs",
+          description: "Subscribe to real-time debug log events for a session using server-sent events.",
+          operationId: "debug.session.stream",
+          responses: {
+            200: {
+              description: "Log stream",
+              content: {
+                "text/event-stream": {
+                  schema: resolver(DebugServer.LogEntry),
+                },
+              },
+            },
+          },
+        }),
+        validator("param", z.object({ sessionID: z.string() })),
+        async (c) => {
+          const { sessionID } = c.req.valid("param")
+          return streamSSE(c, async (stream) => {
+            // Send existing logs first
+            for (const entry of DebugServer.getLogs(sessionID)) {
+              await stream.writeSSE({ data: JSON.stringify(entry) })
+            }
+
+            // Subscribe to new logs
+            const unsub = Bus.subscribe(DebugServer.Event.LogReceived, async (event) => {
+              if (event.properties.sessionID === sessionID) {
+                await stream.writeSSE({ data: JSON.stringify(event.properties) })
+              }
+            })
+
+            // Subscribe to session end
+            const unsubEnd = Bus.subscribe(DebugServer.Event.SessionEnded, async (event) => {
+              if (event.properties.sessionID === sessionID) {
+                await stream.writeSSE({ data: JSON.stringify({ type: "session.ended", ...event.properties }) })
+                stream.close()
+              }
+            })
+
+            await new Promise<void>((resolve) => {
+              stream.onAbort(() => {
+                unsub()
+                unsubEnd()
+                resolve()
               })
             })
           })

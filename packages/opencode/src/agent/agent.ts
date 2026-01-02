@@ -11,6 +11,7 @@ const log = Log.create({ service: "agent" })
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
+import PROMPT_DEBUG from "./prompt/debug.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
@@ -132,6 +133,22 @@ export namespace Agent {
         },
         mode: "primary",
         native: true,
+      },
+      debug: {
+        name: "debug",
+        description: "Debugging specialist for diagnosing issues through instrumentation and log analysis",
+        prompt: PROMPT_DEBUG,
+        tools: {
+          debug_instrument: true,
+          debug_watch: true,
+          debug_cleanup: true,
+          ...defaultTools,
+        },
+        options: {},
+        permission: agentPermission,
+        mode: "primary",
+        native: true,
+        color: "#ff6b6b",
       },
       general: {
         name: "general",

@@ -24,6 +24,9 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
+import { DebugInstrumentTool } from "./debug-instrument"
+import { DebugWatchTool } from "./debug-watch"
+import { DebugCleanupTool } from "./debug-cleanup"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -105,6 +108,9 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
+      DebugInstrumentTool,
+      DebugWatchTool,
+      DebugCleanupTool,
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...custom,
     ]
