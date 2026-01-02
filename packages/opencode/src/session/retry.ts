@@ -9,15 +9,18 @@ export namespace SessionRetry {
 
   export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
-      const timeout = setTimeout(resolve, Math.min(ms, RETRY_MAX_DELAY))
-      signal.addEventListener(
-        "abort",
+      const abortHandler = () => {
+        clearTimeout(timeout)
+        reject(new DOMException("Aborted", "AbortError"))
+      }
+      const timeout = setTimeout(
         () => {
-          clearTimeout(timeout)
-          reject(new DOMException("Aborted", "AbortError"))
+          signal.removeEventListener("abort", abortHandler)
+          resolve()
         },
-        { once: true },
+        Math.min(ms, RETRY_MAX_DELAY),
       )
+      signal.addEventListener("abort", abortHandler, { once: true })
     })
   }
 
