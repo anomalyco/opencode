@@ -1,5 +1,4 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import z from "zod"
 
 export const TuiEvent = {
@@ -8,6 +7,7 @@ export const TuiEvent = {
     "tui.status.updated",
     z.object({
       items: z.record(
+        z.string(),
         z.object({
           id: z.string(),
           priority: z.number().optional(),

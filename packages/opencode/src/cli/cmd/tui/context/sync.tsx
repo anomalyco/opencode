@@ -28,6 +28,7 @@ import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
 import { TuiEvent } from "../event"
 import type { StatusState } from "@/status/registry"
+import { Bus } from "@/bus"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -264,7 +265,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     // Listen for plugin status updates via TUI event bus
-    sdk.event.on(TuiEvent.StatusUpdated.type, (evt) => {
+    Bus.subscribe(TuiEvent.StatusUpdated, (evt) => {
       setStore("pluginStatus", reconcile(evt.properties.items))
     })
 
