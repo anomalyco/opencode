@@ -21,10 +21,11 @@ export const AttachCommand = cmd({
         describe: "session id to continue",
       }),
   handler: async (args) => {
-    if (args.dir) process.chdir(args.dir)
+    const directory = args.dir ? args.dir : process.cwd()
     await tui({
       url: args.url,
       args: { sessionID: args.session },
+      directory,
     })
   },
 })

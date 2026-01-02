@@ -75,6 +75,7 @@ export function Autocomplete(props: {
   const command = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const baseDirectory = () => sync.data.path.directory || process.cwd()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -188,7 +189,7 @@ export function Autocomplete(props: {
         const width = props.anchor().width - 4
         options.push(
           ...result.data.map((item): AutocompleteOption => {
-            let url = `file://${process.cwd()}/${item}`
+            let url = `file://${baseDirectory()}/${item}`
             let filename = item
             if (lineRange && !item.endsWith("/")) {
               filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
