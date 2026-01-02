@@ -25,6 +25,15 @@ import {
   setWorkspaceDirectory,
   type ConnectionMode,
 } from "../utils/opencode-status"
+import {
+  getOpenChamberPort,
+  saveOpenChamberPort,
+  getOpenChamberConnectionMode,
+  setOpenChamberConnectionMode,
+  getOpenChamberRemoteUrl,
+  setOpenChamberRemoteUrl,
+  type OpenChamberConnectionMode,
+} from "../utils/openchamber-status"
 
 interface SettingsPanelProps {
   isModal?: boolean
@@ -48,6 +57,10 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const [remoteUrl, setRemoteUrlState] = createSignal(getRemoteUrl())
   const [isScanning, setIsScanning] = createSignal(false)
   const [scanResult, setScanResult] = createSignal<string | null>(null)
+
+  const [openChamberMode, setOpenChamberMode] = createSignal<OpenChamberConnectionMode>(getOpenChamberConnectionMode())
+  const [openChamberPort, setOpenChamberPortState] = createSignal(String(getOpenChamberPort()))
+  const [openChamberUrl, setOpenChamberUrlState] = createSignal(getOpenChamberRemoteUrl())
 
   onMount(async () => {
     const connected = await checkOpenCodeStatus()
@@ -76,6 +89,17 @@ export function SettingsPanel(props: SettingsPanelProps) {
     } else {
       setRemoteUrl(remoteUrl())
     }
+
+    setOpenChamberConnectionMode(openChamberMode())
+    if (openChamberMode() === "local") {
+      const port = parseInt(openChamberPort(), 10)
+      if (!isNaN(port) && port > 0 && port < 65536) {
+        saveOpenChamberPort(port)
+      }
+    } else {
+      setOpenChamberRemoteUrl(openChamberUrl())
+    }
+
     updateOpenCodeUrl()
     await handleRetry()
     triggerToast("Connection settings saved")
@@ -373,6 +397,48 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 </div>
               </div>
             </Show>
+
+            <div class="settings-section">
+              <h3>OpenChamber UI</h3>
+              <div class="connection-mode-tabs">
+                <button
+                  class={`mode-tab ${openChamberMode() === "local" ? "active" : ""}`}
+                  onClick={() => setOpenChamberMode("local")}
+                >
+                  Local
+                </button>
+                <button
+                  class={`mode-tab ${openChamberMode() === "remote" ? "active" : ""}`}
+                  onClick={() => setOpenChamberMode("remote")}
+                >
+                  Remote
+                </button>
+              </div>
+              <div class="connection-form" style="margin-top: 12px;">
+                <Show when={openChamberMode() === "local"}>
+                  <label>Port</label>
+                  <input
+                    type="number"
+                    placeholder="4097"
+                    value={openChamberPort()}
+                    onInput={(e) => setOpenChamberPortState(e.currentTarget.value)}
+                  />
+                  <p class="setting-hint">Default: 4097. Start with: openchamber --port 4097</p>
+                </Show>
+                <Show when={openChamberMode() === "remote"}>
+                  <label>OpenChamber URL</label>
+                  <input
+                    type="text"
+                    placeholder="https://your-openchamber.example.com"
+                    value={openChamberUrl()}
+                    onInput={(e) => setOpenChamberUrlState(e.currentTarget.value)}
+                  />
+                  <p class="setting-hint">
+                    Use --try-cf-tunnel with cloudflared for remote access via Cloudflare Tunnel.
+                  </p>
+                </Show>
+              </div>
+            </div>
 
             <div class="settings-section">
               <h3>Workspace Context</h3>

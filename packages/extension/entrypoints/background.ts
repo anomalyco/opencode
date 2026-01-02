@@ -2,6 +2,16 @@ import { getCurrentWindowTabs } from "../utils/browser-context"
 
 type ExtractionResult = { success: boolean; markdown?: string; error?: string }
 
+interface PageDimensions {
+  scrollWidth: number
+  scrollHeight: number
+  viewportWidth: number
+  viewportHeight: number
+  devicePixelRatio: number
+  originalScrollX: number
+  originalScrollY: number
+}
+
 async function captureScreenshot(tabId?: number): Promise<{ screenshot?: string; error?: string }> {
   try {
     if (tabId) {
@@ -81,6 +91,152 @@ async function captureSelectionMarkdown(tabId: number): Promise<{ markdown?: str
   } catch (error) {
     return { error: `Extraction failed: ${error instanceof Error ? error.message : String(error)}` }
   }
+}
+
+function getPageDimensionsScript(): PageDimensions {
+  return {
+    scrollWidth: Math.max(
+      document.documentElement.scrollWidth,
+      document.body.scrollWidth,
+      document.documentElement.offsetWidth,
+    ),
+    scrollHeight: Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight,
+      document.documentElement.offsetHeight,
+    ),
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1,
+    originalScrollX: window.scrollX,
+    originalScrollY: window.scrollY,
+  }
+}
+
+function scrollToScript(x: number, y: number): void {
+  window.scrollTo(x, y)
+}
+
+function restoreScrollScript(x: number, y: number): void {
+  window.scrollTo(x, y)
+}
+
+async function captureFullPageScreenshot(tabId: number): Promise<{ screenshot?: string; error?: string }> {
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    if (!tab.active) {
+      await chrome.tabs.update(tabId, { active: true })
+      await new Promise((r) => setTimeout(r, 150))
+    }
+
+    const dimResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: getPageDimensionsScript,
+    })
+    const dimensions = dimResults[0]?.result as PageDimensions
+    if (!dimensions) {
+      return { error: "Could not get page dimensions" }
+    }
+
+    const {
+      scrollWidth,
+      scrollHeight,
+      viewportWidth,
+      viewportHeight,
+      devicePixelRatio,
+      originalScrollX,
+      originalScrollY,
+    } = dimensions
+
+    if (scrollHeight <= viewportHeight && scrollWidth <= viewportWidth) {
+      const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId!, { format: "png" })
+      return { screenshot: dataUrl }
+    }
+
+    const tiles: { dataUrl: string; x: number; y: number }[] = []
+    const ySteps = Math.ceil(scrollHeight / viewportHeight)
+    const xSteps = Math.ceil(scrollWidth / viewportWidth)
+
+    for (let yi = 0; yi < ySteps; yi++) {
+      for (let xi = 0; xi < xSteps; xi++) {
+        const scrollX = xi * viewportWidth
+        const scrollY = yi * viewportHeight
+
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: scrollToScript,
+          args: [scrollX, scrollY],
+        })
+
+        await new Promise((r) => setTimeout(r, 100))
+
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId!, { format: "png" })
+        tiles.push({ dataUrl, x: scrollX, y: scrollY })
+      }
+    }
+
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: restoreScrollScript,
+      args: [originalScrollX, originalScrollY],
+    })
+
+    const stitchResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: stitchTilesInPage,
+      args: [tiles, scrollWidth, scrollHeight, viewportWidth, viewportHeight, devicePixelRatio],
+    })
+
+    const finalDataUrl = stitchResults[0]?.result as string
+    if (!finalDataUrl) {
+      return { error: "Failed to stitch screenshots" }
+    }
+
+    return { screenshot: finalDataUrl }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+    return { error: `Full page capture failed: ${msg}` }
+  }
+}
+
+function stitchTilesInPage(
+  tiles: { dataUrl: string; x: number; y: number }[],
+  totalWidth: number,
+  totalHeight: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  dpr: number,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement("canvas")
+    canvas.width = totalWidth * dpr
+    canvas.height = totalHeight * dpr
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      reject("Could not get canvas context")
+      return
+    }
+
+    let loaded = 0
+    const images: { img: HTMLImageElement; x: number; y: number }[] = []
+
+    for (const tile of tiles) {
+      const img = new Image()
+      img.onload = () => {
+        images.push({ img, x: tile.x * dpr, y: tile.y * dpr })
+        loaded++
+        if (loaded === tiles.length) {
+          for (const { img, x, y } of images) {
+            ctx.drawImage(img, x, y)
+          }
+          resolve(canvas.toDataURL("image/png"))
+        }
+      }
+      img.onerror = () => reject("Failed to load tile image")
+      img.src = tile.dataUrl
+    }
+  })
 }
 
 function extractPageContentFallback(): ExtractionResult {
@@ -166,6 +322,16 @@ export default defineBackground(() => {
         captureScreenshot(message.tabId)
           .then((result) => sendResponse(result))
           .catch((error) => sendResponse({ error: error.message }))
+        return true
+
+      case "CAPTURE_FULL_PAGE_SCREENSHOT":
+        if (message.tabId) {
+          captureFullPageScreenshot(message.tabId)
+            .then((result) => sendResponse(result))
+            .catch((error) => sendResponse({ error: error.message }))
+          return true
+        }
+        sendResponse({ error: "No tabId provided" })
         return true
 
       case "GET_PAGE_CONTENT":

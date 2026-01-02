@@ -1,13 +1,22 @@
 import { render } from "solid-js/web"
 import { createSignal, For, Show, onMount } from "solid-js"
 import "./style.css"
-import { checkOpenCodeStatus, retryConnection, getOpenCodePort, getOpenCodeUrl } from "../../utils/opencode-status"
+import { checkOpenCodeStatus, retryConnection as retryOpenCode, getOpenCodePort } from "../../utils/opencode-status"
+import {
+  checkOpenChamberStatus,
+  retryOpenChamberConnection,
+  getOpenChamberUrl,
+  getOpenChamberPort,
+  getStartCommand,
+} from "../../utils/openchamber-status"
 import { detectPlatform, launchOpenCodeInTerminal, copyToClipboard } from "../../utils/terminal-launcher"
-import { type Platform, type OpenCodeStatus, getIcon, loadPlatforms, savePlatformsToStorage } from "../../utils/shared"
+import { type Platform, getIcon, loadPlatforms } from "../../utils/shared"
 import { SettingsPanel } from "../../components/SettingsPanel"
 import { ContextBar } from "./ContextBar"
 
-function NotRunning(props: { onRetry: () => void; retryCount: number; isRetrying: boolean; retryAttempt: number }) {
+type ConnectionState = "checking" | "opencode-missing" | "openchamber-missing" | "connected"
+
+function OpenCodeNotRunning(props: { onRetry: () => void; isRetrying: boolean; retryAttempt: number }) {
   const platform = detectPlatform()
   const [activeTab, setActiveTab] = createSignal(platform === "windows" ? "windows" : "unix")
   const [copied, setCopied] = createSignal<string | null>(null)
@@ -34,10 +43,11 @@ function NotRunning(props: { onRetry: () => void; retryCount: number; isRetrying
         </div>
 
         <h2>OpenCode isn't running</h2>
+        <p class="not-running-subtitle">Start the OpenCode server first</p>
 
         <div class="install-section">
           <div class="install-header">
-            <h3>Download & Install OpenCode</h3>
+            <h3>Install OpenCode</h3>
           </div>
 
           <div class="install-tabs">
@@ -45,7 +55,7 @@ function NotRunning(props: { onRetry: () => void; retryCount: number; isRetrying
               class={`install-tab ${activeTab() === "windows" ? "active" : ""}`}
               onClick={() => setActiveTab("windows")}
             >
-              Windows PS
+              Windows
             </button>
             <button
               class={`install-tab ${activeTab() === "unix" ? "active" : ""}`}
@@ -74,8 +84,8 @@ function NotRunning(props: { onRetry: () => void; retryCount: number; isRetrying
         </div>
 
         <div class="already-installed">
-          <h3>Already have OpenCode?</h3>
-          <p>Run this to start the server:</p>
+          <h3>Already installed?</h3>
+          <p>Start the server:</p>
           <div class="command-display">
             <code>{serveCommand}</code>
             <button class="copy-btn-small" onClick={() => copyCmd(serveCommand, "serve")}>
@@ -88,21 +98,113 @@ function NotRunning(props: { onRetry: () => void; retryCount: number; isRetrying
               Checking... ({props.retryAttempt}/3)
             </Show>
           </button>
-
-          <Show when={props.retryCount > 0}>
-            <p class="retry-hint">
-              Retried {props.retryCount} time{props.retryCount > 1 ? "s" : ""}. Make sure OpenCode is running.
-            </p>
-          </Show>
         </div>
 
         <div class="learn-more">
           <a href="https://opencode.ai" target="_blank" rel="noopener">
-            Learn more about OpenCode
+            Learn more
           </a>
           <span class="separator">|</span>
           <a href="https://github.com/sst/opencode" target="_blank" rel="noopener">
             GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OpenChamberNotRunning(props: { onRetry: () => void; isRetrying: boolean; retryAttempt: number }) {
+  const [activeTab, setActiveTab] = createSignal<"bun" | "npm" | "curl">("bun")
+  const [copied, setCopied] = createSignal<string | null>(null)
+  const startCommand = getStartCommand()
+
+  const installCommands = {
+    bun: "bun add -g @openchamber/web",
+    npm: "npm install -g @openchamber/web",
+    curl: "curl -fsSL https://raw.githubusercontent.com/btriapitsyn/openchamber/main/scripts/install.sh | bash",
+  }
+
+  const copyCmd = async (cmd: string, id: string) => {
+    await copyToClipboard(cmd)
+    setCopied(id)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  return (
+    <div class="not-running">
+      <div class="not-running-content">
+        <div class="not-running-icon connected">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+
+        <h2>OpenCode is running!</h2>
+        <p class="not-running-subtitle">Now start OpenChamber for the chat UI</p>
+
+        <div class="install-section">
+          <div class="install-header">
+            <h3>Install OpenChamber</h3>
+          </div>
+
+          <div class="install-tabs">
+            <button class={`install-tab ${activeTab() === "bun" ? "active" : ""}`} onClick={() => setActiveTab("bun")}>
+              bun
+            </button>
+            <button class={`install-tab ${activeTab() === "npm" ? "active" : ""}`} onClick={() => setActiveTab("npm")}>
+              npm
+            </button>
+            <button
+              class={`install-tab ${activeTab() === "curl" ? "active" : ""}`}
+              onClick={() => setActiveTab("curl")}
+            >
+              curl
+            </button>
+          </div>
+
+          <div class="install-content">
+            <div class="command-block">
+              <code>{installCommands[activeTab()]}</code>
+              <button class="copy-btn" onClick={() => copyCmd(installCommands[activeTab()], "install")}>
+                {copied() === "install" ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="already-installed">
+          <h3>Already installed?</h3>
+          <p>Start OpenChamber:</p>
+          <div class="command-display">
+            <code>{startCommand}</code>
+            <button class="copy-btn-small" onClick={() => copyCmd(startCommand, "start")}>
+              {copied() === "start" ? "✓" : "Copy"}
+            </button>
+          </div>
+
+          <p class="install-note">
+            For remote access via Cloudflare Tunnel, install{" "}
+            <a
+              href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+              target="_blank"
+              rel="noopener"
+            >
+              cloudflared
+            </a>{" "}
+            and use <code>--try-cf-tunnel</code>
+          </p>
+
+          <button class="retry-btn" onClick={props.onRetry} disabled={props.isRetrying}>
+            <Show when={props.isRetrying} fallback="Retry Connection">
+              Checking... ({props.retryAttempt}/3)
+            </Show>
+          </button>
+        </div>
+
+        <div class="learn-more">
+          <a href="https://github.com/btriapitsyn/openchamber" target="_blank" rel="noopener">
+            OpenChamber GitHub
           </a>
         </div>
       </div>
@@ -116,29 +218,59 @@ function App() {
   const [loadedIframes, setLoadedIframes] = createSignal<Set<string>>(new Set(["opencode"]))
   const [settingsOpen, setSettingsOpen] = createSignal(false)
 
-  const [openCodeStatus, setOpenCodeStatus] = createSignal<OpenCodeStatus>("checking")
-  const [retryCount, setRetryCount] = createSignal(0)
+  const [connectionState, setConnectionState] = createSignal<ConnectionState>("checking")
   const [isRetrying, setIsRetrying] = createSignal(false)
   const [retryAttempt, setRetryAttempt] = createSignal(0)
 
-  onMount(async () => {
-    const connected = await checkOpenCodeStatus()
-    setOpenCodeStatus(connected ? "connected" : "disconnected")
+  async function checkConnections() {
+    setConnectionState("checking")
+
+    const openCodeOk = await checkOpenCodeStatus()
+    if (!openCodeOk) {
+      setConnectionState("opencode-missing")
+      return
+    }
+
+    const openChamberOk = await checkOpenChamberStatus()
+    if (!openChamberOk) {
+      setConnectionState("openchamber-missing")
+      return
+    }
+
+    setConnectionState("connected")
+  }
+
+  onMount(() => {
+    checkConnections()
   })
 
-  async function handleRetry() {
+  async function handleRetryOpenCode() {
     setIsRetrying(true)
     setRetryAttempt(0)
 
-    const connected = await retryConnection(3, (attempt) => {
+    const connected = await retryOpenCode(3, (attempt) => {
       setRetryAttempt(attempt)
     })
 
     setIsRetrying(false)
-    setRetryCount((c) => c + 1)
 
     if (connected) {
-      setOpenCodeStatus("connected")
+      checkConnections()
+    }
+  }
+
+  async function handleRetryOpenChamber() {
+    setIsRetrying(true)
+    setRetryAttempt(0)
+
+    const connected = await retryOpenChamberConnection(3, (attempt) => {
+      setRetryAttempt(attempt)
+    })
+
+    setIsRetrying(false)
+
+    if (connected) {
+      setConnectionState("connected")
     }
   }
 
@@ -151,11 +283,12 @@ function App() {
 
   function openExternal() {
     const platform = platforms().find((p) => p.id === currentView())
-    if (platform?.url) {
+    const url = platform?.id === "opencode" ? getOpenChamberUrl() : platform?.url
+    if (url) {
       if (typeof chrome !== "undefined" && chrome.tabs) {
-        chrome.tabs.create({ url: platform.url, active: true })
+        chrome.tabs.create({ url, active: true })
       } else {
-        window.open(platform.url, "_blank")
+        window.open(url, "_blank")
       }
     }
   }
@@ -208,36 +341,48 @@ function App() {
         <For each={platforms().filter((p) => p.isVisible)}>
           {(platform) => (
             <div class={`view-panel ${currentView() === platform.id ? "active" : ""}`} data-view={platform.id}>
-              <Show
-                when={platform.id !== "opencode" || openCodeStatus() === "connected"}
-                fallback={
-                  <Show when={platform.id === "opencode"}>
+              <Show when={platform.id === "opencode"}>
+                <Show
+                  when={connectionState() === "connected"}
+                  fallback={
                     <Show
-                      when={openCodeStatus() === "disconnected"}
+                      when={connectionState() === "opencode-missing"}
                       fallback={
-                        <div class="checking-status">
-                          <div class="spinner" />
-                          <p>Connecting to OpenCode...</p>
-                        </div>
+                        <Show
+                          when={connectionState() === "openchamber-missing"}
+                          fallback={
+                            <div class="checking-status">
+                              <div class="spinner" />
+                              <p>Connecting...</p>
+                            </div>
+                          }
+                        >
+                          <OpenChamberNotRunning
+                            onRetry={handleRetryOpenChamber}
+                            isRetrying={isRetrying()}
+                            retryAttempt={retryAttempt()}
+                          />
+                        </Show>
                       }
                     >
-                      <NotRunning
-                        onRetry={handleRetry}
-                        retryCount={retryCount()}
+                      <OpenCodeNotRunning
+                        onRetry={handleRetryOpenCode}
                         isRetrying={isRetrying()}
                         retryAttempt={retryAttempt()}
                       />
                     </Show>
-                  </Show>
-                }
-              >
-                <Show when={loadedIframes().has(platform.id)}>
+                  }
+                >
                   <iframe
-                    src={platform.id === "opencode" ? getOpenCodeUrl() : platform.url}
-                    class="platform-frame"
+                    src={getOpenChamberUrl()}
+                    class="platform-frame openchamber-frame"
                     allow="clipboard-read; clipboard-write"
                   />
                 </Show>
+              </Show>
+
+              <Show when={platform.id !== "opencode" && loadedIframes().has(platform.id)}>
+                <iframe src={platform.url} class="platform-frame" allow="clipboard-read; clipboard-write" />
               </Show>
             </div>
           )}

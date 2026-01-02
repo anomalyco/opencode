@@ -26,6 +26,19 @@ export interface GroupedTabs {
   ungrouped: TabInfo[]
 }
 
+export interface WindowInfo {
+  id: number
+  focused: boolean
+  type: string
+  tabs: GroupedTabs
+}
+
+export interface BrowserTree {
+  windows: WindowInfo[]
+  totalTabs: number
+  focusedWindowId: number | null
+}
+
 // Chrome tab group colors mapping
 const TAB_GROUP_COLORS: Record<string, string> = {
   grey: "#5f6368",
@@ -148,14 +161,162 @@ export function canCaptureUrl(url: string): boolean {
   return !protectedPrefixes.some((prefix) => url.startsWith(prefix))
 }
 
+async function getTabGroupsForWindow(windowId: number): Promise<chrome.tabGroups.TabGroup[]> {
+  if (!chrome.tabGroups) return []
+  return chrome.tabGroups.query({ windowId })
+}
+
+function organizeTabsIntoGroups(tabs: chrome.tabs.Tab[], tabGroups: chrome.tabGroups.TabGroup[]): GroupedTabs {
+  const groupMap = new Map<number, TabGroup>()
+  const ungrouped: TabInfo[] = []
+
+  for (const group of tabGroups) {
+    groupMap.set(group.id, {
+      id: group.id,
+      title: group.title || "",
+      color: TAB_GROUP_COLORS[group.color] || group.color,
+      tabs: [],
+    })
+  }
+
+  for (const tab of tabs) {
+    const tabInfo: TabInfo = {
+      id: tab.id!,
+      title: tab.title || "Untitled",
+      url: tab.url || "",
+      favIconUrl: tab.favIconUrl,
+      active: tab.active,
+      groupId: tab.groupId !== -1 ? tab.groupId : undefined,
+    }
+
+    if (tab.groupId !== undefined && tab.groupId !== -1) {
+      const group = groupMap.get(tab.groupId)
+      if (group) {
+        tabInfo.groupColor = group.color
+        tabInfo.groupTitle = group.title
+        group.tabs.push(tabInfo)
+      } else {
+        ungrouped.push(tabInfo)
+      }
+    } else {
+      ungrouped.push(tabInfo)
+    }
+  }
+
+  return {
+    groups: Array.from(groupMap.values()).filter((g) => g.tabs.length > 0),
+    ungrouped,
+  }
+}
+
+export async function getAllWindowsTabs(): Promise<BrowserTree> {
+  const windows = await chrome.windows.getAll({ windowTypes: ["normal"] })
+  const allTabs = await chrome.tabs.query({})
+
+  let totalTabs = 0
+  let focusedWindowId: number | null = null
+
+  const windowInfos: WindowInfo[] = []
+
+  for (const win of windows) {
+    if (!win.id) continue
+
+    if (win.focused) {
+      focusedWindowId = win.id
+    }
+
+    const windowTabs = allTabs.filter((t) => t.windowId === win.id)
+    const tabGroups = await getTabGroupsForWindow(win.id)
+    const organized = organizeTabsIntoGroups(windowTabs, tabGroups)
+
+    totalTabs += windowTabs.length
+
+    windowInfos.push({
+      id: win.id,
+      focused: win.focused,
+      type: win.type || "normal",
+      tabs: organized,
+    })
+  }
+
+  return {
+    windows: windowInfos,
+    totalTabs,
+    focusedWindowId,
+  }
+}
+
+const COLOR_EMOJI: Record<string, string> = {
+  grey: "⚪",
+  blue: "🔵",
+  red: "🔴",
+  yellow: "🟡",
+  green: "🟢",
+  pink: "🩷",
+  purple: "🟣",
+  cyan: "🩵",
+  orange: "🟠",
+}
+
+function getColorEmoji(color: string): string {
+  const normalized = color.toLowerCase()
+  return COLOR_EMOJI[normalized] || "⚪"
+}
+
+export function formatTabTree(tree: BrowserTree): string {
+  const lines: string[] = []
+
+  lines.push("# Browser Context")
+  lines.push("")
+  lines.push(
+    `**${tree.totalTabs} tabs** across **${tree.windows.length} window${tree.windows.length !== 1 ? "s" : ""}**`,
+  )
+  lines.push("")
+
+  for (let i = 0; i < tree.windows.length; i++) {
+    const win = tree.windows[i]
+    const windowLabel = win.focused ? `Window ${i + 1} (focused)` : `Window ${i + 1}`
+    lines.push(`## ${windowLabel}`)
+    lines.push("")
+
+    for (const group of win.tabs.groups) {
+      const emoji = getColorEmoji(group.color)
+      const groupName = group.title || "Unnamed Group"
+      lines.push(`### ${emoji} ${groupName}`)
+
+      for (const tab of group.tabs) {
+        const active = tab.active ? " *(active)*" : ""
+        lines.push(`- [${tab.title}](${tab.url})${active}`)
+      }
+      lines.push("")
+    }
+
+    if (win.tabs.ungrouped.length > 0) {
+      if (win.tabs.groups.length > 0) {
+        lines.push("### Other Tabs")
+      }
+
+      for (const tab of win.tabs.ungrouped) {
+        const active = tab.active ? " *(active)*" : ""
+        lines.push(`- [${tab.title}](${tab.url})${active}`)
+      }
+      lines.push("")
+    }
+  }
+
+  return lines.join("\n")
+}
+
 /**
  * Message types for communication between sidepanel, background, and content scripts
  */
 export type CaptureMessageType =
   | "GET_TABS_WITH_GROUPS"
   | "CAPTURE_SCREENSHOT"
+  | "CAPTURE_FULL_PAGE_SCREENSHOT"
   | "CAPTURE_PAGE_MARKDOWN"
   | "CAPTURE_SELECTION_MARKDOWN"
+  | "CAPTURE_TAB_TREE"
 
 export interface CaptureMessage {
   type: CaptureMessageType
