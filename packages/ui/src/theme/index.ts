@@ -42,3 +42,5 @@ export {
   oneDarkProTheme,
   shadesOfPurpleTheme,
 } from "./default-themes"
+
+export { tuiToDesktop, type TuiTheme } from "./tui-adapter"

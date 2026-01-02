@@ -1,35 +1,25 @@
 import type { DesktopTheme } from "./types"
-import oc1ThemeJson from "./themes/oc-1.json"
-import tokyoThemeJson from "./themes/tokyonight.json"
-import draculaThemeJson from "./themes/dracula.json"
-import monokaiThemeJson from "./themes/monokai.json"
-import solarizedThemeJson from "./themes/solarized.json"
-import nordThemeJson from "./themes/nord.json"
-import catppuccinThemeJson from "./themes/catppuccin.json"
-import ayuThemeJson from "./themes/ayu.json"
-import oneDarkProThemeJson from "./themes/onedarkpro.json"
-import shadesOfPurpleThemeJson from "./themes/shadesofpurple.json"
+import { tuiToDesktop, type TuiTheme } from "./tui-adapter"
 
-export const oc1Theme = oc1ThemeJson as DesktopTheme
-export const tokyonightTheme = tokyoThemeJson as DesktopTheme
-export const draculaTheme = draculaThemeJson as DesktopTheme
-export const monokaiTheme = monokaiThemeJson as DesktopTheme
-export const solarizedTheme = solarizedThemeJson as DesktopTheme
-export const nordTheme = nordThemeJson as DesktopTheme
-export const catppuccinTheme = catppuccinThemeJson as DesktopTheme
-export const ayuTheme = ayuThemeJson as DesktopTheme
-export const oneDarkProTheme = oneDarkProThemeJson as DesktopTheme
-export const shadesOfPurpleTheme = shadesOfPurpleThemeJson as DesktopTheme
+const tuiThemes = import.meta.glob("../../../../opencode/src/cli/cmd/tui/context/theme/*.json", {
+  eager: true,
+  import: "default",
+}) as Record<string, TuiTheme>
 
-export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
-  "oc-1": oc1Theme,
-  tokyonight: tokyonightTheme,
-  dracula: draculaTheme,
-  monokai: monokaiTheme,
-  solarized: solarizedTheme,
-  nord: nordTheme,
-  catppuccin: catppuccinTheme,
-  ayu: ayuTheme,
-  onedarkpro: oneDarkProTheme,
-  shadesofpurple: shadesOfPurpleTheme,
-}
+export const DEFAULT_THEMES: Record<string, DesktopTheme> = Object.fromEntries(
+  Object.entries(tuiThemes).map(([path, json]) => {
+    const id = path.split("/").pop()!.replace(".json", "")
+    return [id, tuiToDesktop(json, id)]
+  }),
+)
+
+export const oc1Theme = DEFAULT_THEMES["opencode"]
+export const tokyonightTheme = DEFAULT_THEMES["tokyonight"]
+export const draculaTheme = DEFAULT_THEMES["dracula"]
+export const monokaiTheme = DEFAULT_THEMES["monokai"]
+export const solarizedTheme = DEFAULT_THEMES["solarized"]
+export const nordTheme = DEFAULT_THEMES["nord"]
+export const catppuccinTheme = DEFAULT_THEMES["catppuccin"]
+export const ayuTheme = DEFAULT_THEMES["ayu"]
+export const oneDarkProTheme = DEFAULT_THEMES["one-dark"]
+export const shadesOfPurpleTheme = DEFAULT_THEMES["aura"]
