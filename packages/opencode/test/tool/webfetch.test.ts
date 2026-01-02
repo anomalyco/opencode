@@ -47,7 +47,7 @@ describe("tool.webfetch", () => {
 
   afterAll(() => server?.stop())
 
-  test("omits binary responses", async () => {
+  test("returns images as attachments", async () => {
     const webfetch = await WebFetchTool.init()
     const result = await webfetch.execute(
       {
@@ -57,9 +57,11 @@ describe("tool.webfetch", () => {
       ctx,
     )
 
-    expect(result.output).toContain("Binary response omitted")
-    expect(result.output).toContain("image/png")
-    expect(result.output).not.toContain("\u001b")
+    expect(result.output).toBe("Image fetched successfully")
+    expect(result.attachments?.length).toBe(1)
+    expect(result.attachments?.[0].mime).toBe("image/png")
+    expect(result.attachments?.[0].filename).toBe("binary.png")
+    expect(result.attachments?.[0].url).toStartWith("data:image/png;base64,")
   })
 
   test("sanitizes control characters in text responses", async () => {
@@ -79,4 +81,3 @@ describe("tool.webfetch", () => {
     expect(result.output).not.toContain("\u0000")
   })
 })
-

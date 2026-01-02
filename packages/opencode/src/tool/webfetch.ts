@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import stripAnsi from "strip-ansi"
+import { Identifier } from "../id/id"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -87,6 +88,23 @@ export const WebFetchTool = Tool.define("webfetch", {
     const contentType = response.headers.get("content-type") || ""
     const type = contentType.split(";")[0].trim().toLowerCase()
     const bytes = new Uint8Array(arrayBuffer)
+    const title = `${params.url} (${contentType || "unknown"})`
+
+    const attachment = createAttachment({
+      sessionID: ctx.sessionID,
+      messageID: ctx.messageID,
+      url: params.url,
+      type,
+      arrayBuffer,
+    })
+    if (attachment) {
+      return {
+        output: attachment.mime === "application/pdf" ? "PDF fetched successfully" : "Image fetched successfully",
+        title,
+        metadata: {},
+        attachments: [attachment],
+      }
+    }
 
     if (isBinaryContentType(type) || (!isTextContentType(type) && !looksLikeText(bytes))) {
       return {
@@ -95,14 +113,12 @@ export const WebFetchTool = Tool.define("webfetch", {
           contentType,
           byteLength: bytes.byteLength,
         }),
-        title: `${params.url} (${contentType || "unknown"})`,
+        title,
         metadata: {},
       }
     }
 
     const content = sanitizeText(new TextDecoder().decode(arrayBuffer))
-
-    const title = `${params.url} (${contentType || "unknown"})`
 
     // Handle content based on requested format and actual content type
     switch (params.format) {
@@ -199,7 +215,6 @@ function convertHTMLToMarkdown(html: string): string {
 
 function isBinaryContentType(type?: string) {
   if (!type) return false
-  if (type.startsWith("image/")) return true
   if (type.startsWith("audio/")) return true
   if (type.startsWith("video/")) return true
   if (type.startsWith("font/")) return true
@@ -234,17 +249,16 @@ function isTextContentType(type?: string) {
 
 function looksLikeText(bytes: Uint8Array) {
   const sample = bytes.subarray(0, Math.min(bytes.length, 1024))
-  let controls = 0
-  let zeros = 0
+  const stats = { controls: 0, zeros: 0 }
 
   for (const byte of sample) {
-    if (byte === 0) zeros++
-    if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) controls++
-    if (byte === 127) controls++
+    if (byte === 0) stats.zeros++
+    if (byte < 32 && byte !== 9 && byte !== 10 && byte !== 13) stats.controls++
+    if (byte === 127) stats.controls++
   }
 
-  if (zeros > 0) return false
-  return controls / Math.max(sample.length, 1) <= 0.1
+  if (stats.zeros > 0) return false
+  return stats.controls / Math.max(sample.length, 1) <= 0.1
 }
 
 function sanitizeText(text: string) {
@@ -264,4 +278,61 @@ function formatBinarySummary(input: { url: string; contentType: string; byteLeng
     `- content-type: ${type}`,
     `- bytes: ${size}`,
   ].join("\n")
+}
+
+function createAttachment(input: {
+  sessionID: string
+  messageID: string
+  url: string
+  type: string
+  arrayBuffer: ArrayBuffer
+}) {
+  if (input.type === "image/svg+xml") return
+  if (!input.type.startsWith("image/") && input.type !== "application/pdf") return
+
+  const b64 = Buffer.from(input.arrayBuffer).toString("base64")
+  return {
+    id: Identifier.ascending("part"),
+    sessionID: input.sessionID,
+    messageID: input.messageID,
+    type: "file" as const,
+    mime: input.type,
+    filename: filenameFromUrl(input.url, input.type),
+    url: `data:${input.type};base64,${b64}`,
+  }
+}
+
+function filenameFromUrl(raw: string, mime: string) {
+  const base = safeFilenameFromUrl(raw)
+  if (base.includes(".")) return base
+  return `${base}.${extensionFromMime(mime)}`
+}
+
+function safeFilenameFromUrl(raw: string) {
+  const fallback = "webfetch"
+  if (!URL.canParse(raw)) return fallback
+
+  const url = new URL(raw)
+  const parts = url.pathname.split("/").filter(Boolean)
+  const last = parts.at(-1)
+  if (!last) return fallback
+  const cleaned = last.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 128)
+  return cleaned || fallback
+}
+
+function extensionFromMime(mime: string) {
+  switch (mime) {
+    case "image/jpeg":
+      return "jpg"
+    case "image/png":
+      return "png"
+    case "image/webp":
+      return "webp"
+    case "image/gif":
+      return "gif"
+    case "application/pdf":
+      return "pdf"
+    default:
+      return "bin"
+  }
 }
