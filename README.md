@@ -18,6 +18,23 @@
 
 ---
 
+### Always Updated (via shell aliases)
+
+Add these aliases to your `~/.bashrc`, `~/.zshrc`, or equivalent shell config to always run the latest version:
+
+```bash
+# Bun (recommended - faster)
+alias opencode='bunx --bun opencode-ai@latest'
+alias opencode-dev='bunx --bun opencode-ai@dev'
+
+# npm
+alias opencode='npx opencode-ai@latest'
+alias opencode-dev='npx opencode-ai@dev'
+```
+
+> [!NOTE]
+> These aliases will automatically fetch the latest version each time you run them. Use `opencode-dev` to test the latest development branch features.
+
 ### Installation
 
 ```bash
