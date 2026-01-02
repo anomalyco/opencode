@@ -637,6 +637,36 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
       const slashMatch = rawText.match(/^\/(\S*)$/)
+      // Match "/commandname " - a slash command followed by a space at the start
+      const slashWithSpaceMatch = rawText.match(/^\/(\S+)\s/)
+
+      // Check if user typed a custom command followed by space - convert to command part
+      if (slashWithSpaceMatch && !rawParts.some((p) => p.type === "command")) {
+        const cmdName = slashWithSpaceMatch[1]
+        const customCmd = sync.data.command.find((c) => c.name === cmdName)
+        if (customCmd) {
+          const content = `/${cmdName}`
+          const commandPart: CommandPart = {
+            type: "command",
+            name: cmdName,
+            content,
+            start: 0,
+            end: content.length,
+          }
+          // Get text after the command
+          const afterCommand = rawText.slice(content.length)
+          const textPart = {
+            type: "text" as const,
+            content: afterCommand,
+            start: content.length,
+            end: content.length + afterCommand.length,
+          }
+          setStore("popover", null)
+          prompt.set([commandPart, textPart], cursorPosition)
+          queueScroll()
+          return
+        }
+      }
 
       if (atMatch) {
         atOnInput(atMatch[1])
@@ -1295,22 +1325,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
         const messageID = Identifier.ascending("message")
-        const commandPartId = Identifier.ascending("part")
-        const optimisticParts = [
-          {
-            id: commandPartId,
-            sessionID: existing.id,
-            messageID,
-            type: "command" as const,
-            command: text,
-            prompt: "",
-          },
-        ]
 
         sync.session.addOptimisticMessage({
           sessionID: existing.id,
           messageID,
-          parts: optimisticParts,
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              sessionID: existing.id,
+              messageID,
+              type: "text" as const,
+              text,
+            },
+          ],
           agent,
           model,
         })
@@ -1324,7 +1351,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             model: `${model.providerID}/${model.modelID}`,
             variant,
             messageID,
-            partID: commandPartId,
           })
           .catch((e) => {
             console.error("Failed to send command", e)

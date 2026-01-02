@@ -1036,8 +1036,8 @@ export namespace SessionPrompt {
 
         return [
           {
-            id: Identifier.ascending("part"),
             ...part,
+            id: part.id ?? Identifier.ascending("part"),
             messageID: info.id,
             sessionID: input.sessionID,
           },
