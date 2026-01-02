@@ -1331,6 +1331,7 @@ export namespace SessionPrompt {
 
   export const CommandInput = z.object({
     messageID: Identifier.schema("message").optional(),
+    partID: Identifier.schema("part").optional(),
     sessionID: Identifier.schema("session"),
     agent: z.string().optional(),
     model: z.string().optional(),
@@ -1433,6 +1434,7 @@ export namespace SessionPrompt {
 
     const commandText = `/${input.command}${input.arguments ? " " + input.arguments : ""}`
     const commandPart = {
+      id: input.partID,
       type: "command" as const,
       command: commandText,
       prompt: template,

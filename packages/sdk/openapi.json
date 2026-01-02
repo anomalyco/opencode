@@ -2070,6 +2070,9 @@
                         },
                         {
                           "$ref": "#/components/schemas/SubtaskPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/CommandPartInput"
                         }
                       ]
                     }
@@ -2446,6 +2449,9 @@
                         },
                         {
                           "$ref": "#/components/schemas/SubtaskPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/CommandPartInput"
                         }
                       ]
                     }
@@ -2540,6 +2546,10 @@
                   "messageID": {
                     "type": "string",
                     "pattern": "^msg.*"
+                  },
+                  "partID": {
+                    "type": "string",
+                    "pattern": "^prt.*"
                   },
                   "agent": {
                     "type": "string"
@@ -6331,6 +6341,31 @@
         },
         "required": ["id", "sessionID", "messageID", "type", "auto"]
       },
+      "CommandPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "command"
+          },
+          "command": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "command", "prompt"]
+      },
       "Part": {
         "anyOf": [
           {
@@ -6396,6 +6431,9 @@
           },
           {
             "$ref": "#/components/schemas/CompactionPart"
+          },
+          {
+            "$ref": "#/components/schemas/CommandPart"
           }
         ]
       },
@@ -9063,6 +9101,25 @@
           }
         },
         "required": ["type", "prompt", "description", "agent"]
+      },
+      "CommandPartInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "command"
+          },
+          "command": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "command", "prompt"]
       },
       "Command": {
         "type": "object",

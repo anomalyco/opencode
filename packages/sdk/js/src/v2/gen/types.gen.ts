@@ -3204,6 +3204,7 @@ export type SessionPromptAsyncResponse = SessionPromptAsyncResponses[keyof Sessi
 export type SessionCommandData = {
   body?: {
     messageID?: string
+    partID?: string
     agent?: string
     model?: string
     arguments: string

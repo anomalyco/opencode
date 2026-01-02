@@ -1368,6 +1368,7 @@ export class Session extends HeyApiClient {
       sessionID: string
       directory?: string
       messageID?: string
+      partID?: string
       agent?: string
       model?: string
       arguments?: string
@@ -1384,6 +1385,7 @@ export class Session extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "body", key: "messageID" },
+            { in: "body", key: "partID" },
             { in: "body", key: "agent" },
             { in: "body", key: "model" },
             { in: "body", key: "arguments" },

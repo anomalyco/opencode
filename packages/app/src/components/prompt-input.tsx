@@ -1324,6 +1324,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             model: `${model.providerID}/${model.modelID}`,
             variant,
             messageID,
+            partID: commandPartId,
           })
           .catch((e) => {
             console.error("Failed to send command", e)
