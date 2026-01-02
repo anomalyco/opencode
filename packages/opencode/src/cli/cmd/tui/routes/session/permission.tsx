@@ -122,6 +122,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       <Match when={store.always}>
         <Prompt
           title="Always allow"
+          request={props.request}
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
@@ -158,6 +159,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       <Match when={!store.always}>
         <Prompt
           title="Permission required"
+          request={props.request}
           body={
             <Switch>
               <Match when={props.request.permission === "edit"}>
@@ -231,14 +233,25 @@ function Prompt<const T extends Record<string, string>>(props: {
   body: JSX.Element
   options: T
   onSelect: (option: keyof T) => void
+  request: PermissionRequest
 }) {
   const { theme } = useTheme()
+  const sdk = useSDK()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
   })
 
   useKeyboard((evt) => {
+    if ((evt.ctrl && evt.name === "c") || evt.name === "d") {
+      evt.preventDefault()
+      sdk.client.permission.reply({
+        reply: "reject",
+        requestID: props.request.id,
+      })
+      return
+    }
+
     if (evt.name === "left" || evt.name == "h") {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)

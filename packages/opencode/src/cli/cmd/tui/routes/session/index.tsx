@@ -44,6 +44,7 @@ import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@open
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "@tui/context/keybind"
+import { useExit } from "../../context/exit"
 import { Header } from "./header"
 import { parsePatch } from "diff"
 import { useDialog } from "../../ui/dialog"
@@ -880,9 +881,26 @@ export function Session() {
 
   const dialog = useDialog()
   const renderer = useRenderer()
+  const exit = useExit()
 
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
+
+  // Global handler for Ctrl-C/Ctrl-D during permission requests
+  // This ensures users can always exit regardless of keyboard focus
+  useKeyboard((evt) => {
+    if (permissions().length === 0) return
+    if ((evt.ctrl && evt.name === "c") || evt.name === "d") {
+      evt.preventDefault()
+      for (const permission of permissions()) {
+        sdk.client.permission.reply({
+          reply: "reject",
+          requestID: permission.id,
+        })
+      }
+      exit()
+    }
+  })
 
   return (
     <context.Provider
