@@ -18,6 +18,38 @@
 
 ---
 
+## GeoComply Fork
+
+This is a GeoComply fork of OpenCode with additional features:
+
+- **1M Token Context Window**: Extended context support for Claude Sonnet 4.5 models via environment variables
+- **Direct Development**: Run directly from GitHub checkout without installation
+
+For detailed development setup and fork-specific features, see [packages/opencode/README.md](./packages/opencode/README.md).
+
+### Quick Start (Development)
+
+```bash
+# Clone and run directly
+git clone git@github.com:GeoComply/opencode.git
+cd opencode
+bun install
+cd packages/opencode
+bun dev
+```
+
+### Enable 1M Context (Claude Sonnet 4.5)
+
+```bash
+# For Anthropic Direct API
+export ANTHROPIC_1M_CONTEXT=true
+
+# For Google Vertex AI Anthropic
+export VERTEX_ANTHROPIC_1M_CONTEXT=true
+```
+
+---
+
 ### Installation
 
 ```bash
