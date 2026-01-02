@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.224",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",

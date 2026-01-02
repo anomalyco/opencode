@@ -4,6 +4,7 @@
   "version": "1.0.224",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-sts": "3.782.0",
     "@jsx-email/render": "1.1.1",

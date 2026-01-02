@@ -3,6 +3,7 @@
   "version": "1.0.224",
   "name": "opencode",
   "type": "module",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "typecheck": "tsgo --noEmit",
