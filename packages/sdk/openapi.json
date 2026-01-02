@@ -2547,10 +2547,6 @@
                     "type": "string",
                     "pattern": "^msg.*"
                   },
-                  "partID": {
-                    "type": "string",
-                    "pattern": "^prt.*"
-                  },
                   "agent": {
                     "type": "string"
                   },

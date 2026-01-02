@@ -1319,6 +1319,52 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    // Check if there's a command part (pill) in the prompt
+    const commandPart = currentPrompt.find((p) => p.type === "command") as CommandPart | undefined
+    if (commandPart) {
+      const commandName = commandPart.name
+      // Get text after the command pill
+      const argsText = currentPrompt
+        .filter((p) => p.type === "text")
+        .map((p) => (p as { content: string }).content)
+        .join("")
+        .trim()
+
+      const messageID = Identifier.ascending("message")
+
+      sync.session.addOptimisticMessage({
+        sessionID: existing.id,
+        messageID,
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            sessionID: existing.id,
+            messageID,
+            type: "text" as const,
+            text,
+          },
+        ],
+        agent,
+        model,
+      })
+
+      sdk.client.session
+        .command({
+          sessionID: existing.id,
+          command: commandName,
+          arguments: argsText,
+          agent,
+          model: `${model.providerID}/${model.modelID}`,
+          variant,
+          messageID,
+        })
+        .catch((e) => {
+          console.error("Failed to send command", e)
+        })
+      return
+    }
+
+    // Fallback: check if text starts with "/" (user typed command without pill conversion)
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)
