@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "openapi": "3.1.1",
   "info": {
@@ -9750,3 +9751,6 @@
     }
   }
 }
+=======
+{}
+>>>>>>> 4f732c838 (feat: add command-aware permission request system for granular tool approval)

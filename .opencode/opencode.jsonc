@@ -10,7 +10,13 @@
       "options": {},
     },
   },
-  "mcp": {},
+  "permission": "ask",
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+    },
+  },
   "tools": {
     "github-triage": false,
   },

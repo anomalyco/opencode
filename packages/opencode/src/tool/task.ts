@@ -9,15 +9,14 @@ import { Agent } from "../agent/agent"
 import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
-import { Wildcard } from "@/util/wildcard"
-import { Permission } from "../permission"
+import { Config } from "../config/config"
+import { PermissionNext } from "@/permission/next"
 
 export { DESCRIPTION as TASK_DESCRIPTION }
 
-export function filterSubagents(agents: Agent.Info[], permissions: Record<string, Config.Permission>) {
-  return agents.filter((a) => Wildcard.all(a.name, permissions) !== "deny")
+export function filterSubagents(agents: Agent.Info[], ruleset: PermissionNext.Ruleset) {
+  return agents.filter((a) => PermissionNext.evaluate("task", a.name, ruleset) !== "deny")
 }
-import { Config } from "../config/config"
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -37,33 +36,24 @@ export const TaskTool = Tool.define("task", async () => {
       command: z.string().describe("The command that triggered this task").optional(),
     }),
     async execute(params, ctx) {
+      const config = await Config.get()
+      const userInvokedAgents = (ctx.extra?.userInvokedAgents ?? []) as string[]
+
+      // Skip permission check if user explicitly invoked this agent via @ autocomplete
+      if (!userInvokedAgents.includes(params.subagent_type)) {
+        await ctx.ask({
+          permission: "task",
+          patterns: [params.subagent_type],
+          always: ["*"],
+          metadata: {
+            description: params.description,
+            subagent_type: params.subagent_type,
+          },
+        })
+      }
+
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
-      const calling = await Agent.get(ctx.agent)
-      if (calling) {
-        const userInvokedAgents = (ctx.extra?.userInvokedAgents ?? []) as string[]
-        // Skip permission check if user explicitly invoked this agent via @ autocomplete
-        if (!userInvokedAgents.includes(params.subagent_type)) {
-          const perm = Wildcard.all(params.subagent_type, calling.permission.task ?? {})
-          if (perm === "deny") {
-            throw new Error(`Agent '${params.subagent_type}' is not available to ${ctx.agent}`)
-          }
-          if (perm === "ask") {
-            await Permission.ask({
-              type: "task",
-              title: `Invoke subagent: ${params.subagent_type}`,
-              pattern: params.subagent_type,
-              callID: ctx.callID,
-              sessionID: ctx.sessionID,
-              messageID: ctx.messageID,
-              metadata: {
-                subagent: params.subagent_type,
-                description: params.description,
-              },
-            })
-          }
-        }
-      }
       const session = await iife(async () => {
         if (params.session_id) {
           const found = await Session.get(params.session_id).catch(() => {})
@@ -73,6 +63,28 @@ export const TaskTool = Tool.define("task", async () => {
         return await Session.create({
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
+          permission: [
+            {
+              permission: "todowrite",
+              pattern: "*",
+              action: "deny",
+            },
+            {
+              permission: "todoread",
+              pattern: "*",
+              action: "deny",
+            },
+            {
+              permission: "task",
+              pattern: "*",
+              action: "deny",
+            },
+            ...(config.experimental?.primary_tools?.map((t) => ({
+              pattern: "*",
+              action: "allow" as const,
+              permission: t,
+            })) ?? []),
+          ],
         })
       })
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
@@ -121,7 +133,6 @@ export const TaskTool = Tool.define("task", async () => {
       using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
 
-      const config = await Config.get()
       const result = await SessionPrompt.prompt({
         messageID,
         sessionID: session.id,
@@ -135,7 +146,6 @@ export const TaskTool = Tool.define("task", async () => {
           todoread: false,
           task: false,
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
-          ...agent.tools,
         },
         parts: promptParts,
       })
