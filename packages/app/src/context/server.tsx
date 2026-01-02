@@ -84,9 +84,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     createEffect(() => {
       if (!ready()) return
       if (active()) return
-      console.log("props.defaultUrl", props.defaultUrl)
       const url = normalizeServerUrl(props.defaultUrl)
-      console.log("url", url)
       if (!url) return
       setActiveRaw(url)
     })
