@@ -161,6 +161,10 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       let output = ""
+      let outputLimitReached = false
+      let outputBuffer = ""
+      let lineBuffer = ""
+      let overwritingLine = false
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -170,16 +174,48 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
-      const append = (chunk: Buffer) => {
-        if (output.length <= MAX_OUTPUT_LENGTH) {
-          output += chunk.toString()
-          ctx.metadata({
-            metadata: {
-              output,
-              description: params.description,
-            },
-          })
+      const appendText = (text: string) => {
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i]
+          if (char === "\r") {
+            overwritingLine = true
+            continue
+          }
+
+          if (char === "\n") {
+            outputBuffer += lineBuffer + "\n"
+            lineBuffer = ""
+            overwritingLine = false
+            continue
+          }
+
+          if (overwritingLine) {
+            lineBuffer = ""
+            overwritingLine = false
+          }
+
+          lineBuffer += char
         }
+
+        output = outputBuffer + lineBuffer
+      }
+
+      const append = (chunk: Buffer) => {
+        if (outputLimitReached) return
+
+        appendText(chunk.toString())
+
+        if (output.length > MAX_OUTPUT_LENGTH) {
+          output = output.slice(0, MAX_OUTPUT_LENGTH)
+          outputLimitReached = true
+        }
+
+        ctx.metadata({
+          metadata: {
+            output,
+            description: params.description,
+          },
+        })
       }
 
       proc.stdout?.on("data", append)
@@ -229,8 +265,7 @@ export const BashTool = Tool.define("bash", async () => {
 
       let resultMetadata: String[] = ["<bash_metadata>"]
 
-      if (output.length > MAX_OUTPUT_LENGTH) {
-        output = output.slice(0, MAX_OUTPUT_LENGTH)
+      if (outputLimitReached) {
         resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
       }
 

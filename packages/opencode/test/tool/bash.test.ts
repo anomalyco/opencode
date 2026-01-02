@@ -35,6 +35,46 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  test("collapses carriage-return progress updates", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "printf 'Downloading 0%%\\rDownloading 50%%\\rDownloading 100%%\\nDone\\n'",
+            description: "Print progress output",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain("Downloading 100%")
+        expect(result.metadata.output).toContain("Done")
+        expect(result.metadata.output).not.toContain("Downloading 0%")
+        expect(result.metadata.output).not.toContain("Downloading 50%")
+        expect(result.metadata.output).not.toContain("\r")
+      },
+    })
+  })
+
+  test("does not drop trailing carriage-return output", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          {
+            command: "printf 'hello\\r'",
+            description: "Print hello carriage return",
+          },
+          ctx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toBe("hello")
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {
