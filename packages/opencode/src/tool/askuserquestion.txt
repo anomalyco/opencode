@@ -1,0 +1,13 @@
+Use this tool when you need to ask the user questions during execution. This allows you to:
+1. Gather user preferences or requirements
+2. Clarify ambiguous instructions
+3. Get decisions on implementation choices as you work
+4. Offer choices to the user about what direction to take
+
+Usage notes:
+- Provide 1-4 questions per invocation
+- Each question should have a short header (max 12 chars) for display in tabs
+- Provide 2-4 options per question, each with a label and description
+- Use multiSelect: true when users should be able to select multiple options
+- Users will always be able to select "Other" to provide custom text input
+- The tool blocks until the user responds

@@ -8,6 +8,7 @@ import type {
   Todo,
   Command,
   PermissionRequest,
+  AskUserRequest,
   LspStatus,
   McpStatus,
   FormatterStatus,
@@ -40,6 +41,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       command: Command[]
       permission: {
         [sessionID: string]: PermissionRequest[]
+      }
+      askuser: {
+        [sessionID: string]: AskUserRequest[]
       }
       config: Config
       session: Session[]
@@ -76,6 +80,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       status: "loading",
       agent: [],
       permission: {},
+      askuser: {},
       command: [],
       provider: [],
       provider_default: {},
@@ -126,6 +131,43 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           setStore(
             "permission",
+            request.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "askuser.replied": {
+          const requests = store.askuser[event.properties.sessionID]
+          if (!requests) break
+          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
+          if (!match.found) break
+          setStore(
+            "askuser",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
+          break
+        }
+
+        case "askuser.asked": {
+          const request = event.properties
+          const requests = store.askuser[request.sessionID]
+          if (!requests) {
+            setStore("askuser", request.sessionID, [request])
+            break
+          }
+          const match = Binary.search(requests, request.id, (r) => r.id)
+          if (match.found) {
+            setStore("askuser", request.sessionID, match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "askuser",
             request.sessionID,
             produce((draft) => {
               draft.splice(match.index, 0, request)

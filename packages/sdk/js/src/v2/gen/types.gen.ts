@@ -550,6 +550,52 @@ export type EventTodoUpdated = {
   }
 }
 
+export type AskUserOption = {
+  label: string
+  description: string
+}
+
+export type AskUserQuestion = {
+  question: string
+  header: string
+  options: Array<AskUserOption>
+  multiSelect: boolean
+}
+
+export type AskUserRequest = {
+  id: string
+  sessionID: string
+  questions: Array<AskUserQuestion>
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventAskuserAsked = {
+  type: "askuser.asked"
+  properties: AskUserRequest
+}
+
+export type AskUserAnswer = {
+  questionIndex: number
+  selectedIndices: Array<number>
+  otherText?: string
+}
+
+export type AskUserReply = {
+  answers: Array<AskUserAnswer>
+}
+
+export type EventAskuserReplied = {
+  type: "askuser.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: AskUserReply
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -773,6 +819,8 @@ export type Event =
   | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
+  | EventAskuserAsked
+  | EventAskuserReplied
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -3430,6 +3478,59 @@ export type PermissionListResponses = {
 }
 
 export type PermissionListResponse = PermissionListResponses[keyof PermissionListResponses]
+
+export type AskuserReplyData = {
+  body?: {
+    reply: AskUserReply
+  }
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/askuser/{requestID}/reply"
+}
+
+export type AskuserReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type AskuserReplyError = AskuserReplyErrors[keyof AskuserReplyErrors]
+
+export type AskuserReplyResponses = {
+  /**
+   * Askuser request processed successfully
+   */
+  200: boolean
+}
+
+export type AskuserReplyResponse = AskuserReplyResponses[keyof AskuserReplyResponses]
+
+export type AskuserListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/askuser"
+}
+
+export type AskuserListResponses = {
+  /**
+   * List of pending askuser requests
+   */
+  200: Array<AskUserRequest>
+}
+
+export type AskuserListResponse = AskuserListResponses[keyof AskuserListResponses]
 
 export type CommandListData = {
   body?: never

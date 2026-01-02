@@ -7,6 +7,10 @@ import type {
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
+  AskuserListResponses,
+  AskUserReply,
+  AskuserReplyErrors,
+  AskuserReplyResponses,
   Auth as Auth2,
   AuthSetErrors,
   AuthSetResponses,
@@ -1690,6 +1694,64 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Askuser extends HeyApiClient {
+  /**
+   * Respond to askuser request
+   *
+   * Submit answers to an askuser question request from the AI assistant.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      reply?: AskUserReply
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "reply" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<AskuserReplyResponses, AskuserReplyErrors, ThrowOnError>({
+      url: "/askuser/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List pending askuser requests
+   *
+   * Get all pending askuser requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<AskuserListResponses, unknown, ThrowOnError>({
+      url: "/askuser",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Command extends HeyApiClient {
   /**
    * List commands
@@ -2758,6 +2820,8 @@ export class OpencodeClient extends HeyApiClient {
   part = new Part({ client: this.client })
 
   permission = new Permission({ client: this.client })
+
+  askuser = new Askuser({ client: this.client })
 
   command = new Command({ client: this.client })
 

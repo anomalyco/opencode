@@ -67,6 +67,7 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
+import { AskUserPrompt } from "./askuser"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 
 addDefaultParsers(parsers.parsers)
@@ -117,6 +118,10 @@ export function Session() {
   const permissions = createMemo(() => {
     if (session().parentID) return sync.data.permission[route.sessionID] ?? []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+  })
+  const askuserRequests = createMemo(() => {
+    if (session().parentID) return sync.data.askuser[route.sessionID] ?? []
+    return children().flatMap((x) => sync.data.askuser[x.id] ?? [])
   })
 
   const pending = createMemo(() => {
@@ -1068,16 +1073,19 @@ export function Session() {
               </For>
             </scrollbox>
             <box flexShrink={0}>
-              <Show when={permissions().length > 0}>
+              <Show when={askuserRequests().length > 0}>
+                <AskUserPrompt request={askuserRequests()[0]} />
+              </Show>
+              <Show when={permissions().length > 0 && askuserRequests().length === 0}>
                 <PermissionPrompt request={permissions()[0]} />
               </Show>
               <Prompt
-                visible={!session().parentID && permissions().length === 0}
+                visible={!session().parentID && permissions().length === 0 && askuserRequests().length === 0}
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
                 }}
-                disabled={permissions().length > 0}
+                disabled={permissions().length > 0 || askuserRequests().length > 0}
                 onSubmit={() => {
                   toBottom()
                 }}
@@ -1398,6 +1406,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
       </Match>
       <Match when={props.part.tool === "todowrite"}>
         <TodoWrite {...toolprops} />
+      </Match>
+      <Match when={props.part.tool === "askuserquestion"}>
+        <AskUserQuestion {...toolprops} />
       </Match>
       <Match when={true}>
         <GenericTool {...toolprops} />
@@ -1812,6 +1823,41 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
       <Match when={true}>
         <InlineTool icon="⚙" pending="Updating todos..." complete={false} part={props.part}>
           Updating todos...
+        </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+function AskUserQuestion(props: ToolProps<any>) {
+  const { theme } = useTheme()
+  const input = props.input as { questions?: Array<{ header: string; question: string }> }
+  const questions = () => input.questions ?? []
+  const isComplete = () => props.part.state.status === "completed"
+
+  return (
+    <Switch>
+      <Match when={isComplete() && props.output}>
+        <BlockTool title="? Question answered">
+          <box>
+            <For each={questions()}>
+              {(q) => (
+                <text fg={theme.text}>
+                  {q.header}: <span style={{ fg: theme.textMuted }}>{q.question}</span>
+                </text>
+              )}
+            </For>
+          </box>
+        </BlockTool>
+      </Match>
+      <Match when={questions().length > 0}>
+        <InlineTool icon="?" pending="Asking user..." complete={true} part={props.part}>
+          Asking: {questions().map((q) => q.header).join(", ")}
+        </InlineTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="?" pending="Preparing question..." complete={false} part={props.part}>
+          Asking user...
         </InlineTool>
       </Match>
     </Switch>

@@ -23,6 +23,7 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
+import { AskUserQuestionTool } from "./askuser"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -103,6 +104,7 @@ export namespace ToolRegistry {
       WebSearchTool,
       CodeSearchTool,
       SkillTool,
+      AskUserQuestionTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...custom,
@@ -121,6 +123,9 @@ export namespace ToolRegistry {
           // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
             return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+          }
+          if (t.id === "askuserquestion") {
+            return providerID === "anthropic"
           }
           return true
         })

@@ -48,6 +48,7 @@ import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
+import { AskUserNext } from "@/askuser"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 
@@ -1612,6 +1613,63 @@ export namespace Server {
         async (c) => {
           const permissions = await PermissionNext.list()
           return c.json(permissions)
+        },
+      )
+      .post(
+        "/askuser/:requestID/reply",
+        describeRoute({
+          summary: "Respond to askuser request",
+          description: "Submit answers to an askuser question request from the AI assistant.",
+          operationId: "askuser.reply",
+          responses: {
+            200: {
+              description: "Askuser request processed successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "param",
+          z.object({
+            requestID: z.string(),
+          }),
+        ),
+        validator("json", z.object({ reply: AskUserNext.Reply })),
+        async (c) => {
+          const params = c.req.valid("param")
+          const json = c.req.valid("json")
+          await AskUserNext.reply({
+            requestID: params.requestID,
+            reply: json.reply,
+          })
+          return c.json(true)
+        },
+      )
+      .get(
+        "/askuser",
+        describeRoute({
+          summary: "List pending askuser requests",
+          description: "Get all pending askuser requests across all sessions.",
+          operationId: "askuser.list",
+          responses: {
+            200: {
+              description: "List of pending askuser requests",
+              content: {
+                "application/json": {
+                  schema: resolver(AskUserNext.Request.array()),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const requests = await AskUserNext.list()
+          return c.json(requests)
         },
       )
       .get(
