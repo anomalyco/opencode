@@ -380,6 +380,8 @@ export namespace SessionPrompt {
           messageID: assistantMessage.id,
           sessionID: sessionID,
           abort,
+          callID: part.callID,
+          extra: { userInvokedAgents: [task.agent] },
           async metadata(input) {
             await Session.updatePart({
               ...part,

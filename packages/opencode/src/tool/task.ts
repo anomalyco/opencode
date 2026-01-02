@@ -39,7 +39,7 @@ export const TaskTool = Tool.define("task", async () => {
       const config = await Config.get()
       const userInvokedAgents = (ctx.extra?.userInvokedAgents ?? []) as string[]
 
-      // Skip permission check if user explicitly invoked this agent via @ autocomplete
+      // Skip permission check if user explicitly invoked this agent via @ autocomplete or slash command
       if (!userInvokedAgents.includes(params.subagent_type)) {
         await ctx.ask({
           permission: "task",
