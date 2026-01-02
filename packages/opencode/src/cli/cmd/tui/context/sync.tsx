@@ -97,6 +97,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     sdk.event.listen((e) => {
       const event = e.details
       switch (event.type) {
+        case "server.instance.disposed":
+          bootstrap()
+          break
         case "permission.replied": {
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
@@ -260,28 +263,26 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const args = useArgs()
 
     async function bootstrap() {
-      const sessionListPromise = sdk.client.session.list().then((x) =>
-        setStore(
-          "session",
-          (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)),
-        ),
-      )
+      console.log("bootstrapping")
+      const sessionListPromise = sdk.client.session
+        .list()
+        .then((x) => setStore("session", reconcile((x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))))
 
       // blocking - include session.list when continuing a session
       const blockingRequests: Promise<unknown>[] = [
         sdk.client.config.providers({}, { throwOnError: true }).then((x) => {
           batch(() => {
-            setStore("provider", x.data!.providers)
-            setStore("provider_default", x.data!.default)
+            setStore("provider", reconcile(x.data!.providers))
+            setStore("provider_default", reconcile(x.data!.default))
           })
         }),
         sdk.client.provider.list({}, { throwOnError: true }).then((x) => {
           batch(() => {
-            setStore("provider_next", x.data!)
+            setStore("provider_next", reconcile(x.data!))
           })
         }),
-        sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", x.data ?? [])),
-        sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", x.data!)),
+        sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", reconcile(x.data ?? []))),
+        sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", reconcile(x.data!))),
         ...(args.continue ? [sessionListPromise] : []),
       ]
 
@@ -291,14 +292,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           // non-blocking
           Promise.all([
             ...(args.continue ? [] : [sessionListPromise]),
-            sdk.client.command.list().then((x) => setStore("command", x.data ?? [])),
-            sdk.client.lsp.status().then((x) => setStore("lsp", x.data!)),
-            sdk.client.mcp.status().then((x) => setStore("mcp", x.data!)),
-            sdk.client.formatter.status().then((x) => setStore("formatter", x.data!)),
-            sdk.client.session.status().then((x) => setStore("session_status", x.data!)),
-            sdk.client.provider.auth().then((x) => setStore("provider_auth", x.data ?? {})),
-            sdk.client.vcs.get().then((x) => setStore("vcs", x.data)),
-            sdk.client.path.get().then((x) => setStore("path", x.data!)),
+            sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
+            sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
+            sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
+            sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
+            sdk.client.session.status().then((x) => {
+              setStore("session_status", reconcile(x.data!))
+            }),
+            sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
+            sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
+            sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
           ]).then(() => {
             setStore("status", "complete")
           })
