@@ -147,6 +147,9 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  WorktreeCreateErrors,
+  WorktreeCreateInput,
+  WorktreeCreateResponses,
 } from "./types.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<
@@ -676,6 +679,43 @@ export class Path extends HeyApiClient {
       url: "/path",
       ...options,
       ...params,
+    })
+  }
+}
+
+export class Worktree extends HeyApiClient {
+  /**
+   * Create worktree
+   *
+   * Create a new git worktree for the current project.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      worktreeCreateInput?: WorktreeCreateInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "worktreeCreateInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorktreeCreateResponses, WorktreeCreateErrors, ThrowOnError>({
+      url: "/worktree",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -2750,6 +2790,8 @@ export class OpencodeClient extends HeyApiClient {
   instance = new Instance({ client: this.client })
 
   path = new Path({ client: this.client })
+
+  worktree = new Worktree({ client: this.client })
 
   vcs = new Vcs({ client: this.client })
 

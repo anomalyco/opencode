@@ -24,7 +24,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum } from "@opencode-ai/util/encode"
+import { base64Decode, checksum } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -38,6 +38,8 @@ import { usePrompt } from "@/context/prompt"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
+import { useGlobalSync } from "@/context/global-sync"
+import { useWorktree } from "@/context/worktree"
 import { showToast } from "@opencode-ai/ui/toast"
 import {
   SessionHeader,
@@ -152,6 +154,8 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const permission = usePermission()
+  const globalSync = useGlobalSync()
+  const worktree = useWorktree()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -358,6 +362,52 @@ export default function Page() {
     return isWorking
   }, working())
 
+  async function createWorktreeSession() {
+    const encoded = params.dir
+    if (!encoded) return
+
+    const projectDirectory = base64Decode(encoded)
+
+    const info = await sdk.client.worktree
+      .create({
+        directory: projectDirectory,
+        worktreeCreateInput: {},
+      })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: "Failed to create worktree",
+          description: err?.data?.message ?? (err instanceof Error ? err.message : "Request failed"),
+        })
+        return
+      })
+
+    if (!info?.directory) return
+
+    const created = await sdk.client.session
+      .create({ directory: projectDirectory })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: "Failed to create session",
+          description: err?.data?.message ?? (err instanceof Error ? err.message : "Request failed"),
+        })
+        return
+      })
+
+    if (!created?.id) return
+
+    worktree.set(created.id, {
+      directory: info.directory,
+      project: projectDirectory,
+      branch: info.branch,
+      name: info.name,
+    })
+
+    globalSync.child(info.directory)
+    navigate(`/${encoded}/session/${created.id}`)
+  }
+
   command.register(() => [
     {
       id: "session.new",
@@ -367,6 +417,16 @@ export default function Page() {
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
+    },
+    {
+      id: "session.new.worktree",
+      title: "New session in worktree",
+      description: "Create a new session backed by a git worktree",
+      category: "Session",
+      slash: "new-worktree",
+      onSelect: () => {
+        void createWorktreeSession()
+      },
     },
     {
       id: "file.open",

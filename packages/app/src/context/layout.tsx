@@ -90,11 +90,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const metadata = globalSync.data.project.find((x) => x.worktree === project.worktree)
+      const [store] = globalSync.child(project.worktree)
+      const metadata = globalSync.data.project.find((x) => x.id === store.project)
       return [
         {
-          ...project,
           ...(metadata ?? {}),
+          ...project,
           icon: { url: metadata?.icon?.url, color: metadata?.icon?.color },
         },
       ]

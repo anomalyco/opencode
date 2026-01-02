@@ -34,7 +34,6 @@ export function SessionHeader() {
   const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const branch = createMemo(() => sync.data.vcs?.branch)
 
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
@@ -61,11 +60,7 @@ export function SessionHeader() {
               <Select
                 options={layout.projects.list().map((project) => project.worktree)}
                 current={sync.directory}
-                label={(x) => {
-                  const name = getFilename(x)
-                  const b = x === sync.directory ? branch() : undefined
-                  return b ? `${name}:${b}` : name
-                }}
+                label={(x) => getFilename(x)}
                 onSelect={(x) => (x ? navigateToProject(x) : undefined)}
                 class="text-14-regular text-text-base"
                 variant="ghost"

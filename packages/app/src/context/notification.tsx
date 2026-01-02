@@ -2,6 +2,7 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
+import { useWorktree } from "./worktree"
 import { usePlatform } from "@/context/platform"
 import { Binary } from "@opencode-ai/util/binary"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -12,7 +13,6 @@ import errorSound from "@opencode-ai/ui/audio/nope-03.aac"
 import { persisted } from "@/utils/persist"
 
 type NotificationBase = {
-  directory?: string
   session?: string
   metadata?: any
   time: number
@@ -45,6 +45,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const globalSDK = useGlobalSDK()
     const globalSync = useGlobalSync()
+    const worktree = useWorktree()
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
@@ -58,13 +59,13 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       const directory = e.name
       const event = e.details
       const base = {
-        directory,
         time: Date.now(),
         viewed: false,
       }
       switch (event.type) {
         case "session.idle": {
           const sessionID = event.properties.sessionID
+
           const [syncStore] = globalSync.child(directory)
           const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
           const session = match.found ? syncStore.session[match.index] : undefined
@@ -77,12 +78,14 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             type: "turn-complete",
             session: sessionID,
           })
-          const href = `/${base64Encode(directory)}/session/${sessionID}`
+          const projectDirectory = worktree.project(sessionID) ?? session?.directory ?? directory
+          const href = `/${base64Encode(projectDirectory)}/session/${sessionID}`
           void platform.notify("Response ready", session?.title ?? sessionID, href)
           break
         }
         case "session.error": {
           const sessionID = event.properties.sessionID
+
           const [syncStore] = globalSync.child(directory)
           const match = sessionID ? Binary.search(syncStore.session, sessionID, (s) => s.id) : undefined
           const session = sessionID && match?.found ? syncStore.session[match.index] : undefined
@@ -98,7 +101,12 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
             error,
           })
           const description = session?.title ?? (typeof error === "string" ? error : "An error occurred")
-          const href = sessionID ? `/${base64Encode(directory)}/session/${sessionID}` : `/${base64Encode(directory)}`
+          const projectDirectory = sessionID
+            ? (worktree.project(sessionID) ?? session?.directory ?? directory)
+            : directory
+          const href = sessionID
+            ? `/${base64Encode(projectDirectory)}/session/${sessionID}`
+            : `/${base64Encode(projectDirectory)}`
           void platform.notify("Session error", description, href)
           break
         }
@@ -120,13 +128,19 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       },
       project: {
         all(directory: string) {
-          return store.list.filter((n) => n.directory === directory)
+          const [syncStore] = globalSync.child(directory)
+          const ids = new Set(syncStore.session.map((s) => s.id))
+          return store.list.filter((n) => !!n.session && ids.has(n.session))
         },
         unseen(directory: string) {
-          return store.list.filter((n) => n.directory === directory && !n.viewed)
+          const [syncStore] = globalSync.child(directory)
+          const ids = new Set(syncStore.session.map((s) => s.id))
+          return store.list.filter((n) => !!n.session && ids.has(n.session) && !n.viewed)
         },
         markViewed(directory: string) {
-          setStore("list", (n) => n.directory === directory, "viewed", true)
+          const [syncStore] = globalSync.child(directory)
+          const ids = new Set(syncStore.session.map((s) => s.id))
+          setStore("list", (n) => !!n.session && ids.has(n.session), "viewed", true)
         },
       },
     }

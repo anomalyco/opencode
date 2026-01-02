@@ -16,6 +16,7 @@ import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
+import { useWorktree } from "@/context/worktree"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -81,6 +82,7 @@ export default function Layout(props: ParentProps) {
   const params = useParams()
   const globalSDK = useGlobalSDK()
   const globalSync = useGlobalSync()
+  const worktree = useWorktree()
   const layout = useLayout()
   const platform = usePlatform()
   const server = useServer()
@@ -172,14 +174,18 @@ export default function Layout(props: ParentProps) {
       const perm = e.details.properties
       if (permission.autoResponds(perm)) return
 
-      const sessionKey = `${directory}:${perm.sessionID}`
       const [store] = globalSync.child(directory)
       const session = store.session.find((s) => s.id === perm.sessionID)
+      const projectDirectory =
+        worktree.project(perm.sessionID) ??
+        (session?.parentID ? worktree.project(session.parentID) : undefined) ??
+        directory
+      const sessionKey = `${projectDirectory}:${perm.sessionID}`
 
       const sessionTitle = session?.title ?? "New session"
-      const projectName = getFilename(directory)
+      const projectName = getFilename(projectDirectory)
       const description = `${sessionTitle} in ${projectName} needs permission`
-      const href = `/${base64Encode(directory)}/session/${perm.sessionID}`
+      const href = `/${base64Encode(projectDirectory)}/session/${perm.sessionID}`
 
       const now = Date.now()
       const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
@@ -190,8 +196,8 @@ export default function Layout(props: ParentProps) {
 
       const currentDir = params.dir ? base64Decode(params.dir) : undefined
       const currentSession = params.id
-      if (directory === currentDir && perm.sessionID === currentSession) return
-      if (directory === currentDir && session?.parentID === currentSession) return
+      if (projectDirectory === currentDir && perm.sessionID === currentSession) return
+      if (projectDirectory === currentDir && session?.parentID === currentSession) return
 
       const existingToastId = toastBySession.get(sessionKey)
       if (existingToastId !== undefined) {
@@ -641,16 +647,28 @@ export default function Layout(props: ParentProps) {
     mobile?: boolean
   }): JSX.Element => {
     const notification = useNotification()
-    const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
+    const sessionDirectory = createMemo(() => worktree.directory(props.session.id) ?? props.project.worktree)
+    const session = createMemo(() => {
+      const directory = sessionDirectory()
+      if (directory === props.project.worktree) return props.session
+      const store = globalSync.child(directory)[0]
+      const match = Binary.search(store.session, props.session.id, (s) => s.id)
+      if (match.found) return store.session[match.index]
+      return props.session
+    })
+    const updated = createMemo(() => DateTime.fromMillis(session().time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const hasPermissions = createMemo(() => {
-      const store = globalSync.child(props.project.worktree)[0]
+      const directory = sessionDirectory()
+      const store = globalSync.child(directory)[0]
       const permissions = store.permission?.[props.session.id] ?? []
       if (permissions.length > 0) return true
       const childSessions = store.session.filter((s) => s.parentID === props.session.id)
       for (const child of childSessions) {
-        const childPermissions = store.permission?.[child.id] ?? []
+        const childDirectory = worktree.directory(child.id) ?? directory
+        const childStore = globalSync.child(childDirectory)[0]
+        const childPermissions = childStore.permission?.[child.id] ?? []
         if (childPermissions.length > 0) return true
       }
       return false
@@ -658,7 +676,8 @@ export default function Layout(props: ParentProps) {
     const isWorking = createMemo(() => {
       if (props.session.id === params.id) return false
       if (hasPermissions()) return false
-      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      const directory = sessionDirectory()
+      const status = globalSync.child(directory)[0].session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
     return (
@@ -669,7 +688,7 @@ export default function Layout(props: ParentProps) {
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
           style={{ "padding-left": "16px" }}
         >
-          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+          <Tooltip placement={props.mobile ? "bottom" : "right"} value={session().title} gutter={10}>
             <A
               href={`${props.slug}/session/${props.session.id}`}
               class="flex flex-col min-w-0 text-left w-full focus:outline-none"
@@ -681,7 +700,7 @@ export default function Layout(props: ParentProps) {
                     "animate-pulse": isWorking(),
                   }}
                 >
-                  {props.session.title}
+                  {session().title}
                 </span>
                 <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
                   <Switch>
@@ -715,10 +734,10 @@ export default function Layout(props: ParentProps) {
                   </Switch>
                 </div>
               </div>
-              <Show when={props.session.summary?.files}>
+              <Show when={session().summary?.files}>
                 <div class="flex justify-between items-center self-stretch">
-                  <span class="text-12-regular text-text-weak">{`${props.session.summary?.files || "No"} file${props.session.summary?.files !== 1 ? "s" : ""} changed`}</span>
-                  <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
+                  <span class="text-12-regular text-text-weak">{`${session().summary?.files || "No"} file${session().summary?.files !== 1 ? "s" : ""} changed`}</span>
+                  <Show when={session().summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
                 </div>
               </Show>
             </A>
@@ -875,76 +894,85 @@ export default function Layout(props: ParentProps) {
   const SidebarContent = (sidebarProps: { mobile?: boolean }) => {
     const expanded = () => sidebarProps.mobile || layout.sidebar.opened()
     return (
-      <>
-        <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
+      <div class="flex flex-col self-stretch h-full items-center justify-between overflow-hidden min-h-0">
+        <div class="flex flex-col items-start self-stretch gap-4 min-h-0">
           <Show when={!sidebarProps.mobile}>
-            <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2" data-tauri-drag-region>
-              <Mark class="shrink-0" />
-            </A>
-          </Show>
-          <Show when={!sidebarProps.mobile}>
-            <TooltipKeybind
-              class="shrink-0"
-              placement="right"
-              title="Toggle sidebar"
-              keybind={command.keybind("sidebar.toggle")}
-              inactive={expanded()}
-            >
-              <Button
-                variant="ghost"
-                size="large"
-                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
-                onClick={layout.sidebar.toggle}
-              >
-                <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left" : "layout-right"}
-                    size="small"
-                    class="group-hover/sidebar-toggle:hidden"
-                  />
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left-partial" : "layout-right-partial"}
-                    size="small"
-                    class="hidden group-hover/sidebar-toggle:inline-block"
-                  />
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left-full" : "layout-right-full"}
-                    size="small"
-                    class="hidden group-active/sidebar-toggle:inline-block"
-                  />
-                </div>
-                <Show when={layout.sidebar.opened()}>
-                  <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
-                    Toggle sidebar
-                  </div>
-                </Show>
-              </Button>
-            </TooltipKeybind>
-          </Show>
-          <DragDropProvider
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragOver={handleDragOver}
-            collisionDetector={closestCenter}
-          >
-            <DragDropSensors />
-            <ConstrainDragXAxis />
             <div
-              ref={(el) => {
-                if (!sidebarProps.mobile) scrollContainerRef = el
+              classList={{
+                "border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75": true,
+                "justify-start": expanded(),
               }}
-              class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
             >
-              <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
-                <For each={layout.projects.list()}>
-                  {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
-                </For>
-              </SortableProvider>
+              <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2" data-tauri-drag-region>
+                <Mark class="shrink-0" />
+              </A>
             </div>
-            <DragOverlay>
-              <ProjectDragOverlay />
-            </DragOverlay>
-          </DragDropProvider>
+          </Show>
+          <div class="flex flex-col items-start self-stretch gap-4 px-2 ">
+            <Show when={!sidebarProps.mobile}>
+              <TooltipKeybind
+                class="shrink-0"
+                placement="right"
+                title="Toggle sidebar"
+                keybind={command.keybind("sidebar.toggle")}
+                inactive={expanded()}
+              >
+                <Button
+                  variant="ghost"
+                  size="large"
+                  class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
+                  onClick={layout.sidebar.toggle}
+                >
+                  <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left" : "layout-right"}
+                      size="small"
+                      class="group-hover/sidebar-toggle:hidden"
+                    />
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left-partial" : "layout-right-partial"}
+                      size="small"
+                      class="hidden group-hover/sidebar-toggle:inline-block"
+                    />
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left-full" : "layout-right-full"}
+                      size="small"
+                      class="hidden group-active/sidebar-toggle:inline-block"
+                    />
+                  </div>
+                  <Show when={layout.sidebar.opened()}>
+                    <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
+                      Toggle sidebar
+                    </div>
+                  </Show>
+                </Button>
+              </TooltipKeybind>
+            </Show>
+            <DragDropProvider
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragXAxis />
+              <div
+                ref={(el) => {
+                  if (!sidebarProps.mobile) scrollContainerRef = el
+                }}
+                class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
+              >
+                <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
+                  <For each={layout.projects.list()}>
+                    {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
+                  </For>
+                </SortableProvider>
+              </div>
+              <DragOverlay>
+                <ProjectDragOverlay />
+              </DragOverlay>
+            </DragDropProvider>
+          </div>
         </div>
         <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
           <Switch>
@@ -1017,7 +1045,7 @@ export default function Layout(props: ParentProps) {
             </Button>
           </Tooltip>
         </div>
-      </>
+      </div>
     )
   }
 
