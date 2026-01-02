@@ -52,6 +52,7 @@ export type AutocompleteRef = {
 
 export type AutocompleteOption = {
   display: string
+  searchTarget?: string
   aliases?: string[]
   disabled?: boolean
   description?: string
@@ -202,6 +203,7 @@ export function Autocomplete(props: {
 
             return {
               display: Locale.truncateMiddle(filename, width),
+              searchTarget: filename,
               onSelect: () => {
                 insertPart(filename, {
                   type: "file",
@@ -430,7 +432,7 @@ export function Autocomplete(props: {
     }
 
     const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
-      keys: [(obj) => removeLineRange(obj.display.trimEnd()), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+      keys: [(obj) => removeLineRange(obj.searchTarget ?? obj.display.trimEnd()), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
