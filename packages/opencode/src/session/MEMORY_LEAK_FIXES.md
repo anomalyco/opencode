@@ -13,6 +13,7 @@ This document outlines the memory leak issues identified in the session module a
 **Problem**: When an instance is disposed, the dispose callback only aborts the AbortControllers but doesn't reject the pending promise callbacks. This leaves hanging promises that never resolve or reject.
 
 **Current Code**:
+
 ```typescript
 async (current) => {
   for (const item of Object.values(current)) {
@@ -22,6 +23,7 @@ async (current) => {
 ```
 
 **Fix**: Add callback rejection in the dispose handler:
+
 ```typescript
 async (current) => {
   for (const item of Object.values(current)) {
@@ -42,6 +44,7 @@ async (current) => {
 **Problem**: If the timeout resolves before the abort signal fires, the abort event listener remains attached to the signal. While `{ once: true }` ensures it fires only once if aborted, it doesn't remove the listener if the timeout fires first. This causes a minor memory leak for long-lived signals.
 
 **Current Code**:
+
 ```typescript
 export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -59,6 +62,7 @@ export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
 ```
 
 **Fix**: Store the abort handler and remove it when timeout resolves:
+
 ```typescript
 export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -66,10 +70,13 @@ export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
       clearTimeout(timeout)
       reject(new DOMException("Aborted", "AbortError"))
     }
-    const timeout = setTimeout(() => {
-      signal.removeEventListener("abort", abortHandler)
-      resolve()
-    }, Math.min(ms, RETRY_MAX_DELAY))
+    const timeout = setTimeout(
+      () => {
+        signal.removeEventListener("abort", abortHandler)
+        resolve()
+      },
+      Math.min(ms, RETRY_MAX_DELAY),
+    )
     signal.addEventListener("abort", abortHandler, { once: true })
   })
 }
@@ -79,13 +86,15 @@ export async function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 ### Issue 3: Orphaned AbortControllers (LOW - Optional)
 
-**Files**: 
+**Files**:
+
 - `summary.ts:102`, `summary.ts:143`
 - `prompt.ts:884-892`, `prompt.ts:945-953`
 
 **Problem**: New `AbortController()` instances are created inline and passed to functions, but the controllers are never stored or explicitly aborted. While this isn't a significant leak (GC handles them when streams complete), it's a code smell.
 
 **Example**:
+
 ```typescript
 abort: new AbortController().signal,
 ```
@@ -103,6 +112,7 @@ abort: new AbortController().signal,
 ## Testing Notes
 
 After implementing fixes:
+
 1. Verify existing tests pass
 2. Manually test session cancellation during active processing
 3. Verify instance disposal properly cleans up all pending sessions
