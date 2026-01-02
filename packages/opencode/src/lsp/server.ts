@@ -1229,7 +1229,7 @@ export namespace LSPServer {
         }
 
         const release = await releaseResponse.json()
-        const version = release.name?.replace(/^v/, '')
+        const version = release.name?.replace(/^v/, "")
 
         if (!version) {
           log.error("Could not determine Kotlin LSP version from release")
@@ -1248,11 +1248,7 @@ export namespace LSPServer {
         else if (platform === "linux") kotlinPlatform = "linux"
         else if (platform === "win32") kotlinPlatform = "win"
 
-        const supportedCombos = [
-          "mac-x64", "mac-aarch64",
-          "linux-x64", "linux-aarch64",
-          "win-x64", "win-aarch64"
-        ]
+        const supportedCombos = ["mac-x64", "mac-aarch64", "linux-x64", "linux-aarch64", "win-x64", "win-aarch64"]
 
         const combo = `${kotlinPlatform}-${kotlinArch}`
 
