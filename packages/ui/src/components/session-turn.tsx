@@ -2,7 +2,7 @@ import {
   AssistantMessage,
   Message as MessageType,
   Part as PartType,
-  type Permission,
+  type PermissionRequest,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
@@ -132,7 +132,7 @@ export function SessionTurn(
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyPermissions: Permission[] = []
+  const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const idle = { type: "idle" as const }
 
@@ -235,16 +235,18 @@ export function SessionTurn(
     if (props.stepsExpanded) return emptyPermissionParts
 
     const next = nextPermission()
-    if (!next) return emptyPermissionParts
+    if (!next || !next.tool) return emptyPermissionParts
 
-    for (const message of assistantMessages()) {
-      const parts = data.store.part[message.id] ?? emptyParts
-      for (const part of parts) {
-        if (part?.type !== "tool") continue
-        const tool = part as ToolPart
-        if (tool.callID === next.callID) return [{ part: tool, message }]
-      }
+    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    if (!message) return emptyPermissionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
     }
+
     return emptyPermissionParts
   })
 

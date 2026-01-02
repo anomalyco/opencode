@@ -4,7 +4,6 @@ import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
-import { Global } from "@/global"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -34,6 +33,7 @@ import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -473,6 +473,20 @@ function App() {
       value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Write heap snapshot",
+      category: "System",
+      value: "app.heap_snapshot",
+      onSelect: (dialog) => {
+        const path = writeHeapSnapshot()
+        toast.show({
+          variant: "info",
+          message: `Heap snapshot written to ${path}`,
+          duration: 5000,
+        })
         dialog.clear()
       },
     },
