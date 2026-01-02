@@ -64,6 +64,10 @@ The ones we have seen above, where the `AGENTS.md` is placed in the project root
 
 You can also have global rules in a `~/.config/opencode/AGENTS.md` file. This gets applied across all opencode sessions.
 
+:::note
+Global files are placed in your OpenCode config directory. [Learn more about config locations](/docs/config#locations).
+:::
+
 Since this isn't committed to Git or shared with your team, we recommend using this to specify any personal rules that the LLM should follow.
 
 ---
@@ -73,7 +77,7 @@ Since this isn't committed to Git or shared with your team, we recommend using t
 So when opencode starts, it looks for:
 
 1. **Local files** by traversing up from the current directory
-2. **Global file** by checking `~/.config/opencode/AGENTS.md`
+2. **Global file** by checking your [config directory](/docs/config#locations) for AGENTS.md
 
 If you have both global and project-specific rules, opencode will combine them together.
 

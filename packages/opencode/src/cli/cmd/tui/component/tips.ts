@@ -31,7 +31,7 @@ export const TIPS = [
   "Use {highlight}@<agent-name>{/highlight} in prompts to invoke specialized subagents.",
   "Press {highlight}Ctrl+X Right/Left{/highlight} to cycle through parent and child sessions.",
   "Create {highlight}opencode.json{/highlight} in project root for project-specific settings.",
-  "Place settings in {highlight}~/.config/opencode/opencode.json{/highlight} for global config.",
+  "Place settings in {highlight}~/.config/opencode/opencode.json{/highlight} for global config (see docs for XDG support).",
   "Add {highlight}$schema{/highlight} to your config for autocomplete in your editor.",
   "Configure {highlight}model{/highlight} in config to set your default model.",
   "Override any keybind in config via the {highlight}keybinds{/highlight} section.",

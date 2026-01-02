@@ -55,9 +55,9 @@ Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
 
 Plugins are loaded from all sources and all hooks run in sequence. The load order is:
 
-1. Global config (`~/.config/opencode/opencode.json`)
+1. Global config (see [config locations](/docs/config#locations))
 2. Project config (`opencode.json`)
-3. Global plugin directory (`~/.config/opencode/plugin/`)
+3. Global plugin directory
 4. Project plugin directory (`.opencode/plugin/`)
 
 Duplicate npm packages with the same name and version are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
