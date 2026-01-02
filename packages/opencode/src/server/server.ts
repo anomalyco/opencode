@@ -21,6 +21,7 @@ import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Instance } from "../project/instance"
+import { Project } from "../project/project"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
@@ -49,6 +50,7 @@ import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
+import { Worktree } from "../worktree"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -79,6 +81,7 @@ export namespace Server {
           let status: ContentfulStatusCode
           if (err instanceof Storage.NotFoundError) status = 404
           else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (err.name.startsWith("Worktree")) status = 400
           else status = 500
           return c.json(err.toObject(), { status })
         }
@@ -608,6 +611,53 @@ export namespace Server {
             worktree: Instance.worktree,
             directory: Instance.directory,
           })
+        },
+      )
+      .post(
+        "/experimental/worktree",
+        describeRoute({
+          summary: "Create worktree",
+          description: "Create a new git worktree for the current project.",
+          operationId: "worktree.create",
+          responses: {
+            200: {
+              description: "Worktree created",
+              content: {
+                "application/json": {
+                  schema: resolver(Worktree.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Worktree.create.schema),
+        async (c) => {
+          const body = c.req.valid("json")
+          const worktree = await Worktree.create(body)
+          return c.json(worktree)
+        },
+      )
+      .get(
+        "/experimental/worktree",
+        describeRoute({
+          summary: "List worktrees",
+          description: "List all sandbox worktrees for the current project.",
+          operationId: "worktree.list",
+          responses: {
+            200: {
+              description: "List of worktree directories",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.string())),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const sandboxes = await Project.sandboxes(Instance.project.id)
+          return c.json(sandboxes)
         },
       )
       .get(
