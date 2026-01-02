@@ -1887,6 +1887,13 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "summary": "Get session messages",

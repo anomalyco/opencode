@@ -274,12 +274,39 @@ export namespace Session {
     z.object({
       sessionID: Identifier.schema("session"),
       limit: z.number().optional(),
+      before: Identifier.schema("message").optional(),
     }),
     async (input) => {
       const result = [] as MessageV2.WithParts[]
-      for await (const msg of MessageV2.stream(input.sessionID)) {
-        if (input.limit && result.length >= input.limit) break
-        result.push(msg)
+      const list = await Storage.list(["message", input.sessionID])
+      const ids = list.map((x) => x[2]).filter((x): x is string => typeof x === "string")
+
+      let start = ids.length - 1
+      if (input.before) {
+        let lo = 0
+        let hi = ids.length - 1
+        let pos = -1
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1
+          const id = ids[mid]
+          if (id < input.before) {
+            pos = mid
+            lo = mid + 1
+            continue
+          }
+          hi = mid - 1
+        }
+        start = pos
+      }
+
+      for (let i = start; i >= 0; i--) {
+        if (input.limit !== undefined && result.length >= input.limit) break
+        result.push(
+          await MessageV2.get({
+            sessionID: input.sessionID,
+            messageID: ids[i],
+          }),
+        )
       }
       result.reverse()
       return result

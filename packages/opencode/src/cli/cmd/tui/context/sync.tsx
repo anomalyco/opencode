@@ -55,6 +55,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       message: {
         [sessionID: string]: Message[]
       }
+      message_page: {
+        [sessionID: string]: {
+          hasMore: boolean
+          loading: boolean
+        }
+      }
       part: {
         [messageID: string]: Part[]
       }
@@ -84,6 +90,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session_diff: {},
       todo: {},
       message: {},
+      message_page: {},
       part: {},
       lsp: [],
       mcp: {},
@@ -193,7 +200,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
-              if (draft.length > 100) draft.shift()
             }),
           )
           break
@@ -350,10 +356,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           if (fullSyncedSessions.has(sessionID)) return
           const [session, messages, todo, diff] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
-            sdk.client.session.messages({ sessionID, limit: 100 }),
+            sdk.client.session.messages({ sessionID, limit: 100 }, { throwOnError: true }),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
           ])
+          const hasMore = !!messages.response.headers.get("link")?.includes('rel="next"')
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
@@ -361,6 +368,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages.data!.map((x) => x.info)
+              draft.message_page[sessionID] = { hasMore, loading: false }
               for (const message of messages.data!) {
                 draft.part[message.info.id] = message.parts
               }
@@ -368,6 +376,46 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             }),
           )
           fullSyncedSessions.add(sessionID)
+        },
+        loadMore(sessionID: string) {
+          const page = store.message_page[sessionID]
+          if (page?.loading) return Promise.resolve()
+          if (page && !page.hasMore) return Promise.resolve()
+
+          const messages = store.message[sessionID] ?? []
+          const oldest = messages.at(0)
+          if (!oldest) return Promise.resolve()
+
+          setStore("message_page", sessionID, {
+            hasMore: page?.hasMore ?? true,
+            loading: true,
+          })
+
+          return sdk.client.session
+            .messages({ sessionID, before: oldest.id, limit: 100 }, { throwOnError: true })
+            .then((res) => {
+              const hasMore = !!res.response.headers.get("link")?.includes('rel="next"')
+              setStore(
+                produce((draft) => {
+                  const existing = draft.message[sessionID] ?? []
+                  for (const msg of res.data ?? []) {
+                    const match = Binary.search(existing, msg.info.id, (m) => m.id)
+                    if (match.found) {
+                      existing[match.index] = msg.info
+                      draft.part[msg.info.id] = msg.parts
+                      continue
+                    }
+                    existing.splice(match.index, 0, msg.info)
+                    draft.part[msg.info.id] = msg.parts
+                  }
+                  draft.message[sessionID] = existing
+                  draft.message_page[sessionID] = { hasMore, loading: false }
+                }),
+              )
+            })
+            .catch(() => {
+              setStore("message_page", sessionID, "loading", false)
+            })
         },
       },
       bootstrap,

@@ -1162,15 +1162,33 @@ export namespace Server {
           "query",
           z.object({
             limit: z.coerce.number().optional(),
+            before: z.string().optional(),
           }),
         ),
         async (c) => {
           const query = c.req.valid("query")
-          const messages = await Session.messages({
-            sessionID: c.req.valid("param").sessionID,
-            limit: query.limit,
+          const limit = query.limit
+          const sessionID = c.req.valid("param").sessionID
+          if (limit !== undefined && limit <= 0) return c.json([])
+          const page = await Session.messages({
+            sessionID,
+            limit: limit === undefined ? undefined : limit + 1,
+            before: query.before,
           })
-          return c.json(messages)
+
+          if (limit !== undefined && page.length > limit) {
+            const messages = page.slice(1)
+            const first = messages.at(0)
+            const url = new URL(c.req.url)
+            url.searchParams.set("limit", limit.toString())
+            if (first) {
+              url.searchParams.set("before", first.info.id)
+              c.header("Link", `<${url.toString()}>; rel="next"`)
+            }
+            return c.json(messages)
+          }
+
+          return c.json(page)
         },
       )
       .get(

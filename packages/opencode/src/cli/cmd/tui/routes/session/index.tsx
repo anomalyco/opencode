@@ -115,6 +115,7 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const paging = createMemo(() => sync.data.message_page[route.sessionID])
   const permissions = createMemo(() => {
     if (session().parentID) return sync.data.permission[route.sessionID] ?? []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
@@ -190,6 +191,22 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+
+  const loadMore = () => {
+    const page = paging()
+    if (!page?.hasMore) return
+    if (page.loading) return
+    if (!scroll) return
+    if (scroll.y > 5) return
+    const height = scroll.scrollHeight
+    const y = scroll.y
+    sync.session.loadMore(route.sessionID).then(() => {
+      setTimeout(() => {
+        const delta = scroll.scrollHeight - height
+        if (delta > 0) scroll.scrollTo(y + delta)
+      }, 1)
+    })
+  }
 
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
@@ -908,6 +925,8 @@ export function Session() {
             </Show>
             <scrollbox
               ref={(r) => (scroll = r)}
+              onMouseScroll={() => loadMore()}
+              onKeyDown={() => setTimeout(loadMore, 1)}
               viewportOptions={{
                 paddingRight: showScrollbar() ? 1 : 0,
               }}
@@ -924,6 +943,11 @@ export function Session() {
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
             >
+              <Show when={paging()?.loading}>
+                <box flexShrink={0} paddingLeft={1}>
+                  <text fg={theme.textMuted}>Loading more...</text>
+                </box>
+              </Show>
               <For each={messages()}>
                 {(message, index) => (
                   <Switch>
