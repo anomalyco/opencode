@@ -904,9 +904,9 @@ export default function Page() {
           style={{ width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%" }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
-            <Show when={activeMessage()}>
-              <Switch>
-                <Match when={params.id}>
+            <Switch>
+              <Match when={params.id}>
+                <Show when={activeMessage()}>
                   <Show
                     when={!mobileReview()}
                     fallback={
@@ -989,12 +989,12 @@ export default function Page() {
                       </div>
                     </div>
                   </Show>
-                </Match>
-                <Match when={true}>
-                  <NewSessionView />
-                </Match>
-              </Switch>
-            </Show>
+                </Show>
+              </Match>
+              <Match when={true}>
+                <NewSessionView />
+              </Match>
+            </Switch>
           </div>
 
           {/* Prompt input */}
