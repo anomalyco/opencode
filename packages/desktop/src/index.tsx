@@ -198,7 +198,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       {ostype() === "macos" && (
-        <div class="bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
+        <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
       )}
       <App />
     </PlatformProvider>
