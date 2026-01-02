@@ -66,8 +66,9 @@ import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { Filesystem } from "@/util/filesystem"
-import { PermissionPrompt } from "./permission"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { normalizePathFromDirectory } from "@tui/util/paths"
+import { PermissionPrompt } from "./permission"
 import { formatTranscript } from "../../util/transcript"
 
 addDefaultParsers(parsers.parsers)
@@ -770,7 +771,7 @@ export function Session() {
             // Just open in editor without saving
             await Editor.open({ value: transcript, renderer })
           } else {
-            const exportDir = process.cwd()
+            const exportDir = sync.data.path.directory || process.cwd()
             const filename = options.filename.trim()
             const filepath = path.join(exportDir, filename)
 
@@ -1777,11 +1778,8 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
 }
 
 function normalizePath(input?: string) {
-  if (!input) return ""
-  if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
-  }
-  return input
+  const directory = use().sync.data.path.directory || process.cwd()
+  return normalizePathFromDirectory(input, directory)
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {
