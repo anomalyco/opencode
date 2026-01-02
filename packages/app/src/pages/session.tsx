@@ -555,6 +555,31 @@ export default function Page() {
         setActiveMessage(priorMsg)
       },
     },
+    {
+      id: "session.compact",
+      title: "Compact session",
+      description: "Summarize the session to reduce context size",
+      category: "Session",
+      slash: "compact",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const model = local.model.current()
+        if (!model) {
+          showToast({
+            title: "No model selected",
+            description: "Connect a provider to summarize this session",
+          })
+          return
+        }
+        await sdk.client.session.summarize({
+          sessionID,
+          modelID: model.id,
+          providerID: model.provider.id,
+        })
+      },
+    },
   ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
