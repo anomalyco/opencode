@@ -1213,7 +1213,7 @@ export default function Page() {
                       >
                         <Show when={selection()}>
                           {(sel) => (
-                            <div class="sticky top-0 z-10 px-6 py-2 flex justify-end bg-background-base border-b border-border-weak-base">
+                            <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
                               <button
                                 type="button"
                                 class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
