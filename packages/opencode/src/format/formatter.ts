@@ -340,3 +340,29 @@ export const rustfmt: Info = {
     return Bun.which("rustfmt") !== null
   },
 }
+
+export const sqlfluff: Info = {
+  name: "sqlfluff",
+  command: ["sqlfluff", "format", "$FILE"],
+  extensions: [".sql"],
+  async enabled() {
+    if (!Bun.which("sqlfluff")) return false
+
+    const configs = [".sqlfluff", "pyproject.toml", "setup.cfg", "tox.ini", "pep8.ini"]
+
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      if (found.length > 0) {
+        const content = await Bun.file(found[0]).text()
+
+        const header = config === "pyproject.toml" ? "[tool.sqlfluff]" : "[sqlfluff]"
+
+        if (content.includes(header) && /dialect\s*=/.test(content)) {
+          return true
+        }
+      }
+    }
+
+    return false
+  },
+}
