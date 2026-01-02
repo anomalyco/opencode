@@ -974,6 +974,7 @@ export namespace Server {
           return c.json(true)
         },
       )
+
       .post(
         "/session/:sessionID/share",
         describeRoute({
@@ -2597,6 +2598,32 @@ export namespace Server {
         async (c) => {
           const evt = c.req.valid("json")
           await Bus.publish(Object.values(TuiEvent).find((def) => def.type === evt.type)!, evt.properties)
+          return c.json(true)
+        },
+      )
+      .post(
+        "/tui/select-session",
+        describeRoute({
+          summary: "Select session",
+          description: "Navigate the TUI to display the specified session.",
+          operationId: "tui.selectSession",
+          responses: {
+            200: {
+              description: "Session selected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator("json", TuiEvent.SessionSelect.properties),
+        async (c) => {
+          const { sessionID } = c.req.valid("json")
+          await Session.get(sessionID)
+          await Bus.publish(TuiEvent.SessionSelect, { sessionID })
           return c.json(true)
         },
       )
