@@ -515,9 +515,9 @@ export namespace Provider {
       },
       limit: {
         context:
-          // Override context limit to 1M for Claude 4+ when 1M context env var is enabled
+          // Override context limit to 1M for Claude Sonnet 4.5 when 1M context env var is enabled
           model.id.includes("claude-") &&
-          model.id.match(/claude-(opus|sonnet|haiku)-4(\.\d+|-\d{8})?/) &&
+          model.id.match(/claude-sonnet-4[.-]5(-\d{8})?/) &&
           ((provider.id === "anthropic" && Env.get("ANTHROPIC_1M_CONTEXT") === "true") ||
             (provider.id === "google-vertex-anthropic" && Env.get("VERTEX_ANTHROPIC_1M_CONTEXT") === "true"))
             ? 1000000
