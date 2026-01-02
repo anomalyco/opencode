@@ -164,6 +164,15 @@ export namespace MessageV2 {
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
 
+  export const CommandPart = PartBase.extend({
+    type: z.literal("command"),
+    command: z.string(),
+    prompt: z.string(),
+  }).meta({
+    ref: "CommandPart",
+  })
+  export type CommandPart = z.infer<typeof CommandPart>
+
   export const RetryPart = PartBase.extend({
     type: z.literal("retry"),
     attempt: z.number(),
@@ -326,6 +335,7 @@ export namespace MessageV2 {
       AgentPart,
       RetryPart,
       CompactionPart,
+      CommandPart,
     ])
     .meta({
       ref: "Part",

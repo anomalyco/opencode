@@ -139,6 +139,16 @@ export namespace SessionPrompt {
           .meta({
             ref: "SubtaskPartInput",
           }),
+        MessageV2.CommandPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "CommandPartInput",
+          }),
       ]),
     ),
   })
@@ -1421,19 +1431,27 @@ export namespace SessionPrompt {
       throw error
     }
 
-    const parts =
-      (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
-        ? [
-            {
-              type: "subtask" as const,
-              agent: agent.name,
-              description: command.description ?? "",
-              command: input.command,
-              // TODO: how can we make task tool accept a more complex input?
-              prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
-            },
-          ]
-        : await resolvePromptParts(template)
+    const commandText = `/${input.command}${input.arguments ? " " + input.arguments : ""}`
+    const commandPart = {
+      type: "command" as const,
+      command: commandText,
+      prompt: template,
+    }
+
+    const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
+    const parts = isSubtask
+      ? [
+          commandPart,
+          {
+            type: "subtask" as const,
+            agent: agent.name,
+            description: command.description ?? "",
+            command: input.command,
+            // TODO: how can we make task tool accept a more complex input?
+            prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
+          },
+        ]
+      : [commandPart, ...(await resolvePromptParts(template))]
 
     const result = (await prompt({
       sessionID: input.sessionID,

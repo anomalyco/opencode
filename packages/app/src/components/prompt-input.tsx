@@ -11,6 +11,7 @@ import {
   usePrompt,
   ImageAttachmentPart,
   AgentPart,
+  CommandPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -180,6 +181,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (part.type === "text") return { ...part }
       if (part.type === "image") return { ...part }
       if (part.type === "agent") return { ...part }
+      if (part.type === "command") return { ...part }
       return {
         ...part,
         selection: part.selection ? { ...part.selection } : undefined,
@@ -397,10 +399,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setStore("popover", null)
 
     if (cmd.type === "custom") {
-      const text = `/${cmd.trigger} `
+      const content = `/${cmd.trigger}`
+      const commandPart: CommandPart = {
+        type: "command",
+        name: cmd.trigger,
+        content,
+        start: 0,
+        end: content.length,
+      }
+      const textPart = { type: "text" as const, content: " ", start: content.length, end: content.length + 1 }
       editorRef.innerHTML = ""
-      editorRef.textContent = text
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      prompt.set([commandPart, textPart], content.length + 1)
       requestAnimationFrame(() => {
         editorRef.focus()
         const range = document.createRange()
@@ -453,6 +462,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           const el = node as HTMLElement
           if (el.dataset.type === "file") return true
           if (el.dataset.type === "agent") return true
+          if (el.dataset.type === "command") return true
           return el.tagName === "BR"
         })
         if (normalized && isPromptEqual(currentParts, domParts)) return
@@ -480,6 +490,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             const pill = document.createElement("span")
             pill.textContent = part.content
             pill.setAttribute("data-type", "agent")
+            pill.setAttribute("data-name", part.name)
+            pill.setAttribute("contenteditable", "false")
+            pill.style.userSelect = "text"
+            pill.style.cursor = "default"
+            editorRef.appendChild(pill)
+          } else if (part.type === "command") {
+            const pill = document.createElement("span")
+            pill.textContent = part.content
+            pill.setAttribute("data-type", "command")
             pill.setAttribute("data-name", part.name)
             pill.setAttribute("contenteditable", "false")
             pill.style.userSelect = "text"
@@ -532,6 +551,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       position += content.length
     }
 
+    const pushCommand = (cmd: HTMLElement) => {
+      const content = cmd.textContent ?? ""
+      parts.push({
+        type: "command",
+        name: cmd.dataset.name!,
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         buffer += node.textContent ?? ""
@@ -548,6 +579,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (el.dataset.type === "agent") {
         flushText()
         pushAgent(el)
+        return
+      }
+      if (el.dataset.type === "command") {
+        flushText()
+        pushCommand(el)
         return
       }
       if (el.tagName === "BR") {
@@ -633,7 +669,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const isText = node.nodeType === Node.TEXT_NODE
       const isPill =
         node.nodeType === Node.ELEMENT_NODE &&
-        ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+        ((node as HTMLElement).dataset.type === "file" ||
+          (node as HTMLElement).dataset.type === "agent" ||
+          (node as HTMLElement).dataset.type === "command")
       const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
       if (isText && remaining <= length) {
@@ -763,7 +801,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       for (const node of nodes) {
         const length = getNodeLength(node)
         const isText = node.nodeType === Node.TEXT_NODE
-        const isFile = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).dataset.type === "file"
+        const isPill =
+          node.nodeType === Node.ELEMENT_NODE &&
+          ((node as HTMLElement).dataset.type === "file" ||
+            (node as HTMLElement).dataset.type === "agent" ||
+            (node as HTMLElement).dataset.type === "command")
         const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
         if (isText && remaining <= length) {
@@ -772,7 +814,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           return
         }
 
-        if ((isFile || isBreak) && remaining <= length) {
+        if ((isPill || isBreak) && remaining <= length) {
           if (edge === "start" && remaining === 0) range.setStartBefore(node)
           if (edge === "start" && remaining > 0) range.setStartAfter(node)
           if (edge === "end" && remaining === 0) range.setEndBefore(node)
@@ -1462,6 +1504,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
+              "[&_[data-type=command]]:text-syntax-string": true,
               "font-mono!": store.mode === "shell",
             }}
           />
@@ -1661,7 +1704,9 @@ function setCursorPosition(parent: HTMLElement, position: number) {
     const isText = node.nodeType === Node.TEXT_NODE
     const isPill =
       node.nodeType === Node.ELEMENT_NODE &&
-      ((node as HTMLElement).dataset.type === "file" || (node as HTMLElement).dataset.type === "agent")
+      ((node as HTMLElement).dataset.type === "file" ||
+        (node as HTMLElement).dataset.type === "agent" ||
+        (node as HTMLElement).dataset.type === "command")
     const isBreak = node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "BR"
 
     if (isText && remaining <= length) {

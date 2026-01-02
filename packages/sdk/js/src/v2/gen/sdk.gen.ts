@@ -11,6 +11,7 @@ import type {
   AuthSetErrors,
   AuthSetResponses,
   CommandListResponses,
+  CommandPartInput,
   Config as Config2,
   ConfigGetResponses,
   ConfigProvidersResponses,
@@ -1234,7 +1235,7 @@ export class Session extends HeyApiClient {
       }
       system?: string
       variant?: string
-      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput | CommandPartInput>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1322,7 +1323,7 @@ export class Session extends HeyApiClient {
       }
       system?: string
       variant?: string
-      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+      parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput | CommandPartInput>
     },
     options?: Options<never, ThrowOnError>,
   ) {
