@@ -191,7 +191,7 @@ export namespace Agent {
         continue
       }
       let item = result[key]
-      if (!item)
+      if (item === undefined) {
         item = result[key] = {
           name: key,
           mode: "all",
@@ -199,6 +199,7 @@ export namespace Agent {
           options: {},
           native: false,
         }
+      }
       if (value.model) item.model = Provider.parseModel(value.model)
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
