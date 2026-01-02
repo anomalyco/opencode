@@ -52,6 +52,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogViewArchivedSessions } from "@/components/dialog-view-archived-sessions"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
@@ -787,6 +788,11 @@ export default function Layout(props: ParentProps) {
                     <DropdownMenu.Trigger as={IconButton} icon="dot-grid" variant="ghost" />
                     <DropdownMenu.Portal>
                       <DropdownMenu.Content>
+                        <DropdownMenu.Item
+                          onSelect={() => dialog.show(() => <DialogViewArchivedSessions project={props.project} />)}
+                        >
+                          <DropdownMenu.ItemLabel>View archived sessions</DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
                         <DropdownMenu.Item
                           onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}
                         >

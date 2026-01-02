@@ -651,14 +651,25 @@ export namespace Server {
             },
           },
         }),
+        validator(
+          "query",
+          z.object({
+            archived: z.boolean().optional(),
+          }),
+        ),
         async (c) => {
+          const { archived } = c.req.valid("query")
           const sessions = await Array.fromAsync(Session.list())
-          pipe(
-            await Array.fromAsync(Session.list()),
-            filter((s) => !s.time.archived),
+          const filtered = pipe(
+            sessions,
+            archived === true
+              ? filter((s) => s.time.archived)
+              : archived === false
+                ? filter((s) => !s.time.archived)
+                : filter((s) => !s.time.archived),
             sortBy((s) => s.time.updated),
           )
-          return c.json(sessions)
+          return c.json(filtered)
         },
       )
       .get(

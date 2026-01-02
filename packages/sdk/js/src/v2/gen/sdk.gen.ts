@@ -710,10 +710,21 @@ export class Session extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      archived?: boolean
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "archived" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).get<SessionListResponses, unknown, ThrowOnError>({
       url: "/session",
       ...options,

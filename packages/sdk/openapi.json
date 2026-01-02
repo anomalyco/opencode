@@ -894,6 +894,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "archived",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "summary": "List sessions",
