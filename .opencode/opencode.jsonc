@@ -10,7 +10,6 @@
       "options": {},
     },
   },
-  // "permission": "ask",
   "mcp": {
     "context7": {
       "type": "remote",
