@@ -127,7 +127,7 @@ export namespace ShareNext {
       const queued = queue.get(sessionID)
       if (!queued) return
       queue.delete(sessionID)
-      const share = await get(sessionID)
+      const share = await get(sessionID).catch(() => undefined)
       if (!share) return
 
       await fetch(`${await url()}/api/share/${share.id}/sync`, {
