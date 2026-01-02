@@ -628,7 +628,6 @@ export default function Page() {
       messageRefs.clear()
       return
     }
-
     const ids = new Set(msgs.map((m) => m.id))
     for (const id of messageRefs.keys()) {
       if (ids.has(id)) continue
@@ -789,37 +788,33 @@ export default function Page() {
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Mobile tab bar - only shown on mobile when there are diffs */}
         <Show when={!isDesktop() && diffs().length > 0}>
-          <div class="flex border-b border-border-weak-base bg-background-base">
-            <button
-              type="button"
-              class="flex-1 py-3 text-14-medium border-b-2 transition-colors"
-              classList={{
-                "border-text-base text-text-base": store.mobileTab === "session",
-                "border-transparent text-text-weak": store.mobileTab !== "session",
-              }}
-              onClick={() => setStore("mobileTab", "session")}
-            >
-              Session
-            </button>
-            <button
-              type="button"
-              class="flex-1 py-3 text-14-medium border-b-2 transition-colors"
-              classList={{
-                "border-text-base text-text-base": store.mobileTab === "review",
-                "border-transparent text-text-weak": store.mobileTab !== "review",
-              }}
-              onClick={() => setStore("mobileTab", "review")}
-            >
-              {diffs().length} Files Changed
-            </button>
-          </div>
+          <Tabs class="h-auto">
+            <Tabs.List>
+              <Tabs.Trigger
+                value="session"
+                class="w-1/2"
+                classes={{ button: "w-full" }}
+                onClick={() => setStore("mobileTab", "session")}
+              >
+                Session
+              </Tabs.Trigger>
+              <Tabs.Trigger
+                value="review"
+                class="w-1/2 !border-r-0"
+                classes={{ button: "w-full" }}
+                onClick={() => setStore("mobileTab", "review")}
+              >
+                {diffs().length} Files Changed
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Tabs>
         </Show>
 
         {/* Session panel */}
         <div
-          class="@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger md:py-3"
           classList={{
-            "flex-1 md:flex-none": true,
+            "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
+            "flex-1 md:flex-none py-6 md:py-3": true,
           }}
           style={{ width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%" }}
         >
@@ -830,7 +825,7 @@ export default function Page() {
                   <Show
                     when={!mobileReview()}
                     fallback={
-                      <div class="relative h-full mt-6 overflow-hidden">
+                      <div class="relative h-full overflow-hidden">
                         <SessionReviewTab
                           diffs={diffs}
                           view={view}
