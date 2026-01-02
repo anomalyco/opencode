@@ -1,11 +1,12 @@
 import { createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { Permission } from "@opencode-ai/sdk/v2/client"
+import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
 import { persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
+import { base64Decode } from "@opencode-ai/util/encode"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -14,10 +15,8 @@ type PermissionRespondFn = (input: {
   directory?: string
 }) => void
 
-const AUTO_ACCEPT_TYPES = new Set(["edit", "write"])
-
-function shouldAutoAccept(perm: Permission) {
-  return AUTO_ACCEPT_TYPES.has(perm.type)
+function shouldAutoAccept(perm: PermissionRequest) {
+  return perm.permission === "edit"
 }
 
 export const { use: usePermission, provider: PermissionProvider } = createSimpleContext({
@@ -28,8 +27,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     const globalSync = useGlobalSync()
 
     const permissionsEnabled = createMemo(() => {
-      if (!params.dir) return false
-      const [store] = globalSync.child(params.dir)
+      if (!params.dir || !base64Decode(params.dir)) return false
+      const [store] = globalSync.child(base64Decode(params.dir))
       return store.config.permission !== undefined
     })
 
@@ -48,7 +47,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       })
     }
 
-    function respondOnce(permission: Permission, directory?: string) {
+    function respondOnce(permission: PermissionRequest, directory?: string) {
       if (responded.has(permission.id)) return
       responded.add(permission.id)
       respond({
@@ -65,7 +64,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     const unsubscribe = globalSDK.event.listen((e) => {
       const event = e.details
-      if (event?.type !== "permission.updated") return
+      if (event?.type !== "permission.asked") return
 
       const perm = event.properties
       if (!isAutoAccepting(perm.sessionID)) return
@@ -98,7 +97,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     return {
       ready,
       respond,
-      autoResponds(permission: Permission) {
+      autoResponds(permission: PermissionRequest) {
         return isAutoAccepting(permission.sessionID) && shouldAutoAccept(permission)
       },
       isAutoAccepting,
