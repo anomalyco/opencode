@@ -635,6 +635,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shellMode = store.mode === "shell"
 
     if (!shellMode) {
+      // Check if there's a command pill that's no longer at the start - convert back to text
+      const commandPartIndex = rawParts.findIndex((p) => p.type === "command")
+      const commandPillNotAtStart =
+        commandPartIndex > 0 ||
+        (commandPartIndex === 0 && rawParts[0].type === "command" && (rawParts[0] as CommandPart).start > 0)
+      if (commandPillNotAtStart) {
+        // There's text before the command pill - convert everything to plain text
+        const textPart = {
+          type: "text" as const,
+          content: rawText,
+          start: 0,
+          end: rawText.length,
+        }
+        setStore("popover", null)
+        prompt.set([textPart], cursorPosition)
+        queueScroll()
+        return
+      }
+
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
       const slashMatch = rawText.match(/^\/(\S*)$/)
       // Match "/commandname " - a slash command followed by a space at the start
