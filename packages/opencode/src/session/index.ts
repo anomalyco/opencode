@@ -16,6 +16,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { FileTime } from "@/file/time"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -326,6 +327,8 @@ export namespace Session {
         await Storage.remove(msg)
       }
       await Storage.remove(["session", project.id, sessionID])
+      // Clear file read timestamps - session is gone, timestamps are orphaned
+      FileTime.clearSession(sessionID)
       Bus.publish(Event.Deleted, {
         info: session,
       })

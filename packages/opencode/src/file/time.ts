@@ -7,18 +7,29 @@ export namespace FileTime {
   // All tools that overwrite existing files should run their
   // assert/read/write/update sequence inside withLock(filepath, ...)
   // so concurrent writes to the same file are serialized.
-  export const state = Instance.state(() => {
-    const read: {
-      [sessionID: string]: {
-        [path: string]: Date | undefined
+  export const state = Instance.state(
+    () => {
+      const read: {
+        [sessionID: string]: {
+          [path: string]: Date | undefined
+        }
+      } = {}
+      const locks = new Map<string, Promise<void>>()
+      return {
+        read,
+        locks,
       }
-    } = {}
-    const locks = new Map<string, Promise<void>>()
-    return {
-      read,
-      locks,
-    }
-  })
+    },
+    // Explicit cleanup on instance disposal. While the state object is GC'd
+    // when the instance is disposed, this makes the lifecycle explicit for
+    // long-running sessions with many subtasks.
+    async (current) => {
+      for (const key of Object.keys(current.read)) {
+        delete current.read[key]
+      }
+      current.locks.clear()
+    },
+  )
 
   export function read(sessionID: string, file: string) {
     log.info("read", { sessionID, file })
@@ -60,5 +71,11 @@ export namespace FileTime {
         `File ${filepath} has been modified since it was last read.\nLast modification: ${stats.mtime.toISOString()}\nLast read: ${time.toISOString()}\n\nPlease read the file again before modifying it.`,
       )
     }
+  }
+
+  // Clears read timestamps for a deleted session. Called by Session.remove()
+  // to prevent orphaned entries from accumulating when sessions/subtasks are deleted.
+  export function clearSession(sessionID: string) {
+    delete state().read[sessionID]
   }
 }
