@@ -78,12 +78,9 @@ export function register(item: StatusItem): StatusHandle {
         }
         if (short === null) {
           updated.short = null
-        } else if (short !== undefined) {
-          if (existing.short) {
-            updated.short = { ...existing.short, ...short }
-          } else {
-            updated.short = short as StatusRenderShort
-          }
+        }
+        if (short !== null && short !== undefined) {
+          updated.short = existing.short ? { ...existing.short, ...short } : (short as StatusRenderShort)
         }
         return {
           ...state,
