@@ -325,8 +325,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
   }
 
-  const hasSubtask = createMemo(() => props.parts?.some((p) => p.type === "subtask"))
-
   return (
     <div data-component="user-message">
       <Show when={attachments().length > 0}>
