@@ -3,7 +3,7 @@ import { Global } from "@/global"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
-import { appendFile, writeFile } from "fs/promises"
+import { appendFile } from "fs/promises"
 
 function calculateFrecency(entry?: { frequency: number; lastOpen: number }): number {
   if (!entry) return 0
@@ -50,7 +50,7 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
           Object.values(latest)
             .map((entry) => JSON.stringify(entry))
             .join("\n") + "\n"
-        writeFile(frecencyFile.name!, content).catch(() => {})
+        Bun.write(frecencyFile, content).catch(() => {})
       }
     })
 
@@ -59,16 +59,17 @@ export const { use: useFrecency, provider: FrecencyProvider } = createSimpleCont
     })
 
     function updateFrecency(filePath: string) {
+      const absolutePath = path.resolve(process.cwd(), filePath)
       const newEntry = {
-        frequency: (store.data[filePath]?.frequency || 0) + 1,
+        frequency: (store.data[absolutePath]?.frequency || 0) + 1,
         lastOpen: Date.now(),
       }
-      setStore("data", filePath, newEntry)
-      appendFile(frecencyFile.name!, JSON.stringify({ path: filePath, ...newEntry }) + "\n").catch(() => {})
+      setStore("data", absolutePath, newEntry)
+      appendFile(frecencyFile.name!, JSON.stringify({ path: absolutePath, ...newEntry }) + "\n").catch(() => {})
     }
 
     return {
-      getFrecency: (filePath: string) => calculateFrecency(store.data[filePath]),
+      getFrecency: (filePath: string) => calculateFrecency(store.data[path.resolve(process.cwd(), filePath)]),
       updateFrecency,
       data: () => store.data,
     }
