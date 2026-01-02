@@ -1,0 +1,61 @@
+Manage the todo list for this session.
+
+---
+
+Input: $ARGUMENTS
+
+---
+
+## Determining the Action
+
+Parse the input to determine which action to perform:
+
+1. **No arguments or "list"**: Show the current todo list
+   - Use `TodoRead` to get current todos
+   - Display them in a formatted list with ID, status, priority, and content
+
+2. **"done <id>" or "complete <id>"**: Mark a todo as completed
+   - Use `TodoRead` to get current todos
+   - Find the todo by ID (exact match or partial match)
+   - Use `TodoWrite` to update its status to "completed"
+   - Confirm what was completed
+
+3. **"cancel <id>" or "remove <id>"**: Cancel/remove a todo
+   - Use `TodoRead` to get current todos
+   - Find the todo by ID
+   - Use `TodoWrite` to update its status to "cancelled"
+   - Confirm what was cancelled
+
+4. **Any other text**: Add new todo item(s)
+   - Parse the input for one or more tasks
+   - Use `TodoRead` to get existing todos
+   - Use `TodoWrite` to add new item(s) with status "pending"
+   - Assign unique IDs (use short descriptive slugs like "auth-error-handling")
+   - Default priority to "medium" unless specified
+
+---
+
+## Important Behavior
+
+**Do NOT interrupt current work.** After processing the todo command:
+1. Briefly acknowledge what was done (one line)
+2. **Resume exactly where you left off** - do not context switch
+
+---
+
+## Examples
+
+### Adding items
+User: `/todo check error handling in auth module`
+→ Add todo, say "Added: check error handling in auth module", resume work
+
+User: `/todo 1. fix tests 2. update docs`
+→ Add both todos, say "Added 2 items: fix tests, update docs", resume work
+
+### Completing items
+User: `/todo done auth-error`
+→ Mark matching todo as completed, say "Completed: check error handling in auth module", resume work
+
+### Listing
+User: `/todo list`
+→ Show formatted todo list, resume work

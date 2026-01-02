@@ -5,6 +5,7 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_TODO from "./template/todo.txt"
 import { MCP } from "../mcp"
 
 export namespace Command {
@@ -53,6 +54,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    TODO: "todo",
   } as const
 
   const state = Instance.state(async () => {
@@ -75,6 +77,14 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      },
+      [Default.TODO]: {
+        name: Default.TODO,
+        description: "manage todo list: add items, mark done, or list",
+        get template() {
+          return PROMPT_TODO
+        },
+        hints: hints(PROMPT_TODO),
       },
     }
 
