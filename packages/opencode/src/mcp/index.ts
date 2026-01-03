@@ -237,16 +237,6 @@ export namespace MCP {
         status: { status: "disabled" as const },
       }
     }
-    if (!("type" in mcp)) {
-      log.warn("mcp override without base config", { key })
-      return {
-        mcpClient: undefined,
-        status: {
-          status: "failed" as const,
-          error: "Missing configuration",
-        },
-      }
-    }
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined
@@ -589,7 +579,7 @@ export namespace MCP {
       throw new Error(`MCP server not found: ${mcpName}`)
     }
 
-    if (!("type" in mcpConfig) || mcpConfig.type !== "remote") {
+    if (mcpConfig.type !== "remote") {
       throw new Error(`MCP server ${mcpName} is not a remote server`)
     }
 
@@ -747,8 +737,7 @@ export namespace MCP {
   export async function supportsOAuth(mcpName: string): Promise<boolean> {
     const cfg = await Config.get()
     const mcpConfig = cfg.mcp?.[mcpName]
-    if (!mcpConfig || !("type" in mcpConfig)) return false
-    return mcpConfig.type === "remote" && mcpConfig.oauth !== false
+    return mcpConfig?.type === "remote" && mcpConfig.oauth !== false
   }
 
   /**
