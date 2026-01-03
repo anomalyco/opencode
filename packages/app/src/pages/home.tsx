@@ -21,10 +21,22 @@ export default function Home() {
   const navigate = useNavigate()
   const server = useServer()
   const homedir = createMemo(() => sync.data.path.home)
+  // Use a dedicated scratch directory inside state path to avoid exposing sensitive files
+  const scratchDir = createMemo(() => {
+    const state = sync.data.path.state
+    if (!state) return undefined
+    return `${state}/scratch`
+  })
 
   function openProject(directory: string) {
     layout.projects.open(directory)
     navigate(`/${base64Encode(directory)}`)
+  }
+
+  function quickStart() {
+    const scratch = scratchDir()
+    if (!scratch) return
+    openProject(scratch)
   }
 
   async function chooseProject() {
@@ -76,9 +88,14 @@ export default function Home() {
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">Recent projects</div>
-              <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                Open project
-              </Button>
+              <div class="flex gap-2">
+                <Button icon="console" size="normal" variant="ghost" class="pl-2 pr-3" onClick={quickStart}>
+                  Quick start
+                </Button>
+                <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+                  Open project
+                </Button>
+              </div>
             </div>
             <ul class="flex flex-col gap-2">
               <For
@@ -108,12 +125,17 @@ export default function Home() {
             <Icon name="folder-add-left" size="large" />
             <div class="flex flex-col gap-1 items-center justify-center">
               <div class="text-14-medium text-text-strong">No recent projects</div>
-              <div class="text-12-regular text-text-weak">Get started by opening a local project</div>
+              <div class="text-12-regular text-text-weak">Get started by opening a local project or start quickly</div>
             </div>
             <div />
-            <Button class="px-3" onClick={chooseProject}>
-              Open project
-            </Button>
+            <div class="flex gap-2">
+              <Button icon="console" variant="ghost" class="px-3" onClick={quickStart}>
+                Quick start
+              </Button>
+              <Button class="px-3" onClick={chooseProject}>
+                Open project
+              </Button>
+            </div>
           </div>
         </Match>
       </Switch>
