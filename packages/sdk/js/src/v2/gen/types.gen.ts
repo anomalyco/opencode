@@ -1566,7 +1566,12 @@ export type Config = {
    * MCP (Model Context Protocol) server configurations
    */
   mcp?: {
-    [key: string]: McpLocalConfig | McpRemoteConfig
+    [key: string]:
+      | McpLocalConfig
+      | McpRemoteConfig
+      | {
+          enabled: boolean
+        }
   }
   formatter?:
     | false
