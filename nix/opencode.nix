@@ -90,10 +90,31 @@ stdenvNoCC.mkDerivation (finalAttrs: {
         # Rewrite wasm references to absolute store paths to avoid runtime resolve failures.
         bun --bun ${scripts + "/patch-wasm.ts"} "$patch_file" "$main_wasm" $wasm_list
       fi
-    done
+	    done
 
-    mkdir -p $out/lib/opencode/node_modules
-    cp -r ../../node_modules/.bun $out/lib/opencode/node_modules/
+	    mkdir -p $out/lib/opencode/node_modules
+	    cp -r ../../node_modules/.bun $out/lib/opencode/node_modules/
+	    bun_root="$out/lib/opencode/node_modules/.bun"
+	    chmod -R u+w "$bun_root"
+	    bun_target="${args.target}"
+	    bun_target="''${bun_target#bun-}"
+	    bun_os="''${bun_target%-*}"
+	    bun_arch="''${bun_target#*-}"
+
+    # bun's `--cpu="*"` / `--os="*"` pulls in all platform optional deps; prune to this build's platform.
+    rm -rf "$bun_root"/*-win32-*@* "$bun_root"/*-windows-*@* "$bun_root"/*-freebsd-*@*
+    if [ "$bun_os" = "linux" ]; then
+      rm -rf "$bun_root"/*-darwin-*@*
+    fi
+    if [ "$bun_os" = "darwin" ]; then
+      rm -rf "$bun_root"/*-linux-*@*
+    fi
+    if [ "$bun_arch" = "arm64" ]; then
+      rm -rf "$bun_root"/*-"$bun_os"-x64@* "$bun_root"/*-"$bun_os"-64@*
+    fi
+    if [ "$bun_arch" = "x64" ]; then
+      rm -rf "$bun_root"/*-"$bun_os"-arm64@* "$bun_root"/*-"$bun_os"-aarch64@*
+    fi
     mkdir -p $out/lib/opencode/node_modules/@opentui
 
     mkdir -p $out/bin
