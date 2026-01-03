@@ -17,5 +17,6 @@
   "scripts": {
     "dev": "email preview emails/templates"
   },
-  "type": "module"
+  "type": "module",
+  "license": "MIT"
 }
