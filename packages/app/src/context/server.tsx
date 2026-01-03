@@ -11,8 +11,7 @@ export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
   if (!trimmed) return
   const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
-  const cleaned = withProtocol.replace(/\/+$/, "")
-  return cleaned.replace(/^(https?:\/\/[^/]+).*/, "$1")
+  return withProtocol.replace(/\/+$/, "")
 }
 
 export function serverDisplayName(url: string) {

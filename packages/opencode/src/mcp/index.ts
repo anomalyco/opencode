@@ -26,6 +26,7 @@ import open from "open"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
+  const DEFAULT_TIMEOUT = 5000
 
   export const Resource = z
     .object({
@@ -328,13 +329,14 @@ export namespace MCP {
       ]
 
       let lastError: Error | undefined
+      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
             name: "opencode",
             version: Installation.VERSION,
           })
-          await client.connect(transport)
+          await withTimeout(client.connect(transport), connectTimeout)
           registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
@@ -404,12 +406,13 @@ export namespace MCP {
         },
       })
 
+      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       try {
         const client = new Client({
           name: "opencode",
           version: Installation.VERSION,
         })
-        await client.connect(transport)
+        await withTimeout(client.connect(transport), connectTimeout)
         registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
@@ -443,7 +446,7 @@ export namespace MCP {
       }
     }
 
-    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? 5000).catch((err) => {
+    const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
