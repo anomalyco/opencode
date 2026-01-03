@@ -281,7 +281,7 @@ async function assertOpencodeConnected() {
       connected = true
       break
     } catch (e) {}
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await Bun.sleep(300)
   } while (retry++ < 30)
 
   if (!connected) {

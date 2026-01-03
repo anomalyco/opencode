@@ -1,8 +1,9 @@
 {
   "name": "@opencode-ai/util",
-  "version": "1.0.222",
+  "version": "1.0.224",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "exports": {
     "./*": "./src/*.ts"
   },
