@@ -158,6 +158,31 @@ export interface Hooks {
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
   /**
+   * Called before a command is executed. Allows plugins to modify the command
+   * or prevent it from executing entirely.
+   *
+   * - `stop`: If true, prevents the command from executing
+   * - `command`, `arguments`, `agent`, `model`: Can be modified to change the command
+   */
+  "command.execute.before"?: (
+    input: {
+      sessionID: string
+      command: string
+      arguments: string
+      agent?: string
+      model?: string
+      messageID?: string
+      variant?: string
+    },
+    output: {
+      stop: boolean
+      command?: string
+      arguments?: string
+      agent?: string
+      model?: string
+    },
+  ) => Promise<void>
+  /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (
