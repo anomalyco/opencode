@@ -71,7 +71,8 @@ export namespace BunProc {
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
       return result
     })
-    if (parsed.dependencies[pkg] === version) return mod
+    // Skip cache for "latest" - always check for updates
+    if (version !== "latest" && parsed.dependencies[pkg] === version) return mod
 
     const proxied = !!(
       process.env.HTTP_PROXY ||
@@ -86,7 +87,8 @@ export namespace BunProc {
       "--force",
       "--exact",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-      ...(proxied ? ["--no-cache"] : []),
+      // Also bypass cache for "latest" to ensure fresh registry lookup
+      ...(proxied || version === "latest" ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
       pkg + "@" + version,
@@ -112,8 +114,9 @@ export namespace BunProc {
       )
     })
 
-    // Resolve actual version from installed package when using "latest"
-    // This ensures subsequent starts use the cached version until explicitly updated
+    // Resolve actual version from installed package
+    // For pinned versions, this caches the version to skip reinstalls
+    // For "latest", we still resolve but always check for updates on next start
     let resolvedVersion = version
     if (version === "latest") {
       const installedPkgJson = Bun.file(path.join(mod, "package.json"))
