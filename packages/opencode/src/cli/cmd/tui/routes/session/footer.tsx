@@ -64,7 +64,7 @@ export function Footer() {
               </text>
             </Show>
             <text fg={theme.text}>
-              <span style={{ fg: theme.success }}>•</span> {lsp().length} LSP
+              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
             </text>
             <Show when={mcp()}>
               <text fg={theme.text}>
