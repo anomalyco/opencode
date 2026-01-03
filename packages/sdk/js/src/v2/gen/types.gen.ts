@@ -4513,6 +4513,10 @@ export type EventSubscribeData = {
   path?: never
   query?: {
     directory?: string
+    /**
+     * Filter events by session ID
+     */
+    session?: string
   }
   url: "/event"
 }

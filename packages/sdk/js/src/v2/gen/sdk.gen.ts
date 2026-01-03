@@ -2810,15 +2810,26 @@ export class Event extends HeyApiClient {
   /**
    * Subscribe to events
    *
-   * Get events
+   * Subscribe to server-sent events. Optionally filter events by session ID to only receive events for a specific session.
    */
   public subscribe<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      session?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "session" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).sse.get<EventSubscribeResponses, unknown, ThrowOnError>({
       url: "/event",
       ...options,

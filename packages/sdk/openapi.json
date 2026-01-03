@@ -5285,10 +5285,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "session",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter events by session ID"
           }
         ],
         "summary": "Subscribe to events",
-        "description": "Get events",
+        "description": "Subscribe to server-sent events. Optionally filter events by session ID to only receive events for a specific session.",
         "responses": {
           "200": {
             "description": "Event stream",
