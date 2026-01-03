@@ -124,7 +124,7 @@ export namespace PermissionNext {
         const rule = evaluate(request.permission, pattern, ruleset, s.approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny")
-          throw new AutoRejectedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
+          throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
           const id = input.id ?? Identifier.ascending("permission")
           return new Promise<void>((resolve, reject) => {
@@ -149,6 +149,7 @@ export namespace PermissionNext {
     z.object({
       requestID: Identifier.schema("permission"),
       reply: Reply,
+      message: z.string().optional(),
     }),
     async (input) => {
       const s = await state()
@@ -161,7 +162,7 @@ export namespace PermissionNext {
         reply: input.reply,
       })
       if (input.reply === "reject") {
-        existing.reject(new RejectedError())
+        existing.reject(input.message ? new CorrectedError(input.message) : new RejectedError())
         // Reject all other pending permissions for this session
         const sessionID = existing.info.sessionID
         for (const [id, pending] of Object.entries(s.pending)) {
@@ -238,13 +239,22 @@ export namespace PermissionNext {
     return result
   }
 
+  /** User rejected without message - halts execution */
   export class RejectedError extends Error {
     constructor() {
-      super(`The user rejected permission to use this specific tool call. You may try again with different parameters.`)
+      super(`The user rejected permission to use this specific tool call.`)
     }
   }
 
-  export class AutoRejectedError extends Error {
+  /** User rejected with message - continues with guidance */
+  export class CorrectedError extends Error {
+    constructor(message: string) {
+      super(`The user rejected permission to use this specific tool call with the following feedback: ${message}`)
+    }
+  }
+
+  /** Auto-rejected by config rule - halts execution */
+  export class DeniedError extends Error {
     constructor(public readonly ruleset: Ruleset) {
       super(
         `The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules ${JSON.stringify(ruleset)}`,
