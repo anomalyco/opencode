@@ -83,8 +83,9 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         const keybind = keybinds()[key]
         if (!keybind) return false
         const parsed: Keybind.Info = result.parse(evt)
+        const usePhysicalKeys = sync.data.config.keybinds?.usePhysicalKeys ?? false
         for (const key of keybind) {
-          if (Keybind.match(key, parsed)) {
+          if (Keybind.match(key, parsed, { usePhysicalKeys })) {
             return true
           }
         }

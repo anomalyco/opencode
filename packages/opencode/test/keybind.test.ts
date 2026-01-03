@@ -185,6 +185,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "f",
+        baseCode: 102,
       },
     ])
   })
@@ -198,6 +199,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: true,
         name: "f",
+        baseCode: 102,
       },
     ])
   })
@@ -211,6 +213,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "x",
+        baseCode: 120,
       },
     ])
   })
@@ -224,6 +227,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "u",
+        baseCode: 117,
       },
     ])
   })
@@ -237,6 +241,7 @@ describe("Keybind.parse", () => {
         shift: true,
         leader: false,
         name: "f2",
+        baseCode: undefined,
       },
     ])
   })
@@ -250,6 +255,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "g",
+        baseCode: 103,
       },
     ])
   })
@@ -263,6 +269,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: true,
         name: "h",
+        baseCode: 104,
       },
     ])
   })
@@ -276,6 +283,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "c",
+        baseCode: 99,
       },
       {
         ctrl: false,
@@ -283,6 +291,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: true,
         name: "q",
+        baseCode: 113,
       },
     ])
   })
@@ -296,6 +305,7 @@ describe("Keybind.parse", () => {
         shift: true,
         leader: false,
         name: "return",
+        baseCode: undefined,
       },
     ])
   })
@@ -309,6 +319,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "j",
+        baseCode: 106,
       },
     ])
   })
@@ -327,6 +338,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "pgup",
+        baseCode: undefined,
       },
     ])
   })
@@ -340,6 +352,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "f2",
+        baseCode: undefined,
       },
     ])
   })
@@ -353,6 +366,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "g",
+        baseCode: 103,
       },
     ])
   })
@@ -366,6 +380,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "x",
+        baseCode: 120,
       },
     ])
   })
@@ -380,6 +395,7 @@ describe("Keybind.parse", () => {
         super: true,
         leader: false,
         name: "z",
+        baseCode: 122,
       },
     ])
   })
@@ -394,6 +410,7 @@ describe("Keybind.parse", () => {
         super: true,
         leader: false,
         name: "z",
+        baseCode: 122,
       },
     ])
   })
@@ -407,6 +424,7 @@ describe("Keybind.parse", () => {
         shift: false,
         leader: false,
         name: "-",
+        baseCode: 45,
       },
       {
         ctrl: false,
@@ -415,7 +433,212 @@ describe("Keybind.parse", () => {
         super: true,
         leader: false,
         name: "z",
+        baseCode: 122,
       },
     ])
+  })
+
+  test("should generate baseCode for single ASCII characters", () => {
+    const result = Keybind.parse("ctrl+x")
+    expect(result[0].baseCode).toBe(120)
+  })
+
+  test("should not generate baseCode for special keys", () => {
+    const result = Keybind.parse("ctrl+return")
+    expect(result[0].baseCode).toBeUndefined()
+  })
+
+  test("should not generate baseCode for function keys", () => {
+    const result = Keybind.parse("f2")
+    expect(result[0].baseCode).toBeUndefined()
+  })
+})
+
+describe("Keybind.match with physical keys", () => {
+  test("should match by baseCode when usePhysicalKeys is true", () => {
+    const config: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "x",
+      baseCode: 120,
+    }
+    const input: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "ㅌ",
+      baseCode: 120,
+    }
+    expect(Keybind.match(config, input, { usePhysicalKeys: true })).toBe(true)
+  })
+
+  test("should not match different baseCode with usePhysicalKeys", () => {
+    const a: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "x",
+      baseCode: 120,
+    }
+    const b: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "y",
+      baseCode: 121,
+    }
+    expect(Keybind.match(a, b, { usePhysicalKeys: true })).toBe(false)
+  })
+
+  test("should fallback to name matching when baseCode unavailable", () => {
+    const a: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "x",
+      baseCode: undefined,
+    }
+    const b: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "x",
+      baseCode: undefined,
+    }
+    expect(Keybind.match(a, b, { usePhysicalKeys: true })).toBe(true)
+  })
+
+  test("should use character matching when usePhysicalKeys is false", () => {
+    const config: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "x",
+      baseCode: 120,
+    }
+    const input: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "ㅌ",
+      baseCode: 120,
+    }
+    expect(Keybind.match(config, input, { usePhysicalKeys: false })).toBe(false)
+  })
+
+  test("should match AZERTY layout (Q key produces 'a')", () => {
+    const config: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "q",
+      baseCode: 113,
+    }
+    const input: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "a",
+      baseCode: 113,
+    }
+    expect(Keybind.match(config, input, { usePhysicalKeys: true })).toBe(true)
+  })
+
+  test("should match modifiers correctly with physical keys", () => {
+    const a: Keybind.Info = {
+      ctrl: true,
+      meta: true,
+      shift: false,
+      leader: false,
+      name: "x",
+      baseCode: 120,
+    }
+    const b: Keybind.Info = {
+      ctrl: true,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "ㅌ",
+      baseCode: 120,
+    }
+    expect(Keybind.match(a, b, { usePhysicalKeys: true })).toBe(false)
+  })
+
+  test("should match leader key with physical keys", () => {
+    const a: Keybind.Info = {
+      ctrl: false,
+      meta: false,
+      shift: false,
+      leader: true,
+      name: "n",
+      baseCode: 110,
+    }
+    const b: Keybind.Info = {
+      ctrl: false,
+      meta: false,
+      shift: false,
+      leader: true,
+      name: "ㅜ",
+      baseCode: 110,
+    }
+    expect(Keybind.match(a, b, { usePhysicalKeys: true })).toBe(true)
+  })
+
+  test("should not match when leader differs with physical keys", () => {
+    const a: Keybind.Info = {
+      ctrl: false,
+      meta: false,
+      shift: false,
+      leader: true,
+      name: "n",
+      baseCode: 110,
+    }
+    const b: Keybind.Info = {
+      ctrl: false,
+      meta: false,
+      shift: false,
+      leader: false,
+      name: "ㅜ",
+      baseCode: 110,
+    }
+    expect(Keybind.match(a, b, { usePhysicalKeys: true })).toBe(false)
+  })
+})
+
+describe("Keybind.fromParsedKey with baseCode", () => {
+  test("should preserve baseCode from ParsedKey", () => {
+    const parsedKey = {
+      name: "ㅌ",
+      ctrl: true,
+      meta: false,
+      shift: false,
+      baseCode: 120,
+    } as any
+
+    const info = Keybind.fromParsedKey(parsedKey)
+    expect(info.baseCode).toBe(120)
+  })
+
+  test("should handle undefined baseCode", () => {
+    const parsedKey = {
+      name: "x",
+      ctrl: true,
+      meta: false,
+      shift: false,
+    } as any
+
+    const info = Keybind.fromParsedKey(parsedKey)
+    expect(info.baseCode).toBeUndefined()
   })
 })
