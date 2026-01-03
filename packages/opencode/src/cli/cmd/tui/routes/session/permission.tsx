@@ -1,15 +1,19 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
+import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
+import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Locale } from "@/util/locale"
+
+type PermissionStage = "permission" | "always" | "reject"
 
 function normalizePath(input?: string) {
   if (!input) return ""
@@ -101,8 +105,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sdk = useSDK()
   const sync = useSync()
   const [store, setStore] = createStore({
-    always: false,
+    stage: "permission" as PermissionStage,
   })
+
+  const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
 
   const input = createMemo(() => {
     const tool = props.request.tool
@@ -120,7 +126,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
   return (
     <Switch>
-      <Match when={store.always}>
+      <Match when={store.stage === "always"}>
         <Prompt
           title="Always allow"
           body={
@@ -148,7 +154,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           options={{ confirm: "Confirm", cancel: "Cancel" }}
           escapeKey="cancel"
           onSelect={(option) => {
-            setStore("always", false)
+            setStore("stage", "permission")
             if (option === "cancel") return
             sdk.client.permission.reply({
               reply: "always",
@@ -157,7 +163,19 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           }}
         />
       </Match>
-      <Match when={!store.always}>
+      <Match when={store.stage === "reject"}>
+        <RejectPrompt
+          onConfirm={(message) => {
+            sdk.client.permission.reply({
+              reply: "reject",
+              requestID: props.request.id,
+              message: message || undefined,
+            })
+          }}
+          onCancel={() => setStore("stage", "permission")}
+        />
+      </Match>
+      <Match when={store.stage === "permission"}>
         <Prompt
           title="Permission required"
           body={
@@ -215,17 +233,92 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           escapeKey="reject"
           onSelect={(option) => {
             if (option === "always") {
-              setStore("always", true)
+              setStore("stage", "always")
               return
             }
+            if (option === "reject") {
+              if (session()?.parentID) {
+                setStore("stage", "reject")
+                return
+              }
+              sdk.client.permission.reply({
+                reply: "reject",
+                requestID: props.request.id,
+              })
+            }
             sdk.client.permission.reply({
-              reply: option as "once" | "reject",
+              reply: "once",
               requestID: props.request.id,
             })
           }}
         />
       </Match>
     </Switch>
+  )
+}
+
+function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: () => void }) {
+  let input: TextareaRenderable
+  const { theme } = useTheme()
+  const keybind = useKeybind()
+  const textareaKeybindings = useTextareaKeybindings()
+
+  useKeyboard((evt) => {
+    if (evt.name === "escape" || keybind.match("app_exit", evt)) {
+      evt.preventDefault()
+      props.onCancel()
+      return
+    }
+    if (evt.name === "return") {
+      evt.preventDefault()
+      props.onConfirm(input.plainText)
+    }
+  })
+
+  return (
+    <box
+      backgroundColor={theme.backgroundPanel}
+      border={["left"]}
+      borderColor={theme.error}
+      customBorderChars={SplitBorder.customBorderChars}
+    >
+      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
+        <box flexDirection="row" gap={1} paddingLeft={1}>
+          <text fg={theme.error}>{"△"}</text>
+          <text fg={theme.text}>Reject permission</text>
+        </box>
+        <box paddingLeft={1}>
+          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+        </box>
+      </box>
+      <box
+        flexDirection="row"
+        flexShrink={0}
+        paddingTop={1}
+        paddingLeft={2}
+        paddingRight={3}
+        paddingBottom={1}
+        backgroundColor={theme.backgroundElement}
+        justifyContent="space-between"
+      >
+        <textarea
+          ref={(val: TextareaRenderable) => (input = val)}
+          focused
+          textColor={theme.text}
+          focusedTextColor={theme.text}
+          cursorColor={theme.primary}
+          keyBindings={textareaKeybindings()}
+        />
+        <box flexDirection="row" gap={2} flexShrink={0} marginLeft={1}>
+          <text fg={theme.text}>
+            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+          </text>
+          <text fg={theme.text}>
+            esc <span style={{ fg: theme.textMuted }}>cancel</span>
+          </text>
+        </box>
+      </box>
+    </box>
   )
 }
 

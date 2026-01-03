@@ -1566,7 +1566,12 @@ export type Config = {
    * MCP (Model Context Protocol) server configurations
    */
   mcp?: {
-    [key: string]: McpLocalConfig | McpRemoteConfig
+    [key: string]:
+      | McpLocalConfig
+      | McpRemoteConfig
+      | {
+          enabled: boolean
+        }
   }
   formatter?:
     | false
@@ -3449,6 +3454,7 @@ export type PermissionRespondResponse = PermissionRespondResponses[keyof Permiss
 export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"
+    message?: string
   }
   path: {
     requestID: string
