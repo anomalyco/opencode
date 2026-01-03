@@ -88,7 +88,6 @@ export namespace Agent {
         options: {},
         mode: "subagent",
         native: true,
-        hidden: true,
       },
       explore: {
         name: "explore",
