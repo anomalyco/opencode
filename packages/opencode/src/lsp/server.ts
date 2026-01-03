@@ -1212,7 +1212,15 @@ export namespace LSPServer {
   export const KotlinLS: Info = {
     id: "kotlin-ls",
     extensions: [".kt", ".kts"],
-    root: NearestRoot(["build.gradle", "build.gradle.kts", "settings.gradle.kts", "pom.xml"]),
+    root: (start) =>
+      // 1) Nearest Gradle root (multi-project or included build)
+      NearestRoot(["settings.gradle.kts", "settings.gradle"])(start) ??
+      // 2) Gradle wrapper (strong root signal)
+      NearestRoot(["gradlew", "gradlew.bat"])(start) ??
+      // 3) Single-project or module-level build
+      NearestRoot(["build.gradle.kts", "build.gradle"])(start) ??
+      // 4) Maven fallback
+      NearestRoot(["pom.xml"])(start),
     async spawn(root) {
       const distPath = path.join(Global.Path.bin, "kotlin-ls")
       const launcherScript =
