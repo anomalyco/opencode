@@ -32,6 +32,7 @@ export type Project = {
     updated: number
     initialized?: number
   }
+  sandboxes?: Array<string>
 }
 
 export type EventProjectUpdated = {
@@ -478,6 +479,7 @@ export type EventPermissionReplied = {
     requestID: string
     reply: "once" | "always" | "reject" | "interject"
     interjection?: string
+    message?: string
   }
 }
 
@@ -590,6 +592,16 @@ export type EventTuiToastShow = {
      * Duration in milliseconds
      */
     duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
   }
 }
 
@@ -777,6 +789,7 @@ export type Event =
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
+  | EventTuiSessionSelect
   | EventMcpToolsChanged
   | EventCommandExecuted
   | EventSessionCreated
@@ -1555,7 +1568,12 @@ export type Config = {
    * MCP (Model Context Protocol) server configurations
    */
   mcp?: {
-    [key: string]: McpLocalConfig | McpRemoteConfig
+    [key: string]:
+      | McpLocalConfig
+      | McpRemoteConfig
+      | {
+          enabled: boolean
+        }
   }
   formatter?:
     | false
@@ -1674,6 +1692,17 @@ export type Path = {
   config: string
   worktree: string
   directory: string
+}
+
+export type Worktree = {
+  name: string
+  branch: string
+  directory: string
+}
+
+export type WorktreeCreateInput = {
+  name?: string
+  startCommand?: string
 }
 
 export type VcsInfo = {
@@ -2397,6 +2426,51 @@ export type PathGetResponses = {
 }
 
 export type PathGetResponse = PathGetResponses[keyof PathGetResponses]
+
+export type WorktreeListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/worktree"
+}
+
+export type WorktreeListResponses = {
+  /**
+   * List of worktree directories
+   */
+  200: Array<string>
+}
+
+export type WorktreeListResponse = WorktreeListResponses[keyof WorktreeListResponses]
+
+export type WorktreeCreateData = {
+  body?: WorktreeCreateInput
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/worktree"
+}
+
+export type WorktreeCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type WorktreeCreateError = WorktreeCreateErrors[keyof WorktreeCreateErrors]
+
+export type WorktreeCreateResponses = {
+  /**
+   * Worktree created
+   */
+  200: Worktree
+}
+
+export type WorktreeCreateResponse = WorktreeCreateResponses[keyof WorktreeCreateResponses]
 
 export type VcsGetData = {
   body?: never
@@ -3382,8 +3456,9 @@ export type PermissionRespondResponse = PermissionRespondResponses[keyof Permiss
 
 export type PermissionReplyData = {
   body?: {
-    reply: "once" | "always" | "reject" | "interject"
-    interjection?: string
+     reply: "once" | "always" | "reject" | "interject"
+     interjection?: string
+     message?: string
   }
   path: {
     requestID: string
@@ -4313,7 +4388,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow
+  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
   path?: never
   query?: {
     directory?: string
@@ -4338,6 +4413,42 @@ export type TuiPublishResponses = {
 }
 
 export type TuiPublishResponse = TuiPublishResponses[keyof TuiPublishResponses]
+
+export type TuiSelectSessionData = {
+  body?: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/tui/select-session"
+}
+
+export type TuiSelectSessionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type TuiSelectSessionError = TuiSelectSessionErrors[keyof TuiSelectSessionErrors]
+
+export type TuiSelectSessionResponses = {
+  /**
+   * Session selected successfully
+   */
+  200: boolean
+}
+
+export type TuiSelectSessionResponse = TuiSelectSessionResponses[keyof TuiSelectSessionResponses]
 
 export type TuiControlNextData = {
   body?: never
