@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Show } from "solid-js"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
@@ -6,6 +6,7 @@ import { useServer } from "@/context/server"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useSDK } from "@/context/sdk"
 import { getFilename } from "@opencode-ai/util/path"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { iife } from "@opencode-ai/util/iife"
@@ -19,10 +20,12 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
+import { showToast } from "@opencode-ai/ui/toast"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
+  const sdk = useSDK()
   const layout = useLayout()
   const params = useParams()
   const navigate = useNavigate()
@@ -37,6 +40,8 @@ export function SessionHeader() {
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
 
+  const [deleting, setDeleting] = createSignal(false)
+
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
   }
@@ -44,6 +49,30 @@ export function SessionHeader() {
   function navigateToSession(session: Session | undefined) {
     if (!session) return
     navigate(`/${params.dir}/session/${session.id}`)
+  }
+
+  async function deleteCurrentSession() {
+    const session = currentSession()
+    if (!session || deleting()) return
+
+    // Simple confirmation
+    if (!confirm(`Delete session "${session.title}"?`)) return
+
+    setDeleting(true)
+    try {
+      await sdk.client.session.delete({
+        sessionID: session.id,
+        directory: projectDirectory(),
+      })
+      showToast({ title: "Session deleted" })
+      // Navigate to new session page
+      navigate(`/${params.dir}/session`)
+    } catch (e) {
+      console.error("Failed to delete session", e)
+      showToast({ title: "Failed to delete session", description: String(e) })
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -92,6 +121,9 @@ export function SessionHeader() {
             <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
             </TooltipKeybind>
+            <Tooltip class="hidden xl:block" value="Delete session">
+              <IconButton icon="close" variant="ghost" onClick={deleteCurrentSession} disabled={deleting()} />
+            </Tooltip>
           </Show>
         </div>
         <div class="flex items-center gap-3">
