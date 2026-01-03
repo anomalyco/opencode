@@ -218,20 +218,12 @@ export default function Page() {
     return sync.data.message[id] !== undefined
   })
   const emptyUserMessages: UserMessage[] = []
-  const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
-    emptyUserMessages,
-    { equals: same },
-  )
-  const visibleUserMessages = createMemo(
-    () => {
-      const revert = revertMessageID()
-      if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
-    },
-    emptyUserMessages,
-    { equals: same },
-  )
+  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
+  const visibleUserMessages = createMemo(() => {
+    const revert = revertMessageID()
+    if (!revert) return userMessages()
+    return userMessages().filter((m) => m.id < revert)
+  }, emptyUserMessages)
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
   createEffect(
@@ -256,6 +248,7 @@ export default function Page() {
     mobileTab: "session" as "session" | "review",
     ignoreScrollSpy: false,
     initialScrollDone: !params.id,
+    newSessionWorktree: "main",
   })
 
   const activeMessage = createMemo(() => {
@@ -1017,7 +1010,10 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView />
+                <NewSessionView
+                  worktree={store.newSessionWorktree}
+                  onWorktreeChange={(value) => setStore("newSessionWorktree", value)}
+                />
               </Match>
             </Switch>
           </div>
@@ -1034,6 +1030,8 @@ export default function Page() {
                 ref={(el) => {
                   inputRef = el
                 }}
+                newSessionWorktree={store.newSessionWorktree}
+                onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
               />
             </div>
           </div>
@@ -1153,6 +1151,15 @@ export default function Page() {
                     })
                     const contents = createMemo(() => state()?.content?.content ?? "")
                     const cacheKey = createMemo(() => checksum(contents()))
+                    const isImage = createMemo(() => {
+                      const c = state()?.content
+                      return c?.encoding === "base64" && c?.mimeType?.startsWith("image/")
+                    })
+                    const imageDataUrl = createMemo(() => {
+                      if (!isImage()) return
+                      const c = state()?.content
+                      return `data:${c?.mimeType};base64,${c?.content}`
+                    })
                     const selectedLines = createMemo(() => {
                       const p = path()
                       if (!p) return null
@@ -1255,6 +1262,11 @@ export default function Page() {
                           )}
                         </Show>
                         <Switch>
+                          <Match when={state()?.loaded && isImage()}>
+                            <div class="px-6 py-4 pb-40">
+                              <img src={imageDataUrl()} alt={path()} class="max-w-full" />
+                            </div>
+                          </Match>
                           <Match when={state()?.loaded}>
                             <Dynamic
                               component={codeComponent}
