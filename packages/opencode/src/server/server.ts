@@ -654,7 +654,7 @@ export namespace Server {
         validator(
           "query",
           z.object({
-            archived: z.boolean().optional(),
+            archived: z.coerce.boolean().optional(),
           }),
         ),
         async (c) => {
