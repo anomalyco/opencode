@@ -348,7 +348,7 @@ export const GithubInstallCommand = cmd({
               }
 
               retries++
-              await new Promise((resolve) => setTimeout(resolve, 1000))
+              await Bun.sleep(1000)
             } while (true)
 
             s.stop("Installed GitHub app")
@@ -396,7 +396,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run opencode
-        uses: sst/opencode/github@latest${envStr}
+        uses: anomalyco/opencode/github@latest${envStr}
         with:
           model: ${provider}/${model}`,
             )
@@ -994,12 +994,16 @@ export const GithubRunCommand = cmd({
 
         console.log("Configuring git...")
         const config = "http.https://github.com/.extraheader"
-        const ret = await $`git config --local --get ${config}`
-        gitConfig = ret.stdout.toString().trim()
+        // actions/checkout@v6 no longer stores credentials in .git/config,
+        // so this may not exist - use nothrow() to handle gracefully
+        const ret = await $`git config --local --get ${config}`.nothrow()
+        if (ret.exitCode === 0) {
+          gitConfig = ret.stdout.toString().trim()
+          await $`git config --local --unset-all ${config}`
+        }
 
         const newCredentials = Buffer.from(`x-access-token:${appToken}`, "utf8").toString("base64")
 
-        await $`git config --local --unset-all ${config}`
         await $`git config --local ${config} "AUTHORIZATION: basic ${newCredentials}"`
         await $`git config --global user.name "${AGENT_USERNAME}"`
         await $`git config --global user.email "${AGENT_USERNAME}@users.noreply.github.com"`

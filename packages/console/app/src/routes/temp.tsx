@@ -151,7 +151,7 @@ export default function Home() {
             <a href="https://x.com/opencode">X.com</a>
           </div>
           <div data-slot="cell">
-            <a href="https://github.com/sst/opencode">GitHub</a>
+            <a href="https://github.com/anomalyco/opencode">GitHub</a>
           </div>
           <div data-slot="cell">
             <a href="https://opencode.ai/discord">Discord</a>

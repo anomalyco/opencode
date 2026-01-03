@@ -218,20 +218,12 @@ export default function Page() {
     return sync.data.message[id] !== undefined
   })
   const emptyUserMessages: UserMessage[] = []
-  const userMessages = createMemo(
-    () => messages().filter((m) => m.role === "user") as UserMessage[],
-    emptyUserMessages,
-    { equals: same },
-  )
-  const visibleUserMessages = createMemo(
-    () => {
-      const revert = revertMessageID()
-      if (!revert) return userMessages()
-      return userMessages().filter((m) => m.id < revert)
-    },
-    emptyUserMessages,
-    { equals: same },
-  )
+  const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
+  const visibleUserMessages = createMemo(() => {
+    const revert = revertMessageID()
+    if (!revert) return userMessages()
+    return userMessages().filter((m) => m.id < revert)
+  }, emptyUserMessages)
   const lastUserMessage = createMemo(() => visibleUserMessages().at(-1))
 
   createEffect(
@@ -256,6 +248,7 @@ export default function Page() {
     mobileTab: "session" as "session" | "review",
     ignoreScrollSpy: false,
     initialScrollDone: !params.id,
+    newSessionWorktree: "main",
   })
 
   const activeMessage = createMemo(() => {
@@ -553,6 +546,31 @@ export default function Page() {
         // Navigate to the message before the new revert point
         const priorMsg = userMessages().findLast((x) => x.id < nextMessage.id)
         setActiveMessage(priorMsg)
+      },
+    },
+    {
+      id: "session.compact",
+      title: "Compact session",
+      description: "Summarize the session to reduce context size",
+      category: "Session",
+      slash: "compact",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const model = local.model.current()
+        if (!model) {
+          showToast({
+            title: "No model selected",
+            description: "Connect a provider to summarize this session",
+          })
+          return
+        }
+        await sdk.client.session.summarize({
+          sessionID,
+          modelID: model.id,
+          providerID: model.provider.id,
+        })
       },
     },
   ])
@@ -992,7 +1010,10 @@ export default function Page() {
                 </Show>
               </Match>
               <Match when={true}>
-                <NewSessionView />
+                <NewSessionView
+                  worktree={store.newSessionWorktree}
+                  onWorktreeChange={(value) => setStore("newSessionWorktree", value)}
+                />
               </Match>
             </Switch>
           </div>
@@ -1009,6 +1030,8 @@ export default function Page() {
                 ref={(el) => {
                   inputRef = el
                 }}
+                newSessionWorktree={store.newSessionWorktree}
+                onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
               />
             </div>
           </div>
