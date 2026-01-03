@@ -44,7 +44,7 @@ export function DialogViewArchivedSessions(props: { project: LocalProject }) {
           }
         >
           <div class="flex items-center justify-center py-8">
-            <Spinner size="large" />
+            <Spinner />
           </div>
         </Show>
         <Show when={archivedSessions() && archivedSessions()!.length > 0}>
@@ -64,7 +64,7 @@ export function DialogViewArchivedSessions(props: { project: LocalProject }) {
                       )}
                     </div>
                   </div>
-                  <Icon name="arrow-right" size="small" class="text-text-weak shrink-0" />
+                  <Icon name="chevron-right" size="small" class="text-text-weak shrink-0" />
                 </button>
               )}
             </For>
