@@ -1,4 +1,5 @@
 import z from "zod"
+import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
 import { $ } from "bun"
@@ -31,6 +32,7 @@ export namespace Project {
         updated: z.number(),
         initialized: z.number().optional(),
       }),
+      sandboxes: z.array(z.string()).optional(),
     })
     .meta({
       ref: "Project",
@@ -76,12 +78,16 @@ export namespace Project {
             worktree,
             vcs: "git",
           }
-        worktree = await $`git rev-parse --show-toplevel`
+        worktree = await $`git rev-parse --git-common-dir`
           .quiet()
           .nothrow()
           .cwd(worktree)
           .text()
-          .then((x) => path.resolve(worktree, x.trim()))
+          .then((x) => {
+            const dirname = path.dirname(x.trim())
+            if (dirname === ".") return worktree
+            return dirname
+          })
         return { id, worktree, vcs: "git" }
       }
 
@@ -218,4 +224,32 @@ export namespace Project {
       return result
     },
   )
+
+  export async function addSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      if (!draft.sandboxes) draft.sandboxes = []
+      if (!draft.sandboxes.includes(directory)) {
+        draft.sandboxes.push(directory)
+      }
+      draft.time.updated = Date.now()
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
+  }
+
+  export async function sandboxes(projectID: string) {
+    const project = await Storage.read<Info>(["project", projectID]).catch(() => undefined)
+    if (!project?.sandboxes) return []
+    const valid: string[] = []
+    for (const dir of project.sandboxes) {
+      const stat = await fs.stat(dir).catch(() => undefined)
+      if (stat?.isDirectory()) valid.push(dir)
+    }
+    return valid
+  }
 }
