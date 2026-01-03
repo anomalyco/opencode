@@ -1,8 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
-import { Message } from "./message"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
@@ -308,6 +306,7 @@ export namespace MessageV2 {
     }),
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
+    variant: z.string().optional(),
   }).meta({
     ref: "UserMessage",
   })
@@ -477,7 +476,6 @@ export namespace MessageV2 {
           role: "assistant",
           parts: [],
         }
-        result.push(assistantMessage)
         for (const part of msg.parts) {
           if (part.type === "text")
             assistantMessage.parts.push({
@@ -536,10 +534,13 @@ export namespace MessageV2 {
             })
           }
         }
+        if (assistantMessage.parts.length > 0) {
+          result.push(assistantMessage)
+        }
       }
     }
 
-    return convertToModelMessages(result.filter((msg) => msg.parts.length > 0))
+    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {

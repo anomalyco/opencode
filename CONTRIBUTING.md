@@ -14,10 +14,10 @@ However, any UI or core product feature must go through a design review with the
 
 If you are unsure if a PR would be accepted, feel free to ask a maintainer or look for issues with any of the following labels:
 
-- [`help wanted`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Ahelp-wanted)
-- [`good first issue`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22)
-- [`bug`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug)
-- [`perf`](https://github.com/sst/opencode/issues?q=is%3Aopen%20is%3Aissue%20label%3A%22perf%22)
+- [`help wanted`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Ahelp-wanted)
+- [`good first issue`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22)
+- [`bug`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug)
+- [`perf`](https://github.com/anomalyco/opencode/issues?q=is%3Aopen%20is%3Aissue%20label%3A%22perf%22)
 
 > [!NOTE]
 > PRs that ignore these guardrails will likely be closed.
@@ -33,6 +33,36 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
   bun install
   bun dev
   ```
+
+### Running against a different directory
+
+By default, `bun dev` runs OpenCode in the `packages/opencode` directory. To run it against a different directory or repository:
+
+```bash
+bun dev <directory>
+```
+
+To run OpenCode in the root of the opencode repo itself:
+
+```bash
+bun dev .
+```
+
+### Building a "localcode"
+
+To compile a standalone executable:
+
+```bash
+./packages/opencode/script/build.ts --single
+```
+
+Then run it with:
+
+```bash
+./packages/opencode/dist/opencode-<platform>/bin/opencode
+```
+
+Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.

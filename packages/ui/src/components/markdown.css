@@ -64,8 +64,16 @@
     list-style-position: inside;
   }
 
+  ul {
+    list-style-type: disc;
+  }
+
+  ol {
+    list-style-type: decimal;
+  }
+
   li {
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.5rem;
   }
 
   li::marker {

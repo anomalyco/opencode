@@ -18,8 +18,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     return {
       data: store,
       set: setStore,
+      get status() {
+        return store.status
+      },
       get ready() {
-        return store.ready
+        return store.status !== "loading"
       },
       get project() {
         const match = Binary.search(globalSync.data.project, store.project, (p) => p.id)
@@ -56,14 +59,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 const result = Binary.search(messages, input.messageID, (m) => m.id)
                 messages.splice(result.index, 0, message)
               }
-              draft.part[input.messageID] = input.parts.slice()
+              draft.part[input.messageID] = input.parts
+                .filter((p) => !!p?.id)
+                .slice()
+                .sort((a, b) => a.id.localeCompare(b.id))
             }),
           )
         },
         async sync(sessionID: string, _isRetry = false) {
           const [session, messages, todo, diff] = await Promise.all([
             retry(() => sdk.client.session.get({ sessionID })),
-            retry(() => sdk.client.session.messages({ sessionID, limit: 100 })),
+            retry(() => sdk.client.session.messages({ sessionID, limit: 1000 })),
             retry(() => sdk.client.session.todo({ sessionID })),
             retry(() => sdk.client.session.diff({ sessionID })),
           ])
@@ -81,13 +87,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               }),
             )
 
-            setStore("todo", sessionID, reconcile(todo.data ?? []))
+            setStore("todo", sessionID, reconcile(todo.data ?? [], { key: "id" }))
             setStore(
               "message",
               sessionID,
               reconcile(
                 (messages.data ?? [])
                   .map((x) => x.info)
+                  .filter((m) => !!m?.id)
                   .slice()
                   .sort((a, b) => a.id.localeCompare(b.id)),
                 { key: "id" },
@@ -95,11 +102,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             )
 
             for (const message of messages.data ?? []) {
+              if (!message?.info?.id) continue
               setStore(
                 "part",
                 message.info.id,
                 reconcile(
-                  message.parts.slice().sort((a, b) => a.id.localeCompare(b.id)),
+                  message.parts
+                    .filter((p) => !!p?.id)
+                    .slice()
+                    .sort((a, b) => a.id.localeCompare(b.id)),
                   { key: "id" },
                 ),
               )
@@ -112,10 +123,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("limit", (x) => x + count)
           await sdk.client.session.list().then((x) => {
             const sessions = (x.data ?? [])
+              .filter((s) => !!s?.id)
               .slice()
               .sort((a, b) => a.id.localeCompare(b.id))
               .slice(0, store.limit)
-            setStore("session", sessions)
+            setStore("session", reconcile(sessions, { key: "id" }))
           })
         },
         more: createMemo(() => store.session.length >= store.limit),

@@ -3,6 +3,7 @@ import { useParams } from "@solidjs/router"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
+
 import { base64Decode } from "@opencode-ai/util/encode"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
@@ -19,14 +20,14 @@ export default function Layout(props: ParentProps) {
           {iife(() => {
             const sync = useSync()
             const sdk = useSDK()
+            const respond = (input: {
+              sessionID: string
+              permissionID: string
+              response: "once" | "always" | "reject"
+            }) => sdk.client.permission.respond(input)
+
             return (
-              <DataProvider
-                data={sync.data}
-                directory={directory()}
-                onPermissionRespond={(input) => {
-                  sdk.client.permission.respond(input)
-                }}
-              >
+              <DataProvider data={sync.data} directory={directory()} onPermissionRespond={respond}>
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>
             )
