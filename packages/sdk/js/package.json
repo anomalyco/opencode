@@ -3,6 +3,7 @@
   "name": "@opencode-ai/sdk",
   "version": "1.0.224",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "build": "./script/build.ts"
