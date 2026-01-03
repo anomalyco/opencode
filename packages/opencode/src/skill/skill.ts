@@ -18,6 +18,7 @@ export namespace Skill {
     location: z.string(),
     remote: z.boolean().optional(),
     baseUrl: z.string().optional(),
+    hostname: z.string().optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -44,8 +45,9 @@ export namespace Skill {
 
   /**
    * Load remote skills from all authenticated wellknown endpoints.
-   * Skills are namespaced as hostname:skill-name.
-   * First authenticated endpoint wins for collisions.
+   * Returns skills keyed by their original name (not namespaced).
+   * Namespacing only happens during merge if there's a local collision.
+   * First authenticated endpoint wins for remote collisions.
    */
   async function loadRemoteSkills(): Promise<Record<string, Info>> {
     const config = await Config.get()
@@ -63,24 +65,24 @@ export namespace Skill {
       const hostname = WellKnown.getHostname(baseUrl)
 
       for (const [name, skill] of Object.entries(index.skills)) {
-        const prefixedName = `${hostname}:${name}`
-
-        // First endpoint wins for same prefixed name
-        if (skills[prefixedName]) {
+        // First endpoint wins for same skill name
+        if (skills[name]) {
           log.warn("duplicate remote skill name", {
-            name: prefixedName,
-            existing: skills[prefixedName].location,
+            name,
+            existing: skills[name].location,
             duplicate: skill.url,
           })
           continue
         }
 
-        skills[prefixedName] = {
-          name: prefixedName,
+        skills[name] = {
+          name,
           description: skill.description,
           location: skill.url,
           remote: true,
           baseUrl,
+          // Store hostname for potential namespacing if there's a local collision
+          hostname,
         }
       }
     }
@@ -155,16 +157,18 @@ export namespace Skill {
     }
 
     // Load remote skills from wellknown endpoints
-    // Remote skills are namespaced as hostname:skill-name
-    // Local skills take precedence (they're already in `skills` at this point)
+    // Remote skills use plain names by default, but get namespaced (hostname:name)
+    // if there's a collision with a local skill
     const remoteSkills = await loadRemoteSkills()
     for (const [name, skill] of Object.entries(remoteSkills)) {
-      // Don't override local skills
       if (skills[name]) {
-        log.debug("local skill takes precedence over remote", { name })
-        continue
+        // Local skill exists - namespace the remote skill
+        const namespacedName = `${skill.hostname}:${name}`
+        log.debug("namespacing remote skill due to local collision", { name, namespacedName })
+        skills[namespacedName] = { ...skill, name: namespacedName }
+      } else {
+        skills[name] = skill
       }
-      skills[name] = skill
     }
 
     return skills

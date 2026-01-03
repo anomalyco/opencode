@@ -27,15 +27,12 @@ export const SkillTool = Tool.define("skill", async () => {
           "Skills provide specialized knowledge and step-by-step guidance.",
           "Use this when a task matches an available skill's description.",
           "<available_skills>",
-          ...skills.flatMap((skill) => {
-            const source = skill.remote ? ` (remote: ${skill.baseUrl})` : ""
-            return [
-              `  <skill>`,
-              `    <name>${skill.name}</name>`,
-              `    <description>${skill.description}${source}</description>`,
-              `  </skill>`,
-            ]
-          }),
+          ...skills.flatMap((skill) => [
+            `  <skill>`,
+            `    <name>${skill.name}</name>`,
+            `    <description>${skill.description}</description>`,
+            `  </skill>`,
+          ]),
           "</available_skills>",
         ].join(" ")
 

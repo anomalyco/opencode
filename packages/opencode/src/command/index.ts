@@ -34,6 +34,7 @@ export namespace Command {
       mcp: z.boolean().optional(),
       remote: z.boolean().optional(),
       baseUrl: z.string().optional(),
+      hostname: z.string().optional(),
       // workaround for zod not supporting async functions natively so we use getters
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
@@ -64,8 +65,9 @@ export namespace Command {
 
   /**
    * Load remote commands from all authenticated wellknown endpoints.
-   * Commands are namespaced as hostname:command-name.
-   * First authenticated endpoint wins for collisions.
+   * Returns commands keyed by their original name (not namespaced).
+   * Namespacing only happens during merge if there's a local collision.
+   * First authenticated endpoint wins for remote collisions.
    */
   async function loadRemoteCommands(): Promise<Record<string, Info>> {
     const cfg = await Config.get()
@@ -83,23 +85,22 @@ export namespace Command {
       const hostname = WellKnown.getHostname(baseUrl)
 
       for (const [name, command] of Object.entries(index.commands)) {
-        const prefixedName = `${hostname}:${name}`
-
-        // First endpoint wins for same prefixed name
-        if (commands[prefixedName]) {
+        // First endpoint wins for same command name
+        if (commands[name]) {
           log.warn("duplicate remote command name", {
-            name: prefixedName,
-            existing: commands[prefixedName].name,
+            name,
+            existing: commands[name].name,
             duplicate: command.url,
           })
           continue
         }
 
-        commands[prefixedName] = {
-          name: prefixedName,
+        commands[name] = {
+          name,
           description: command.description,
           remote: true,
           baseUrl,
+          hostname,
           get template() {
             return fetchRemoteCommandTemplate(command.url, baseUrl)
           },
@@ -191,16 +192,18 @@ export namespace Command {
     }
 
     // Load remote commands from wellknown endpoints
-    // Remote commands are namespaced as hostname:command-name
-    // Local commands take precedence (they're already in `result` at this point)
+    // Remote commands use plain names by default, but get namespaced (hostname:name)
+    // if there's a collision with a local command
     const remoteCommands = await loadRemoteCommands()
     for (const [name, command] of Object.entries(remoteCommands)) {
-      // Don't override local commands
       if (result[name]) {
-        log.debug("local command takes precedence over remote", { name })
-        continue
+        // Local command exists - namespace the remote command
+        const namespacedName = `${command.hostname}:${name}`
+        log.debug("namespacing remote command due to local collision", { name, namespacedName })
+        result[namespacedName] = { ...command, name: namespacedName }
+      } else {
+        result[name] = command
       }
-      result[name] = command
     }
 
     return result
