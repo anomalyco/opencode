@@ -163,3 +163,20 @@ export DISPLAY=:99.0
 ```
 
 opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+
+---
+
+### Extremely slow in large codebases
+
+OpenCode uses [Git worktrees](https://git-scm.com/docs/git-worktree) to snapshot the codebase on every message.
+
+This can lead to extremely slow conversation turns in large codebases with hundreds of thousands of files.
+
+Consider disabling snapshots in the [config](/docs/config) as a workaround:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "snapshot": false
+}
+```
