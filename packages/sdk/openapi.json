@@ -850,6 +850,94 @@
         ]
       }
     },
+    "/experimental/worktree": {
+      "post": {
+        "operationId": "worktree.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Create worktree",
+        "description": "Create a new git worktree for the current project.",
+        "responses": {
+          "200": {
+            "description": "Worktree created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Worktree"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorktreeCreateInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.create({\n  ...\n})"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "worktree.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List worktrees",
+        "description": "List all sandbox worktrees for the current project.",
+        "responses": {
+          "200": {
+            "description": "List of worktree directories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.worktree.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/vcs": {
       "get": {
         "operationId": "vcs.get",
@@ -5303,6 +5391,12 @@
               }
             },
             "required": ["created", "updated"]
+          },
+          "sandboxes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": ["id", "worktree", "time"]
@@ -9026,6 +9120,32 @@
           }
         },
         "required": ["home", "state", "config", "worktree", "directory"]
+      },
+      "Worktree": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "branch", "directory"]
+      },
+      "WorktreeCreateInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "startCommand": {
+            "type": "string"
+          }
+        }
       },
       "VcsInfo": {
         "type": "object",
