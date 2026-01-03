@@ -895,6 +895,11 @@ export namespace Config {
         .optional()
         .default("ctrl+w,ctrl+backspace,alt+backspace")
         .describe("Delete word backward in input"),
+      input_lowercase_word: z.string().optional().default("alt+l").describe("Lowercase word in input"),
+      input_uppercase_word: z.string().optional().default("alt+u").describe("Uppercase word in input"),
+      input_capitalize_word: z.string().optional().default("alt+c").describe("Capitalize word in input"),
+      input_yank: z.string().optional().default("ctrl+y").describe("Yank (paste) last killed text"),
+      input_transpose_characters: z.string().optional().describe("Transpose characters in input"),
       history_previous: z.string().optional().default("up").describe("Previous history item"),
       history_next: z.string().optional().default("down").describe("Next history item"),
       session_child_first: z.string().optional().default("<leader>down").describe("Go to first child session"),
