@@ -39,8 +39,9 @@ export namespace Plugin {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
         plugin = await BunProc.install(pkg, version).catch((err) => {
-          if (BUILTIN.includes(pkg)) return ""
+          if (builtin) return ""
           throw err
         })
         if (!plugin) continue
