@@ -211,9 +211,42 @@ pub fn run() {
             // Initialize log state
             app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
 
-            tauri::async_runtime::spawn(async move {
-                let port = get_sidecar_port();
+            // Get port and create window immediately for faster perceived startup
+            let port = get_sidecar_port();
 
+            let primary_monitor = app.primary_monitor().ok().flatten();
+            let size = primary_monitor
+                .map(|m| m.size().to_logical(m.scale_factor()))
+                .unwrap_or(LogicalSize::new(1920, 1080));
+
+            // Create window immediately with serverReady = false
+            let mut window_builder =
+                WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
+                    .title("OpenCode")
+                    .inner_size(size.width as f64, size.height as f64)
+                    .decorations(true)
+                    .zoom_hotkeys_enabled(true)
+                    .disable_drag_drop_handler()
+                    .initialization_script(format!(
+                        r#"
+                      window.__OPENCODE__ ??= {{}};
+                      window.__OPENCODE__.updaterEnabled = {updater_enabled};
+                      window.__OPENCODE__.port = {port};
+                      window.__OPENCODE__.serverReady = false;
+                    "#
+                    ));
+
+            #[cfg(target_os = "macos")]
+            {
+                window_builder = window_builder
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true);
+            }
+
+            let _window = window_builder.build().expect("Failed to create window");
+
+            // Spawn server in background and notify when ready
+            tauri::async_runtime::spawn(async move {
                 let should_spawn_sidecar = !is_server_running(port).await;
 
                 let child = if should_spawn_sidecar {
@@ -257,34 +290,10 @@ pub fn run() {
                     None
                 };
 
-                let primary_monitor = app.primary_monitor().ok().flatten();
-                let size = primary_monitor
-                    .map(|m| m.size().to_logical(m.scale_factor()))
-                    .unwrap_or(LogicalSize::new(1920, 1080));
-
-                let mut window_builder =
-                    WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                        .title("OpenCode")
-                        .inner_size(size.width as f64, size.height as f64)
-                        .decorations(true)
-                        .zoom_hotkeys_enabled(true)
-                        .disable_drag_drop_handler()
-                        .initialization_script(format!(
-                            r#"
-                          window.__OPENCODE__ ??= {{}};
-                          window.__OPENCODE__.updaterEnabled = {updater_enabled};
-                          window.__OPENCODE__.port = {port};
-                        "#
-                        ));
-
-                #[cfg(target_os = "macos")]
-                {
-                    window_builder = window_builder
-                        .title_bar_style(tauri::TitleBarStyle::Overlay)
-                        .hidden_title(true);
+                // Notify the frontend that the server is ready
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.eval("window.__OPENCODE__.serverReady = true; window.dispatchEvent(new Event('opencode:server-ready'));");
                 }
-
-                window_builder.build().expect("Failed to create window");
 
                 app.manage(ServerState(Arc::new(Mutex::new(child))));
             });
