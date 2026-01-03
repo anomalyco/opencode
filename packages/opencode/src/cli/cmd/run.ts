@@ -247,6 +247,13 @@ export const RunCommand = cmd({
         return args.agent
       })()
 
+      if (args.format !== "json") {
+        const agentInfo = resolvedAgent ? await Agent.get(resolvedAgent) : undefined
+        const inputModel = args.model ? Provider.parseModel(args.model) : undefined
+        const finalModel = inputModel ?? agentInfo?.model ?? (await Provider.defaultModel())
+        UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + `Using model: ${finalModel.providerID}/${finalModel.modelID}`)
+      }
+
       if (args.command) {
         await sdk.session.command({
           sessionID,
