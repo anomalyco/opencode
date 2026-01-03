@@ -419,13 +419,15 @@ export namespace Config {
     })
   export type Permission = z.infer<typeof Permission>
 
-  export const Command = z.object({
-    template: z.string(),
-    description: z.string().optional(),
-    agent: z.string().optional(),
-    model: z.string().optional(),
-    subtask: z.boolean().optional(),
-  })
+  export const Command = z
+    .object({
+      template: z.string(),
+      description: z.string().optional(),
+      agent: z.string().optional(),
+      model: z.string().optional(),
+      subtask: z.boolean().optional(),
+    })
+    .passthrough()
   export type Command = z.infer<typeof Command>
 
   export const Agent = z
