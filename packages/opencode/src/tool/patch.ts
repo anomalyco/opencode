@@ -174,10 +174,11 @@ export const PatchTool = Tool.define("patch", {
           break
       }
 
-      // Update file time tracking
-      FileTime.read(ctx.sessionID, change.filePath)
-      if (change.movePath) {
-        FileTime.read(ctx.sessionID, change.movePath)
+      // Update file time tracking with actual mtime
+      if (change.type !== "delete") {
+        const targetPath = change.movePath || change.filePath
+        const statsAfterPatch = await Bun.file(targetPath).stat()
+        FileTime.read(ctx.sessionID, targetPath, statsAfterPatch.mtime)
       }
     }
 

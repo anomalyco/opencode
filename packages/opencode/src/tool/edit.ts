@@ -63,7 +63,8 @@ export const EditTool = Tool.define("edit", {
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
-        FileTime.read(ctx.sessionID, filePath)
+        const statsAfterWrite = await Bun.file(filePath).stat()
+        FileTime.read(ctx.sessionID, filePath, statsAfterWrite.mtime)
         return
       }
 

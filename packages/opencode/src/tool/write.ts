@@ -45,7 +45,8 @@ export const WriteTool = Tool.define("write", {
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
-    FileTime.read(ctx.sessionID, filepath)
+    const statsAfterWrite = await Bun.file(filepath).stat()
+    FileTime.read(ctx.sessionID, filepath, statsAfterWrite.mtime)
 
     let output = "Wrote file successfully."
     await LSP.touchFile(filepath, true)

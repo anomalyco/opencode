@@ -129,7 +129,8 @@ export const ReadTool = Tool.define("read", {
 
     // just warms the lsp client
     LSP.touchFile(filepath, false)
-    FileTime.read(ctx.sessionID, filepath)
+    const stats = await file.stat()
+    FileTime.read(ctx.sessionID, filepath, stats.mtime)
 
     return {
       title,

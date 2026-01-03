@@ -1115,7 +1115,8 @@ export namespace SessionPrompt {
               }
 
               const file = Bun.file(filepath)
-              FileTime.read(input.sessionID, filepath)
+              const stats = await Bun.file(filepath).stat()
+              FileTime.read(input.sessionID, filepath, stats.mtime)
               return [
                 {
                   id: Identifier.ascending("part"),
