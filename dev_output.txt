@@ -1,0 +1,46 @@
+
+[0m▄
+█▀▀█ █▀▀█ █▀▀█ █▀▀▄ [0m█▀▀▀ █▀▀█ █▀▀█ █▀▀█
+█░░█ █░░█ █▀▀▀ █░░█ [0m█░░░ █░░█ █░░█ █▀▀▀
+▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ [0m▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀
+
+Commands:
+  opencode completion          generate shell completion script
+  opencode acp                 start ACP (Agent Client Protocol) server
+  opencode [project]           start opencode tui                                          [default]
+  opencode attach <url>        attach to a running opencode server
+  opencode run [message..]     run opencode with a message
+  opencode auth                manage credentials
+  opencode agent               manage agents
+  opencode upgrade [target]    upgrade opencode to the latest or a specific version
+  opencode uninstall           uninstall opencode and remove all related files
+  opencode serve               starts a headless opencode server
+  opencode web                 starts a headless opencode server
+  opencode models [provider]   list all available models
+  opencode stats               show token usage and cost statistics
+  opencode export [sessionID]  export session data as JSON
+  opencode import <file>       import session data from JSON file or URL
+  opencode github              manage GitHub agent
+  opencode pr <number>         fetch and checkout a GitHub PR branch, then run opencode
+  opencode session             manage sessions
+
+Positionals:
+  project  path to start opencode in                                                        [string]
+
+Options:
+  -h, --help        show help                                                              [boolean]
+  -v, --version     show version number                                                    [boolean]
+      --print-logs  print logs to stderr                                                   [boolean]
+      --log-level   log level                   [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --port        port to listen on                                          [number] [default: 0]
+      --hostname    hostname to listen on                            [string] [default: "127.0.0.1"]
+      --mdns        enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --cors        additional domains to allow for CORS                       [array] [default: []]
+  -m, --model       model to use in the format of provider/model                            [string]
+  -c, --continue    continue the last session                                              [boolean]
+  -s, --session     session id to continue                                                  [string]
+      --prompt      prompt to use                                                           [string]
+      --agent       agent to use                                                            [string]
+
+e:\code\OpenCode\opencode>
