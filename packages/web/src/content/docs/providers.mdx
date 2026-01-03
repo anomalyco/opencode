@@ -1457,6 +1457,9 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
         "apiKey": "{env:ANTHROPIC_API_KEY}",
         "headers": {
           "Authorization": "Bearer custom-token"
+        },
+        "extraBody": {
+          "provider-scoped-extra-body-param-key": "value"
         }
       },
       "models": {
@@ -1465,6 +1468,11 @@ Here's an example setting the `apiKey`, `headers`, and model `limit` options.
           "limit": {
             "context": 200000,
             "output": 65536
+          },
+          "options": {
+            "extraBody": {
+              "enable_thinking": true
+            }
           }
         }
       }
@@ -1479,6 +1487,7 @@ Configuration details:
 - **headers**: Custom headers sent with each request.
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.
+- **options.extraBody**: Extra body params which will be sent to the provider.
 
 The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
