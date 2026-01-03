@@ -37,12 +37,14 @@ export namespace Locale {
     return num.toString()
   }
 
-  export function duration(input: number) {
+  export function duration(input: number, opts?: { decimalSeconds?: boolean }) {
+    const decimalSeconds = opts?.decimalSeconds ?? true
     if (input < 1000) {
       return `${input}ms`
     }
     if (input < 60000) {
-      return `${(input / 1000).toFixed(1)}s`
+      if (decimalSeconds) return `${(input / 1000).toFixed(1)}s`
+      return `${Math.floor(input / 1000)}s`
     }
     if (input < 3600000) {
       const minutes = Math.floor(input / 60000)
@@ -54,8 +56,8 @@ export namespace Locale {
       const minutes = Math.floor((input % 3600000) / 60000)
       return `${hours}h ${minutes}m`
     }
-    const hours = Math.floor(input / 3600000)
-    const days = Math.floor((input % 3600000) / 86400000)
+    const days = Math.floor(input / 86400000)
+    const hours = Math.floor((input % 86400000) / 3600000)
     return `${days}d ${hours}h`
   }
 

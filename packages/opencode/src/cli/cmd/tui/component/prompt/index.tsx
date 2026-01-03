@@ -1030,7 +1030,7 @@ export function Prompt(props: PromptProps) {
                       if (!r) return ""
                       const baseMessage = message()
                       const truncatedHint = isTruncated() ? " (click to expand)" : ""
-                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${seconds()}s ` : ""}attempt #${r.attempt}]`
+                      const retryInfo = ` [retrying ${seconds() > 0 ? `in ${Locale.duration(seconds() * 1000, { decimalSeconds: false })} ` : ""}attempt #${r.attempt}]`
                       return baseMessage + truncatedHint + retryInfo
                     }
 
