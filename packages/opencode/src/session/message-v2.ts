@@ -484,7 +484,6 @@ export namespace MessageV2 {
           role: "assistant",
           parts: [],
         }
-        result.push(assistantMessage)
         for (const part of msg.parts) {
           if (part.type === "text")
             assistantMessage.parts.push({
@@ -542,6 +541,9 @@ export namespace MessageV2 {
               providerMetadata: part.metadata,
             })
           }
+        }
+        if (assistantMessage.parts.length > 0) {
+          result.push(assistantMessage)
         }
       }
     }

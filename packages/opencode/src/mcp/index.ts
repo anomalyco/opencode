@@ -147,6 +147,10 @@ export namespace MCP {
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 
   type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
+  type McpEntry = NonNullable<Config.Info["mcp"]>[string]
+  function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
+    return typeof entry === "object" && entry !== null && "type" in entry
+  }
 
   const state = Instance.state(
     async () => {
@@ -157,6 +161,11 @@ export namespace MCP {
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
+          if (!isMcpConfigured(mcp)) {
+            log.error("Ignoring MCP config entry without type", { key })
+            return
+          }
+
           // If disabled by config, mark as disabled without trying to connect
           if (mcp.enabled === false) {
             status[key] = { status: "disabled" }
@@ -272,6 +281,7 @@ export namespace MCP {
         status: { status: "disabled" as const },
       }
     }
+
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined
@@ -469,8 +479,9 @@ export namespace MCP {
     const config = cfg.mcp ?? {}
     const result: Record<string, Status> = {}
 
-    // Include all MCPs from config, not just connected ones
-    for (const key of Object.keys(config)) {
+    // Include all configured MCPs from config, not just connected ones
+    for (const [key, mcp] of Object.entries(config)) {
+      if (!isMcpConfigured(mcp)) continue
       result[key] = s.status[key] ?? { status: "disabled" }
     }
 
@@ -487,6 +498,11 @@ export namespace MCP {
     const mcp = config[name]
     if (!mcp) {
       log.error("MCP config not found", { name })
+      return
+    }
+
+    if (!isMcpConfigured(mcp)) {
+      log.error("Ignoring MCP connect request for config without type", { name })
       return
     }
 
@@ -662,6 +678,10 @@ export namespace MCP {
       throw new Error(`MCP server not found: ${mcpName}`)
     }
 
+    if (!isMcpConfigured(mcpConfig)) {
+      throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
+    }
+
     if (mcpConfig.type !== "remote") {
       throw new Error(`MCP server ${mcpName} is not a remote server`)
     }
@@ -788,6 +808,10 @@ export namespace MCP {
         throw new Error(`MCP server not found: ${mcpName}`)
       }
 
+      if (!isMcpConfigured(mcpConfig)) {
+        throw new Error(`MCP server ${mcpName} is disabled or missing configuration`)
+      }
+
       // Re-add the MCP server to establish connection
       pendingOAuthTransports.delete(mcpName)
       const result = await add(mcpName, mcpConfig)
@@ -820,7 +844,9 @@ export namespace MCP {
   export async function supportsOAuth(mcpName: string): Promise<boolean> {
     const cfg = await Config.get()
     const mcpConfig = cfg.mcp?.[mcpName]
-    return mcpConfig?.type === "remote" && mcpConfig.oauth !== false
+    if (!mcpConfig) return false
+    if (!isMcpConfigured(mcpConfig)) return false
+    return mcpConfig.type === "remote" && mcpConfig.oauth !== false
   }
 
   /**
