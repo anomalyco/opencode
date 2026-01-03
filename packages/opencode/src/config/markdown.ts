@@ -31,6 +31,18 @@ export namespace ConfigMarkdown {
     }
   }
 
+  /**
+   * Parse markdown content directly (for remote content).
+   * Returns undefined if parsing fails.
+   */
+  export function parseContent(content: string) {
+    try {
+      return matter(content)
+    } catch {
+      return undefined
+    }
+  }
+
   export const FrontmatterError = NamedError.create(
     "ConfigFrontmatterError",
     z.object({

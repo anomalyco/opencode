@@ -27,12 +27,15 @@ export const SkillTool = Tool.define("skill", async () => {
           "Skills provide specialized knowledge and step-by-step guidance.",
           "Use this when a task matches an available skill's description.",
           "<available_skills>",
-          ...skills.flatMap((skill) => [
-            `  <skill>`,
-            `    <name>${skill.name}</name>`,
-            `    <description>${skill.description}</description>`,
-            `  </skill>`,
-          ]),
+          ...skills.flatMap((skill) => {
+            const source = skill.remote ? ` (remote: ${skill.baseUrl})` : ""
+            return [
+              `  <skill>`,
+              `    <name>${skill.name}</name>`,
+              `    <description>${skill.description}${source}</description>`,
+              `  </skill>`,
+            ]
+          }),
           "</available_skills>",
         ].join(" ")
 
@@ -47,7 +50,7 @@ export const SkillTool = Tool.define("skill", async () => {
       const skill = await Skill.get(params.name)
 
       if (!skill) {
-        const available = Skill.all().then((x) => Object.keys(x).join(", "))
+        const available = await Skill.all().then((x) => x.map((s) => s.name).join(", "))
         throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
       }
 
@@ -57,19 +60,31 @@ export const SkillTool = Tool.define("skill", async () => {
         always: [params.name],
         metadata: {},
       })
-      // Load and parse skill content
-      const parsed = await ConfigMarkdown.parse(skill.location)
-      const dir = path.dirname(skill.location)
 
-      // Format output similar to plugin pattern
-      const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", parsed.content.trim()].join("\n")
+      // Load skill content (handles both local and remote)
+      const content = await Skill.getContent(params.name)
+      if (!content) {
+        throw new Error(`Failed to load content for skill "${params.name}"`)
+      }
+
+      // Parse the content to extract frontmatter
+      const parsed = ConfigMarkdown.parseContent(content)
+      const skillContent = parsed?.content?.trim() ?? content.trim()
+
+      // For remote skills, use URL as base; for local, use directory
+      const baseInfo = skill.remote
+        ? `**Source**: ${skill.baseUrl}`
+        : `**Base directory**: ${path.dirname(skill.location)}`
+
+      const output = [`## Skill: ${skill.name}`, "", baseInfo, "", skillContent].join("\n")
 
       return {
         title: `Loaded skill: ${skill.name}`,
         output,
         metadata: {
           name: skill.name,
-          dir,
+          remote: skill.remote ?? false,
+          location: skill.location,
         },
       }
     },

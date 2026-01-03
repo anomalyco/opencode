@@ -938,6 +938,18 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          remote_skills: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable fetching skills from wellknown endpoints. When authenticated to a wellknown endpoint, remote skills are available with hostname:skill-name prefix. Local skills take precedence. Default: true.",
+            ),
+          remote_commands: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable fetching commands from wellknown endpoints. When authenticated to a wellknown endpoint, remote commands are available with hostname:command-name prefix. Local commands take precedence. Default: true.",
+            ),
         })
         .optional(),
     })

@@ -10,6 +10,7 @@ import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
+import { WellKnown } from "../../util/wellknown"
 import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
@@ -163,7 +164,12 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthRefreshCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -393,5 +399,60 @@ export const AuthLogoutCommand = cmd({
     if (prompts.isCancel(providerID)) throw new UI.CancelledError()
     await Auth.remove(providerID)
     prompts.outro("Logout successful")
+  },
+})
+
+export const AuthRefreshCommand = cmd({
+  command: "refresh [url]",
+  describe: "refresh wellknown config and remote skills/commands",
+  builder: (yargs) =>
+    yargs.positional("url", {
+      describe: "specific wellknown URL to refresh (refreshes all if omitted)",
+      type: "string",
+    }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Refresh wellknown")
+
+    const spinner = prompts.spinner()
+    spinner.start("Refreshing...")
+
+    const results = await WellKnown.refresh(args.url)
+
+    if (results.size === 0) {
+      spinner.stop("No wellknown endpoints found")
+      if (!args.url) {
+        prompts.log.info("Run `opencode auth login <url>` to authenticate to a wellknown endpoint")
+      }
+      prompts.outro("Done")
+      return
+    }
+
+    spinner.stop("Refreshed")
+
+    for (const [url, index] of results) {
+      const hostname = WellKnown.getHostname(url)
+      const skillCount = Object.keys(index.skills ?? {}).length
+      const commandCount = Object.keys(index.commands ?? {}).length
+
+      prompts.log.info(`${hostname}`)
+      if (skillCount > 0) {
+        prompts.log.message(`  ${skillCount} skill${skillCount === 1 ? "" : "s"}`)
+        for (const name of Object.keys(index.skills ?? {})) {
+          prompts.log.message(`    ${UI.Style.TEXT_DIM}${hostname}:${name}`)
+        }
+      }
+      if (commandCount > 0) {
+        prompts.log.message(`  ${commandCount} command${commandCount === 1 ? "" : "s"}`)
+        for (const name of Object.keys(index.commands ?? {})) {
+          prompts.log.message(`    ${UI.Style.TEXT_DIM}${hostname}:${name}`)
+        }
+      }
+      if (skillCount === 0 && commandCount === 0) {
+        prompts.log.message(`  ${UI.Style.TEXT_DIM}no skills or commands`)
+      }
+    }
+
+    prompts.outro("Done")
   },
 })

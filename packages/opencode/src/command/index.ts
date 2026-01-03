@@ -6,8 +6,13 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { WellKnown } from "@/util/wellknown"
+import { Log } from "@/util/log"
+import { ConfigMarkdown } from "@/config/markdown"
 
 export namespace Command {
+  const log = Log.create({ service: "command" })
+
   export const Event = {
     Executed: BusEvent.define(
       "command.executed",
@@ -27,6 +32,8 @@ export namespace Command {
       agent: z.string().optional(),
       model: z.string().optional(),
       mcp: z.boolean().optional(),
+      remote: z.boolean().optional(),
+      baseUrl: z.string().optional(),
       // workaround for zod not supporting async functions natively so we use getters
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
@@ -54,6 +61,71 @@ export namespace Command {
     INIT: "init",
     REVIEW: "review",
   } as const
+
+  /**
+   * Load remote commands from all authenticated wellknown endpoints.
+   * Commands are namespaced as hostname:command-name.
+   * First authenticated endpoint wins for collisions.
+   */
+  async function loadRemoteCommands(): Promise<Record<string, Info>> {
+    const cfg = await Config.get()
+    if (cfg.experimental?.remote_commands === false) {
+      return {}
+    }
+
+    const commands: Record<string, Info> = {}
+    const endpoints = await WellKnown.getAuthenticatedEndpoints()
+
+    for (const baseUrl of endpoints) {
+      const index = await WellKnown.getIndex(baseUrl)
+      if (!index?.commands) continue
+
+      const hostname = WellKnown.getHostname(baseUrl)
+
+      for (const [name, command] of Object.entries(index.commands)) {
+        const prefixedName = `${hostname}:${name}`
+
+        // First endpoint wins for same prefixed name
+        if (commands[prefixedName]) {
+          log.warn("duplicate remote command name", {
+            name: prefixedName,
+            existing: commands[prefixedName].name,
+            duplicate: command.url,
+          })
+          continue
+        }
+
+        commands[prefixedName] = {
+          name: prefixedName,
+          description: command.description,
+          remote: true,
+          baseUrl,
+          get template() {
+            return fetchRemoteCommandTemplate(command.url, baseUrl)
+          },
+          hints: [], // Will be populated when template is fetched
+        }
+      }
+    }
+
+    return commands
+  }
+
+  /**
+   * Fetch and parse a remote command template.
+   * Returns the template content from the markdown file.
+   */
+  async function fetchRemoteCommandTemplate(url: string, baseUrl: string): Promise<string> {
+    const content = await WellKnown.fetchContent(url, baseUrl)
+    if (!content) {
+      log.warn("failed to fetch remote command content", { url })
+      return ""
+    }
+
+    // Parse markdown frontmatter
+    const md = ConfigMarkdown.parseContent(content)
+    return md?.content?.trim() ?? content.trim()
+  }
 
   const state = Instance.state(async () => {
     const cfg = await Config.get()
@@ -116,6 +188,19 @@ export namespace Command {
         },
         hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
       }
+    }
+
+    // Load remote commands from wellknown endpoints
+    // Remote commands are namespaced as hostname:command-name
+    // Local commands take precedence (they're already in `result` at this point)
+    const remoteCommands = await loadRemoteCommands()
+    for (const [name, command] of Object.entries(remoteCommands)) {
+      // Don't override local commands
+      if (result[name]) {
+        log.debug("local command takes precedence over remote", { name })
+        continue
+      }
+      result[name] = command
     }
 
     return result

@@ -6,14 +6,18 @@ import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { WellKnown } from "@/util/wellknown"
 import { exists } from "fs/promises"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
+
   export const Info = z.object({
     name: z.string(),
     description: z.string(),
     location: z.string(),
+    remote: z.boolean().optional(),
+    baseUrl: z.string().optional(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -37,6 +41,52 @@ export namespace Skill {
 
   const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
+
+  /**
+   * Load remote skills from all authenticated wellknown endpoints.
+   * Skills are namespaced as hostname:skill-name.
+   * First authenticated endpoint wins for collisions.
+   */
+  async function loadRemoteSkills(): Promise<Record<string, Info>> {
+    const config = await Config.get()
+    if (config.experimental?.remote_skills === false) {
+      return {}
+    }
+
+    const skills: Record<string, Info> = {}
+    const endpoints = await WellKnown.getAuthenticatedEndpoints()
+
+    for (const baseUrl of endpoints) {
+      const index = await WellKnown.getIndex(baseUrl)
+      if (!index?.skills) continue
+
+      const hostname = WellKnown.getHostname(baseUrl)
+
+      for (const [name, skill] of Object.entries(index.skills)) {
+        const prefixedName = `${hostname}:${name}`
+
+        // First endpoint wins for same prefixed name
+        if (skills[prefixedName]) {
+          log.warn("duplicate remote skill name", {
+            name: prefixedName,
+            existing: skills[prefixedName].location,
+            duplicate: skill.url,
+          })
+          continue
+        }
+
+        skills[prefixedName] = {
+          name: prefixedName,
+          description: skill.description,
+          location: skill.url,
+          remote: true,
+          baseUrl,
+        }
+      }
+    }
+
+    return skills
+  }
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
@@ -104,11 +154,52 @@ export namespace Skill {
       }
     }
 
+    // Load remote skills from wellknown endpoints
+    // Remote skills are namespaced as hostname:skill-name
+    // Local skills take precedence (they're already in `skills` at this point)
+    const remoteSkills = await loadRemoteSkills()
+    for (const [name, skill] of Object.entries(remoteSkills)) {
+      // Don't override local skills
+      if (skills[name]) {
+        log.debug("local skill takes precedence over remote", { name })
+        continue
+      }
+      skills[name] = skill
+    }
+
     return skills
   })
 
-  export async function get(name: string) {
-    return state().then((x) => x[name])
+  /**
+   * Get a skill by name.
+   * For remote skills, fetches content lazily on first access.
+   */
+  export async function get(name: string): Promise<Info | undefined> {
+    const skills = await state()
+    return skills[name]
+  }
+
+  /**
+   * Get skill content by name.
+   * For local skills, reads from filesystem.
+   * For remote skills, fetches from URL with caching.
+   */
+  export async function getContent(name: string): Promise<string | undefined> {
+    const skill = await get(name)
+    if (!skill) return undefined
+
+    if (skill.remote && skill.baseUrl) {
+      const content = await WellKnown.fetchContent(skill.location, skill.baseUrl)
+      if (!content) {
+        log.warn("failed to fetch remote skill content", { name, url: skill.location })
+        return undefined
+      }
+      return content
+    }
+
+    // Local skill - read from filesystem
+    const file = Bun.file(skill.location)
+    return file.text().catch(() => undefined)
   }
 
   export async function all() {
