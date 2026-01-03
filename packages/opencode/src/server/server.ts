@@ -688,7 +688,8 @@ export namespace Server {
         "/session",
         describeRoute({
           summary: "List sessions",
-          description: "Get a list of all OpenCode sessions, sorted by most recently updated.",
+          description:
+            "Get a list of OpenCode sessions. By default, returns sessions from the current directory. Use ?all=true to get all sessions in the project.",
           operationId: "session.list",
           responses: {
             200: {
@@ -702,9 +703,10 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const sessions = await Array.fromAsync(Session.list())
+          const all = c.req.query("all") === "true"
+          const sessions = await Array.fromAsync(Session.list({ all }))
           pipe(
-            await Array.fromAsync(Session.list()),
+            sessions,
             filter((s) => !s.time.archived),
             sortBy((s) => s.time.updated),
           )

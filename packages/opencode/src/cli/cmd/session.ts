@@ -52,6 +52,12 @@ export const SessionListCommand = cmd({
         describe: "limit to N most recent sessions",
         type: "number",
       })
+      .option("all", {
+        alias: "a",
+        describe: "show sessions from all directories in the project",
+        type: "boolean",
+        default: false,
+      })
       .option("format", {
         describe: "output format",
         type: "string",
@@ -62,7 +68,7 @@ export const SessionListCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       const sessions = []
-      for await (const session of Session.list()) {
+      for await (const session of Session.list({ all: args.all })) {
         if (!session.parentID) {
           sessions.push(session)
         }

@@ -286,10 +286,23 @@ export namespace Session {
     },
   )
 
-  export async function* list() {
+  export interface ListOptions {
+    /**
+     * When true, returns all sessions for the project regardless of directory.
+     * When false (default), only returns sessions created in the current directory.
+     */
+    all?: boolean
+  }
+
+  export async function* list(options?: ListOptions) {
     const project = Instance.project
+    const currentDirectory = Instance.directory
     for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+      const session = await Storage.read<Info>(item)
+      if (options?.all !== true && session.directory !== currentDirectory) {
+        continue
+      }
+      yield session
     }
   }
 
