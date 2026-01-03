@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -10,6 +10,7 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
+import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
@@ -29,7 +30,6 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
-import { useTextareaKeybindings } from "../textarea-keybindings"
 
 export type PromptProps = {
   sessionID?: string
@@ -163,6 +163,61 @@ const PLACEHOLDERS = [
   "If we use, to achieve our purposes, a mechanical agency with whose operation we cannot effectively interfere once we have started it… we had better be quite sure that the purpose put into the machine is the purpose which we really desire.",
 ]
 
+const TEXTAREA_ACTIONS = [
+  "submit",
+  "newline",
+  "move-left",
+  "move-right",
+  "move-up",
+  "move-down",
+  "select-left",
+  "select-right",
+  "select-up",
+  "select-down",
+  "line-home",
+  "line-end",
+  "select-line-home",
+  "select-line-end",
+  "visual-line-home",
+  "visual-line-end",
+  "select-visual-line-home",
+  "select-visual-line-end",
+  "buffer-home",
+  "buffer-end",
+  "select-buffer-home",
+  "select-buffer-end",
+  "delete-line",
+  "delete-to-line-end",
+  "delete-to-line-start",
+  "backspace",
+  "delete",
+  "undo",
+  "redo",
+  "word-forward",
+  "word-backward",
+  "select-word-forward",
+  "select-word-backward",
+  "delete-word-forward",
+  "delete-word-backward",
+] as const
+
+function mapTextareaKeybindings(
+  keybinds: Record<string, Keybind.Info[]>,
+  action: (typeof TEXTAREA_ACTIONS)[number],
+): KeyBinding[] {
+  const configKey = `input_${action.replace(/-/g, "_")}`
+  const bindings = keybinds[configKey]
+  if (!bindings) return []
+  return bindings.map((binding) => ({
+    name: binding.name,
+    ctrl: binding.ctrl || undefined,
+    meta: binding.meta || undefined,
+    shift: binding.shift || undefined,
+    super: binding.super || undefined,
+    action,
+  }))
+}
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -194,7 +249,15 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  const textareaKeybindings = useTextareaKeybindings()
+  const textareaKeybindings = createMemo(() => {
+    const keybinds = keybind.all
+
+    return [
+      { name: "return", action: "submit" },
+      { name: "return", meta: true, action: "newline" },
+      ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
+    ] satisfies KeyBinding[]
+  })
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
