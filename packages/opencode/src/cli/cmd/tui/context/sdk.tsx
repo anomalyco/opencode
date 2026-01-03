@@ -5,11 +5,12 @@ import { batch, onCleanup, onMount } from "solid-js"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: { url: string }) => {
+  init: (props: { url: string; directory?: string }) => {
     const abort = new AbortController()
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,
+      directory: props.directory,
     })
 
     const emitter = createGlobalEmitter<{
