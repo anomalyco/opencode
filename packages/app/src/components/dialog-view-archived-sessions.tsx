@@ -28,13 +28,14 @@ export function DialogViewArchivedSessions(props: { project: LocalProject }) {
       <List
         search={{ placeholder: "Search archived sessions", autofocus: true }}
         emptyMessage="No archived sessions"
-        items={async () => {
+        items={async (filter: string) => {
           const result = await globalSDK.client.session.list({
             directory: props.project.worktree,
             archived: true,
           })
           return result.data ?? []
         }}
+        filterKeys={["title"]}
         key={(x) => x.id}
         onSelect={(session) => {
           if (session) restoreSession(session.id)
