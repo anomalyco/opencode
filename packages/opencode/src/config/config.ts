@@ -817,7 +817,20 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+      mcp: z
+        .record(
+          z.string(),
+          z.union([
+            Mcp,
+            z
+              .object({
+                enabled: z.boolean(),
+              })
+              .strict(),
+          ]),
+        )
+        .optional()
+        .describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
         .union([
           z.literal(false),
