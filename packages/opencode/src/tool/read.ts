@@ -40,10 +40,13 @@ export const ReadTool = Tool.define("read", {
       })
     }
 
+    const relative = path.relative(Instance.worktree, filepath)
+    const ext = path.extname(filepath)
+    const alwaysPattern = ext ? `*${ext}` : relative
     await ctx.ask({
       permission: "read",
-      patterns: [filepath],
-      always: ["*"],
+      patterns: [relative],
+      always: [alwaysPattern],
       metadata: {},
     })
 

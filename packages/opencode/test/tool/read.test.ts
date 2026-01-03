@@ -121,6 +121,183 @@ describe("tool.read external_directory permission", () => {
   })
 })
 
+describe("tool.read granular permission patterns", () => {
+  test("still reads file content correctly with new permission patterns", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "src", "index.ts"), "export const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "src", "index.ts") }, ctx)
+        expect(result.output).toContain("export const x = 1")
+      },
+    })
+  })
+
+  test("asks with relative path pattern for files inside project", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "src", "index.ts"), "export const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(tmp.path, "src", "index.ts") }, testCtx)
+        const readReq = requests.find((r) => r.permission === "read")
+        expect(readReq).toBeDefined()
+        expect(readReq!.patterns[0].endsWith("src/index.ts")).toBe(true)
+      },
+    })
+  })
+
+  test("uses extension-based always pattern for files with extensions", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "config.json"), "{}")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(tmp.path, "config.json") }, testCtx)
+        const readReq = requests.find((r) => r.permission === "read")
+        expect(readReq).toBeDefined()
+        expect(readReq!.always).toEqual(["*.json"])
+      },
+    })
+  })
+
+  test("uses relative path as always pattern for files without extensions", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "Makefile"), "all:\n\techo hello")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(tmp.path, "Makefile") }, testCtx)
+        const readReq = requests.find((r) => r.permission === "read")
+        expect(readReq).toBeDefined()
+        expect(readReq!.always[0].endsWith("Makefile")).toBe(true)
+      },
+    })
+  })
+
+  test("uses correct extension for dotfiles with extensions", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, ".eslintrc.json"), "{}")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: path.join(tmp.path, ".eslintrc.json") }, testCtx)
+        const readReq = requests.find((r) => r.permission === "read")
+        expect(readReq).toBeDefined()
+        expect(readReq!.always).toEqual(["*.json"])
+      },
+    })
+  })
+})
+
+describe("tool.read permission deny", () => {
+  test("throws DeniedError when file pattern is denied", async () => {
+    const { PermissionNext: PN } = await import("../../src/permission/next")
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "secret.txt"), "secret content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            const rule = PN.evaluate(req.permission, req.patterns[0], [
+              { permission: "read", pattern: "*secret.txt", action: "deny" },
+            ])
+            if (rule.action === "deny") {
+              throw new PN.DeniedError([])
+            }
+          },
+        }
+        await expect(read.execute({ filePath: path.join(tmp.path, "secret.txt") }, testCtx)).rejects.toBeInstanceOf(
+          PN.DeniedError,
+        )
+      },
+    })
+  })
+
+  test("allows reading when file pattern matches allow rule", async () => {
+    const { PermissionNext: PN } = await import("../../src/permission/next")
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "allowed.ts"), "export const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            const rule = PN.evaluate(req.permission, req.patterns[0], [
+              { permission: "read", pattern: "*.ts", action: "allow" },
+            ])
+            if (rule.action === "deny") {
+              throw new PN.DeniedError([])
+            }
+          },
+        }
+        const result = await read.execute({ filePath: path.join(tmp.path, "allowed.ts") }, testCtx)
+        expect(result.output).toContain("export const x = 1")
+      },
+    })
+  })
+})
+
 describe("tool.read env file blocking", () => {
   test.each([
     [".env", true],

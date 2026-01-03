@@ -910,7 +910,13 @@ export namespace SessionPrompt {
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
                       metadata: async () => {},
-                      ask: async () => {},
+                      ask: async (req) => {
+                        await PermissionNext.ask({
+                          ...req,
+                          sessionID: input.sessionID,
+                          ruleset: agent.permission,
+                        })
+                      },
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -971,7 +977,13 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   extra: { bypassCwdCheck: true },
                   metadata: async () => {},
-                  ask: async () => {},
+                  ask: async (req) => {
+                    await PermissionNext.ask({
+                      ...req,
+                      sessionID: input.sessionID,
+                      ruleset: agent.permission,
+                    })
+                  },
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [
