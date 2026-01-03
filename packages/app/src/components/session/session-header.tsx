@@ -1,4 +1,4 @@
-import { createMemo, createResource, Show } from "solid-js"
+import { createEffect, createMemo, createResource, Show } from "solid-js"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
@@ -7,7 +7,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { iife } from "@opencode-ai/util/iife"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -31,10 +31,11 @@ export function SessionHeader() {
   const dialog = useDialog()
   const sync = useSync()
 
+  const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+
   const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
-  const branch = createMemo(() => sync.data.vcs?.branch)
 
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
@@ -60,12 +61,8 @@ export function SessionHeader() {
             <div class="hidden xl:flex items-center gap-2">
               <Select
                 options={layout.projects.list().map((project) => project.worktree)}
-                current={sync.directory}
-                label={(x) => {
-                  const name = getFilename(x)
-                  const b = x === sync.directory ? branch() : undefined
-                  return b ? `${name}:${b}` : name
-                }}
+                current={sync.project?.worktree ?? projectDirectory()}
+                label={(x) => getFilename(x)}
                 onSelect={(x) => (x ? navigateToProject(x) : undefined)}
                 class="text-14-regular text-text-base"
                 variant="ghost"
@@ -191,7 +188,7 @@ export function SessionHeader() {
                     let shareURL = session.share?.url
                     if (!shareURL) {
                       shareURL = await globalSDK.client.session
-                        .share({ sessionID: session.id, directory: sync.directory })
+                        .share({ sessionID: session.id, directory: projectDirectory() })
                         .then((r) => r.data?.share?.url)
                         .catch((e) => {
                           console.error("Failed to share session", e)
