@@ -8819,10 +8819,24 @@
             "additionalProperties": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/McpLocalConfig"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/McpLocalConfig"
+                    },
+                    {
+                      "$ref": "#/components/schemas/McpRemoteConfig"
+                    }
+                  ]
                 },
                 {
-                  "$ref": "#/components/schemas/McpRemoteConfig"
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["enabled"],
+                  "additionalProperties": false
                 }
               ]
             }
