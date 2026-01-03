@@ -146,6 +146,7 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 #### Command Events
 
 - `command.executed`
+- `command.execute.before`
 
 #### File Events
 
@@ -340,3 +341,53 @@ Format as a structured prompt that a new agent can use to resume work.
 ```
 
 When `output.prompt` is set, it completely replaces the default compaction prompt. The `output.context` array is ignored in this case.
+
+---
+
+### Command hooks
+
+Intercept and modify slash commands before they're sent to the LLM:
+
+```ts title=".opencode/plugin/command-hooks.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CommandHooksPlugin: Plugin = async (ctx) => {
+  return {
+    "command.execute.before": async (input, output) => {
+      // Prevent /init command from running
+      if (input.command === "init") {
+        console.log("Blocking /init command")
+        output.stop = true
+        return
+      }
+
+      // Add --verbose flag to /review command
+      if (input.command === "review") {
+        output.arguments = input.arguments + " --verbose"
+      }
+
+      // Force specific model for code review
+      if (input.command === "review") {
+        output.model = "anthropic/claude-3-5-sonnet-20241022"
+      }
+
+      // Change agent for /test command
+      if (input.command === "test") {
+        output.agent = "build"
+      }
+    },
+  }
+}
+```
+
+The `command.execute.before` hook allows you to:
+
+- **Block commands** - Set `output.stop = true` to prevent command execution
+- **Modify arguments** - Change `output.arguments` to alter command arguments
+- **Change agent** - Override the agent used for a command
+- **Change model** - Override the model used for a command
+- **Create aliases** - Map one command to another
+
+:::note
+The `output` object is initialized with all values from `input`, so you only need to set the fields you want to change.
+:::
