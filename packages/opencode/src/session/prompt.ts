@@ -560,6 +560,25 @@ export namespace SessionPrompt {
 
       const sessionMessages = clone(msgs)
 
+      // Ephemerally wrap queued user messages with a reminder to stay on track
+      if (step > 1 && lastFinished) {
+        for (const msg of sessionMessages) {
+          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
+          for (const part of msg.parts) {
+            if (part.type !== "text" || part.ignored || part.synthetic) continue
+            if (!part.text.trim()) continue
+            part.text = [
+              "<system-reminder>",
+              "The user sent the following message:",
+              part.text,
+              "",
+              "Please address this message and continue with your tasks.",
+              "</system-reminder>",
+            ].join("\n")
+          }
+        }
+      }
+
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
       const result = await processor.process({
