@@ -14,6 +14,7 @@ export namespace WellKnown {
   export const Command = z.object({
     description: z.string().optional(),
     url: z.string().url(),
+    hints: z.array(z.string()).optional(),
   })
   export type Command = z.infer<typeof Command>
 
@@ -92,7 +93,8 @@ export namespace WellKnown {
   }
 
   /**
-   * Fetch content from a remote URL with authentication
+   * Fetch content from a remote URL with authentication.
+   * Only sends auth headers if the URL is on the same origin as baseUrl.
    */
   export async function fetchContent(url: string, baseUrl: string): Promise<string | undefined> {
     const cacheKey = `${baseUrl}:${url}`
@@ -101,7 +103,10 @@ export namespace WellKnown {
     }
 
     try {
-      const headers = await getHeaders(baseUrl)
+      // Only send auth headers if URL is on the same origin as baseUrl
+      const targetOrigin = new URL(url).origin
+      const baseOrigin = new URL(baseUrl).origin
+      const headers = targetOrigin === baseOrigin ? await getHeaders(baseUrl) : {}
       const response = await fetch(url, { headers })
 
       if (!response.ok) {

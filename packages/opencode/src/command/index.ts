@@ -104,7 +104,7 @@ export namespace Command {
           get template() {
             return fetchRemoteCommandTemplate(command.url, baseUrl)
           },
-          hints: [], // Will be populated when template is fetched
+          hints: command.hints ?? [],
         }
       }
     }
