@@ -95,6 +95,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
+  let popoverRef!: HTMLDivElement
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -435,6 +436,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     key: (x) => x?.id,
     filterKeys: ["trigger", "title", "description"],
     onSelect: handleSlashSelect,
+  })
+
+  // Scroll active item into view in popovers
+  createEffect(() => {
+    const activeKey = store.popover === "slash" ? slashActive() : store.popover === "at" ? atActive() : null
+    if (!activeKey || !popoverRef) return
+    const element = popoverRef.querySelector(`[data-key="${activeKey}"]`) as HTMLElement | null
+    if (!element) return
+
+    const styles = getComputedStyle(popoverRef)
+    const paddingTop = parseFloat(styles.paddingTop)
+    const paddingBottom = parseFloat(styles.paddingBottom)
+    const elementTop = element.offsetTop
+    const elementBottom = elementTop + element.offsetHeight
+
+    if (elementTop < popoverRef.scrollTop + paddingTop) {
+      popoverRef.scrollTop = elementTop - paddingTop
+    } else if (elementBottom > popoverRef.scrollTop + popoverRef.clientHeight - paddingBottom) {
+      popoverRef.scrollTop = elementBottom - popoverRef.clientHeight + paddingBottom
+    }
   })
 
   createEffect(
@@ -1354,6 +1375,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popover}>
         <div
+          ref={(el) => (popoverRef = el)}
           class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10
                  overflow-auto no-scrollbar flex flex-col p-2 rounded-md
                  border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
@@ -1367,6 +1389,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <For each={atFlat().slice(0, 10)}>
                   {(item) => (
                     <button
+                      data-key={atKey(item)}
                       classList={{
                         "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
                         "bg-surface-raised-base-hover": atActive() === atKey(item),
@@ -1412,6 +1435,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <For each={slashFlat()}>
                   {(cmd) => (
                     <button
+                      data-key={cmd.id}
                       classList={{
                         "w-full flex items-center justify-between gap-4 rounded-md px-2 py-1": true,
                         "bg-surface-raised-base-hover": slashActive() === cmd.id,
