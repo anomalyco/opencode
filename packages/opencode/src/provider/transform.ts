@@ -464,6 +464,13 @@ export namespace ProviderTransform {
         result["reasoningSummary"] = "auto"
       }
     }
+
+    const extraBody = { ...providerOptions?.extraBody, ...model.options?.extraBody }
+    if (Object.keys(extraBody).length > 0) {
+      // Merge in extra body options
+      Object.assign(result, extraBody)
+    }
+
     return result
   }
 
