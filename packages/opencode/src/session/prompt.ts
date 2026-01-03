@@ -1330,6 +1330,7 @@ export namespace SessionPrompt {
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    stop: z.boolean().optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
@@ -1344,7 +1345,33 @@ export namespace SessionPrompt {
 
   export async function command(input: CommandInput) {
     log.info("command", input)
+    input = await Plugin.trigger("command.execute.before", input, { ...input, stop: false })
+    if (input.stop) {
+      log.info("command stopped by plugin", { command: input.command })
+      return undefined
+    }
+    if (!input.command) {
+      const error = new NamedError.Unknown({
+        message: "Plugin hook did not provide required command",
+      })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
+
     const command = await Command.get(input.command)
+    if (!command) {
+      const error = new NamedError.Unknown({
+        message: `Command not found: "${input.command}"`,
+      })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []
