@@ -2749,6 +2749,11 @@ export namespace Server {
               if (sessionFilter) {
                 const eventSessionID =
                   event.properties?.sessionID || event.properties?.info?.sessionID || event.properties?.part?.sessionID
+                // Only allow server.* events (connected, heartbeat, etc.) to pass through without sessionID
+                // All other events without sessionID are filtered out to prevent cross-session leakage
+                if (!eventSessionID && !event.type.startsWith("server.")) {
+                  return
+                }
                 if (eventSessionID && eventSessionID !== sessionFilter) {
                   return
                 }
