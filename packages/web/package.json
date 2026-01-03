@@ -1,6 +1,7 @@
 {
   "name": "@opencode-ai/web",
   "type": "module",
+  "license": "MIT",
   "version": "1.0.224",
   "scripts": {
     "dev": "astro dev",
