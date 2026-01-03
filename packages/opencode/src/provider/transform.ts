@@ -20,15 +20,33 @@ export namespace ProviderTransform {
     if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              return {
-                ...part,
-                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+          // Filter out reasoning/thinking parts from other providers as they have incompatible signatures
+          msg.content = msg.content
+            .filter((part: any) => {
+              // Remove thinking blocks that aren't from Anthropic (they have invalid signatures)
+              if (part.type === "thinking" && part.signature) {
+                // Anthropic thinking signatures start with specific prefixes - keep those
+                // Strip thinking blocks from other providers
+                return false
               }
-            }
-            return part
-          })
+              return true
+            })
+            .map((part) => {
+              // Convert reasoning parts to text to preserve the content
+              if ((part as any).type === "reasoning") {
+                return {
+                  type: "text" as const,
+                  text: `<thinking>${(part as any).text || (part as any).content || ""}</thinking>`,
+                }
+              }
+              if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
+                return {
+                  ...part,
+                  toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                }
+              }
+              return part
+            })
         }
         return msg
       })
