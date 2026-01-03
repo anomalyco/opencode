@@ -662,11 +662,13 @@ export namespace Server {
           const sessions = await Array.fromAsync(Session.list())
           const filtered = pipe(
             sessions,
-            archived === true
-              ? filter((s) => s.time.archived)
-              : archived === false
-                ? filter((s) => !s.time.archived)
-                : filter((s) => !s.time.archived),
+            filter((s) =>
+              archived === true
+                ? s.time.archived !== undefined
+                : archived === false
+                  ? s.time.archived === undefined
+                  : s.time.archived === undefined,
+            ),
             sortBy((s) => s.time.updated),
           )
           return c.json(filtered)
