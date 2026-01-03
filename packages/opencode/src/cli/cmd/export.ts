@@ -5,6 +5,7 @@ import { bootstrap } from "../bootstrap"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
+import { t } from "../../i18n"
 
 export const ExportCommand = cmd({
   command: "export [sessionID]",
@@ -18,11 +19,11 @@ export const ExportCommand = cmd({
   handler: async (args) => {
     await bootstrap(process.cwd(), async () => {
       let sessionID = args.sessionID
-      process.stderr.write(`Exporting session: ${sessionID ?? "latest"}`)
+      process.stderr.write(t("export.exporting_session", { id: sessionID ?? t("export.latest") }))
 
       if (!sessionID) {
         UI.empty()
-        prompts.intro("Export session", {
+        prompts.intro(t("session.export"), {
           output: process.stderr,
         })
 
@@ -32,10 +33,10 @@ export const ExportCommand = cmd({
         }
 
         if (sessions.length === 0) {
-          prompts.log.error("No sessions found", {
+          prompts.log.error(t("export.no_sessions"), {
             output: process.stderr,
           })
-          prompts.outro("Done", {
+          prompts.outro(t("upgrade.done"), {
             output: process.stderr,
           })
           return
@@ -44,7 +45,7 @@ export const ExportCommand = cmd({
         sessions.sort((a, b) => b.time.updated - a.time.updated)
 
         const selectedSession = await prompts.autocomplete({
-          message: "Select session to export",
+          message: t("export.select_session"),
           maxItems: 10,
           options: sessions.map((session) => ({
             label: session.title,
@@ -60,7 +61,7 @@ export const ExportCommand = cmd({
 
         sessionID = selectedSession as string
 
-        prompts.outro("Exporting session...", {
+        prompts.outro(t("export.exporting"), {
           output: process.stderr,
         })
       }
@@ -80,7 +81,7 @@ export const ExportCommand = cmd({
         process.stdout.write(JSON.stringify(exportData, null, 2))
         process.stdout.write(EOL)
       } catch (error) {
-        UI.error(`Session not found: ${sessionID!}`)
+        UI.error(t("export.session_not_found", { id: sessionID! }))
         process.exit(1)
       }
     })

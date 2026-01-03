@@ -10,6 +10,7 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
+import { t } from "@/i18n"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -32,10 +33,10 @@ export function createDialogProviderOptions() {
         title: provider.name,
         value: provider.id,
         description: {
-          opencode: "(Recommended)",
-          anthropic: "(Claude Max or API key)",
+          opencode: t("provider.recommended"),
+          anthropic: t("provider.claude_max_or_api"),
         }[provider.id],
-        category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
+        category: provider.id in PROVIDER_PRIORITY ? t("provider.category_popular") : t("provider.category_other"),
         async onSelect() {
           const methods = sync.data.provider_auth[provider.id] ?? [
             {
@@ -49,7 +50,7 @@ export function createDialogProviderOptions() {
               dialog.replace(
                 () => (
                   <DialogSelect
-                    title="Select auth method"
+                    title={t("dialog.select_auth_method")}
                     options={methods.map((x, index) => ({
                       title: x.label,
                       value: index,
@@ -91,7 +92,7 @@ export function createDialogProviderOptions() {
 
 export function DialogProvider() {
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  return <DialogSelect title={t("dialog.connect_provider")} options={options()} />
 }
 
 interface AutoMethodProps {
@@ -132,7 +133,7 @@ function AutoMethod(props: AutoMethodProps) {
         <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
-      <text fg={theme.textMuted}>Waiting for authorization...</text>
+      <text fg={theme.textMuted}>{t("ui.waiting_for_auth")}</text>
     </box>
   )
 }
@@ -153,7 +154,7 @@ function CodeMethod(props: CodeMethodProps) {
   return (
     <DialogPrompt
       title={props.title}
-      placeholder="Authorization code"
+      placeholder={t("placeholder.auth_code")}
       onConfirm={async (value) => {
         const { error } = await sdk.client.provider.oauth.callback({
           providerID: props.providerID,
@@ -173,7 +174,7 @@ function CodeMethod(props: CodeMethodProps) {
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
           <Link href={props.authorization.url} fg={theme.primary} />
           <Show when={error()}>
-            <text fg={theme.error}>Invalid code</text>
+            <text fg={theme.error}>{t("ui.invalid_code")}</text>
           </Show>
         </box>
       )}
@@ -194,15 +195,14 @@ function ApiMethod(props: ApiMethodProps) {
   return (
     <DialogPrompt
       title={props.title}
-      placeholder="API key"
+      placeholder={t("placeholder.api_key")}
       description={
         props.providerID === "opencode" ? (
           <box gap={1}>
-            <text fg={theme.textMuted}>
-              OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
-            </text>
+            <text fg={theme.textMuted}>{t("zen.description")}</text>
             <text fg={theme.text}>
-              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+              {t("zen.get_key", "https://opencode.ai/zen")}{" "}
+              <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span>
             </text>
           </box>
         ) : undefined

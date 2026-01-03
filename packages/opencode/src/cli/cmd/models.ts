@@ -5,6 +5,7 @@ import { ModelsDev } from "../../provider/models"
 import { cmd } from "./cmd"
 import { UI } from "../ui"
 import { EOL } from "os"
+import { t } from "../../i18n"
 
 export const ModelsCommand = cmd({
   command: "models [provider]",
@@ -28,7 +29,7 @@ export const ModelsCommand = cmd({
   handler: async (args) => {
     if (args.refresh) {
       await ModelsDev.refresh()
-      UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + t("models.cache_refreshed") + UI.Style.TEXT_NORMAL)
     }
 
     await Instance.provide({
@@ -52,7 +53,7 @@ export const ModelsCommand = cmd({
         if (args.provider) {
           const provider = providers[args.provider]
           if (!provider) {
-            UI.error(`Provider not found: ${args.provider}`)
+            UI.error(t("models.provider_not_found", { provider: args.provider }))
             return
           }
 

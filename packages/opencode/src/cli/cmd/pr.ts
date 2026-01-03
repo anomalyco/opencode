@@ -2,6 +2,7 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Instance } from "@/project/instance"
 import { $ } from "bun"
+import { t } from "../../i18n"
 
 export const PrCommand = cmd({
   command: "pr <number>",
@@ -18,19 +19,19 @@ export const PrCommand = cmd({
       async fn() {
         const project = Instance.project
         if (project.vcs !== "git") {
-          UI.error("Could not find git repository. Please run this command from a git repository.")
+          UI.error(t("pr.no_git_repo"))
           process.exit(1)
         }
 
         const prNumber = args.number
         const localBranchName = `pr/${prNumber}`
-        UI.println(`Fetching and checking out PR #${prNumber}...`)
+        UI.println(t("pr.fetching", { number: String(prNumber) }))
 
         // Use gh pr checkout with custom branch name
         const result = await $`gh pr checkout ${prNumber} --branch ${localBranchName} --force`.nothrow()
 
         if (result.exitCode !== 0) {
-          UI.error(`Failed to checkout PR #${prNumber}. Make sure you have gh CLI installed and authenticated.`)
+          UI.error(t("pr.checkout_failed", { number: String(prNumber) }))
           process.exit(1)
         }
 
@@ -55,7 +56,7 @@ export const PrCommand = cmd({
               const remotes = (await $`git remote`.nothrow().text()).trim()
               if (!remotes.split("\n").includes(remoteName)) {
                 await $`git remote add ${remoteName} https://github.com/${forkOwner}/${forkName}.git`.nothrow()
-                UI.println(`Added fork remote: ${remoteName}`)
+                UI.println(t("pr.added_fork_remote", { name: remoteName }))
               }
 
               // Set upstream to the fork so pushes go there
@@ -68,8 +69,8 @@ export const PrCommand = cmd({
               const sessionMatch = prInfo.body.match(/https:\/\/opncd\.ai\/s\/([a-zA-Z0-9_-]+)/)
               if (sessionMatch) {
                 const sessionUrl = sessionMatch[0]
-                UI.println(`Found opencode session: ${sessionUrl}`)
-                UI.println(`Importing session...`)
+                UI.println(t("pr.found_session", { url: sessionUrl }))
+                UI.println(t("pr.importing_session"))
 
                 const importResult = await $`opencode import ${sessionUrl}`.nothrow()
                 if (importResult.exitCode === 0) {
@@ -78,7 +79,7 @@ export const PrCommand = cmd({
                   const sessionIdMatch = importOutput.match(/Imported session: ([a-zA-Z0-9_-]+)/)
                   if (sessionIdMatch) {
                     sessionId = sessionIdMatch[1]
-                    UI.println(`Session imported: ${sessionId}`)
+                    UI.println(t("pr.session_imported", { id: sessionId }))
                   }
                 }
               }
@@ -86,9 +87,9 @@ export const PrCommand = cmd({
           }
         }
 
-        UI.println(`Successfully checked out PR #${prNumber} as branch '${localBranchName}'`)
+        UI.println(t("pr.checkout_success", { number: String(prNumber), branch: localBranchName }))
         UI.println()
-        UI.println("Starting opencode...")
+        UI.println(t("pr.starting"))
         UI.println()
 
         // Launch opencode TUI with session ID if available

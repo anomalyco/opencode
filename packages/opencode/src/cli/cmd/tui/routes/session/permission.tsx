@@ -12,6 +12,7 @@ import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Locale } from "@/util/locale"
+import { t } from "@/i18n"
 
 type PermissionStage = "permission" | "always" | "reject"
 
@@ -51,7 +52,9 @@ function EditBody(props: { request: PermissionRequest }) {
     <box flexDirection="column" gap={1}>
       <box flexDirection="row" gap={1} paddingLeft={1}>
         <text fg={theme.textMuted}>{"→"}</text>
-        <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
+        <text fg={theme.textMuted}>
+          {t("permission.edit")} {normalizePath(filepath())}
+        </text>
       </box>
       <Show when={diff()}>
         <box maxHeight={Math.floor(dimensions().height / 4)} overflow="scroll">
@@ -128,15 +131,15 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
     <Switch>
       <Match when={store.stage === "always"}>
         <Prompt
-          title="Always allow"
+          title={t("permission.always_allow")}
           body={
             <Switch>
               <Match when={props.request.always.length === 1 && props.request.always[0] === "*"}>
-                <TextBody title={"This will allow " + props.request.permission + " until OpenCode is restarted."} />
+                <TextBody title={t("permission.always_allow_desc", { permission: props.request.permission })} />
               </Match>
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.textMuted}>This will allow the following patterns until OpenCode is restarted</text>
+                  <text fg={theme.textMuted}>{t("permission.always_allow_patterns")}</text>
                   <box>
                     <For each={props.request.always}>
                       {(pattern) => (
@@ -151,7 +154,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               </Match>
             </Switch>
           }
-          options={{ confirm: "Confirm", cancel: "Cancel" }}
+          options={{ confirm: t("dialog.confirm"), cancel: t("dialog.cancel") }}
           escapeKey="cancel"
           onSelect={(option) => {
             setStore("stage", "permission")
@@ -177,23 +180,23 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
       </Match>
       <Match when={store.stage === "permission"}>
         <Prompt
-          title="Permission required"
+          title={t("permission.title")}
           body={
             <Switch>
               <Match when={props.request.permission === "edit"}>
                 <EditBody request={props.request} />
               </Match>
               <Match when={props.request.permission === "read"}>
-                <TextBody icon="→" title={`Read ` + normalizePath(input().filePath as string)} />
+                <TextBody icon="→" title={`${t("permission.read")} ` + normalizePath(input().filePath as string)} />
               </Match>
               <Match when={props.request.permission === "glob"}>
-                <TextBody icon="✱" title={`Glob "` + (input().pattern ?? "") + `"`} />
+                <TextBody icon="✱" title={`${t("permission.glob")} "` + (input().pattern ?? "") + `"`} />
               </Match>
               <Match when={props.request.permission === "grep"}>
-                <TextBody icon="✱" title={`Grep "` + (input().pattern ?? "") + `"`} />
+                <TextBody icon="✱" title={`${t("permission.grep")} "` + (input().pattern ?? "") + `"`} />
               </Match>
               <Match when={props.request.permission === "list"}>
-                <TextBody icon="→" title={`List ` + normalizePath(input().path as string)} />
+                <TextBody icon="→" title={`${t("permission.list")} ` + normalizePath(input().path as string)} />
               </Match>
               <Match when={props.request.permission === "bash"}>
                 <TextBody
@@ -205,31 +208,38 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               <Match when={props.request.permission === "task"}>
                 <TextBody
                   icon="#"
-                  title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task`}
+                  title={`${Locale.titlecase((input().subagent_type as string) ?? t("permission.unknown"))} ${t("permission.task")}`}
                   description={"◉ " + input().description}
                 />
               </Match>
               <Match when={props.request.permission === "webfetch"}>
-                <TextBody icon="%" title={`WebFetch ` + (input().url ?? "")} />
+                <TextBody icon="%" title={`${t("permission.webfetch")} ` + (input().url ?? "")} />
               </Match>
               <Match when={props.request.permission === "websearch"}>
-                <TextBody icon="◈" title={`Exa Web Search "` + (input().query ?? "") + `"`} />
+                <TextBody icon="◈" title={`${t("permission.websearch")} "` + (input().query ?? "") + `"`} />
               </Match>
               <Match when={props.request.permission === "codesearch"}>
-                <TextBody icon="◇" title={`Exa Code Search "` + (input().query ?? "") + `"`} />
+                <TextBody icon="◇" title={`${t("permission.codesearch")} "` + (input().query ?? "") + `"`} />
               </Match>
               <Match when={props.request.permission === "external_directory"}>
-                <TextBody icon="←" title={`Access external directory ` + normalizePath(input().path as string)} />
+                <TextBody
+                  icon="←"
+                  title={`${t("permission.external_directory")} ` + normalizePath(input().path as string)}
+                />
               </Match>
               <Match when={props.request.permission === "doom_loop"}>
-                <TextBody icon="⟳" title="Continue after repeated failures" />
+                <TextBody icon="⟳" title={t("permission.doom_loop")} />
               </Match>
               <Match when={true}>
-                <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
+                <TextBody icon="⚙" title={`${t("permission.call_tool")} ` + props.request.permission} />
               </Match>
             </Switch>
           }
-          options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+          options={{
+            once: t("permission.allow_once"),
+            always: t("permission.allow_always"),
+            reject: t("permission.reject"),
+          }}
           escapeKey="reject"
           onSelect={(option) => {
             if (option === "always") {
@@ -285,10 +295,10 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
           <text fg={theme.error}>{"△"}</text>
-          <text fg={theme.text}>Reject permission</text>
+          <text fg={theme.text}>{t("permission.reject_title")}</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.textMuted}>Tell OpenCode what to do differently</text>
+          <text fg={theme.textMuted}>{t("permission.reject_desc")}</text>
         </box>
       </box>
       <box
@@ -311,10 +321,10 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
         />
         <box flexDirection="row" gap={2} flexShrink={0} marginLeft={1}>
           <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+            {t("misc.enter")} <span style={{ fg: theme.textMuted }}>{t("misc.confirm")}</span>
           </text>
           <text fg={theme.text}>
-            esc <span style={{ fg: theme.textMuted }}>cancel</span>
+            {t("dialog.esc")} <span style={{ fg: theme.textMuted }}>{t("dialog.cancel")}</span>
           </text>
         </box>
       </box>
@@ -404,10 +414,10 @@ function Prompt<const T extends Record<string, string>>(props: {
         </box>
         <box flexDirection="row" gap={2}>
           <text fg={theme.text}>
-            {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
+            {"⇆"} <span style={{ fg: theme.textMuted }}>{t("permission.select")}</span>
           </text>
           <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>confirm</span>
+            {t("misc.enter")} <span style={{ fg: theme.textMuted }}>{t("misc.confirm")}</span>
           </text>
         </box>
       </box>

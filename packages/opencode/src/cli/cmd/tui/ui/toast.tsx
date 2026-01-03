@@ -6,6 +6,7 @@ import { SplitBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import z from "zod"
 import { TuiEvent } from "../event"
+import { t } from "@/i18n"
 
 export type ToastOptions = z.infer<typeof TuiEvent.ToastShow.properties>
 
@@ -72,7 +73,7 @@ function init() {
         })
       toast.show({
         variant: "error",
-        message: "An unknown error has occurred",
+        message: t("toast.unknown_error"),
       })
     },
     get currentToast(): ToastOptions | null {

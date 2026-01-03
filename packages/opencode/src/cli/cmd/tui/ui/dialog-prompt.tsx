@@ -3,6 +3,7 @@ import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { onMount, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { t } from "@/i18n"
 
 export type DialogPromptProps = {
   title: string
@@ -50,7 +51,7 @@ export function DialogPrompt(props: DialogPromptProps) {
           keyBindings={[{ name: "return", action: "submit" }]}
           ref={(val: TextareaRenderable) => (textarea = val)}
           initialValue={props.value}
-          placeholder={props.placeholder ?? "Enter text"}
+          placeholder={props.placeholder ?? t("placeholder.enter_text")}
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}

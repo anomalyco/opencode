@@ -10,6 +10,7 @@ import matter from "gray-matter"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
 import type { Argv } from "yargs"
+import { t } from "../../i18n"
 
 type AgentMode = "all" | "primary" | "subagent"
 
@@ -67,7 +68,7 @@ const AgentCreateCommand = cmd({
 
         if (!isFullyNonInteractive) {
           UI.empty()
-          prompts.intro("Create agent")
+          prompts.intro(t("agent.create_title"))
         }
 
         const project = Instance.project
@@ -80,15 +81,15 @@ const AgentCreateCommand = cmd({
           let scope: "global" | "project" = "global"
           if (project.vcs === "git") {
             const scopeResult = await prompts.select({
-              message: "Location",
+              message: t("agent.location"),
               options: [
                 {
-                  label: "Current project",
+                  label: t("agent.current_project"),
                   value: "project" as const,
                   hint: Instance.worktree,
                 },
                 {
-                  label: "Global",
+                  label: t("agent.global"),
                   value: "global" as const,
                   hint: Global.Path.config,
                 },
@@ -109,9 +110,9 @@ const AgentCreateCommand = cmd({
           description = cliDescription
         } else {
           const query = await prompts.text({
-            message: "Description",
-            placeholder: "What should this agent do?",
-            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+            message: t("agent.description"),
+            placeholder: t("agent.description_placeholder"),
+            validate: (x) => (x && x.length > 0 ? undefined : t("auth.required")),
           })
           if (prompts.isCancel(query)) throw new UI.CancelledError()
           description = query
@@ -119,22 +120,22 @@ const AgentCreateCommand = cmd({
 
         // Generate agent
         const spinner = prompts.spinner()
-        spinner.start("Generating agent configuration...")
+        spinner.start(t("agent.generating"))
         const model = args.model ? Provider.parseModel(args.model) : undefined
         const generated = await Agent.generate({ description, model }).catch((error) => {
-          spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
+          spinner.stop(t("agent.llm_failed", { error: error.message }), 1)
           if (isFullyNonInteractive) process.exit(1)
           throw new UI.CancelledError()
         })
-        spinner.stop(`Agent ${generated.identifier} generated`)
+        spinner.stop(t("agent.generated", { name: generated.identifier }))
 
         // Select tools
         let selectedTools: string[]
         if (cliTools !== undefined) {
-          selectedTools = cliTools ? cliTools.split(",").map((t) => t.trim()) : AVAILABLE_TOOLS
+          selectedTools = cliTools ? cliTools.split(",").map((x) => x.trim()) : AVAILABLE_TOOLS
         } else {
           const result = await prompts.multiselect({
-            message: "Select tools to enable",
+            message: t("agent.select_tools"),
             options: AVAILABLE_TOOLS.map((tool) => ({
               label: tool,
               value: tool,
@@ -151,22 +152,22 @@ const AgentCreateCommand = cmd({
           mode = cliMode
         } else {
           const modeResult = await prompts.select({
-            message: "Agent mode",
+            message: t("agent.mode"),
             options: [
               {
-                label: "All",
+                label: t("agent.mode_all"),
                 value: "all" as const,
-                hint: "Can function in both primary and subagent roles",
+                hint: t("agent.mode_all_hint"),
               },
               {
-                label: "Primary",
+                label: t("agent.mode_primary"),
                 value: "primary" as const,
-                hint: "Acts as a primary/main agent",
+                hint: t("agent.mode_primary_hint"),
               },
               {
-                label: "Subagent",
+                label: t("agent.mode_subagent"),
                 value: "subagent" as const,
-                hint: "Can be used as a subagent by other agents",
+                hint: t("agent.mode_subagent_hint"),
               },
             ],
             initialValue: "all" as const,
@@ -205,10 +206,10 @@ const AgentCreateCommand = cmd({
         const file = Bun.file(filePath)
         if (await file.exists()) {
           if (isFullyNonInteractive) {
-            console.error(`Error: Agent file already exists: ${filePath}`)
+            console.error(`Error: ${t("agent.file_exists", { path: filePath })}`)
             process.exit(1)
           }
-          prompts.log.error(`Agent file already exists: ${filePath}`)
+          prompts.log.error(t("agent.file_exists", { path: filePath }))
           throw new UI.CancelledError()
         }
 
@@ -217,8 +218,8 @@ const AgentCreateCommand = cmd({
         if (isFullyNonInteractive) {
           console.log(filePath)
         } else {
-          prompts.log.success(`Agent created: ${filePath}`)
-          prompts.outro("Done")
+          prompts.log.success(t("agent.created", { path: filePath }))
+          prompts.outro(t("upgrade.done"))
         }
       },
     })

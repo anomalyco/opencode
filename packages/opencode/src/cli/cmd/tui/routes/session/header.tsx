@@ -7,6 +7,7 @@ import { SplitBorder, EmptyBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useDirectory } from "../../context/directory"
 import { useKeybind } from "../../context/keybind"
+import { t } from "@/i18n"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -79,16 +80,17 @@ export function Header() {
           <Match when={session()?.parentID}>
             <box flexDirection="row" gap={2}>
               <text fg={theme.text}>
-                <b>Subagent session</b>
+                <b>{t("ui.subagent_session")}</b>
               </text>
               <text fg={theme.text}>
-                Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
+                {t("session.parent")} <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
               </text>
               <text fg={theme.text}>
-                Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
+                {t("session.prev")}{" "}
+                <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
               </text>
               <text fg={theme.text}>
-                Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
+                {t("session.next")} <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
               </text>
               <box flexGrow={1} flexShrink={1} />
               <ContextInfo context={context} cost={cost} />

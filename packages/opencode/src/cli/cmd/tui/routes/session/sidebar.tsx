@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { t } from "@/i18n"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -90,7 +91,7 @@ export function Sidebar(props: { sessionID: string }) {
             </box>
             <box>
               <text fg={theme.text}>
-                <b>Context</b>
+                <b>{t("ui.section_context")}</b>
               </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
@@ -107,12 +108,15 @@ export function Sidebar(props: { sessionID: string }) {
                     <text fg={theme.text}>{expanded.mcp ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>MCP</b>
+                    <b>{t("ui.section_mcp")}</b>
                     <Show when={!expanded.mcp}>
                       <span style={{ fg: theme.textMuted }}>
                         {" "}
-                        ({connectedMcpCount()} active
-                        {errorMcpCount() > 0 ? `, ${errorMcpCount()} error${errorMcpCount() > 1 ? "s" : ""}` : ""})
+                        ({connectedMcpCount()} {t("ui.mcp_active")}
+                        {errorMcpCount() > 0
+                          ? `, ${errorMcpCount()} ${errorMcpCount() > 1 ? t("ui.mcp_errors") : t("ui.mcp_error")}`
+                          : ""}
+                        )
                       </span>
                     </Show>
                   </text>
@@ -141,12 +145,12 @@ export function Sidebar(props: { sessionID: string }) {
                           {key}{" "}
                           <span style={{ fg: theme.textMuted }}>
                             <Switch fallback={item.status}>
-                              <Match when={item.status === "connected"}>Connected</Match>
+                              <Match when={item.status === "connected"}>{t("ui.connected")}</Match>
                               <Match when={item.status === "failed" && item}>{(val) => <i>{val().error}</i>}</Match>
-                              <Match when={item.status === "disabled"}>Disabled</Match>
-                              <Match when={(item.status as string) === "needs_auth"}>Needs auth</Match>
+                              <Match when={item.status === "disabled"}>{t("ui.disabled")}</Match>
+                              <Match when={(item.status as string) === "needs_auth"}>{t("ui.needs_auth")}</Match>
                               <Match when={(item.status as string) === "needs_client_registration"}>
-                                Needs client ID
+                                {t("ui.needs_client_id")}
                               </Match>
                             </Switch>
                           </span>
@@ -167,15 +171,13 @@ export function Sidebar(props: { sessionID: string }) {
                   <text fg={theme.text}>{expanded.lsp ? "▼" : "▶"}</text>
                 </Show>
                 <text fg={theme.text}>
-                  <b>LSP</b>
+                  <b>{t("ui.section_lsp")}</b>
                 </text>
               </box>
               <Show when={sync.data.lsp.length <= 2 || expanded.lsp}>
                 <Show when={sync.data.lsp.length === 0}>
                   <text fg={theme.textMuted}>
-                    {sync.data.config.lsp === false
-                      ? "LSPs have been disabled in settings"
-                      : "LSPs will activate as files are read"}
+                    {sync.data.config.lsp === false ? t("ui.lsp_disabled") : t("ui.lsp_will_activate")}
                   </text>
                 </Show>
                 <For each={sync.data.lsp}>
@@ -211,7 +213,7 @@ export function Sidebar(props: { sessionID: string }) {
                     <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Todo</b>
+                    <b>{t("ui.section_todo")}</b>
                   </text>
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
@@ -230,7 +232,7 @@ export function Sidebar(props: { sessionID: string }) {
                     <text fg={theme.text}>{expanded.diff ? "▼" : "▶"}</text>
                   </Show>
                   <text fg={theme.text}>
-                    <b>Modified Files</b>
+                    <b>{t("ui.section_modified_files")}</b>
                   </text>
                 </box>
                 <Show when={diff().length <= 2 || expanded.diff}>
@@ -283,18 +285,16 @@ export function Sidebar(props: { sessionID: string }) {
               <box flexGrow={1} gap={1}>
                 <box flexDirection="row" justifyContent="space-between">
                   <text fg={theme.text}>
-                    <b>Getting started</b>
+                    <b>{t("ui.getting_started")}</b>
                   </text>
                   <text fg={theme.textMuted} onMouseDown={() => kv.set("dismissed_getting_started", true)}>
                     ✕
                   </text>
                 </box>
-                <text fg={theme.textMuted}>OpenCode includes free models so you can start immediately.</text>
-                <text fg={theme.textMuted}>
-                  Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
-                </text>
+                <text fg={theme.textMuted}>{t("ui.getting_started_desc")}</text>
+                <text fg={theme.textMuted}>{t("ui.getting_started_providers")}</text>
                 <box flexDirection="row" gap={1} justifyContent="space-between">
-                  <text fg={theme.text}>Connect provider</text>
+                  <text fg={theme.text}>{t("ui.connect_provider")}</text>
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>

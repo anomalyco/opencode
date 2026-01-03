@@ -10,6 +10,7 @@ import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
+import { t } from "@/i18n"
 import type { PromptInfo } from "./history"
 
 function removeLineRange(input: string) {
@@ -274,56 +275,56 @@ export function Autocomplete(props: {
       results.push(
         {
           display: "/undo",
-          description: "undo the last message",
+          description: t("slash.undo"),
           onSelect: () => {
             command.trigger("session.undo")
           },
         },
         {
           display: "/redo",
-          description: "redo the last message",
+          description: t("slash.redo"),
           onSelect: () => command.trigger("session.redo"),
         },
         {
           display: "/compact",
           aliases: ["/summarize"],
-          description: "compact the session",
+          description: t("slash.compact"),
           onSelect: () => command.trigger("session.compact"),
         },
         {
           display: "/unshare",
           disabled: !s.share,
-          description: "unshare a session",
+          description: t("slash.unshare"),
           onSelect: () => command.trigger("session.unshare"),
         },
         {
           display: "/rename",
-          description: "rename session",
+          description: t("slash.rename"),
           onSelect: () => command.trigger("session.rename"),
         },
         {
           display: "/copy",
-          description: "copy session transcript to clipboard",
+          description: t("slash.copy"),
           onSelect: () => command.trigger("session.copy"),
         },
         {
           display: "/export",
-          description: "export session transcript to file",
+          description: t("slash.export"),
           onSelect: () => command.trigger("session.export"),
         },
         {
           display: "/timeline",
-          description: "jump to message",
+          description: t("slash.timeline"),
           onSelect: () => command.trigger("session.timeline"),
         },
         {
           display: "/fork",
-          description: "fork from message",
+          description: t("slash.fork"),
           onSelect: () => command.trigger("session.fork"),
         },
         {
           display: "/thinking",
-          description: "toggle thinking visibility",
+          description: t("slash.thinking"),
           onSelect: () => command.trigger("session.toggle.thinking"),
         },
       )
@@ -331,7 +332,7 @@ export function Autocomplete(props: {
         results.push({
           display: "/share",
           disabled: !!s.share?.url,
-          description: "share a session",
+          description: t("slash.share"),
           onSelect: () => command.trigger("session.share"),
         })
       }
@@ -341,64 +342,64 @@ export function Autocomplete(props: {
       {
         display: "/new",
         aliases: ["/clear"],
-        description: "create a new session",
+        description: t("slash.new"),
         onSelect: () => command.trigger("session.new"),
       },
       {
         display: "/models",
-        description: "list models",
+        description: t("slash.models"),
         onSelect: () => command.trigger("model.list"),
       },
       {
         display: "/agents",
-        description: "list agents",
+        description: t("slash.agents"),
         onSelect: () => command.trigger("agent.list"),
       },
       {
         display: "/session",
         aliases: ["/resume", "/continue"],
-        description: "list sessions",
+        description: t("slash.sessions"),
         onSelect: () => command.trigger("session.list"),
       },
       {
         display: "/status",
-        description: "show status",
+        description: t("slash.status"),
         onSelect: () => command.trigger("opencode.status"),
       },
       {
         display: "/mcp",
-        description: "toggle MCPs",
+        description: t("slash.mcp"),
         onSelect: () => command.trigger("mcp.list"),
       },
       {
         display: "/theme",
-        description: "toggle theme",
+        description: t("slash.theme"),
         onSelect: () => command.trigger("theme.switch"),
       },
       {
         display: "/editor",
-        description: "open editor",
+        description: t("slash.editor"),
         onSelect: () => command.trigger("prompt.editor", "prompt"),
       },
       {
         display: "/connect",
-        description: "connect to a provider",
+        description: t("slash.connect"),
         onSelect: () => command.trigger("provider.connect"),
       },
       {
         display: "/help",
-        description: "show help",
+        description: t("slash.help"),
         onSelect: () => command.trigger("help.show"),
       },
       {
         display: "/commands",
-        description: "show all commands",
+        description: t("slash.commands"),
         onSelect: () => command.show(),
       },
       {
         display: "/exit",
         aliases: ["/quit", "/q"],
-        description: "exit the app",
+        description: t("slash.exit"),
         onSelect: () => command.trigger("app.exit"),
       },
     )
@@ -592,7 +593,7 @@ export function Autocomplete(props: {
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text fg={theme.textMuted}>No matching items</text>
+              <text fg={theme.textMuted}>{t("ui.no_matching_items")}</text>
             </box>
           }
         >

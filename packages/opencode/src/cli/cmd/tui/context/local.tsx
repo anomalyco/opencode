@@ -12,6 +12,7 @@ import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
+import { t } from "@/i18n"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -202,8 +203,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const value = currentModel()
           if (!value) {
             return {
-              provider: "Connect a provider",
-              model: "No provider selected",
+              provider: t("model.connect_provider"),
+              model: t("model.no_provider_selected"),
               reasoning: false,
             }
           }
@@ -233,7 +234,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!favorites.length) {
             toast.show({
               variant: "info",
-              message: "Add a favorite model to use this shortcut",
+              message: t("toast.add_favorite_model"),
               duration: 3000,
             })
             return

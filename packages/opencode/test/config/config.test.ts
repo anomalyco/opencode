@@ -4,7 +4,6 @@ import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
-import { pathToFileURL } from "url"
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -398,8 +397,7 @@ test("resolves scoped npm plugins in config", async () => {
       const config = await Config.get()
       const pluginEntries = config.plugin ?? []
 
-      const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = import.meta.resolve("@scope/plugin", baseUrl)
+      const expected = Bun.resolveSync("@scope/plugin", tmp.path)
 
       expect(pluginEntries.includes(expected)).toBe(true)
 

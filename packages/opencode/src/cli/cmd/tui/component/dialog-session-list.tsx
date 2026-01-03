@@ -10,6 +10,7 @@ import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
 import "opentui-spinner/solid"
+import { t } from "@/i18n"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -36,13 +37,13 @@ export function DialogSessionList() {
         const date = new Date(x.time.updated)
         let category = date.toDateString()
         if (category === today) {
-          category = "Today"
+          category = t("time.today")
         }
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
         return {
-          title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
+          title: isDeleting ? t("dialog.press_again_to_confirm", deleteKeybind) : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
@@ -67,7 +68,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={t("session.list")}
       options={options()}
       current={currentSessionID()}
       onMove={() => {
@@ -83,7 +84,7 @@ export function DialogSessionList() {
       keybind={[
         {
           keybind: Keybind.parse(deleteKeybind)[0],
-          title: "delete",
+          title: t("session.delete"),
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
               sdk.client.session.delete({
@@ -97,7 +98,7 @@ export function DialogSessionList() {
         },
         {
           keybind: Keybind.parse("ctrl+r")[0],
-          title: "rename",
+          title: t("session.rename"),
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },

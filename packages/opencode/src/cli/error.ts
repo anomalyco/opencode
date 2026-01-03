@@ -2,38 +2,45 @@ import { ConfigMarkdown } from "@/config/markdown"
 import { Config } from "../config/config"
 import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
+import { t } from "../i18n"
 import { UI } from "./ui"
 
 export function FormatError(input: unknown) {
-  if (MCP.Failed.isInstance(input))
-    return `MCP server "${input.data.name}" failed. Note, opencode does not support MCP authentication yet.`
+  if (MCP.Failed.isInstance(input)) return t("error.mcp_server_failed", { name: input.data.name })
   if (Provider.ModelNotFoundError.isInstance(input)) {
     const { providerID, modelID, suggestions } = input.data
     return [
-      `Model not found: ${providerID}/${modelID}`,
-      ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
-      `Try: \`opencode models\` to list available models`,
-      `Or check your config (opencode.json) provider/model names`,
+      t("error.model_not_found", { provider: providerID, model: modelID }),
+      ...(Array.isArray(suggestions) && suggestions.length
+        ? [t("error.model_did_you_mean", { suggestions: suggestions.join(", ") })]
+        : []),
+      t("error.model_try_list"),
+      t("error.model_check_config"),
     ].join("\n")
   }
   if (Provider.InitError.isInstance(input)) {
-    return `Failed to initialize provider "${input.data.providerID}". Check credentials and configuration.`
+    return t("error.provider_init_failed", { provider: input.data.providerID })
   }
   if (Config.JsonError.isInstance(input)) {
     return (
-      `Config file at ${input.data.path} is not valid JSON(C)` + (input.data.message ? `: ${input.data.message}` : "")
+      t("error.config_invalid_json", { path: input.data.path }) + (input.data.message ? `: ${input.data.message}` : "")
     )
   }
   if (Config.ConfigDirectoryTypoError.isInstance(input)) {
-    return `Directory "${input.data.dir}" in ${input.data.path} is not valid. Rename the directory to "${input.data.suggestion}" or remove it. This is a common typo.`
+    return t("error.config_directory_typo", {
+      dir: input.data.dir,
+      path: input.data.path,
+      suggestion: input.data.suggestion,
+    })
   }
   if (ConfigMarkdown.FrontmatterError.isInstance(input)) {
-    return `Failed to parse frontmatter in ${input.data.path}:\n${input.data.message}`
+    return t("error.frontmatter_parse_failed", { path: input.data.path }) + `\n${input.data.message}`
   }
   if (Config.InvalidError.isInstance(input))
     return [
-      `Configuration is invalid${input.data.path && input.data.path !== "config" ? ` at ${input.data.path}` : ""}` +
-        (input.data.message ? `: ${input.data.message}` : ""),
+      (input.data.path && input.data.path !== "config"
+        ? t("error.config_invalid_at", { path: input.data.path })
+        : t("error.config_invalid")) + (input.data.message ? `: ${input.data.message}` : ""),
       ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
     ].join("\n")
 

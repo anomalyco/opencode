@@ -14,6 +14,7 @@ import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
+import { DialogLanguage } from "@tui/component/dialog-language"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
@@ -35,6 +36,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { t, setLanguage, type SupportedLocale } from "@/i18n"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -189,7 +191,7 @@ function App() {
     // @ts-expect-error writeOut is not in type definitions
     renderer.writeOut(finalOsc52)
     await Clipboard.copy(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then(() => toast.show({ message: t("toast.copied_to_clipboard"), variant: "info" }))
       .catch(toast.error)
     renderer.clearSelection()
   }
@@ -197,6 +199,11 @@ function App() {
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
+  })
+
+  createEffect(() => {
+    const lang = (sync.data.config as { language?: SupportedLocale }).language
+    if (lang) setLanguage(lang)
   })
 
   // Update terminal window title based on current route and session
@@ -271,24 +278,23 @@ function App() {
   const connected = useConnected()
   command.register(() => [
     {
-      title: "Switch session",
+      title: t("command.switch_session"),
       value: "session.list",
       keybind: "session_list",
-      category: "Session",
+      category: t("category.session"),
       suggested: sync.data.session.length > 0,
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
     },
     {
-      title: "New session",
+      title: t("command.new_session"),
       suggested: route.data.type === "session",
       value: "session.new",
       keybind: "session_new",
-      category: "Session",
+      category: t("category.session"),
       onSelect: () => {
         const current = promptRef.current
-        // Don't require focus - if there's any text, preserve it
         const currentPrompt = current?.current?.input ? current.current : undefined
         route.navigate({
           type: "home",
@@ -298,169 +304,177 @@ function App() {
       },
     },
     {
-      title: "Switch model",
+      title: t("command.switch_model"),
       value: "model.list",
       keybind: "model_list",
       suggested: true,
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
       },
     },
     {
-      title: "Model cycle",
+      title: t("command.model_cycle"),
       disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         local.model.cycle(1)
       },
     },
     {
-      title: "Model cycle reverse",
+      title: t("command.model_cycle_reverse"),
       disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         local.model.cycle(-1)
       },
     },
     {
-      title: "Favorite cycle",
+      title: t("command.favorite_cycle"),
       value: "model.cycle_favorite",
       keybind: "model_cycle_favorite",
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         local.model.cycleFavorite(1)
       },
     },
     {
-      title: "Favorite cycle reverse",
+      title: t("command.favorite_cycle_reverse"),
       value: "model.cycle_favorite_reverse",
       keybind: "model_cycle_favorite_reverse",
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         local.model.cycleFavorite(-1)
       },
     },
     {
-      title: "Switch agent",
+      title: t("command.switch_agent"),
       value: "agent.list",
       keybind: "agent_list",
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
       },
     },
     {
-      title: "Toggle MCPs",
+      title: t("command.toggle_mcps"),
       value: "mcp.list",
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         dialog.replace(() => <DialogMcp />)
       },
     },
     {
-      title: "Agent cycle",
+      title: t("command.agent_cycle"),
       value: "agent.cycle",
       keybind: "agent_cycle",
-      category: "Agent",
+      category: t("category.agent"),
       disabled: true,
       onSelect: () => {
         local.agent.move(1)
       },
     },
     {
-      title: "Variant cycle",
+      title: t("command.variant_cycle"),
       value: "variant.cycle",
       keybind: "variant_cycle",
-      category: "Agent",
+      category: t("category.agent"),
       onSelect: () => {
         local.model.variant.cycle()
       },
     },
     {
-      title: "Agent cycle reverse",
+      title: t("command.agent_cycle_reverse"),
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
-      category: "Agent",
+      category: t("category.agent"),
       disabled: true,
       onSelect: () => {
         local.agent.move(-1)
       },
     },
     {
-      title: "Connect provider",
+      title: t("command.connect_provider"),
       value: "provider.connect",
       suggested: !connected(),
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
       },
-      category: "Provider",
+      category: t("category.provider"),
     },
     {
-      title: "View status",
+      title: t("command.view_status"),
       keybind: "status_view",
       value: "opencode.status",
       onSelect: () => {
         dialog.replace(() => <DialogStatus />)
       },
-      category: "System",
+      category: t("category.system"),
     },
     {
-      title: "Switch theme",
+      title: t("command.switch_theme"),
       value: "theme.switch",
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
-      category: "System",
+      category: t("category.system"),
     },
     {
-      title: "Toggle appearance",
+      title: t("command.switch_language"),
+      value: "language.switch",
+      onSelect: () => {
+        dialog.replace(() => <DialogLanguage />)
+      },
+      category: t("category.system"),
+    },
+    {
+      title: t("command.toggle_appearance"),
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
         dialog.clear()
       },
-      category: "System",
+      category: t("category.system"),
     },
     {
-      title: "Help",
+      title: t("command.help"),
       value: "help.show",
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
       },
-      category: "System",
+      category: t("category.system"),
     },
     {
-      title: "Open docs",
+      title: t("command.open_docs"),
       value: "docs.open",
       onSelect: () => {
         open("https://opencode.ai/docs").catch(() => {})
         dialog.clear()
       },
-      category: "System",
+      category: t("category.system"),
     },
     {
-      title: "Open WebUI",
+      title: t("command.open_webui"),
       value: "webui.open",
       onSelect: () => {
         open(sdk.url).catch(() => {})
         dialog.clear()
       },
-      category: "System",
+      category: t("category.system"),
     },
     {
-      title: "Exit the app",
+      title: t("command.exit_app"),
       value: "app.exit",
       onSelect: () => exit(),
-      category: "System",
+      category: t("category.system"),
     },
     {
-      title: "Toggle debug panel",
-      category: "System",
+      title: t("command.toggle_debug"),
+      category: t("category.system"),
       value: "app.debug",
       onSelect: (dialog) => {
         renderer.toggleDebugOverlay()
@@ -468,8 +482,8 @@ function App() {
       },
     },
     {
-      title: "Toggle console",
-      category: "System",
+      title: t("command.toggle_console"),
+      category: t("category.system"),
       value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
@@ -477,8 +491,8 @@ function App() {
       },
     },
     {
-      title: "Write heap snapshot",
-      category: "System",
+      title: t("command.heap_snapshot"),
+      category: t("category.system"),
       value: "app.heap_snapshot",
       onSelect: (dialog) => {
         const path = writeHeapSnapshot()
@@ -491,25 +505,24 @@ function App() {
       },
     },
     {
-      title: "Suspend terminal",
+      title: t("command.suspend_terminal"),
       value: "terminal.suspend",
       keybind: "terminal_suspend",
-      category: "System",
+      category: t("category.system"),
       onSelect: () => {
         process.once("SIGCONT", () => {
           renderer.resume()
         })
 
         renderer.suspend()
-        // pid=0 means send the signal to all processes in the process group
         process.kill(0, "SIGTSTP")
       },
     },
     {
-      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      title: terminalTitleEnabled() ? t("command.disable_terminal_title") : t("command.enable_terminal_title"),
       value: "terminal.title.toggle",
       keybind: "terminal_title_toggle",
-      category: "System",
+      category: t("category.system"),
       onSelect: (dialog) => {
         setTerminalTitleEnabled((prev) => {
           const next = !prev
@@ -527,11 +540,9 @@ function App() {
     if (!currentModel) return
     if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
       untrack(() => {
-        DialogAlert.show(
-          dialog,
-          "Warning",
-          "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out OpenCode Zen\nhttps://opencode.ai/zen",
-        ).then(() => kv.set("openrouter_warning", true))
+        DialogAlert.show(dialog, t("warning.title"), t("warning.openrouter")).then(() =>
+          kv.set("openrouter_warning", true),
+        )
       })
     }
   })
@@ -561,7 +572,7 @@ function App() {
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: t("toast.session_deleted"),
       })
     }
   })
@@ -569,7 +580,7 @@ function App() {
   sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
     const message = (() => {
-      if (!error) return "An error occurred"
+      if (!error) return t("error.occurred")
 
       if (typeof error === "object") {
         const data = error.data
@@ -590,8 +601,8 @@ function App() {
   sdk.event.on(Installation.Event.Updated.type, (evt) => {
     toast.show({
       variant: "success",
-      title: "Update Complete",
-      message: `OpenCode updated to v${evt.properties.version}`,
+      title: t("update.complete"),
+      message: t("update.message_complete", evt.properties.version),
       duration: 5000,
     })
   })
@@ -599,8 +610,8 @@ function App() {
   sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
-      title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      title: t("update.available"),
+      message: t("update.message_available", evt.properties.version),
       duration: 10000,
     })
   })
@@ -623,7 +634,7 @@ function App() {
           /* @ts-expect-error */
           renderer.writeOut(finalOsc52)
           await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+            .then(() => toast.show({ message: t("toast.copied_to_clipboard"), variant: "info" }))
             .catch(toast.error)
           renderer.clearSelection()
         }
@@ -693,18 +704,18 @@ function ErrorComponent(props: {
         </text>
         <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
           <text attributes={TextAttributes.BOLD} fg={colors.bg}>
-            Copy issue URL (exception info pre-filled)
+            {t("ui.copy_issue_url")}
           </text>
         </box>
-        {copied() && <text fg={colors.muted}>Successfully copied</text>}
+        {copied() && <text fg={colors.muted}>{t("ui.successfully_copied")}</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
-        <text fg={colors.text}>A fatal error occurred!</text>
+        <text fg={colors.text}>{t("ui.fatal_error")}</text>
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Reset TUI</text>
+          <text fg={colors.bg}>{t("ui.reset_tui")}</text>
         </box>
         <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Exit</text>
+          <text fg={colors.bg}>{t("ui.exit")}</text>
         </box>
       </box>
       <scrollbox height={Math.floor(term().height * 0.7)}>

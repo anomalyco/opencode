@@ -13,6 +13,7 @@ import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
+import { t } from "@/i18n"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -44,10 +45,10 @@ export function Home() {
 
   command.register(() => [
     {
-      title: tipsHidden() ? "Show tips" : "Hide tips",
+      title: tipsHidden() ? t("misc.show_tips") : t("misc.hide_tips"),
       value: "tips.toggle",
       keybind: "tips_toggle",
-      category: "System",
+      category: t("category.system"),
       onSelect: (dialog) => {
         kv.set("tips_hidden", !tipsHidden())
         dialog.clear()

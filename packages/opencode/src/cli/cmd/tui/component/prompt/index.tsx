@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t as tuiT, dim, fg } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -30,6 +30,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { t } from "@/i18n"
 
 export type PromptProps = {
   sessionID?: string
@@ -76,7 +77,7 @@ export function Prompt(props: PromptProps) {
   function promptModelWarning() {
     toast.show({
       variant: "warning",
-      message: "Connect a provider to send prompts",
+      message: t("prompt.connect_provider"),
       duration: 3000,
     })
     if (sync.data.provider.length === 0) {
@@ -153,9 +154,9 @@ export function Prompt(props: PromptProps) {
   command.register(() => {
     return [
       {
-        title: "Clear prompt",
+        title: t("prompt.clear"),
         value: "prompt.clear",
-        category: "Prompt",
+        category: t("prompt.category"),
         disabled: true,
         onSelect: (dialog) => {
           input.extmarks.clear()
@@ -164,11 +165,11 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Submit prompt",
+        title: t("prompt.submit"),
         value: "prompt.submit",
         disabled: true,
         keybind: "input_submit",
-        category: "Prompt",
+        category: t("prompt.category"),
         onSelect: (dialog) => {
           if (!input.focused) return
           submit()
@@ -176,11 +177,11 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Paste",
+        title: t("prompt.paste"),
         value: "prompt.paste",
         disabled: true,
         keybind: "input_paste",
-        category: "Prompt",
+        category: t("prompt.category"),
         onSelect: async () => {
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
@@ -193,11 +194,11 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Interrupt session",
+        title: t("prompt.interrupt"),
         value: "session.interrupt",
         keybind: "session_interrupt",
         disabled: status().type === "idle",
-        category: "Session",
+        category: t("session.category"),
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
@@ -224,8 +225,8 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Open editor",
-        category: "Session",
+        title: t("prompt.open_editor"),
+        category: t("session.category"),
         keybind: "editor_open",
         value: "prompt.editor",
         onSelect: async (dialog, trigger) => {
@@ -399,9 +400,9 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => [
     {
-      title: "Stash prompt",
+      title: t("prompt.stash"),
       value: "prompt.stash",
-      category: "Prompt",
+      category: t("prompt.category"),
       disabled: !store.prompt.input,
       onSelect: (dialog) => {
         if (!store.prompt.input) return
@@ -417,9 +418,9 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
-      title: "Stash pop",
+      title: t("prompt.stash_pop"),
       value: "prompt.stash.pop",
-      category: "Prompt",
+      category: t("prompt.category"),
       disabled: stash.list().length === 0,
       onSelect: (dialog) => {
         const entry = stash.pop()
@@ -433,9 +434,9 @@ export function Prompt(props: PromptProps) {
       },
     },
     {
-      title: "Stash list",
+      title: t("prompt.stash_list"),
       value: "prompt.stash.list",
-      category: "Prompt",
+      category: t("prompt.category"),
       disabled: stash.list().length === 0,
       onSelect: (dialog) => {
         dialog.replace(() => (
@@ -927,7 +928,7 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {store.mode === "shell" ? t("misc.shell") : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
@@ -1021,7 +1022,7 @@ export function Prompt(props: PromptProps) {
                       const r = retry()
                       if (!r) return
                       if (isTruncated()) {
-                        DialogAlert.show(dialog, "Retry Error", r.message)
+                        DialogAlert.show(dialog, t("error.retry"), r.message)
                       }
                     }
 
@@ -1047,7 +1048,7 @@ export function Prompt(props: PromptProps) {
               <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                 esc{" "}
                 <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                  {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                  {store.interrupt > 0 ? t("session.again_to_interrupt") : t("session.interrupt")}
                 </span>
               </text>
             </box>
@@ -1057,15 +1058,15 @@ export function Prompt(props: PromptProps) {
               <Switch>
                 <Match when={store.mode === "normal"}>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>{t("agent.switch")}</span>
                   </text>
                   <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
+                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>{t("command.list")}</span>
                   </text>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
-                    esc <span style={{ fg: theme.textMuted }}>exit shell mode</span>
+                    esc <span style={{ fg: theme.textMuted }}>{t("misc.exit_shell")}</span>
                   </text>
                 </Match>
               </Switch>

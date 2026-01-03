@@ -7,6 +7,7 @@ import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { t } from "@/i18n"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -58,7 +59,7 @@ export const TuiThreadCommand = cmd({
     try {
       process.chdir(cwd)
     } catch (e) {
-      UI.error("Failed to change directory to " + cwd)
+      UI.error(t("thread.failed_chdir", { path: cwd }))
       return
     }
 

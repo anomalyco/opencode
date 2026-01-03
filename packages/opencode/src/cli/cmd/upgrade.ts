@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
+import { t } from "../../i18n"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -23,45 +24,45 @@ export const UpgradeCommand = {
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
-    prompts.intro("Upgrade")
+    prompts.intro(t("upgrade.title"))
     const detectedMethod = await Installation.method()
     const method = (args.method as Installation.Method) ?? detectedMethod
     if (method === "unknown") {
-      prompts.log.error(`opencode is installed to ${process.execPath} and may be managed by a package manager`)
+      prompts.log.error(t("upgrade.installed_to", { path: process.execPath }))
       const install = await prompts.select({
-        message: "Install anyways?",
+        message: t("upgrade.install_anyway"),
         options: [
-          { label: "Yes", value: true },
-          { label: "No", value: false },
+          { label: t("upgrade.yes"), value: true },
+          { label: t("upgrade.no"), value: false },
         ],
         initialValue: false,
       })
       if (!install) {
-        prompts.outro("Done")
+        prompts.outro(t("upgrade.done"))
         return
       }
     }
-    prompts.log.info("Using method: " + method)
+    prompts.log.info(t("upgrade.using_method", { method }))
     const target = args.target ? args.target.replace(/^v/, "") : await Installation.latest()
 
     if (Installation.VERSION === target) {
-      prompts.log.warn(`opencode upgrade skipped: ${target} is already installed`)
-      prompts.outro("Done")
+      prompts.log.warn(t("upgrade.skipped", { version: target }))
+      prompts.outro(t("upgrade.done"))
       return
     }
 
-    prompts.log.info(`From ${Installation.VERSION} → ${target}`)
+    prompts.log.info(t("upgrade.from_to", { from: Installation.VERSION, to: target }))
     const spinner = prompts.spinner()
-    spinner.start("Upgrading...")
+    spinner.start(t("upgrade.upgrading"))
     const err = await Installation.upgrade(method, target).catch((err) => err)
     if (err) {
-      spinner.stop("Upgrade failed", 1)
+      spinner.stop(t("upgrade.failed"), 1)
       if (err instanceof Installation.UpgradeFailedError) prompts.log.error(err.data.stderr)
       else if (err instanceof Error) prompts.log.error(err.message)
-      prompts.outro("Done")
+      prompts.outro(t("upgrade.done"))
       return
     }
-    spinner.stop("Upgrade complete")
-    prompts.outro("Done")
+    spinner.stop(t("upgrade.complete"))
+    prompts.outro(t("upgrade.done"))
   },
 }

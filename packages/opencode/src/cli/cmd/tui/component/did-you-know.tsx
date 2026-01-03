@@ -1,8 +1,9 @@
 import { createMemo, createSignal, For } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { useKeybind } from "@tui/context/keybind"
-import { TIPS } from "./tips"
+import { getTips } from "./tips"
 import { EmptyBorder } from "./border"
+import { t } from "@/i18n"
 
 type TipPart = { text: string; highlight: boolean }
 
@@ -27,6 +28,7 @@ function parseTip(tip: string): TipPart[] {
   return parts
 }
 
+const TIPS = getTips()
 const [tipIndex, setTipIndex] = createSignal(Math.floor(Math.random() * TIPS.length))
 
 export function randomizeTip() {
@@ -34,25 +36,25 @@ export function randomizeTip() {
 }
 
 const BOX_WIDTH = 42
-const TITLE = " 🅘 Did you know? "
 
 export function DidYouKnow() {
   const { theme } = useTheme()
   const keybind = useKeybind()
 
   const tipParts = createMemo(() => parseTip(TIPS[tipIndex()]))
+  const title = createMemo(() => ` 🅘 ${t("misc.did_you_know")} `)
 
   const dashes = createMemo(() => {
     // ╭─ + title + ─...─ + ╮ = BOX_WIDTH
     // 1 + 1 + title.length + dashes + 1 = BOX_WIDTH
-    return Math.max(0, BOX_WIDTH - 2 - TITLE.length - 1)
+    return Math.max(0, BOX_WIDTH - 2 - title().length - 1)
   })
 
   return (
     <box position="absolute" bottom={3} right={2} width={BOX_WIDTH}>
       <text>
         <span style={{ fg: theme.border }}>╭─</span>
-        <span style={{ fg: theme.text }}>{TITLE}</span>
+        <span style={{ fg: theme.text }}>{title()}</span>
         <span style={{ fg: theme.border }}>{"─".repeat(dashes())}╮</span>
       </text>
       <box
@@ -77,7 +79,7 @@ export function DidYouKnow() {
       <box flexDirection="row" justifyContent="flex-end">
         <text>
           <span style={{ fg: theme.text }}>{keybind.print("tips_toggle")}</span>
-          <span style={{ fg: theme.textMuted }}> hide tips</span>
+          <span style={{ fg: theme.textMuted }}> {t("misc.hide_tips")}</span>
         </text>
       </box>
     </box>

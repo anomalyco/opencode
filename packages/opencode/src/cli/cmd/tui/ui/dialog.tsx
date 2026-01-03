@@ -5,6 +5,7 @@ import { Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
+import { t } from "@/i18n"
 
 export function Dialog(
   props: ParentProps<{
@@ -146,7 +147,7 @@ export function DialogProvider(props: ParentProps) {
             /* @ts-expect-error */
             renderer.writeOut(finalOsc52)
             await Clipboard.copy(text)
-              .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+              .then(() => toast.show({ message: t("toast.copied_to_clipboard"), variant: "info" }))
               .catch(toast.error)
             renderer.clearSelection()
           }

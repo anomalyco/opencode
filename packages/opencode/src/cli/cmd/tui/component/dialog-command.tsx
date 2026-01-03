@@ -12,6 +12,7 @@ import {
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
+import { t } from "@/i18n"
 
 type Context = ReturnType<typeof init>
 const ctx = createContext<Context>()
@@ -32,7 +33,7 @@ function init() {
     return [
       ...suggested.map((x) => ({
         ...x,
-        category: "Suggested",
+        category: t("command.suggested"),
         value: "suggested." + x.value,
       })),
       ...all,
@@ -117,7 +118,7 @@ function DialogCommand(props: { options: CommandOption[] }) {
   return (
     <DialogSelect
       ref={(r) => (ref = r)}
-      title="Commands"
+      title={t("command.category")}
       options={props.options.filter((x) => !ref?.filter || !x.value.startsWith("suggested."))}
     />
   )
