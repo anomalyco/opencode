@@ -3045,6 +3045,9 @@
                   "reply": {
                     "type": "string",
                     "enum": ["once", "always", "reject"]
+                  },
+                  "message": {
+                    "type": "string"
                   }
                 },
                 "required": ["reply"]
