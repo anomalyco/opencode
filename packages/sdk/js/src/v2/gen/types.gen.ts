@@ -3449,6 +3449,7 @@ export type PermissionRespondResponse = PermissionRespondResponses[keyof Permiss
 export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"
+    message?: string
   }
   path: {
     requestID: string
