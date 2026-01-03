@@ -30,7 +30,6 @@ export const LspTool = Tool.define("lsp", {
     await ctx.ask({
       permission: "lsp",
       patterns: ["*"],
-      always: ["*"],
       metadata: {},
     })
 

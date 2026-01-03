@@ -63,7 +63,6 @@ export const EditTool = Tool.define("edit", {
         await ctx.ask({
           permission: "edit",
           patterns: [path.relative(Instance.worktree, filePath)],
-          always: ["*"],
           metadata: {
             filepath: filePath,
             diff,
@@ -91,7 +90,6 @@ export const EditTool = Tool.define("edit", {
       await ctx.ask({
         permission: "edit",
         patterns: [path.relative(Instance.worktree, filePath)],
-        always: ["*"],
         metadata: {
           filepath: filePath,
           diff,

@@ -22,7 +22,6 @@ export const GrepTool = Tool.define("grep", {
     await ctx.ask({
       permission: "grep",
       patterns: [params.pattern],
-      always: ["*"],
       metadata: {
         pattern: params.pattern,
         path: params.path,

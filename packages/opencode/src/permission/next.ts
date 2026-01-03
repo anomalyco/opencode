@@ -60,7 +60,7 @@ export namespace PermissionNext {
       permission: z.string(),
       patterns: z.string().array(),
       metadata: z.record(z.string(), z.any()),
-      always: z.string().array(),
+      always: z.string().array().optional(),
       tool: z
         .object({
           messageID: z.string(),
@@ -131,6 +131,7 @@ export namespace PermissionNext {
             const info: Request = {
               id,
               ...request,
+              always: request.always ?? [rule.pattern],
             }
             s.pending[id] = {
               info,
@@ -183,7 +184,7 @@ export namespace PermissionNext {
         return
       }
       if (input.reply === "always") {
-        for (const pattern of existing.info.always) {
+        for (const pattern of existing.info.always!) {
           s.approved.push({
             permission: existing.info.permission,
             pattern,

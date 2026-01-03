@@ -739,7 +739,6 @@ export namespace SessionPrompt {
           permission: key,
           metadata: {},
           patterns: ["*"],
-          always: ["*"],
         })
 
         const result = await execute(args, opts)

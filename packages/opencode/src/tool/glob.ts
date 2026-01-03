@@ -20,7 +20,6 @@ export const GlobTool = Tool.define("glob", {
     await ctx.ask({
       permission: "glob",
       patterns: [params.pattern],
-      always: ["*"],
       metadata: {
         pattern: params.pattern,
         path: params.path,

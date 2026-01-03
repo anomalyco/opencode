@@ -136,7 +136,6 @@ export const PatchTool = Tool.define("patch", {
     await ctx.ask({
       permission: "edit",
       patterns: fileChanges.map((c) => path.relative(Instance.worktree, c.filePath)),
-      always: ["*"],
       metadata: {
         diff: totalDiff,
       },

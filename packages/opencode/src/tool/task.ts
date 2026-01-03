@@ -33,7 +33,6 @@ export const TaskTool = Tool.define("task", async () => {
       await ctx.ask({
         permission: "task",
         patterns: [params.subagent_type],
-        always: ["*"],
         metadata: {
           description: params.description,
           subagent_type: params.subagent_type,

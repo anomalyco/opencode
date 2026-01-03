@@ -26,7 +26,6 @@ export const WebFetchTool = Tool.define("webfetch", {
     await ctx.ask({
       permission: "webfetch",
       patterns: [params.url],
-      always: ["*"],
       metadata: {
         url: params.url,
         format: params.format,

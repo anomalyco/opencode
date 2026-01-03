@@ -60,7 +60,6 @@ export const WebSearchTool = Tool.define("websearch", {
     await ctx.ask({
       permission: "websearch",
       patterns: [params.query],
-      always: ["*"],
       metadata: {
         query: params.query,
         numResults: params.numResults,

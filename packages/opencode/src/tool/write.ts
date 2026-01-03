@@ -38,7 +38,6 @@ export const WriteTool = Tool.define("write", {
     await ctx.ask({
       permission: "edit",
       patterns: [path.relative(Instance.worktree, filepath)],
-      always: ["*"],
       metadata: {
         filepath,
         diff,

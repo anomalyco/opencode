@@ -12,7 +12,6 @@ export const TodoWriteTool = Tool.define("todowrite", {
     await ctx.ask({
       permission: "todowrite",
       patterns: ["*"],
-      always: ["*"],
       metadata: {},
     })
 
@@ -37,7 +36,6 @@ export const TodoReadTool = Tool.define("todoread", {
     await ctx.ask({
       permission: "todoread",
       patterns: ["*"],
-      always: ["*"],
       metadata: {},
     })
 

@@ -46,7 +46,6 @@ export const ListTool = Tool.define("list", {
     await ctx.ask({
       permission: "list",
       patterns: [searchPath],
-      always: ["*"],
       metadata: {
         path: searchPath,
       },
