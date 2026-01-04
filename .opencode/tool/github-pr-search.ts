@@ -31,7 +31,7 @@ export default tool({
     offset: tool.schema.number().describe("Number of results to skip for pagination").default(0),
   },
   async execute(args) {
-    const owner = "sst"
+    const owner = "anomalyco"
     const repo = "opencode"
 
     const page = Math.floor(args.offset / args.limit) + 1
