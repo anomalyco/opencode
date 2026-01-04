@@ -212,11 +212,6 @@ export namespace Worktree {
       throw new StartCommandFailedError({ message: errorText(ran) || "Worktree start command failed" })
     }
 
-    const opencodeDir = path.join(info.directory, ".opencode")
-    if (await Bun.file(opencodeDir).exists()) {
-      await Config.installDependencies(info.directory)
-    }
-
     return info
   })
 }

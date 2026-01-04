@@ -18,6 +18,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { existsSync } from "fs"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -103,7 +104,10 @@ export namespace Config {
         }
       }
 
-      installDependencies(dir)
+      const exists = existsSync(path.join(dir, "node_modules"))
+      const installing = installDependencies(dir)
+      if (!exists) await installing
+
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
