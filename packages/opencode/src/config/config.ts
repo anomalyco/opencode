@@ -23,6 +23,9 @@ import { existsSync } from "fs"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  // Track install promises per directory so tools can wait for their dependencies
+  const installPromises = new Map<string, Promise<void>>()
+
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
@@ -106,6 +109,7 @@ export namespace Config {
 
       const exists = existsSync(path.join(dir, "node_modules"))
       const installing = installDependencies(dir)
+      installPromises.set(dir, installing)
       if (!exists) await installing
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
@@ -162,6 +166,7 @@ export namespace Config {
     return {
       config: result,
       directories,
+      installPromises,
     }
   })
 
@@ -1117,5 +1122,10 @@ export namespace Config {
 
   export async function directories() {
     return state().then((x) => x.directories)
+  }
+
+  export async function getInstallPromise(dir: string): Promise<void> {
+    const promises = await state().then((x) => x.installPromises)
+    return promises.get(dir) ?? Promise.resolve()
   }
 }

@@ -32,6 +32,9 @@ export namespace ToolRegistry {
     const glob = new Bun.Glob("tool/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
+      // Wait for dependencies to be installed before loading tools from this directory
+      await Config.getInstallPromise(dir)
+
       for await (const match of glob.scan({
         cwd: dir,
         absolute: true,
