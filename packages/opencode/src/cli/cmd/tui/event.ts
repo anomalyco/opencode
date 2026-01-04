@@ -43,4 +43,11 @@ export const TuiEvent = {
       sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
     }),
   ),
+  BlockToggle: BusEvent.define(
+    "tui.block.toggle",
+    z.object({
+      blockID: z.string().describe("Block ID to toggle collapse state"),
+      collapsed: z.boolean().optional().describe("Force collapse state, or toggle if omitted"),
+    }),
+  ),
 }

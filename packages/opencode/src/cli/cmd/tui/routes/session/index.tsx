@@ -92,6 +92,8 @@ const context = createContext<{
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
+  collapsedBlocks: () => Set<string>
+  toggleBlockCollapse: (blockID: string, collapsed?: boolean) => void
 }>()
 
 function use() {
@@ -881,6 +883,20 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
+  const [collapsedBlocks, setCollapsedBlocks] = createSignal<Set<string>>(new Set())
+  const toggleBlockCollapse = (blockID: string, collapsed?: boolean) => {
+    setCollapsedBlocks((prev) => {
+      const next = new Set(prev)
+      const shouldCollapse = collapsed ?? !next.has(blockID)
+      if (shouldCollapse) {
+        next.add(blockID)
+      } else {
+        next.delete(blockID)
+      }
+      return next
+    })
+  }
+
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
@@ -898,6 +914,8 @@ export function Session() {
         showDetails,
         diffWrapMode,
         sync,
+        collapsedBlocks,
+        toggleBlockCollapse,
       }}
     >
       <box flexDirection="row">
@@ -1447,34 +1465,53 @@ function InlineTool(props: { icon: string; complete: any; pending: string; child
   )
 }
 
-function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void; part?: ToolPart }) {
+function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void; part?: ToolPart; blockID?: string }) {
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const ctx = useContext(context)
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const collapsed = createMemo(() => props.blockID ? ctx?.collapsedBlocks().has(props.blockID) : false)
+  const toggleCollapse = () => {
+    if (props.blockID && ctx?.toggleBlockCollapse) {
+      ctx.toggleBlockCollapse(props.blockID)
+    }
+  }
   return (
     <box
       border={["left"]}
       paddingTop={1}
-      paddingBottom={1}
+      paddingBottom={collapsed() ? 0 : 1}
       paddingLeft={2}
       marginTop={1}
-      gap={1}
+      gap={collapsed() ? 0 : 1}
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background}
-      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOver={() => (props.onClick || props.blockID) && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         props.onClick?.()
       }}
     >
-      <text paddingLeft={3} fg={theme.textMuted}>
-        {props.title}
-      </text>
-      {props.children}
-      <Show when={error()}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text paddingLeft={3} fg={theme.textMuted}>
+          {props.title}
+        </text>
+        <Show when={props.blockID}>
+          <text fg={theme.textMuted} onMouseUp={toggleCollapse}>
+            {collapsed() ? "▶" : "▼"}
+          </text>
+        </Show>
+      </box>
+      <Show when={!collapsed()}>
+        {props.children}
+      </Show>
+      <Show when={collapsed()}>
+        <text fg={theme.textMuted} paddingLeft={3}>(collapsed)</text>
+      </Show>
+      <Show when={error() && !collapsed()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
     </box>
@@ -1487,7 +1524,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
-        <BlockTool title={"# " + (props.input.description ?? "Shell")} part={props.part}>
+        <BlockTool title={"# " + (props.input.description ?? "Shell")} part={props.part} blockID={props.part?.id}>
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <text fg={theme.text}>{output()}</text>
@@ -1518,7 +1555,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part} blockID={props.part?.id}>
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
@@ -1634,6 +1671,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
               : undefined
           }
           part={props.part}
+          blockID={`task-${props.part.id}`}
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
@@ -1690,7 +1728,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part} blockID={`edit-${props.part.id}`}>
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -1740,7 +1778,7 @@ function Patch(props: ToolProps<typeof PatchTool>) {
   return (
     <Switch>
       <Match when={props.output !== undefined}>
-        <BlockTool title="# Patch" part={props.part}>
+        <BlockTool title="# Patch" part={props.part} blockID={`patch-${props.part.id}`}>
           <box>
             <text fg={theme.text}>{props.output?.trim()}</text>
           </box>
@@ -1759,7 +1797,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.todos?.length}>
-        <BlockTool title="# Todos" part={props.part}>
+        <BlockTool title="# Todos" part={props.part} blockID={`todos-${props.part.id}`}>
           <box>
             <For each={props.input.todos ?? []}>
               {(todo) => <TodoItem status={todo.status} content={todo.content} />}

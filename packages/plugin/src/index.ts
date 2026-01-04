@@ -207,4 +207,12 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Called when a block's collapse state changes. Allows plugins to control
+   * block collapse/expand behavior.
+   */
+  "tui.block.collapsed"?: (
+    input: { sessionID: string; blockID: string },
+    output: { collapsed: boolean },
+  ) => Promise<void>
 }
