@@ -5402,7 +5402,7 @@
             }
           }
         },
-        "required": ["id", "worktree", "time"]
+        "required": ["id", "worktree", "time", "sandboxes"]
       },
       "Event.project.updated": {
         "type": "object",
