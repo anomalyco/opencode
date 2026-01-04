@@ -2,13 +2,16 @@ name: Docs Update
 
 on:
   schedule:
-    # Run every 4 hours
-    - cron: "0 */4 * * *"
-  workflow_dispatch: # Allow manual trigger for testing
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+
+env:
+  LOOKBACK_HOURS: 4
 
 jobs:
   update-docs:
-    runs-on: ubuntu-latest
+    if: github.repository == 'sst/opencode'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write
       contents: write
@@ -19,12 +22,15 @@ jobs:
         with:
           fetch-depth: 0 # Fetch full history to access commits
 
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
       - name: Get recent commits
         id: commits
         run: |
-          COMMITS=$(git log --since="4 hours ago" --pretty=format:"- %h %s" 2>/dev/null || echo "")
+          COMMITS=$(git log --since="${{ env.LOOKBACK_HOURS }} hours ago" --pretty=format:"- %h %s" 2>/dev/null || echo "")
           if [ -z "$COMMITS" ]; then
-            echo "No commits in the last 4 hours"
+            echo "No commits in the last ${{ env.LOOKBACK_HOURS }} hours"
             echo "has_commits=false" >> $GITHUB_OUTPUT
           else
             echo "has_commits=true" >> $GITHUB_OUTPUT
@@ -44,7 +50,7 @@ jobs:
           model: opencode/gpt-5.2
           agent: docs
           prompt: |
-            Review the following commits from the last 4 hours and identify any new features that may need documentation.
+            Review the following commits from the last ${{ env.LOOKBACK_HOURS }} hours and identify any new features that may need documentation.
 
             <recent_commits>
             ${{ steps.commits.outputs.list }}
@@ -62,4 +68,5 @@ jobs:
             4. If you are creating a new documentation file be sure to update packages/web/astro.config.mjs too.
 
             Focus on user-facing features and API changes. Skip internal refactors, bug fixes, and test updates unless they affect user-facing behavior.
-            All doc related commits should start with "docs:" prefix.
+            Don't feel the need to document every little thing. It is perfectly okay to make 0 changes at all.
+            Try to keep documentation only for large features or changes that already have a good spot to be documented.

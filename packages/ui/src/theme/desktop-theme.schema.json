@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/desktop-theme.json",
+  "title": "OpenCode Desktop Theme",
+  "description": "A theme definition for the OpenCode desktop application",
+  "type": "object",
+  "required": ["name", "id", "light", "dark"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable theme name"
+    },
+    "id": {
+      "type": "string",
+      "description": "Unique theme identifier (slug)",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "light": {
+      "$ref": "#/definitions/ThemeVariant",
+      "description": "Light mode color variant"
+    },
+    "dark": {
+      "$ref": "#/definitions/ThemeVariant",
+      "description": "Dark mode color variant"
+    }
+  },
+  "definitions": {
+    "HexColor": {
+      "type": "string",
+      "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+      "description": "A hex color value like #fff, #ffff, #ffffff, or #ffffffff"
+    },
+    "ColorValue": {
+      "type": "string",
+      "pattern": "^(#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|var\(--[a-z0-9-]+\))$",
+      "description": "Either a hex color value (#rgb/#rgba/#rrggbb/#rrggbbaa) or a CSS variable reference"
+    },
+    "ThemeSeedColors": {
+      "type": "object",
+      "description": "The minimum set of colors needed to generate a theme",
+      "required": ["neutral", "primary", "success", "warning", "error", "info", "interactive", "diffAdd", "diffDelete"],
+      "properties": {
+        "neutral": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Base neutral color for generating the gray scale"
+        },
+        "primary": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Primary brand/accent color"
+        },
+        "success": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Success state color (typically green)"
+        },
+        "warning": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Warning state color (typically yellow/orange)"
+        },
+        "error": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Error/critical state color (typically red)"
+        },
+        "info": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Informational state color (typically purple/blue)"
+        },
+        "interactive": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Interactive element color (links, buttons)"
+        },
+        "diffAdd": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Color for diff additions"
+        },
+        "diffDelete": {
+          "$ref": "#/definitions/HexColor",
+          "description": "Color for diff deletions"
+        }
+      }
+    },
+    "ThemeVariant": {
+      "type": "object",
+      "description": "A theme variant (light or dark) with seed colors and optional overrides",
+      "required": ["seeds"],
+      "properties": {
+        "seeds": {
+          "$ref": "#/definitions/ThemeSeedColors",
+          "description": "Seed colors used to generate the full palette"
+        },
+        "overrides": {
+          "type": "object",
+          "description": "Optional direct overrides for any CSS variable (without -- prefix)",
+          "additionalProperties": {
+            "$ref": "#/definitions/ColorValue"
+          }
+        }
+      }
+    }
+  }
+}

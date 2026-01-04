@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -10,8 +10,9 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
-import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
+import { usePromptStash } from "./stash"
+import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer } from "@opentui/solid"
@@ -27,9 +28,12 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
+import { useKV } from "../../context/kv"
+import { useTextareaKeybindings } from "../textarea-keybindings"
 
 export type PromptProps = {
   sessionID?: string
+  visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
   ref?: (ref: PromptRef) => void
@@ -49,61 +53,6 @@ export type PromptRef = {
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 
-const TEXTAREA_ACTIONS = [
-  "submit",
-  "newline",
-  "move-left",
-  "move-right",
-  "move-up",
-  "move-down",
-  "select-left",
-  "select-right",
-  "select-up",
-  "select-down",
-  "line-home",
-  "line-end",
-  "select-line-home",
-  "select-line-end",
-  "visual-line-home",
-  "visual-line-end",
-  "select-visual-line-home",
-  "select-visual-line-end",
-  "buffer-home",
-  "buffer-end",
-  "select-buffer-home",
-  "select-buffer-end",
-  "delete-line",
-  "delete-to-line-end",
-  "delete-to-line-start",
-  "backspace",
-  "delete",
-  "undo",
-  "redo",
-  "word-forward",
-  "word-backward",
-  "select-word-forward",
-  "select-word-backward",
-  "delete-word-forward",
-  "delete-word-backward",
-] as const
-
-function mapTextareaKeybindings(
-  keybinds: Record<string, Keybind.Info[]>,
-  action: (typeof TEXTAREA_ACTIONS)[number],
-): KeyBinding[] {
-  const configKey = `input_${action.replace(/-/g, "_")}`
-  const bindings = keybinds[configKey]
-  if (!bindings) return []
-  return bindings.map((binding) => ({
-    name: binding.name,
-    ctrl: binding.ctrl || undefined,
-    meta: binding.meta || undefined,
-    shift: binding.shift || undefined,
-    super: binding.super || undefined,
-    action,
-  }))
-}
-
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -118,9 +67,11 @@ export function Prompt(props: PromptProps) {
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
   const history = usePromptHistory()
+  const stash = usePromptStash()
   const command = useCommandDialog()
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
+  const kv = useKV()
 
   function promptModelWarning() {
     toast.show({
@@ -133,20 +84,71 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  const textareaKeybindings = createMemo(() => {
-    const keybinds = keybind.all
-
-    return [
-      { name: "return", action: "submit" },
-      { name: "return", meta: true, action: "newline" },
-      ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
-    ] satisfies KeyBinding[]
-  })
+  const textareaKeybindings = useTextareaKeybindings()
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId: number
+
+  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+    input.insertText(evt.properties.text)
+    setTimeout(() => {
+      input.getLayoutNode().markDirty()
+      input.gotoBufferEnd()
+      renderer.requestRender()
+    }, 0)
+  })
+
+  createEffect(() => {
+    if (props.disabled) input.cursorColor = theme.backgroundElement
+    if (!props.disabled) input.cursorColor = theme.text
+  })
+
+  const lastUserMessage = createMemo(() => {
+    if (!props.sessionID) return undefined
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return undefined
+    return messages.findLast((m) => m.role === "user")
+  })
+
+  const [store, setStore] = createStore<{
+    prompt: PromptInfo
+    mode: "normal" | "shell"
+    extmarkToPartIndex: Map<number, number>
+    interrupt: number
+    placeholder: number
+  }>({
+    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
+    prompt: {
+      input: "",
+      parts: [],
+    },
+    mode: "normal",
+    extmarkToPartIndex: new Map(),
+    interrupt: 0,
+  })
+
+  // Initialize agent/model/variant from last user message when session changes
+  let syncedSessionID: string | undefined
+  createEffect(() => {
+    const sessionID = props.sessionID
+    const msg = lastUserMessage()
+
+    if (sessionID !== syncedSessionID) {
+      if (!sessionID || !msg) return
+
+      syncedSessionID = sessionID
+
+      // Only set agent if it's a primary agent (not a subagent)
+      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
+      if (msg.agent && isPrimaryAgent) {
+        local.agent.set(msg.agent)
+      }
+      if (msg.model) local.model.set(msg.model)
+      if (msg.variant) local.model.variant.set(msg.variant)
+    }
+  })
 
   command.register(() => {
     return [
@@ -308,34 +310,9 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
-  sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
-    input.insertText(evt.properties.text)
-  })
-
   createEffect(() => {
-    if (props.disabled) input.cursorColor = theme.backgroundElement
-    if (!props.disabled) input.cursorColor = theme.text
-  })
-
-  const [store, setStore] = createStore<{
-    prompt: PromptInfo
-    mode: "normal" | "shell"
-    extmarkToPartIndex: Map<number, number>
-    interrupt: number
-    placeholder: number
-  }>({
-    placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
-    prompt: {
-      input: "",
-      parts: [],
-    },
-    mode: "normal",
-    extmarkToPartIndex: new Map(),
-    interrupt: 0,
-  })
-
-  createEffect(() => {
-    input.focus()
+    if (props.visible !== false) input?.focus()
+    if (props.visible === false) input?.blur()
   })
 
   onMount(() => {
@@ -420,6 +397,61 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  command.register(() => [
+    {
+      title: "Stash prompt",
+      value: "prompt.stash",
+      category: "Prompt",
+      disabled: !store.prompt.input,
+      onSelect: (dialog) => {
+        if (!store.prompt.input) return
+        stash.push({
+          input: store.prompt.input,
+          parts: store.prompt.parts,
+        })
+        input.extmarks.clear()
+        input.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        dialog.clear()
+      },
+    },
+    {
+      title: "Stash pop",
+      value: "prompt.stash.pop",
+      category: "Prompt",
+      disabled: stash.list().length === 0,
+      onSelect: (dialog) => {
+        const entry = stash.pop()
+        if (entry) {
+          input.setText(entry.input)
+          setStore("prompt", { input: entry.input, parts: entry.parts })
+          restoreExtmarksFromParts(entry.parts)
+          input.gotoBufferEnd()
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Stash list",
+      value: "prompt.stash.list",
+      category: "Prompt",
+      disabled: stash.list().length === 0,
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogStash
+            onSelect={(entry) => {
+              input.setText(entry.input)
+              setStore("prompt", { input: entry.input, parts: entry.parts })
+              restoreExtmarksFromParts(entry.parts)
+              input.gotoBufferEnd()
+            }}
+          />
+        ))
+      },
+    },
+  ])
+
   props.ref?.({
     get focused() {
       return input.focused
@@ -497,6 +529,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
+    const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -525,6 +558,7 @@ export function Prompt(props: PromptProps) {
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
+        variant,
       })
     } else {
       sdk.client.session.prompt({
@@ -533,6 +567,7 @@ export function Prompt(props: PromptProps) {
         messageID,
         agent: local.agent.current().name,
         model: selectedModel,
+        variant,
         parts: [
           {
             id: Identifier.ascending("part"),
@@ -653,6 +688,13 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(local.agent.current().name)
   })
 
+  const showVariant = createMemo(() => {
+    const variants = local.model.variant.list()
+    if (variants.length === 0) return false
+    const current = local.model.variant.current()
+    return !!current
+  })
+
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -695,7 +737,7 @@ export function Prompt(props: PromptProps) {
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
-      <box ref={(r) => (anchor = r)}>
+      <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
           border={["left"]}
           borderColor={highlight()}
@@ -864,6 +906,13 @@ export function Prompt(props: PromptProps) {
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
+
+                // Force layout update and render for the pasted content
+                setTimeout(() => {
+                  input.getLayoutNode().markDirty()
+                  input.gotoBufferEnd()
+                  renderer.requestRender()
+                }, 0)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
@@ -886,6 +935,12 @@ export function Prompt(props: PromptProps) {
                     {local.model.parsed().model}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <Show when={showVariant()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text>
+                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                    </text>
+                  </Show>
                 </box>
               </Show>
             </box>
@@ -926,8 +981,11 @@ export function Prompt(props: PromptProps) {
               justifyContent={status().type === "retry" ? "space-between" : "flex-start"}
             >
               <box flexShrink={0} flexDirection="row" gap={1}>
-                {/* @ts-ignore // SpinnerOptions doesn't support marginLeft */}
-                <spinner marginLeft={1} color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                <box marginLeft={1}>
+                  <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+                    <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                  </Show>
+                </box>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {

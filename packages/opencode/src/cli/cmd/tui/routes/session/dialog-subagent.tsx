@@ -11,7 +11,7 @@ export function DialogSubagent(props: { sessionID: string }) {
         {
           title: "Open",
           value: "subagent.view",
-          description: "open the subagent's session",
+          description: "the subagent's session",
           onSelect: (dialog) => {
             route.navigate({
               type: "session",

@@ -17,7 +17,7 @@
   display: none;
 }
 
-@container (min-width: 72rem) {
+@container (min-width: 88rem) {
   [data-slot="session-message-rail-compact"] {
     display: none;
   }

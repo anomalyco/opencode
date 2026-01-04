@@ -14,10 +14,10 @@ However, any UI or core product feature must go through a design review with the
 
 If you are unsure if a PR would be accepted, feel free to ask a maintainer or look for issues with any of the following labels:
 
-- [`help wanted`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Ahelp-wanted)
-- [`good first issue`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22)
-- [`bug`](https://github.com/sst/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug)
-- [`perf`](https://github.com/sst/opencode/issues?q=is%3Aopen%20is%3Aissue%20label%3A%22perf%22)
+- [`help wanted`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Ahelp-wanted)
+- [`good first issue`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22)
+- [`bug`](https://github.com/anomalyco/opencode/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug)
+- [`perf`](https://github.com/anomalyco/opencode/issues?q=is%3Aopen%20is%3Aissue%20label%3A%22perf%22)
 
 > [!NOTE]
 > PRs that ignore these guardrails will likely be closed.
@@ -33,6 +33,36 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
   bun install
   bun dev
   ```
+
+### Running against a different directory
+
+By default, `bun dev` runs OpenCode in the `packages/opencode` directory. To run it against a different directory or repository:
+
+```bash
+bun dev <directory>
+```
+
+To run OpenCode in the root of the opencode repo itself:
+
+```bash
+bun dev .
+```
+
+### Building a "localcode"
+
+To compile a standalone executable:
+
+```bash
+./packages/opencode/script/build.ts --single
+```
+
+Then run it with:
+
+```bash
+./packages/opencode/dist/opencode-<platform>/bin/opencode
+```
+
+Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
 - Core pieces:
   - `packages/opencode`: OpenCode core business logic & server.
@@ -53,12 +83,12 @@ your debugger via that URL. Other methods can result in breakpoints being mapped
 
 Caveats:
 
-- `*.tsx` files won't have their breakpoints correctly mapped. This seems due to Bun currently not supporting source maps on code transformed
-  via `BunPlugin`s (currently necessary due to our dependency on `@opentui/solid`). Currently, the best you can do in terms of debugging `*.tsx`
-  files is writing a `debugger;` statement. Debugging facilities like stepping won't work, but at least you will be informed if a specific code
-  is triggered.
 - If you want to run the OpenCode TUI and have breakpoints triggered in the server code, you might need to run `bun dev spawn` instead of
   the usual `bun dev`. This is because `bun dev` runs the server in a worker thread and breakpoints might not work there.
+- If `spawn` does not work for you, you can debug the server separately:
+  - Debug server: `bun run --inspect=ws://localhost:6499/ ./src/index.ts serve --port 4096`,
+    then attach TUI with `opencode attach http://localhost:4096`
+  - Debug TUI: `bun run --inspect=ws://localhost:6499/ --conditions=browser ./src/index.ts`
 
 Other tips and tricks:
 
