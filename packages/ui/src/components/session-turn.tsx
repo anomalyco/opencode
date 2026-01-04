@@ -9,7 +9,7 @@ import {
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -578,12 +578,10 @@ export function SessionTurn(
                                     before={{
                                       name: diff.file!,
                                       contents: diff.before!,
-                                      cacheKey: checksum(diff.before!),
                                     }}
                                     after={{
                                       name: diff.file!,
                                       contents: diff.after!,
-                                      cacheKey: checksum(diff.after!),
                                     }}
                                   />
                                 </Accordion.Content>
