@@ -207,4 +207,8 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  "tui.input.mode"?: (
+    input: { text: string; currentMode: "normal" | "shell" },
+    output: { mode: "normal" | "shell" },
+  ) => Promise<void>
 }

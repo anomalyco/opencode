@@ -21,6 +21,7 @@ import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
+import { Plugin } from "@/plugin"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
 import { createColors, createFrames } from "../../ui/spinner.ts"
@@ -761,11 +762,20 @@ export function Prompt(props: PromptProps) {
               focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
               minHeight={1}
               maxHeight={6}
-              onContentChange={() => {
+              onContentChange={async () => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
                 syncExtmarksWithPromptParts()
+                
+                const modeResult = await Plugin.trigger(
+                  "tui.input.mode",
+                  { text: value, currentMode: store.mode },
+                  { mode: store.mode }
+                )
+                if (modeResult.mode !== store.mode) {
+                  setStore("mode", modeResult.mode)
+                }
               }}
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {
