@@ -1,8 +1,14 @@
 name: nix desktop
 
 on:
-  pull_request:
+  push:
     branches: [dev]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/app/**"
+      - "packages/desktop/**"
   workflow_dispatch:
 
 jobs:
