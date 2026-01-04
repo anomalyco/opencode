@@ -222,8 +222,38 @@ export namespace Session {
     return result
   }
 
+  export async function repairOrphanedToolCalls(sessionID: string) {
+    for await (const msg of MessageV2.stream(sessionID)) {
+      if (msg.info.role !== "assistant") continue
+      for (const part of msg.parts) {
+        if (part.type === "tool" && part.state.status === "running") {
+          log.warn("repairing orphaned tool call", {
+            sessionID,
+            messageID: msg.info.id,
+            partID: part.id,
+            tool: part.tool,
+            callID: part.callID,
+          })
+          await updatePart({
+            ...part,
+            state: {
+              status: "error",
+              input: part.state.input,
+              error: "Tool execution interrupted (recovered on session load)",
+              time: {
+                start: part.state.time.start,
+                end: Date.now(),
+              },
+            },
+          })
+        }
+      }
+    }
+  }
+
   export const get = fn(Identifier.schema("session"), async (id) => {
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
+    await repairOrphanedToolCalls(id)
     return read as Info
   })
 
