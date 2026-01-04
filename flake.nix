@@ -66,10 +66,10 @@
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = nodeModulesHash;
           };
-          mkPackage = pkgs.callPackage ./nix/opencode.nix { };
-        in
-        {
-          default = mkPackage {
+          mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
+          mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
+
+          opencodePkg = mkOpencode {
             inherit (packageJson) version;
             src = ./.;
             scripts = ./nix/scripts;
@@ -77,6 +77,18 @@
             modelsDev = "${modelsDev.${system}}/dist/_api.json";
             inherit mkNodeModules;
           };
+
+          desktopPkg = mkDesktop {
+            inherit (packageJson) version;
+            src = ./.;
+            scripts = ./nix/scripts;
+            mkNodeModules = mkNodeModules;
+            opencode = opencodePkg;
+          };
+        in
+        {
+          default = opencodePkg;
+          desktop = desktopPkg;
         }
       );
 
