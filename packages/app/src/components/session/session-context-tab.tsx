@@ -305,12 +305,18 @@ export function SessionContextTab(props: SessionContextTabProps) {
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
 
-  const restoreScroll = () => {
+  const restoreScroll = (retries = 0) => {
     const el = scroll
     if (!el) return
 
     const s = props.view()?.scroll("context")
     if (!s) return
+
+    // Wait for content to be scrollable - content may not have rendered yet
+    if (el.scrollHeight <= el.clientHeight && retries < 10) {
+      requestAnimationFrame(() => restoreScroll(retries + 1))
+      return
+    }
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x
