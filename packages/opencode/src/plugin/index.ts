@@ -47,7 +47,10 @@ export namespace Plugin {
         if (!plugin) continue
       }
       const mod = await import(plugin)
+      const seen = new Set<PluginInstance>()
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+        if (seen.has(fn)) continue
+        seen.add(fn)
         const init = await fn(input)
         hooks.push(init)
       }
