@@ -1256,6 +1256,62 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
 
 ---
 
+### Vercel AI Gateway
+
+Vercel AI Gateway lets you access models from OpenAI, Anthropic, Google, xAI, and more through a unified endpoint. Models are offered at list price with no markup.
+
+1. Head over to the [Vercel dashboard](https://vercel.com/), navigate to the **AI Gateway** tab, and click **API keys** to create a new API key.
+
+2. Run the `/connect` command and search for **Vercel AI Gateway**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Vercel AI Gateway API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+You can also customize models through your opencode config. Here's an example of specifying provider routing order.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "anthropic/claude-sonnet-4": {
+          "options": {
+            "order": ["anthropic", "vertex"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Some useful routing options:
+
+| Option              | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `order`             | Provider sequence to try                             |
+| `only`              | Restrict to specific providers                       |
+| `zeroDataRetention` | Only use providers with zero data retention policies |
+
+---
+
 ### xAI
 
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
