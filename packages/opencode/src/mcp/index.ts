@@ -26,7 +26,7 @@ import open from "open"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
-  const DEFAULT_TIMEOUT = 5000
+  const DEFAULT_TIMEOUT = 30_000
 
   export const Resource = z
     .object({
