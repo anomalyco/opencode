@@ -162,7 +162,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
-    killBuffer: string
   }>({
     popover: null,
     historyIndex: -1,
@@ -172,7 +171,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
-    killBuffer: "",
   })
 
   const MAX_HISTORY = 100
@@ -801,242 +799,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return false
   }
 
-  const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
-  const IS_WIN = typeof navigator === "object" && /Win/.test(navigator.platform)
-
-  const textOnly = () => {
-    const parts = prompt.current()
-    if (!parts.every((part) => part.type === "text")) return
-    return parts.map((part) => part.content).join("")
-  }
-
-  const exitHistoryMode = () => {
-    if (store.historyIndex < 0) return
-    if (store.applyingHistory) return
-    setStore("historyIndex", -1)
-    setStore("savedPrompt", null)
-  }
-
-  const applyText = (content: string, cursorPosition: number) => {
-    exitHistoryMode()
-    setStore("popover", null)
-
-    const part = {
-      type: "text" as const,
-      content,
-      start: 0,
-      end: content.length,
-    }
-
-    prompt.set([part], cursorPosition)
-    requestAnimationFrame(() => {
-      editorRef.focus()
-      setCursorPosition(editorRef, cursorPosition)
-      queueScroll()
-    })
-  }
-
-  const handleReadlineKeyDown = (event: KeyboardEvent) => {
-    if (event.metaKey) return false
-
-    const ctrl = event.ctrlKey && !event.altKey && !event.shiftKey
-    const alt = event.altKey && !event.ctrlKey && !event.shiftKey
-
-    if (!ctrl && !alt) return false
-
-    if (alt && IS_WIN) return false
-
-    if (ctrl && IS_WIN) {
-      const blocked = new Set(["KeyA", "KeyC", "KeyV", "KeyX", "KeyZ", "KeyY", "KeyF", "KeyT"])
-      if (blocked.has(event.code)) return false
-    }
-
-    const { collapsed, cursorPosition, textLength } = getCaretState()
-    if (!collapsed) return false
-
-    const text = textOnly()
-    if (text === undefined) return false
-
-    const moveCursor = (pos: number) => {
-      setCursorPosition(editorRef, pos)
-      queueScroll()
-    }
-
-    const saveKillBuffer = (start: number, end: number) => {
-      if (start === end) return false
-      setStore("killBuffer", text.slice(start, end))
-      return true
-    }
-
-    const killRange = (start: number, end: number) => {
-      if (!saveKillBuffer(start, end)) return
-      applyText(text.slice(0, start) + text.slice(end), start)
-    }
-
-    if (ctrl) {
-      if (event.code === "KeyA" && IS_MAC) {
-        const pos = text.lastIndexOf("\n", cursorPosition - 1) + 1
-        moveCursor(pos)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyE") {
-        const next = text.indexOf("\n", cursorPosition)
-        const pos = next === -1 ? textLength : next
-        moveCursor(pos)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyB") {
-        const pos = Math.max(0, cursorPosition - 1)
-        moveCursor(pos)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyF" && IS_MAC) {
-        const pos = Math.min(textLength, cursorPosition + 1)
-        moveCursor(pos)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyD") {
-        if (cursorPosition >= textLength) {
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
-
-        applyText(text.slice(0, cursorPosition) + text.slice(cursorPosition + 1), cursorPosition)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyK") {
-        const next = text.indexOf("\n", cursorPosition)
-        const lineEnd = next === -1 ? textLength : next
-        const end = lineEnd === cursorPosition && lineEnd < textLength ? lineEnd + 1 : lineEnd
-        if (end === cursorPosition) {
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
-
-        killRange(cursorPosition, end)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyU" && IS_MAC) {
-        const start = text.lastIndexOf("\n", cursorPosition - 1) + 1
-        if (start === cursorPosition) {
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
-
-        killRange(start, cursorPosition)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyY" && IS_MAC) {
-        if (!store.killBuffer) {
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
-
-        applyText(
-          text.slice(0, cursorPosition) + store.killBuffer + text.slice(cursorPosition),
-          cursorPosition + store.killBuffer.length,
-        )
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyT" && IS_MAC) {
-        if (textLength < 2 || cursorPosition === 0) {
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
-
-        const atEnd = cursorPosition === textLength
-        const first = atEnd ? cursorPosition - 2 : cursorPosition - 1
-        const second = atEnd ? cursorPosition - 1 : cursorPosition
-
-        if (text[first] === "\n" || text[second] === "\n") {
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
-
-        const nextText = text.slice(0, first) + text[second] + text[first] + text.slice(second + 1)
-        const nextCursor = atEnd ? cursorPosition : cursorPosition + 1
-        applyText(nextText, nextCursor)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      return false
-    }
-
-    if (alt) {
-      if (event.code === "KeyB") {
-        let pos = cursorPosition
-        while (pos > 0 && /\s/.test(text[pos - 1])) pos -= 1
-        while (pos > 0 && !/\s/.test(text[pos - 1])) pos -= 1
-        moveCursor(pos)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyF") {
-        let pos = cursorPosition
-        while (pos < textLength && /\s/.test(text[pos])) pos += 1
-        while (pos < textLength && !/\s/.test(text[pos])) pos += 1
-        moveCursor(pos)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      if (event.code === "KeyD") {
-        let end = cursorPosition
-        while (end < textLength && /\s/.test(text[end])) end += 1
-        while (end < textLength && !/\s/.test(text[end])) end += 1
-        if (end === cursorPosition) {
-          event.preventDefault()
-          event.stopPropagation()
-          return true
-        }
-
-        killRange(cursorPosition, end)
-        event.preventDefault()
-        event.stopPropagation()
-        return true
-      }
-
-      return false
-    }
-
-    return false
-  }
-
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Backspace") {
       const selection = window.getSelection()
@@ -1103,8 +865,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
       return
     }
-
-    if (handleReadlineKeyDown(event)) return
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       if (event.altKey || event.ctrlKey || event.metaKey) return
