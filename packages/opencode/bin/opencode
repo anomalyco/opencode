@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import childProcess from "child_process"
+import fs from "fs"
+import path from "path"
+import os from "os"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
@@ -23,7 +27,7 @@ if (envPath) {
 }
 
 const scriptPath = fs.realpathSync(__filename)
-const scriptDir = path.dirname(scriptPath)
+const scriptDir = __dirname
 
 const platformMap = {
   darwin: "darwin",
@@ -50,6 +54,12 @@ const binary = platform === "windows" ? "opencode.exe" : "opencode"
 function findBinary(startDir) {
   let current = startDir
   for (;;) {
+    // Check dist folder first (for local development)
+    const distPath = path.join(current, "dist", base, "bin", binary)
+    if (fs.existsSync(distPath)) {
+      return distPath
+    }
+
     const modules = path.join(current, "node_modules")
     if (fs.existsSync(modules)) {
       const entries = fs.readdirSync(modules)
