@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.0.224",
+  "version": "1.1.1",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@octokit/webhooks-types": "7.6.1",
+    "@opencode-ai/script": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
     "@parcel/watcher-linux-arm64-glibc": "2.5.1",
@@ -39,12 +40,11 @@
     "@types/bun": "catalog:",
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
-    "typescript": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
-    "zod-to-json-schema": "3.24.5",
-    "@opencode-ai/script": "workspace:*"
+    "zod-to-json-schema": "3.24.5"
   },
   "dependencies": {
     "@actions/core": "1.11.1",
@@ -86,6 +86,7 @@
     "@parcel/watcher": "2.5.1",
     "@pierre/diffs": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
+    "@solid-primitives/scheduled": "1.5.2",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",

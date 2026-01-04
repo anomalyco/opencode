@@ -701,8 +701,27 @@ export namespace Server {
             },
           },
         }),
+        validator(
+          "query",
+          z.object({
+            start: z.coerce
+              .number()
+              .optional()
+              .meta({ description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)" }),
+            search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
+            limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
+          }),
+        ),
         async (c) => {
-          const sessions = await Array.fromAsync(Session.list())
+          const query = c.req.valid("query")
+          const term = query.search?.toLowerCase()
+          const sessions: Session.Info[] = []
+          for await (const session of Session.list()) {
+            if (query.start !== undefined && session.time.updated < query.start) continue
+            if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
+            sessions.push(session)
+            if (query.limit !== undefined && sessions.length >= query.limit) break
+          }
           return c.json(sessions)
         },
       )
@@ -2335,6 +2354,27 @@ export namespace Server {
           const { name } = c.req.valid("param")
           await MCP.disconnect(name)
           return c.json(true)
+        },
+      )
+      .get(
+        "/experimental/resource",
+        describeRoute({
+          summary: "Get MCP resources",
+          description: "Get all available MCP resources from connected servers. Optionally filter by name.",
+          operationId: "experimental.resource.list",
+          responses: {
+            200: {
+              description: "MCP resources",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Resource)),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await MCP.resources())
         },
       )
       .get(
