@@ -314,12 +314,12 @@ function Option(props: {
   return (
     <>
       <Show when={props.current}>
-        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0.5}>
+        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0}>
           ●
         </text>
       </Show>
       <Show when={!props.current && props.gutter}>
-        <box flexShrink={0} marginRight={0.5}>
+        <box flexShrink={0} marginRight={0}>
           {props.gutter}
         </box>
       </Show>
