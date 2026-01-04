@@ -55,7 +55,7 @@ export default function Home() {
 
   return (
     <div class="mx-auto mt-20 md:mt-55 w-full max-w-xl px-4">
-      <Logo class="w-full opacity-12" />
+      <Logo class="opacity-12" />
       <Button
         size="large"
         variant="ghost"
@@ -92,10 +92,10 @@ export default function Home() {
                     <Button
                       size="large"
                       variant="ghost"
-                      class="text-14-mono text-left justify-between px-3 gap-2 min-w-0 w-full"
+                      class="text-14-mono text-left justify-between px-3 gap-2 w-full"
                       onClick={() => openProject(project.worktree)}
                     >
-                      <span class="truncate min-w-0">{project.worktree.replace(homedir(), "~")}</span>
+                      <span class="truncate">{project.worktree.replace(homedir(), "~")}</span>
                       <span class="text-14-regular text-text-weak shrink-0">
                         {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
                       </span>
