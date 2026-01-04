@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { RLM } from "./rlm"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -509,7 +510,7 @@ export namespace SessionPrompt {
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
-      msgs = insertReminders({
+      msgs = await insertReminders({
         messages: msgs,
         agent,
       })
@@ -1082,7 +1083,7 @@ export namespace SessionPrompt {
     }
   }
 
-  function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
+  async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
     if (input.agent.name === "plan") {
@@ -1107,6 +1108,28 @@ export namespace SessionPrompt {
         synthetic: true,
       })
     }
+
+    // RLM: Check for large context and inject reminder
+    if (await RLM.isEnabled()) {
+      const contextInfo = RLM.analyzeContext(
+        userMessage.parts
+          .filter((p) => p.type === "text")
+          .map((p) => ({ type: "text", text: (p as { text: string }).text })),
+      )
+
+      if (contextInfo.isLarge) {
+        RLM.notifyActivation(userMessage.info.sessionID, contextInfo)
+        userMessage.parts.push({
+          id: Identifier.ascending("part"),
+          messageID: userMessage.info.id,
+          sessionID: userMessage.info.sessionID,
+          type: "text",
+          text: RLM.generateActivationPrompt(contextInfo),
+          synthetic: true,
+        })
+      }
+    }
+
     return input.messages
   }
 
