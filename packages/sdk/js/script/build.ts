@@ -16,6 +16,9 @@ await createClient({
     clean: true,
     indexFile: false,
     path: "./src/v2/gen",
+    source: {
+      fileName: 'openapi',
+    },
     tsConfigPath: path.join(dir, "tsconfig.json"),
   },
   plugins: [
@@ -26,6 +29,20 @@ await createClient({
     "@hey-api/typescript",
     {
       auth: false,
+      examples: {
+        importSetup(ctx) {
+          const { $, node } = ctx;
+          return $(node.name).call();
+        },
+        importName: 'createOpencodeClient',
+        moduleName: '@opencode-ai/sdk',
+        payload(operation, ctx) {
+          const { $ } = ctx;
+          return $.object().pretty();
+        },
+        transform: (example) => example.replace(/\({}\)/, '({\n  ...\n})'),
+        setupName: 'client',
+      },
       name: "@hey-api/sdk",
       operations: {
         containerName: "OpencodeClient",

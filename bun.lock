@@ -370,7 +370,7 @@
       "name": "@opencode-ai/sdk",
       "version": "1.0.224",
       "devDependencies": {
-        "@hey-api/openapi-ts": "0.90.0",
+        "@hey-api/openapi-ts": "0.90.1",
         "@tsconfig/node22": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
@@ -902,11 +902,11 @@
 
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.0.11", "", { "dependencies": { "@types/node": "^20.0.0", "happy-dom": "^20.0.11" } }, "sha512-GqNqiShBT/lzkHTMC/slKBrvN0DsD4Di8ssBk4aDaVgEn+2WMzE6DXxq701ndSXj7/0cJ8mNT71pM7Bnrr6JRw=="],
 
-    "@hey-api/codegen-core": ["@hey-api/codegen-core@0.5.0", "", { "dependencies": { "ansi-colors": "4.1.3", "color-support": "1.1.3" }, "peerDependencies": { "typescript": ">=5.5.3" } }, "sha512-k4A41bH0bppzn5VgruQe36oc2ENr5MTXnonCXw/N8/608n9VuI9S3PyNMYYLO6FMSIvgaByN8GOaaqAtrShA6g=="],
+    "@hey-api/codegen-core": ["@hey-api/codegen-core@0.5.1", "", { "dependencies": { "ansi-colors": "4.1.3", "color-support": "1.1.3" }, "peerDependencies": { "typescript": ">=5.5.3" } }, "sha512-k/WN7WWEcaOglKiSlc0WHxUFdaCpf9QLAQK5TzOq2oyljzGPn0RNkWtO2Lk3Of68kkWXINMdyhmBE3nW/9NCQQ=="],
 
     "@hey-api/json-schema-ref-parser": ["@hey-api/json-schema-ref-parser@1.2.2", "", { "dependencies": { "@jsdevtools/ono": "^7.1.3", "@types/json-schema": "^7.0.15", "js-yaml": "^4.1.1", "lodash": "^4.17.21" } }, "sha512-oS+5yAdwnK20lSeFO1d53Ku+yaGCsY8PcrmSq2GtSs3bsBfRnHAbpPKSVzQcaxAOrzj5NB+f34WhZglVrNayBA=="],
 
-    "@hey-api/openapi-ts": ["@hey-api/openapi-ts@0.90.0", "", { "dependencies": { "@hey-api/codegen-core": "^0.5.0", "@hey-api/json-schema-ref-parser": "1.2.2", "ansi-colors": "4.1.3", "c12": "3.3.3", "color-support": "1.1.3", "commander": "14.0.2", "open": "11.0.0", "semver": "7.7.3" }, "peerDependencies": { "typescript": ">=5.5.3" }, "bin": { "openapi-ts": "bin/run.js" } }, "sha512-0Fujk+3q/tEZeXRLRs/Y/lTQ9b4m1MHBsW5uGAI+tbscVDwqlkFc23MBoDcbysWyuG/aF95F39nmHdAoTCtP0Q=="],
+    "@hey-api/openapi-ts": ["@hey-api/openapi-ts@0.90.1", "", { "dependencies": { "@hey-api/codegen-core": "^0.5.1", "@hey-api/json-schema-ref-parser": "1.2.2", "ansi-colors": "4.1.3", "c12": "3.3.3", "color-support": "1.1.3", "commander": "14.0.2", "open": "11.0.0", "semver": "7.7.3" }, "peerDependencies": { "typescript": ">=5.5.3" }, "bin": { "openapi-ts": "bin/run.js" } }, "sha512-wsURTl5k5J/JQR3gU8N7MOZYpsx/xnZHwixzXzs77hQGzibLXuGbTmBMJEu90r8zBcabzp9rt7kv1HMkmEb9cw=="],
 
     "@hono/standard-validator": ["@hono/standard-validator@0.1.5", "", { "peerDependencies": { "@standard-schema/spec": "1.0.0", "hono": ">=3.9.0" } }, "sha512-EIyZPPwkyLn6XKwFj5NBEWHXhXbgmnVh2ceIFo5GO7gKI9WmzTjPDKnppQB0KrqKeAkq3kpoW4SIbu5X1dgx3w=="],
 

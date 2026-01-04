@@ -19,11 +19,11 @@
     "dist"
   ],
   "devDependencies": {
-    "@hey-api/openapi-ts": "0.90.0",
+    "@hey-api/openapi-ts": "0.90.1",
     "@tsconfig/node22": "catalog:",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native-preview": "catalog:",
+    "typescript": "catalog:"
   },
   "dependencies": {},
   "publishConfig": {
