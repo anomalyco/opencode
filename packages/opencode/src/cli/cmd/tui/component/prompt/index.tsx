@@ -766,6 +766,13 @@ export function Prompt(props: PromptProps) {
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
                 syncExtmarksWithPromptParts()
+                if (props.sessionID && value.length > 0) {
+                  fetch(`${sdk.url}/plugin/input-changed`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sessionID: props.sessionID, text: value }),
+                  }).catch(() => {})
+                }
               }}
               keyBindings={textareaKeybindings()}
               onKeyDown={async (e) => {

@@ -207,4 +207,12 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Called when the TUI input text changes. Useful for plugins that want to
+   * observe user typing behavior (e.g., intent detection, analytics).
+   *
+   * - `input.sessionID`: Current session ID
+   * - `input.text`: The current text in the TUI input
+   */
+  "tui.input.changed"?: (input: { sessionID: string; text: string }, output: {}) => Promise<void>
 }

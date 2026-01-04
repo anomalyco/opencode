@@ -61,6 +61,8 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PluginInputChangedErrors,
+  PluginInputChangedResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -2808,6 +2810,45 @@ export class Tui extends HeyApiClient {
   control = new Control({ client: this.client })
 }
 
+export class Plugin extends HeyApiClient {
+  /**
+   * Notify plugins of input change
+   *
+   * Fires the tui.input.changed hook to notify plugins when TUI input text changes.
+   */
+  public inputChanged<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+      text?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "text" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PluginInputChangedResponses, PluginInputChangedErrors, ThrowOnError>({
+      url: "/plugin/input-changed",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Event extends HeyApiClient {
   /**
    * Subscribe to events
@@ -2878,6 +2919,8 @@ export class OpencodeClient extends HeyApiClient {
   formatter = new Formatter({ client: this.client })
 
   tui = new Tui({ client: this.client })
+
+  plugin = new Plugin({ client: this.client })
 
   auth = new Auth({ client: this.client })
 

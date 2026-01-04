@@ -4446,6 +4446,36 @@ export type TuiSelectSessionResponses = {
 
 export type TuiSelectSessionResponse = TuiSelectSessionResponses[keyof TuiSelectSessionResponses]
 
+export type PluginInputChangedData = {
+  body?: {
+    sessionID: string
+    text: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/plugin/input-changed"
+}
+
+export type PluginInputChangedErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type PluginInputChangedError = PluginInputChangedErrors[keyof PluginInputChangedErrors]
+
+export type PluginInputChangedResponses = {
+  /**
+   * Plugins notified successfully
+   */
+  200: boolean
+}
+
+export type PluginInputChangedResponse = PluginInputChangedResponses[keyof PluginInputChangedResponses]
+
 export type TuiControlNextData = {
   body?: never
   path?: never
