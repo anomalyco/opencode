@@ -2508,6 +2508,18 @@ export type SessionListData = {
   path?: never
   query?: {
     directory?: string
+    /**
+     * Filter sessions updated on or after this timestamp (milliseconds since epoch)
+     */
+    start?: number
+    /**
+     * Filter sessions by title (case-insensitive)
+     */
+    search?: string
+    /**
+     * Maximum number of sessions to return
+     */
+    limit?: number
   }
   url: "/session"
 }
