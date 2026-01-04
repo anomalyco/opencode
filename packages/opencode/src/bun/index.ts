@@ -60,6 +60,9 @@ export namespace BunProc {
     }),
   )
 
+  // Cache expiry for "latest" version checks (24 hours)
+  const LATEST_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+
   export async function install(pkg: string, version = "latest") {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
@@ -67,11 +70,27 @@ export namespace BunProc {
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))
     const parsed = await pkgjson.json().catch(async () => {
-      const result = { dependencies: {} }
+      const result = { dependencies: {}, _timestamps: {} }
       await Bun.write(pkgjson.name!, JSON.stringify(result, null, 2))
       return result
     })
+    
+    // Ensure _timestamps exists for older cache files
+    if (!parsed._timestamps) parsed._timestamps = {}
+    
+    // Fast path: exact version match
     if (parsed.dependencies[pkg] === version) return mod
+    
+    // For "latest" requests, check if we have a cached version that's still fresh
+    if (version === "latest" && parsed.dependencies[pkg]) {
+      const timestamp = parsed._timestamps[pkg] || 0
+      const age = Date.now() - timestamp
+      if (age < LATEST_CACHE_TTL_MS) {
+        log.info("using cached package", { pkg, cachedVersion: parsed.dependencies[pkg], ageMs: age })
+        return mod
+      }
+      log.info("cache expired, will check for updates", { pkg, cachedVersion: parsed.dependencies[pkg], ageMs: age })
+    }
 
     const proxied = !!(
       process.env.HTTP_PROXY ||
@@ -124,6 +143,7 @@ export namespace BunProc {
     }
 
     parsed.dependencies[pkg] = resolvedVersion
+    parsed._timestamps[pkg] = Date.now()
     await Bun.write(pkgjson.name!, JSON.stringify(parsed, null, 2))
     return mod
   }
