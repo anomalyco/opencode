@@ -1168,11 +1168,6 @@ export default function Page() {
                           </Match>
                           <Match when={state()?.loaded && isSvg()}>
                             <div class="flex flex-col gap-4 px-6 py-4">
-                              <Show when={svgPreviewUrl()}>
-                                <div class="flex justify-center">
-                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                                </div>
-                              </Show>
                               <Dynamic
                                 component={codeComponent}
                                 file={{
@@ -1188,8 +1183,13 @@ export default function Page() {
                                   file.setSelectedLines(p, range)
                                 }}
                                 overflow="scroll"
-                                class="select-text pb-40"
+                                class="select-text"
                               />
+                              <Show when={svgPreviewUrl()}>
+                                <div class="flex justify-center pb-40">
+                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                </div>
+                              </Show>
                             </div>
                           </Match>
                           <Match when={state()?.loaded}>
