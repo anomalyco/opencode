@@ -1345,12 +1345,20 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
+          const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+
           c.status(200)
           c.header("Content-Type", "application/json")
           return stream(c, async (stream) => {
-            const sessionID = c.req.valid("param").sessionID
-            const body = c.req.valid("json")
-            const msg = await SessionPrompt.prompt({ ...body, sessionID })
+            const msg = await Instance.provide({
+              directory,
+              init: InstanceBootstrap,
+              async fn() {
+                return SessionPrompt.prompt({ ...body, sessionID })
+              },
+            })
             stream.write(JSON.stringify(msg))
           })
         },
@@ -1377,13 +1385,21 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          c.status(204)
-          c.header("Content-Type", "application/json")
-          return stream(c, async () => {
-            const sessionID = c.req.valid("param").sessionID
-            const body = c.req.valid("json")
-            SessionPrompt.prompt({ ...body, sessionID })
+          const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const sessionID = c.req.valid("param").sessionID
+          const body = c.req.valid("json")
+
+          void Instance.provide({
+            directory,
+            init: InstanceBootstrap,
+            async fn() {
+              await SessionPrompt.prompt({ ...body, sessionID })
+            },
+          }).catch((error) => {
+            log.error("prompt_async failed", { error })
           })
+
+          return c.body(null, 204)
         },
       )
       .post(

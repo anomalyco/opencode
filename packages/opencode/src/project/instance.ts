@@ -1,4 +1,5 @@
 import { Log } from "@/util/log"
+import { ProcessCwd } from "@/util/process-cwd"
 import { Context } from "../util/context"
 import { Project } from "./project"
 import { State } from "./state"
@@ -25,16 +26,20 @@ export const Instance = {
           worktree: project.worktree,
           project,
         }
-        await context.provide(ctx, async () => {
-          await input.init?.()
+        await ProcessCwd.run(ctx.worktree, async () => {
+          await context.provide(ctx, async () => {
+            await input.init?.()
+          })
         })
         return ctx
       })
       cache.set(input.directory, existing)
     }
     const ctx = await existing
-    return context.provide(ctx, async () => {
-      return input.fn()
+    return ProcessCwd.run(ctx.worktree, async () => {
+      return context.provide(ctx, async () => {
+        return input.fn()
+      })
     })
   },
   get directory() {
