@@ -597,7 +597,7 @@ export namespace MCP {
     const s = await state()
     const clientsSnapshot = await clients()
 
-    const prompts = Object.fromEntries<ResourceInfo & { client: string }>(
+    const result = Object.fromEntries<ResourceInfo & { client: string }>(
       (
         await Promise.all(
           Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
@@ -611,7 +611,7 @@ export namespace MCP {
       ).flat(),
     )
 
-    return prompts
+    return result
   }
 
   export async function getPrompt(clientName: string, name: string, args?: Record<string, string>) {

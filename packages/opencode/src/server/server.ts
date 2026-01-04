@@ -2338,11 +2338,11 @@ export namespace Server {
         },
       )
       .get(
-        "/mcp/resources",
+        "/experimental/resource",
         describeRoute({
           summary: "Get MCP resources",
-          description: "Get all available MCP resources from connected servers.",
-          operationId: "mcp.resources",
+          description: "Get all available MCP resources from connected servers. Optionally filter by name.",
+          operationId: "experimental.resource.list",
           responses: {
             200: {
               description: "MCP resources",

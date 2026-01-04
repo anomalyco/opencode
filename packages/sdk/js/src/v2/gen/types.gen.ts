@@ -4170,16 +4170,16 @@ export type McpDisconnectResponses = {
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
 
-export type McpResourcesData = {
+export type ExperimentalResourceListData = {
   body?: never
   path?: never
   query?: {
     directory?: string
   }
-  url: "/mcp/resources"
+  url: "/experimental/resource"
 }
 
-export type McpResourcesResponses = {
+export type ExperimentalResourceListResponses = {
   /**
    * MCP resources
    */
@@ -4188,7 +4188,8 @@ export type McpResourcesResponses = {
   }
 }
 
-export type McpResourcesResponse = McpResourcesResponses[keyof McpResourcesResponses]
+export type ExperimentalResourceListResponse =
+  ExperimentalResourceListResponses[keyof ExperimentalResourceListResponses]
 
 export type LspStatusData = {
   body?: never
