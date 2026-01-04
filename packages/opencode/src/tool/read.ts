@@ -8,7 +8,6 @@ import DESCRIPTION from "./read.txt"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
-import { iife } from "@/util/iife"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -46,21 +45,6 @@ export const ReadTool = Tool.define("read", {
       always: ["*"],
       metadata: {},
     })
-
-    const block = iife(() => {
-      const basename = path.basename(filepath)
-      const whitelist = [".env.sample", ".env.example", ".example", ".env.template"]
-
-      if (whitelist.some((w) => basename.endsWith(w))) return false
-      // Block .env, .env.local, .env.production, etc. but not .envrc
-      if (/^\.env(\.|$)/.test(basename)) return true
-
-      return false
-    })
-
-    if (block) {
-      throw new Error(`The user has blocked you from reading ${filepath}, DO NOT make further attempts to read it`)
-    }
 
     const file = Bun.file(filepath)
     if (!(await file.exists())) {
