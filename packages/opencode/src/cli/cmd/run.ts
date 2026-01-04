@@ -87,6 +87,10 @@ export const RunCommand = cmd({
         type: "number",
         describe: "port for the local server (defaults to random port if no value provided)",
       })
+      .option("variant", {
+        type: "string",
+        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -254,6 +258,7 @@ export const RunCommand = cmd({
           model: args.model,
           command: args.command,
           arguments: message,
+          variant: args.variant,
         })
       } else {
         const modelParam = args.model ? Provider.parseModel(args.model) : undefined
@@ -261,6 +266,7 @@ export const RunCommand = cmd({
           sessionID,
           agent: resolvedAgent,
           model: modelParam,
+          variant: args.variant,
           parts: [...fileParts, { type: "text", text: message }],
         })
       }
