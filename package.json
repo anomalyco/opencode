@@ -9,6 +9,7 @@
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
+    "build": "bun run script/build.ts",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
     "test": "echo 'do not run tests from root' && exit 1"
@@ -76,7 +77,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sst/opencode"
+    "url": "git+https://github.com/sst/opencode.git"
   },
   "license": "MIT",
   "prettier": {
@@ -96,5 +97,6 @@
   },
   "patchedDependencies": {
     "ghostty-web@0.3.0": "patches/ghostty-web@0.3.0.patch"
-  }
+  },
+  "version": ""
 }

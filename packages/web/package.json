@@ -33,7 +33,7 @@
     "toolbeam-docs-theme": "0.4.8"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
+    "@geocomply/opencode": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

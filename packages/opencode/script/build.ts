@@ -102,8 +102,10 @@ if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
 }
 for (const item of targets) {
+  // Extract base package name without scope (e.g., "@geocomply/opencode" -> "opencode")
+  const baseName = pkg.name.split('/').pop() || pkg.name
   const name = [
-    pkg.name,
+    baseName,
     // changing to win32 flags npm for some reason
     item.os === "win32" ? "windows" : item.os,
     item.arch,
@@ -133,7 +135,7 @@ for (const item of targets) {
       //@ts-ignore (bun types aren't up to date)
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
+      target: name.replace(baseName, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--"],
       windows: {},
