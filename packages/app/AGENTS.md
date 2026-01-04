@@ -4,7 +4,6 @@
   running at http://localhost:3000
 - NEVER try to restart the app, or the server process, EVER.
 
-
 ## SolidJS
 
 - Always prefer `createStore` over multiple `createSignal` calls
