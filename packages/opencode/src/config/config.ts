@@ -480,7 +480,7 @@ export namespace Config {
       }
 
       // Convert legacy tools config to permissions
-      const permission: Permission = { ...agent.permission }
+      const permission: Permission = {}
       for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
         const action = enabled ? "allow" : "deny"
         // write, edit, patch, multiedit all map to edit permission
@@ -490,6 +490,7 @@ export namespace Config {
           permission[tool] = action
         }
       }
+      Object.assign(permission, agent.permission)
 
       // Convert legacy maxSteps to steps
       const steps = agent.steps ?? agent.maxSteps
