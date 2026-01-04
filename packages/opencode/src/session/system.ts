@@ -14,6 +14,7 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
+import PROMPT_RLM_AUTO from "./prompt/rlm-auto.txt"
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
@@ -65,6 +66,14 @@ export namespace SystemPrompt {
     path.join(Global.Path.config, "AGENTS.md"),
     path.join(os.homedir(), ".claude", "CLAUDE.md"),
   ]
+
+  export async function rlm() {
+    const config = await Config.get()
+    if (config.experimental?.repl_tool === true) {
+      return [PROMPT_RLM_AUTO]
+    }
+    return []
+  }
 
   export async function custom() {
     const config = await Config.get()

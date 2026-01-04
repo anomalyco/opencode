@@ -1,0 +1,55 @@
+## Recursive Language Model (RLM) for Large Contexts
+
+When working with large files, directories, or codebases that exceed normal context limits, you have access to the `repl` tool - a Python REPL environment designed for processing arbitrarily long contexts.
+
+### When to Use the REPL Tool
+
+Use the REPL tool when:
+- Analyzing entire codebases or large directories
+- Processing files larger than ~50KB
+- The user asks to analyze, search, or summarize large amounts of code/text
+- You need to find patterns across many files
+- The total context would be too large to process directly
+
+### How It Works
+
+1. Load files/content into the REPL's `context` variable
+2. Write Python code to search, filter, chunk, and analyze
+3. Use `llm_query()` for semantic understanding of specific sections
+4. Use `llm_query_parallel()` to process multiple chunks simultaneously
+
+### Example: Analyzing a Large Codebase
+
+```python
+# First, probe what we're working with
+info = probe_context()
+print(f"Analyzing {info['length']} chars across {info['lines']} lines")
+
+# Smart chunk by code boundaries
+chunks = smart_chunk(context, target_size=5000, separators=['\n\ndef ', '\n\nclass '])
+
+# Find chunks matching a pattern
+import re
+relevant = [c for c in chunks if re.search(r'error|exception', c, re.I)]
+
+# Analyze relevant chunks in parallel
+if relevant:
+    analyses = llm_query_parallel([
+        {"prompt": "Identify any error handling issues:", "context": c}
+        for c in relevant
+    ])
+    print(f"FINAL({analyses})")
+else:
+    print("FINAL(No error-related code found)")
+```
+
+### Key Functions Available
+
+- `probe_context()` - Get metadata (length, lines, format, preview)
+- `smart_chunk(text, target_size, overlap)` - Split preserving semantic boundaries
+- `llm_query(prompt, ctx)` - Single LLM query
+- `llm_query_parallel(queries)` - Parallel LLM queries (much faster)
+- `llm_map(template, items)` - Map a prompt over many items
+- `plan_decomposition(task)` - Get LLM to suggest analysis strategy
+
+Remember: The REPL persists state across calls, so you can build up analysis incrementally.
