@@ -4485,6 +4485,29 @@ export type TuiControlResponseResponses = {
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
 
+export type PluginInputModeData = {
+  body?: {
+    text: string
+    currentMode: "normal" | "shell"
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/plugin/input-mode"
+}
+
+export type PluginInputModeResponses = {
+  /**
+   * Plugin hook triggered successfully
+   */
+  200: {
+    mode?: "normal" | "shell"
+  }
+}
+
+export type PluginInputModeResponse = PluginInputModeResponses[keyof PluginInputModeResponses]
+
 export type AuthSetData = {
   body?: Auth
   path: {

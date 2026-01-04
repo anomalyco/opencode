@@ -8,6 +8,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
+import { Log } from "@/util/log"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
@@ -767,18 +768,20 @@ export function Prompt(props: PromptProps) {
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
                 syncExtmarksWithPromptParts()
-                
-                if (props.sessionID) {
-                  try {
-                    const modeResult = await Plugin.trigger(
-                      "tui.input.mode",
-                      { text: value, currentMode: store.mode },
-                      { mode: store.mode }
-                    )
-                    if (modeResult.mode !== store.mode) {
-                      setStore("mode", modeResult.mode)
-                    }
-                  } catch {}
+
+                if (props.sessionID && value.length > 0) {
+                  fetch(`${sdk.url}/plugin/input-mode`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: value, currentMode: store.mode }),
+                  })
+                    .then((response) => response.ok && response.json())
+                    .then((result) => {
+                      if (result?.mode && result.mode !== store.mode) {
+                        setStore("mode", result.mode)
+                      }
+                    })
+                    .catch(() => {})
                 }
               }}
               keyBindings={textareaKeybindings()}

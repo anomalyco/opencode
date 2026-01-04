@@ -7,4 +7,17 @@ export const GlobalBus = new EventEmitter<{
       payload: any
     },
   ]
+  "tui.input.mode.request": [
+    {
+      sessionID: string
+      text: string
+      currentMode: "normal" | "shell"
+    },
+  ]
+  "tui.input.mode.response": [
+    {
+      sessionID: string
+      mode: "normal" | "shell"
+    },
+  ]
 }>()

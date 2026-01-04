@@ -48,6 +48,7 @@ import { upgradeWebSocket, websocket } from "hono/bun"
 import { errors } from "./error"
 import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
+import { Plugin } from "@/plugin"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 import { Worktree } from "../worktree"
@@ -2674,6 +2675,41 @@ export namespace Server {
         },
       )
       .route("/tui/control", TuiRoute)
+      .post(
+        "/plugin/input-mode",
+        describeRoute({
+          summary: "Trigger plugin input mode hook",
+          description: "Trigger the tui.input.mode plugin hook to determine input mode",
+          operationId: "plugin.inputMode",
+          responses: {
+            200: {
+              description: "Plugin hook triggered successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      mode: z.enum(["normal", "shell"]).optional(),
+                    }),
+                  ),
+                },
+              },
+            },
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            text: z.string(),
+            currentMode: z.enum(["normal", "shell"]),
+          }),
+        ),
+        async (c) => {
+          const { text, currentMode } = c.req.valid("json")
+          const output: { mode?: "normal" | "shell" } = {}
+          await Plugin.trigger("tui.input.mode", { text, currentMode }, output)
+          return c.json(output)
+        },
+      )
       .put(
         "/auth/:providerID",
         describeRoute({

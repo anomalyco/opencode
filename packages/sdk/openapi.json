@@ -5217,6 +5217,65 @@
         ]
       }
     },
+    "/plugin/input-mode": {
+      "post": {
+        "operationId": "plugin.inputMode",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Trigger plugin input mode hook",
+        "description": "Trigger the tui.input.mode plugin hook to determine input mode",
+        "responses": {
+          "200": {
+            "description": "Plugin hook triggered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": ["normal", "shell"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "currentMode": {
+                    "type": "string",
+                    "enum": ["normal", "shell"]
+                  }
+                },
+                "required": ["text", "currentMode"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.plugin.inputMode({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/auth/{providerID}": {
       "put": {
         "operationId": "auth.set",

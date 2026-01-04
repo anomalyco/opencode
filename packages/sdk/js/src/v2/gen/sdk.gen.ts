@@ -61,6 +61,7 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PluginInputModeResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -2808,6 +2809,45 @@ export class Tui extends HeyApiClient {
   control = new Control({ client: this.client })
 }
 
+export class Plugin extends HeyApiClient {
+  /**
+   * Trigger plugin input mode hook
+   *
+   * Trigger the tui.input.mode plugin hook to determine input mode
+   */
+  public inputMode<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      text?: string
+      currentMode?: "normal" | "shell"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "text" },
+            { in: "body", key: "currentMode" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PluginInputModeResponses, unknown, ThrowOnError>({
+      url: "/plugin/input-mode",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Event extends HeyApiClient {
   /**
    * Subscribe to events
@@ -2878,6 +2918,8 @@ export class OpencodeClient extends HeyApiClient {
   formatter = new Formatter({ client: this.client })
 
   tui = new Tui({ client: this.client })
+
+  plugin = new Plugin({ client: this.client })
 
   auth = new Auth({ client: this.client })
 
