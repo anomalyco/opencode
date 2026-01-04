@@ -6,6 +6,7 @@ import { Instance } from "@/project/instance"
 import { Database, eq } from "@/storage/db"
 import { PermissionTable } from "@/session/session.sql"
 import { fn } from "@/util/fn"
+import { isInteractive } from "@/util/interactive"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import os from "os"
@@ -142,11 +143,22 @@ export namespace PermissionNext {
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
           const id = input.id ?? Identifier.ascending("permission")
+          const info: Request = {
+            id,
+            ...request,
+          }
+
+          // Non-interactive mode: no one to approve, auto-deny
+          if (!isInteractive()) {
+            Bus.publish(Event.Asked, info)
+            log.warn("auto-denied permission in non-interactive mode", {
+              permission: request.permission,
+              patterns: request.patterns,
+            })
+            throw new DeniedError([{ permission: request.permission, pattern: "*", action: "deny" }])
+          }
+
           return new Promise<void>((resolve, reject) => {
-            const info: Request = {
-              id,
-              ...request,
-            }
             s.pending[id] = {
               info,
               resolve,

@@ -24,7 +24,9 @@ import { Session } from "../../session"
 import { Identifier } from "../../id/id"
 import { Provider } from "../../provider/provider"
 import { Bus } from "../../bus"
+import { Flag } from "../../flag/flag"
 import { MessageV2 } from "../../session/message-v2"
+import { PermissionNext } from "../../permission/next"
 import { SessionPrompt } from "@/session/prompt"
 import { $ } from "bun"
 
@@ -467,6 +469,7 @@ export const GithubRunCommand = cmd({
       let gitConfig: string
       let session: { id: string; title: string; version: string }
       let shareId: string | undefined
+      let unsubscribeEvents: (() => void) | undefined
       let exitCode = 0
       type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
       const triggerCommentId = isCommentEvent
@@ -518,7 +521,7 @@ export const GithubRunCommand = cmd({
             },
           ],
         })
-        subscribeSessionEvents()
+        unsubscribeEvents = subscribeSessionEvents()
         shareId = await (async () => {
           if (share === false) return
           if (!share && repoData.data.private) return
@@ -633,6 +636,7 @@ export const GithubRunCommand = cmd({
         // Also output the clean error message for the action to capture
         //core.setOutput("prepare_error", e.message);
       } finally {
+        unsubscribeEvents?.()
         if (!useGithubToken) {
           await restoreGitConfig()
           await revokeAppToken()
@@ -828,34 +832,78 @@ export const GithubRunCommand = cmd({
           )
         }
 
+        // Track sessions: main session + subagent sessions when OPENCODE_EMIT_SUBAGENT_EVENTS
+        const trackedSessions = new Set<string>([session.id])
+        const unsubscribes: Array<() => void> = []
+
+        if (Flag.OPENCODE_EMIT_SUBAGENT_EVENTS) {
+          unsubscribes.push(
+            Bus.subscribe(Session.Event.Created, (evt) => {
+              const info = evt.properties.info
+              if (info.parentID && trackedSessions.has(info.parentID)) {
+                trackedSessions.add(info.id)
+                console.log()
+                printEvent(UI.Style.TEXT_INFO_BOLD, "Agent", info.title ?? "Subagent started")
+              }
+            }),
+          )
+        }
+
         let text = ""
-        Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-          if (evt.properties.part.sessionID !== session.id) return
-          //if (evt.properties.part.messageID === messageID) return
-          const part = evt.properties.part
+        unsubscribes.push(
+          Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+            const shouldTrack =
+              evt.properties.part.sessionID === session.id ||
+              (Flag.OPENCODE_EMIT_SUBAGENT_EVENTS && trackedSessions.has(evt.properties.part.sessionID))
+            if (!shouldTrack) return
 
-          if (part.type === "tool" && part.state.status === "completed") {
-            const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
-            const title =
-              part.state.title || Object.keys(part.state.input).length > 0
-                ? JSON.stringify(part.state.input)
-                : "Unknown"
-            console.log()
-            printEvent(color, tool, title)
-          }
+            const part = evt.properties.part
 
-          if (part.type === "text") {
-            text = part.text
-
-            if (part.time?.end) {
-              UI.empty()
-              UI.println(UI.markdown(text))
-              UI.empty()
-              text = ""
-              return
+            if (part.type === "tool" && part.state.status === "completed") {
+              const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
+              const title =
+                part.state.title || Object.keys(part.state.input).length > 0
+                  ? JSON.stringify(part.state.input)
+                  : "Unknown"
+              console.log()
+              printEvent(color, tool, title)
             }
-          }
-        })
+
+            if (part.type === "text") {
+              text = part.text
+
+              if (part.time?.end) {
+                UI.empty()
+                UI.println(UI.markdown(text))
+                UI.empty()
+                text = ""
+                return
+              }
+            }
+          }),
+        )
+
+        // Subscribe to permission events (auto-denied in non-interactive mode)
+        unsubscribes.push(
+          Bus.subscribe(PermissionNext.Event.Asked, async (evt) => {
+            const shouldTrack =
+              evt.properties.sessionID === session.id ||
+              (Flag.OPENCODE_EMIT_SUBAGENT_EVENTS && trackedSessions.has(evt.properties.sessionID))
+            if (!shouldTrack) return
+
+            console.log()
+            printEvent(
+              UI.Style.TEXT_WARNING_BOLD,
+              "Denied",
+              `${evt.properties.permission}: ${evt.properties.patterns.join(", ")}`,
+            )
+            console.log(
+              `  To allow, add to opencode.json: { "permission": { "${evt.properties.permission}": "allow" } }`,
+            )
+          }),
+        )
+
+        return () => unsubscribes.forEach((unsub) => unsub())
       }
 
       async function summarize(response: string) {

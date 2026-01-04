@@ -30,6 +30,11 @@ inputs:
     description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/opencode,/oc'"
     required: false
 
+  emit_subagent_events:
+    description: "Emit subagent tool calls and events to workflow logs (verbose output)"
+    required: false
+    default: "false"
+
   oidc_base_url:
     description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.opencode.ai"
     required: false
@@ -72,3 +77,4 @@ runs:
         USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
         MENTIONS: ${{ inputs.mentions }}
         OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
+        OPENCODE_EMIT_SUBAGENT_EVENTS: ${{ inputs.emit_subagent_events }}
