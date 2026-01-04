@@ -1,6 +1,7 @@
 import z from "zod"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
+import path from "path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
@@ -108,6 +109,7 @@ export const BashTool = Tool.define("bash", async () => {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
+              .cwd(cwd)
               .quiet()
               .nothrow()
               .text()
@@ -119,7 +121,7 @@ export const BashTool = Tool.define("bash", async () => {
                 process.platform === "win32" && resolved.match(/^\/[a-z]\//)
                   ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
                   : resolved
-              directories.add(normalized)
+              if (!Filesystem.contains(Instance.directory, normalized)) directories.add(normalized)
             }
           }
         }
@@ -135,7 +137,7 @@ export const BashTool = Tool.define("bash", async () => {
         await ctx.ask({
           permission: "external_directory",
           patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => x + "*"),
+          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
           metadata: {},
         })
       }

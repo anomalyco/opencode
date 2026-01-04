@@ -10,7 +10,6 @@
       "options": {},
     },
   },
-  // "permission": "ask",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -19,5 +18,6 @@
   },
   "tools": {
     "github-triage": false,
+    "github-pr-search": false,
   },
 }

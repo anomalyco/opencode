@@ -28,7 +28,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 
 type State = {
-  ready: boolean
+  status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: Command[]
   project: string
@@ -88,7 +88,7 @@ function createGlobalSync() {
         provider: { all: [], connected: [], default: {} },
         config: {},
         path: { state: "", config: "", worktree: "", directory: "", home: "" },
-        ready: false,
+        status: "loading" as const,
         agent: [],
         command: [],
         session: [],
@@ -142,7 +142,8 @@ function createGlobalSync() {
       directory,
       throwOnError: true,
     })
-    const load = {
+
+    const blockingRequests = {
       project: () => sdk.project.current().then((x) => setStore("project", x.data!.id)),
       provider: () =>
         sdk.provider.list().then((x) => {
@@ -157,51 +158,57 @@ function createGlobalSync() {
             })),
           })
         }),
-      path: () => sdk.path.get().then((x) => setStore("path", x.data!)),
       agent: () => sdk.app.agents().then((x) => setStore("agent", x.data ?? [])),
-      command: () => sdk.command.list().then((x) => setStore("command", x.data ?? [])),
-      session: () => loadSessions(directory),
-      status: () => sdk.session.status().then((x) => setStore("session_status", x.data!)),
       config: () => sdk.config.get().then((x) => setStore("config", x.data!)),
-      mcp: () => sdk.mcp.status().then((x) => setStore("mcp", x.data ?? {})),
-      lsp: () => sdk.lsp.status().then((x) => setStore("lsp", x.data ?? [])),
-      vcs: () => sdk.vcs.get().then((x) => setStore("vcs", x.data)),
-      permission: () =>
-        sdk.permission.list().then((x) => {
-          const grouped: Record<string, PermissionRequest[]> = {}
-          for (const perm of x.data ?? []) {
-            if (!perm?.id || !perm.sessionID) continue
-            const existing = grouped[perm.sessionID]
-            if (existing) {
-              existing.push(perm)
-              continue
-            }
-            grouped[perm.sessionID] = [perm]
-          }
-
-          batch(() => {
-            for (const sessionID of Object.keys(store.permission)) {
-              if (grouped[sessionID]) continue
-              setStore("permission", sessionID, [])
-            }
-            for (const [sessionID, permissions] of Object.entries(grouped)) {
-              setStore(
-                "permission",
-                sessionID,
-                reconcile(
-                  permissions
-                    .filter((p) => !!p?.id)
-                    .slice()
-                    .sort((a, b) => a.id.localeCompare(b.id)),
-                  { key: "id" },
-                ),
-              )
-            }
-          })
-        }),
     }
-    await Promise.all(Object.values(load).map((p) => retry(p).catch((e) => setGlobalStore("error", e))))
-      .then(() => setStore("ready", true))
+    await Promise.all(Object.values(blockingRequests).map((p) => retry(p).catch((e) => setGlobalStore("error", e))))
+      .then(() => {
+        if (store.status !== "complete") setStore("status", "partial")
+        // non-blocking
+        Promise.all([
+          sdk.path.get().then((x) => setStore("path", x.data!)),
+          sdk.command.list().then((x) => setStore("command", x.data ?? [])),
+          sdk.session.status().then((x) => setStore("session_status", x.data!)),
+          loadSessions(directory),
+          sdk.mcp.status().then((x) => setStore("mcp", x.data!)),
+          sdk.lsp.status().then((x) => setStore("lsp", x.data!)),
+          sdk.vcs.get().then((x) => setStore("vcs", x.data)),
+          sdk.permission.list().then((x) => {
+            const grouped: Record<string, PermissionRequest[]> = {}
+            for (const perm of x.data ?? []) {
+              if (!perm?.id || !perm.sessionID) continue
+              const existing = grouped[perm.sessionID]
+              if (existing) {
+                existing.push(perm)
+                continue
+              }
+              grouped[perm.sessionID] = [perm]
+            }
+
+            batch(() => {
+              for (const sessionID of Object.keys(store.permission)) {
+                if (grouped[sessionID]) continue
+                setStore("permission", sessionID, [])
+              }
+              for (const [sessionID, permissions] of Object.entries(grouped)) {
+                setStore(
+                  "permission",
+                  sessionID,
+                  reconcile(
+                    permissions
+                      .filter((p) => !!p?.id)
+                      .slice()
+                      .sort((a, b) => a.id.localeCompare(b.id)),
+                    { key: "id" },
+                  ),
+                )
+              }
+            })
+          }),
+        ]).then(() => {
+          setStore("status", "complete")
+        })
+      })
       .catch((e) => setGlobalStore("error", e))
   }
 

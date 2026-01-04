@@ -47,6 +47,13 @@ export namespace Agent {
       "*": "allow",
       doom_loop: "ask",
       external_directory: "ask",
+      // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+      read: {
+        "*": "allow",
+        "*.env": "deny",
+        "*.env.*": "deny",
+        "*.env.example": "allow",
+      },
     })
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
