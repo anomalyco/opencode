@@ -3649,7 +3649,7 @@ export type IntentRespondData = {
   query?: {
     directory?: string
   }
-  url: "/session/{sessionID}/intent/{intentID}"
+  url: "/intent/{sessionID}/{intentID}"
 }
 
 export type IntentRespondErrors = {

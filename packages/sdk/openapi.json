@@ -3100,7 +3100,7 @@
         ]
       }
     },
-    "/session/{sessionID}/intent/{intentID}": {
+    "/intent/{sessionID}/{intentID}": {
       "post": {
         "operationId": "intent.respond",
         "parameters": [

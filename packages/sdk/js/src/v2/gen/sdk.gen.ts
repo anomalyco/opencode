@@ -1792,7 +1792,7 @@ export class Intent extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).post<IntentRespondResponses, IntentRespondErrors, ThrowOnError>({
-      url: "/session/{sessionID}/intent/{intentID}",
+      url: "/intent/{sessionID}/{intentID}",
       ...options,
       ...params,
       headers: {
