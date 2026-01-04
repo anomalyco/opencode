@@ -768,13 +768,17 @@ export function Prompt(props: PromptProps) {
                 autocomplete.onInput(value)
                 syncExtmarksWithPromptParts()
                 
-                const modeResult = await Plugin.trigger(
-                  "tui.input.mode",
-                  { text: value, currentMode: store.mode },
-                  { mode: store.mode }
-                )
-                if (modeResult.mode !== store.mode) {
-                  setStore("mode", modeResult.mode)
+                if (props.sessionID) {
+                  try {
+                    const modeResult = await Plugin.trigger(
+                      "tui.input.mode",
+                      { text: value, currentMode: store.mode },
+                      { mode: store.mode }
+                    )
+                    if (modeResult.mode !== store.mode) {
+                      setStore("mode", modeResult.mode)
+                    }
+                  } catch {}
                 }
               }}
               keyBindings={textareaKeybindings()}
