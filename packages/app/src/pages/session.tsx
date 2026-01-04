@@ -15,7 +15,7 @@ import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
-import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
+import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
@@ -102,18 +102,12 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       .catch(() => undefined)
   }
 
-  const restoreScroll = (retries = 0) => {
+  const restoreScroll = () => {
     const el = scroll
     if (!el) return
 
     const s = props.view().scroll("review")
     if (!s) return
-
-    // Wait for content to be scrollable - content may not have rendered yet
-    if (el.scrollHeight <= el.clientHeight && retries < 10) {
-      requestAnimationFrame(() => restoreScroll(retries + 1))
-      return
-    }
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x
@@ -159,6 +153,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
         restoreScroll()
       }}
       onScroll={handleScroll}
+      onDiffRendered={() => requestAnimationFrame(restoreScroll)}
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{
@@ -192,7 +187,6 @@ export default function Page() {
   const prompt = usePrompt()
   const permission = usePermission()
   const [pendingMessage, setPendingMessage] = createSignal<string | undefined>(undefined)
-  const [pendingHash, setPendingHash] = createSignal<string | undefined>(undefined)
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -494,38 +488,73 @@ export default function Page() {
     setStore("expanded", id, status().type !== "idle")
   })
 
+  const addSelectionToContext = (path: string, selection: FileSelection) => {
+    prompt.context.add({ type: "file", path, selection })
+  }
+
   command.register(() => [
     {
       id: "session.new",
-      title: language.t("command.session.new"),
-      category: language.t("command.category.session"),
+      title: "New session",
+      category: "Session",
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
     {
       id: "file.open",
-      title: language.t("command.file.open"),
-      description: language.t("command.file.open.description"),
-      category: language.t("command.category.file"),
+      title: "Open file",
+      description: "Search files and commands",
+      category: "File",
       keybind: "mod+p",
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile />),
     },
     {
+      id: "context.addSelection",
+      title: "Add selection to context",
+      description: "Add selected lines from the current file",
+      category: "Context",
+      keybind: "mod+shift+l",
+      disabled: (() => {
+        const active = tabs().active()
+        if (!active) return true
+        const path = file.pathFromTab(active)
+        if (!path) return true
+        return file.selectedLines(path) == null
+      })(),
+      onSelect: () => {
+        const active = tabs().active()
+        if (!active) return
+        const path = file.pathFromTab(active)
+        if (!path) return
+
+        const range = file.selectedLines(path)
+        if (!range) {
+          showToast({
+            title: "No line selection",
+            description: "Select a line range in a file tab first.",
+          })
+          return
+        }
+
+        addSelectionToContext(path, selectionFromLines(range))
+      },
+    },
+    {
       id: "terminal.toggle",
-      title: language.t("command.terminal.toggle"),
+      title: "Toggle terminal",
       description: "",
-      category: language.t("command.category.view"),
+      category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
       onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
-      title: language.t("command.review.toggle"),
+      title: "Toggle review",
       description: "",
-      category: language.t("command.category.view"),
+      category: "View",
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     },
@@ -542,9 +571,9 @@ export default function Page() {
     },
     {
       id: "steps.toggle",
-      title: language.t("command.steps.toggle"),
-      description: language.t("command.steps.toggle.description"),
-      category: language.t("command.category.view"),
+      title: "Toggle steps",
+      description: "Show or hide steps for the current message",
+      category: "View",
       keybind: "mod+e",
       slash: "steps",
       disabled: !params.id,
@@ -556,62 +585,62 @@ export default function Page() {
     },
     {
       id: "message.previous",
-      title: language.t("command.message.previous"),
-      description: language.t("command.message.previous.description"),
-      category: language.t("command.category.session"),
+      title: "Previous message",
+      description: "Go to the previous user message",
+      category: "Session",
       keybind: "mod+arrowup",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(-1),
     },
     {
       id: "message.next",
-      title: language.t("command.message.next"),
-      description: language.t("command.message.next.description"),
-      category: language.t("command.category.session"),
+      title: "Next message",
+      description: "Go to the next user message",
+      category: "Session",
       keybind: "mod+arrowdown",
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
     },
     {
       id: "model.choose",
-      title: language.t("command.model.choose"),
-      description: language.t("command.model.choose.description"),
-      category: language.t("command.category.model"),
+      title: "Choose model",
+      description: "Select a different model",
+      category: "Model",
       keybind: "mod+'",
       slash: "model",
       onSelect: () => dialog.show(() => <DialogSelectModel />),
     },
     {
       id: "mcp.toggle",
-      title: language.t("command.mcp.toggle"),
-      description: language.t("command.mcp.toggle.description"),
-      category: language.t("command.category.mcp"),
+      title: "Toggle MCPs",
+      description: "Toggle MCPs",
+      category: "MCP",
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
       id: "agent.cycle",
-      title: language.t("command.agent.cycle"),
-      description: language.t("command.agent.cycle.description"),
-      category: language.t("command.category.agent"),
+      title: "Cycle agent",
+      description: "Switch to the next agent",
+      category: "Agent",
       keybind: "mod+.",
       slash: "agent",
       onSelect: () => local.agent.move(1),
     },
     {
       id: "agent.cycle.reverse",
-      title: language.t("command.agent.cycle.reverse"),
-      description: language.t("command.agent.cycle.reverse.description"),
-      category: language.t("command.category.agent"),
+      title: "Cycle agent backwards",
+      description: "Switch to the previous agent",
+      category: "Agent",
       keybind: "shift+mod+.",
       onSelect: () => local.agent.move(-1),
     },
     {
       id: "model.variant.cycle",
-      title: language.t("command.model.variant.cycle"),
-      description: language.t("command.model.variant.cycle.description"),
-      category: language.t("command.category.model"),
+      title: "Cycle thinking effort",
+      description: "Switch to the next effort level",
+      category: "Model",
       keybind: "shift+mod+d",
       onSelect: () => {
         local.model.variant.cycle()
@@ -621,31 +650,30 @@ export default function Page() {
       id: "permissions.autoaccept",
       title:
         params.id && permission.isAutoAccepting(params.id, sdk.directory)
-          ? language.t("command.permissions.autoaccept.disable")
-          : language.t("command.permissions.autoaccept.enable"),
-      category: language.t("command.category.permissions"),
+          ? "Stop auto-accepting edits"
+          : "Auto-accept edits",
+      category: "Permissions",
       keybind: "mod+shift+a",
       disabled: !params.id || !permission.permissionsEnabled(),
       onSelect: () => {
         const sessionID = params.id
         if (!sessionID) return
         permission.toggleAutoAccept(sessionID, sdk.directory)
-        const enabled = permission.isAutoAccepting(sessionID, sdk.directory)
         showToast({
-          title: enabled
-            ? language.t("toast.permissions.autoaccept.on.title")
-            : language.t("toast.permissions.autoaccept.off.title"),
-          description: enabled
-            ? language.t("toast.permissions.autoaccept.on.description")
-            : language.t("toast.permissions.autoaccept.off.description"),
+          title: permission.isAutoAccepting(sessionID, sdk.directory)
+            ? "Auto-accepting edits"
+            : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(sessionID, sdk.directory)
+            ? "Edit and write permissions will be automatically approved"
+            : "Edit and write permissions will require approval",
         })
       },
     },
     {
       id: "session.undo",
-      title: language.t("command.session.undo"),
-      description: language.t("command.session.undo.description"),
-      category: language.t("command.category.session"),
+      title: "Undo",
+      description: "Undo the last message",
+      category: "Session",
       slash: "undo",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -662,10 +690,7 @@ export default function Page() {
         // Restore the prompt from the reverted message
         const parts = sync.data.part[message.id]
         if (parts) {
-          const restored = extractPromptFromParts(parts, {
-            directory: sdk.directory,
-            attachmentName: language.t("common.attachment"),
-          })
+          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
           prompt.set(restored)
         }
         // Navigate to the message before the reverted one (which will be the new last visible message)
@@ -675,9 +700,9 @@ export default function Page() {
     },
     {
       id: "session.redo",
-      title: language.t("command.session.redo"),
-      description: language.t("command.session.redo.description"),
-      category: language.t("command.category.session"),
+      title: "Redo",
+      description: "Redo the last undone message",
+      category: "Session",
       slash: "redo",
       disabled: !params.id || !info()?.revert?.messageID,
       onSelect: async () => {
@@ -704,9 +729,9 @@ export default function Page() {
     },
     {
       id: "session.compact",
-      title: language.t("command.session.compact"),
-      description: language.t("command.session.compact.description"),
-      category: language.t("command.category.session"),
+      title: "Compact session",
+      description: "Summarize the session to reduce context size",
+      category: "Session",
       slash: "compact",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: async () => {
@@ -715,8 +740,8 @@ export default function Page() {
         const model = local.model.current()
         if (!model) {
           showToast({
-            title: language.t("toast.model.none.title"),
-            description: language.t("toast.model.none.description"),
+            title: "No model selected",
+            description: "Connect a provider to summarize this session",
           })
           return
         }
@@ -729,9 +754,9 @@ export default function Page() {
     },
     {
       id: "session.fork",
-      title: language.t("command.session.fork"),
-      description: language.t("command.session.fork.description"),
-      category: language.t("command.category.session"),
+      title: "Fork from message",
+      description: "Create a new session from a previous message",
+      category: "Session",
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
@@ -740,9 +765,9 @@ export default function Page() {
       ? [
           {
             id: "session.share",
-            title: language.t("command.session.share"),
-            description: language.t("command.session.share.description"),
-            category: language.t("command.category.session"),
+            title: "Share session",
+            description: "Share this session and copy the URL to clipboard",
+            category: "Session",
             slash: "share",
             disabled: !params.id || !!info()?.share?.url,
             onSelect: async () => {
@@ -752,22 +777,22 @@ export default function Page() {
                 .then((res) => {
                   navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
                     showToast({
-                      title: language.t("toast.session.share.copyFailed.title"),
+                      title: "Failed to copy URL to clipboard",
                       variant: "error",
                     }),
                   )
                 })
                 .then(() =>
                   showToast({
-                    title: language.t("toast.session.share.success.title"),
-                    description: language.t("toast.session.share.success.description"),
+                    title: "Session shared",
+                    description: "Share URL copied to clipboard!",
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: language.t("toast.session.share.failed.title"),
-                    description: language.t("toast.session.share.failed.description"),
+                    title: "Failed to share session",
+                    description: "An error occurred while sharing the session",
                     variant: "error",
                   }),
                 )
@@ -775,9 +800,9 @@ export default function Page() {
           },
           {
             id: "session.unshare",
-            title: language.t("command.session.unshare"),
-            description: language.t("command.session.unshare.description"),
-            category: language.t("command.category.session"),
+            title: "Unshare session",
+            description: "Stop sharing this session",
+            category: "Session",
             slash: "unshare",
             disabled: !params.id || !info()?.share?.url,
             onSelect: async () => {
@@ -786,15 +811,15 @@ export default function Page() {
                 .unshare({ sessionID: params.id })
                 .then(() =>
                   showToast({
-                    title: language.t("toast.session.unshare.success.title"),
-                    description: language.t("toast.session.unshare.success.description"),
+                    title: "Session unshared",
+                    description: "Session unshared successfully!",
                     variant: "success",
                   }),
                 )
                 .catch(() =>
                   showToast({
-                    title: language.t("toast.session.unshare.failed.title"),
-                    description: language.t("toast.session.unshare.failed.description"),
+                    title: "Failed to unshare session",
+                    description: "An error occurred while unsharing the session",
                     variant: "error",
                   }),
                 )
@@ -1093,39 +1118,63 @@ export default function Page() {
 
     const a = el.getBoundingClientRect()
     const b = root.getBoundingClientRect()
-    const offset = (info()?.title ? 40 : 0) + 12
-    const top = a.top - b.top + root.scrollTop - offset
-    root.scrollTo({ top: top > 0 ? top : 0, behavior })
+    const top = a.top - b.top + root.scrollTop
+    root.scrollTo({ top, behavior })
     return true
   }
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
-    // Navigating to a specific message should always pause auto-follow.
-    autoScroll.pause()
     setActiveMessage(message)
-    updateHash(message.id)
 
     const msgs = visibleUserMessages()
     const index = msgs.findIndex((m) => m.id === message.id)
     if (index !== -1 && index < store.turnStart) {
       setStore("turnStart", index)
       scheduleTurnBackfill()
+
+      requestAnimationFrame(() => {
+        const el = document.getElementById(anchor(message.id))
+        if (!el) {
+          requestAnimationFrame(() => {
+            const next = document.getElementById(anchor(message.id))
+            if (!next) return
+            scrollToElement(next, behavior)
+          })
+          return
+        }
+        scrollToElement(el, behavior)
+      })
+
+      updateHash(message.id)
+      return
     }
 
-    const id = anchor(message.id)
-    const attempt = (tries: number) => {
-      const el = document.getElementById(id)
-      if (el && scrollToElement(el, behavior)) return
-      if (tries >= 8) return
-      requestAnimationFrame(() => attempt(tries + 1))
+    const el = document.getElementById(anchor(message.id))
+    if (!el) {
+      updateHash(message.id)
+      requestAnimationFrame(() => {
+        const next = document.getElementById(anchor(message.id))
+        if (!next) return
+        if (!scrollToElement(next, behavior)) return
+      })
+      return
     }
-    attempt(0)
+    if (scrollToElement(el, behavior)) {
+      updateHash(message.id)
+      return
+    }
+
+    requestAnimationFrame(() => {
+      const next = document.getElementById(anchor(message.id))
+      if (!next) return
+      if (!scrollToElement(next, behavior)) return
+    })
+    updateHash(message.id)
   }
 
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = window.location.hash.slice(1)
     if (!hash) {
-      setPendingHash(undefined)
       autoScroll.forceScrollToBottom()
       return
     }
@@ -1134,25 +1183,21 @@ export default function Page() {
     if (match) {
       const msg = visibleUserMessages().find((m) => m.id === match[1])
       if (msg) {
-        setPendingHash(undefined)
         scrollToMessage(msg, behavior)
         return
       }
 
       // If we have a message hash but the message isn't loaded/rendered yet,
       // don't fall back to "bottom". We'll retry once messages arrive.
-      setPendingHash(match[1])
       return
     }
 
     const target = document.getElementById(hash)
     if (target) {
-      setPendingHash(undefined)
       scrollToElement(target, behavior)
       return
     }
 
-    setPendingHash(undefined)
     autoScroll.forceScrollToBottom()
   }
 
@@ -1210,14 +1255,20 @@ export default function Page() {
     visibleUserMessages().length
     store.turnStart
 
-    const targetId = pendingMessage() ?? pendingHash()
+    const targetId =
+      pendingMessage() ??
+      (() => {
+        const hash = window.location.hash.slice(1)
+        const match = hash.match(/^message-(.+)$/)
+        if (!match) return undefined
+        return match[1]
+      })()
     if (!targetId) return
     if (store.messageId === targetId) return
 
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
     if (pendingMessage() === targetId) setPendingMessage(undefined)
-    if (pendingHash() === targetId) setPendingHash(undefined)
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
@@ -1305,7 +1356,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "session")}
               >
-                {language.t("session.tab.session")}
+                Session
               </Tabs.Trigger>
               <Tabs.Trigger
                 value="review"
@@ -1314,10 +1365,8 @@ export default function Page() {
                 onClick={() => setStore("mobileTab", "review")}
               >
                 <Switch>
-                  <Match when={hasReview()}>
-                    {language.t("session.review.filesChanged", { count: reviewCount() })}
-                  </Match>
-                  <Match when={true}>{language.t("session.tab.review")}</Match>
+                  <Match when={hasReview()}>{reviewCount()} Files Changed</Match>
+                  <Match when={true}>Review</Match>
                 </Switch>
               </Tabs.Trigger>
             </Tabs.List>
@@ -1347,11 +1396,7 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={
-                                <div class="px-4 py-4 text-text-weak">
-                                  {language.t("session.review.loadingChanges")}
-                                </div>
-                              }
+                              fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
                             >
                               <SessionReviewTab
                                 diffs={diffs}
@@ -1373,9 +1418,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">
-                                {language.t("session.review.empty")}
-                              </div>
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
                             </div>
                           </Match>
                         </Switch>
@@ -1413,8 +1456,9 @@ export default function Page() {
                           if (!hasScrollGesture()) return
                           markScrollGesture(e.target)
                           autoScroll.handleScroll()
-                          if (isDesktop() && autoScroll.userScrolled()) scheduleScrollSpy(e.currentTarget)
+                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
                         }}
+                        onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
                         style={{ "--session-title-height": info()?.title ? "40px" : "0px" }}
                       >
@@ -1452,7 +1496,7 @@ export default function Page() {
                                 class="text-12-medium opacity-50"
                                 onClick={() => setStore("turnStart", 0)}
                               >
-                                {language.t("session.messages.renderEarlier")}
+                                Render earlier messages
                               </Button>
                             </div>
                           </Show>
@@ -1470,9 +1514,7 @@ export default function Page() {
                                   sync.session.history.loadMore(id)
                                 }}
                               >
-                                {historyLoading()
-                                  ? language.t("session.messages.loadingEarlier")
-                                  : language.t("session.messages.loadEarlier")}
+                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
                               </Button>
                             </div>
                           </Show>
@@ -1556,7 +1598,7 @@ export default function Page() {
                 when={prompt.ready()}
                 fallback={
                   <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || language.t("prompt.loading")}
+                    {handoff.prompt || "Loading prompt..."}
                   </div>
                 }
               >
@@ -1608,7 +1650,7 @@ export default function Page() {
                             <DiffChanges changes={diffs()} variant="bars" />
                           </Show>
                           <div class="flex items-center gap-1.5">
-                            <div>{language.t("session.tab.review")}</div>
+                            <div>Review</div>
                             <Show when={info()?.summary?.files}>
                               <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
                                 {info()?.summary?.files ?? 0}
@@ -1636,7 +1678,7 @@ export default function Page() {
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
-                          <div>{language.t("session.tab.context")}</div>
+                          <div>Context</div>
                         </div>
                       </Tabs.Trigger>
                     </Show>
@@ -1645,7 +1687,7 @@ export default function Page() {
                     </SortableProvider>
                     <div class="bg-background-base h-full flex items-center justify-center border-b border-border-weak-base px-3">
                       <TooltipKeybind
-                        title={language.t("command.file.open")}
+                        title="Open file"
                         keybind={command.keybind("file.open")}
                         class="flex items-center"
                       >
@@ -1668,11 +1710,7 @@ export default function Page() {
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
-                              fallback={
-                                <div class="px-6 py-4 text-text-weak">
-                                  {language.t("session.review.loadingChanges")}
-                                </div>
-                              }
+                              fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
                             >
                               <SessionReviewTab
                                 diffs={diffs}
@@ -1690,9 +1728,7 @@ export default function Page() {
                           <Match when={true}>
                             <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
                               <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">
-                                {language.t("session.review.empty")}
-                              </div>
+                              <div class="text-13-regular text-text-weak max-w-56">No changes in this session yet</div>
                             </div>
                           </Match>
                         </Switch>
@@ -1719,6 +1755,9 @@ export default function Page() {
                     let scroll: HTMLDivElement | undefined
                     let scrollFrame: number | undefined
                     let pending: { x: number; y: number } | undefined
+                    let codeScroll: HTMLElement[] = []
+
+                    const [selectionPopoverTop, setSelectionPopoverTop] = createSignal<number | undefined>()
 
                     const path = createMemo(() => file.pathFromTab(tab))
                     const state = createMemo(() => {
@@ -1775,28 +1814,78 @@ export default function Page() {
                       return `L${sel.startLine}-${sel.endLine}`
                     })
 
-                    const restoreScroll = (retries = 0) => {
+                    const updateSelectionPopover = () => {
                       const el = scroll
-                      if (!el) return
-
-                      const s = view()?.scroll(tab)
-                      if (!s) return
-
-                      // Wait for content to be scrollable - content may not have rendered yet
-                      if (el.scrollHeight <= el.clientHeight && retries < 10) {
-                        requestAnimationFrame(() => restoreScroll(retries + 1))
+                      if (!el) {
+                        setSelectionPopoverTop(undefined)
                         return
                       }
 
-                      if (el.scrollTop !== s.y) el.scrollTop = s.y
-                      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+                      const sel = selection()
+                      if (!sel) {
+                        setSelectionPopoverTop(undefined)
+                        return
+                      }
+
+                      const host = el.querySelector("diffs-container")
+                      if (!(host instanceof HTMLElement)) {
+                        setSelectionPopoverTop(undefined)
+                        return
+                      }
+
+                      const root = host.shadowRoot
+                      if (!root) {
+                        setSelectionPopoverTop(undefined)
+                        return
+                      }
+
+                      const marker =
+                        (root.querySelector(
+                          '[data-selected-line="last"], [data-selected-line="single"]',
+                        ) as HTMLElement | null) ?? (root.querySelector("[data-selected-line]") as HTMLElement | null)
+
+                      if (!marker) {
+                        setSelectionPopoverTop(undefined)
+                        return
+                      }
+
+                      const containerRect = el.getBoundingClientRect()
+                      const markerRect = marker.getBoundingClientRect()
+                      setSelectionPopoverTop(markerRect.bottom - containerRect.top + el.scrollTop + 8)
                     }
 
-                    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
-                      pending = {
-                        x: event.currentTarget.scrollLeft,
-                        y: event.currentTarget.scrollTop,
-                      }
+                    createEffect(
+                      on(
+                        selection,
+                        (sel) => {
+                          if (!sel) {
+                            setSelectionPopoverTop(undefined)
+                            return
+                          }
+
+                          requestAnimationFrame(updateSelectionPopover)
+                        },
+                        { defer: true },
+                      ),
+                    )
+
+                    const getCodeScroll = () => {
+                      const el = scroll
+                      if (!el) return []
+
+                      const host = el.querySelector("diffs-container")
+                      if (!(host instanceof HTMLElement)) return []
+
+                      const root = host.shadowRoot
+                      if (!root) return []
+
+                      return Array.from(root.querySelectorAll("[data-code]")).filter(
+                        (node): node is HTMLElement => node instanceof HTMLElement && node.clientWidth > 0,
+                      )
+                    }
+
+                    const queueScrollUpdate = (next: { x: number; y: number }) => {
+                      pending = next
                       if (scrollFrame !== undefined) return
 
                       scrollFrame = requestAnimationFrame(() => {
@@ -1807,6 +1896,65 @@ export default function Page() {
                         if (!next) return
 
                         view().setScroll(tab, next)
+                      })
+                    }
+
+                    const handleCodeScroll = (event: Event) => {
+                      const el = scroll
+                      if (!el) return
+
+                      const target = event.currentTarget
+                      if (!(target instanceof HTMLElement)) return
+
+                      queueScrollUpdate({
+                        x: target.scrollLeft,
+                        y: el.scrollTop,
+                      })
+                    }
+
+                    const syncCodeScroll = () => {
+                      const next = getCodeScroll()
+                      if (next.length === codeScroll.length && next.every((el, i) => el === codeScroll[i])) return
+
+                      for (const item of codeScroll) {
+                        item.removeEventListener("scroll", handleCodeScroll)
+                      }
+
+                      codeScroll = next
+
+                      for (const item of codeScroll) {
+                        item.addEventListener("scroll", handleCodeScroll)
+                      }
+                    }
+
+                    const restoreScroll = () => {
+                      const el = scroll
+                      if (!el) return
+
+                      const s = view()?.scroll(tab)
+                      if (!s) return
+
+                      syncCodeScroll()
+
+                      if (codeScroll.length > 0) {
+                        for (const item of codeScroll) {
+                          if (item.scrollLeft !== s.x) item.scrollLeft = s.x
+                        }
+                      }
+
+                      if (el.scrollTop !== s.y) el.scrollTop = s.y
+
+                      if (codeScroll.length > 0) return
+
+                      if (el.scrollLeft !== s.x) el.scrollLeft = s.x
+                    }
+
+                    const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
+                      if (codeScroll.length === 0) syncCodeScroll()
+
+                      queueScrollUpdate({
+                        x: codeScroll[0]?.scrollLeft ?? event.currentTarget.scrollLeft,
+                        y: event.currentTarget.scrollTop,
                       })
                     }
 
@@ -1844,6 +1992,10 @@ export default function Page() {
                     )
 
                     onCleanup(() => {
+                      for (const item of codeScroll) {
+                        item.removeEventListener("scroll", handleCodeScroll)
+                      }
+
                       if (scrollFrame === undefined) return
                       cancelAnimationFrame(scrollFrame)
                     })
@@ -1851,93 +2003,115 @@ export default function Page() {
                     return (
                       <Tabs.Content
                         value={tab}
-                        class="mt-3"
+                        class="mt-3 relative"
                         ref={(el: HTMLDivElement) => {
                           scroll = el
                           restoreScroll()
+                          updateSelectionPopover()
                         }}
                         onScroll={handleScroll}
                       >
                         <Show when={activeTab() === tab}>
-                          <Show when={selection()}>
+                          <Show when={selectionPopoverTop() !== undefined && selection()}>
                             {(sel) => (
-                              <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
-                                <button
-                                  type="button"
-                                  class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
-                                  onClick={() => {
-                                    const p = path()
-                                    if (!p) return
-                                    prompt.context.add({ type: "file", path: p, selection: sel() })
-                                  }}
+                              <div class="absolute z-20 right-6" style={{ top: `${selectionPopoverTop() ?? 0}px` }}>
+                                <TooltipKeybind
+                                  placement="bottom"
+                                  title="Add selection to context"
+                                  keybind={command.keybind("context.addSelection")}
                                 >
-                                  <Icon name="plus-small" size="small" />
-                                  <span>
-                                    {language.t("session.context.addToContext", { selection: selectionLabel() ?? "" })}
-                                  </span>
-                                </button>
+                                  <button
+                                    type="button"
+                                    class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-raised-stronger-non-alpha border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
+                                    onClick={() => {
+                                      const p = path()
+                                      if (!p) return
+                                      addSelectionToContext(p, sel())
+                                    }}
+                                  >
+                                    <Icon name="plus-small" size="small" />
+                                    <span>
+                                      {language.t("session.context.addToContext", {
+                                        selection: selectionLabel() ?? "",
+                                      })}
+                                    </span>
+                                  </button>
+                                </TooltipKeybind>
                               </div>
                             )}
                           </Show>
-                          <Switch>
-                            <Match when={state()?.loaded && isImage()}>
-                              <div class="px-6 py-4 pb-40">
-                                <img src={imageDataUrl()} alt={path()} class="max-w-full" />
-                              </div>
-                            </Match>
-                            <Match when={state()?.loaded && isSvg()}>
-                              <div class="flex flex-col gap-4 px-6 py-4">
-                                <Dynamic
-                                  component={codeComponent}
-                                  file={{
-                                    name: path() ?? "",
-                                    contents: svgContent() ?? "",
-                                    cacheKey: cacheKey(),
-                                  }}
-                                  enableLineSelection
-                                  selectedLines={selectedLines()}
-                                  onLineSelected={(range: SelectedLineRange | null) => {
-                                    const p = path()
-                                    if (!p) return
-                                    file.setSelectedLines(p, range)
-                                  }}
-                                  overflow="scroll"
-                                  class="select-text"
-                                />
-                                <Show when={svgPreviewUrl()}>
-                                  <div class="flex justify-center pb-40">
-                                    <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                                  </div>
-                                </Show>
-                              </div>
-                            </Match>
-                            <Match when={state()?.loaded}>
+                        </Show>
+                        <Switch>
+                          <Match when={state()?.loaded && isImage()}>
+                            <div class="px-6 py-4 pb-40">
+                              <img
+                                src={imageDataUrl()}
+                                alt={path()}
+                                class="max-w-full"
+                                onLoad={() => requestAnimationFrame(restoreScroll)}
+                              />
+                            </div>
+                          </Match>
+                          <Match when={state()?.loaded && isSvg()}>
+                            <div class="flex flex-col gap-4 px-6 py-4">
                               <Dynamic
                                 component={codeComponent}
                                 file={{
                                   name: path() ?? "",
-                                  contents: contents(),
+                                  contents: svgContent() ?? "",
                                   cacheKey: cacheKey(),
                                 }}
                                 enableLineSelection
                                 selectedLines={selectedLines()}
+                                onRendered={() => {
+                                  requestAnimationFrame(restoreScroll)
+                                  requestAnimationFrame(updateSelectionPopover)
+                                }}
                                 onLineSelected={(range: SelectedLineRange | null) => {
                                   const p = path()
                                   if (!p) return
                                   file.setSelectedLines(p, range)
                                 }}
                                 overflow="scroll"
-                                class="select-text pb-40"
+                                class="select-text"
                               />
-                            </Match>
-                            <Match when={state()?.loading}>
-                              <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-                            </Match>
-                            <Match when={state()?.error}>
-                              {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
-                            </Match>
-                          </Switch>
-                        </Show>
+                              <Show when={svgPreviewUrl()}>
+                                <div class="flex justify-center pb-40">
+                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                </div>
+                              </Show>
+                            </div>
+                          </Match>
+                          <Match when={state()?.loaded}>
+                            <Dynamic
+                              component={codeComponent}
+                              file={{
+                                name: path() ?? "",
+                                contents: contents(),
+                                cacheKey: cacheKey(),
+                              }}
+                              enableLineSelection
+                              selectedLines={selectedLines()}
+                              onRendered={() => {
+                                requestAnimationFrame(restoreScroll)
+                                requestAnimationFrame(updateSelectionPopover)
+                              }}
+                              onLineSelected={(range: SelectedLineRange | null) => {
+                                const p = path()
+                                if (!p) return
+                                file.setSelectedLines(p, range)
+                              }}
+                              overflow="scroll"
+                              class="select-text pb-40"
+                            />
+                          </Match>
+                          <Match when={state()?.loading}>
+                            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+                          </Match>
+                          <Match when={state()?.error}>
+                            {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
+                          </Match>
+                        </Switch>
                       </Tabs.Content>
                     )
                   }}
@@ -1990,11 +2164,9 @@ export default function Page() {
                     )}
                   </For>
                   <div class="flex-1" />
-                  <div class="text-text-weak pr-2">{language.t("common.loading")}...</div>
+                  <div class="text-text-weak pr-2">Loading...</div>
                 </div>
-                <div class="flex-1 flex items-center justify-center text-text-weak">
-                  {language.t("terminal.loading")}
-                </div>
+                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
               </div>
             }
           >
