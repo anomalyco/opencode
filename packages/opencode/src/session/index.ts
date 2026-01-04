@@ -16,6 +16,7 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
+import { MCP } from "../mcp"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
@@ -129,6 +130,7 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        mcpServers: z.record(z.string(), Config.Mcp).optional(),
       })
       .optional(),
     async (input) => {
@@ -137,6 +139,7 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        mcpServers: input?.mcpServers,
       })
     },
   )
@@ -184,6 +187,7 @@ export namespace Session {
     parentID?: string
     directory: string
     permission?: PermissionNext.Ruleset
+    mcpServers?: Record<string, Config.Mcp>
   }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
@@ -203,6 +207,17 @@ export namespace Session {
     Bus.publish(Event.Created, {
       info: result,
     })
+
+    if (input.mcpServers) {
+      await Promise.all(
+        Object.entries(input.mcpServers).map(async ([name, config]) => {
+          await MCP.add(name, config).catch((error) => {
+            log.error("failed to add mcp server", { name, error })
+          })
+        }),
+      )
+    }
+
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)
