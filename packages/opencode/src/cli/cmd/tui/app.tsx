@@ -2,18 +2,7 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import {
-  Switch,
-  Match,
-  createEffect,
-  untrack,
-  ErrorBoundary,
-  createSignal,
-  onMount,
-  onCleanup,
-  batch,
-  on,
-} from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -44,8 +33,8 @@ import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
-import { iife } from "@/util/iife"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -107,7 +96,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
+export function tui(input: { url: string; args: Args; directory?: string; onExit?: () => Promise<void> }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
@@ -127,7 +116,7 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url}>
+                      <SDKProvider url={input.url} directory={input.directory}>
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
@@ -190,84 +179,45 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
+  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
+  renderer.console.onCopySelection = async (text: string) => {
+    if (!text || text.length === 0) return
+
+    const base64 = Buffer.from(text).toString("base64")
+    const osc52 = `\x1b]52;c;${base64}\x07`
+    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+    // @ts-expect-error writeOut is not in type definitions
+    renderer.writeOut(finalOsc52)
+    await Clipboard.copy(text)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+    renderer.clearSelection()
+  }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
-  // Update terminal window title based on current route and session
-  // Braille spinner animation frames for when agent is running (space + single character for consistent width with "OC")
-  const spinnerFrames = [" ⠋", " ⠙", " ⠹", " ⠸", " ⠼", " ⠴", " ⠦", " ⠧", " ⠇", " ⠏"]
-  // Permission request animation frames (flashing triangle with leading space)
-  const permissionFrames = [" ◭", "  "]
-  let spinnerInterval: ReturnType<typeof setInterval> | undefined
-  let spinnerIndex = 0
-  let currentTitle = ""
-  let currentAnimationType: "spinner" | "permission" | undefined
-
-  // Cleanup interval on component unmount
-  onCleanup(() => {
-    if (spinnerInterval) {
-      clearInterval(spinnerInterval)
-      spinnerInterval = undefined
-    }
+  createEffect(() => {
+    console.log(JSON.stringify(route.data))
   })
 
+  // Update terminal window title based on current route and session
   createEffect(() => {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      if (spinnerInterval) {
-        clearInterval(spinnerInterval)
-        spinnerInterval = undefined
-        currentAnimationType = undefined
-      }
       renderer.setTerminalTitle("OpenCode")
       return
     }
 
     if (route.data.type === "session") {
-      const sessionID = route.data.sessionID
-      const session = sync.session.get(sessionID)
-      const status = sync.data.session_status[sessionID]
-      const isBusy = status?.type === "busy"
-      const permissions = sync.data.permission[sessionID] ?? []
-      const hasPermissionRequest = permissions.length > 0
-      const hasTitle = session && !SessionApi.isDefaultTitle(session.title)
-
-      // Truncate title to 40 chars max, fallback to "OpenCode" if no title yet
-      currentTitle = iife(() => {
-        if (!hasTitle) return "OpenCode"
-        if (session.title.length > 40) return session.title.slice(0, 37) + "..."
-        return session.title
-      })
-
-      // Determine which animation to show (permission takes priority)
-      const targetAnimation = hasPermissionRequest ? "permission" : isBusy ? "spinner" : undefined
-      const frames = hasPermissionRequest ? permissionFrames : spinnerFrames
-
-      if (!targetAnimation) {
-        // Stop animation and show static title
-        if (spinnerInterval) {
-          clearInterval(spinnerInterval)
-          spinnerInterval = undefined
-          currentAnimationType = undefined
-        }
-        renderer.setTerminalTitle(hasTitle ? `OC | ${currentTitle}` : "OpenCode")
+      const session = sync.session.get(route.data.sessionID)
+      if (!session || SessionApi.isDefaultTitle(session.title)) {
+        renderer.setTerminalTitle("OpenCode")
         return
       }
 
-      // Start or switch animation
-      if (!spinnerInterval || currentAnimationType !== targetAnimation) {
-        if (spinnerInterval) clearInterval(spinnerInterval)
-        spinnerIndex = 0
-        currentAnimationType = targetAnimation
-        renderer.setTerminalTitle(`${frames[spinnerIndex]} | ${currentTitle}`)
-        spinnerInterval = setInterval(
-          () => {
-            spinnerIndex = (spinnerIndex + 1) % frames.length
-            renderer.setTerminalTitle(`${frames[spinnerIndex]} | ${currentTitle}`)
-          },
-          hasPermissionRequest ? 400 : 80,
-        )
-      }
+      // Truncate title to 40 chars max
+      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+      renderer.setTerminalTitle(`OC | ${title}`)
     }
   })
 
@@ -423,6 +373,15 @@ function App() {
       },
     },
     {
+      title: "Variant cycle",
+      value: "variant.cycle",
+      keybind: "variant_cycle",
+      category: "Agent",
+      onSelect: () => {
+        local.model.variant.cycle()
+      },
+    },
+    {
       title: "Agent cycle reverse",
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
@@ -453,6 +412,7 @@ function App() {
     {
       title: "Switch theme",
       value: "theme.switch",
+      keybind: "theme_list",
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
@@ -511,9 +471,23 @@ function App() {
     {
       title: "Toggle console",
       category: "System",
-      value: "app.fps",
+      value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Write heap snapshot",
+      category: "System",
+      value: "app.heap_snapshot",
+      onSelect: (dialog) => {
+        const path = writeHeapSnapshot()
+        toast.show({
+          variant: "info",
+          message: `Heap snapshot written to ${path}`,
+          duration: 5000,
+        })
         dialog.clear()
       },
     },
@@ -573,6 +547,13 @@ function App() {
       message: evt.properties.message,
       variant: evt.properties.variant,
       duration: evt.properties.duration,
+    })
+  })
+
+  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+    route.navigate({
+      type: "session",
+      sessionID: evt.properties.sessionID,
     })
   })
 
@@ -675,7 +656,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"

@@ -59,8 +59,12 @@ After running the tests, I'll analyze the results.`
 
     expect(result).toHaveLength(1)
 
+    if (typeof result[0].content === "string") {
+      throw new Error("Expected content to be an array, not a string")
+    }
+
     // Check that tool call was extracted
-    const toolCalls = result[0].content.filter((part: any) => part.type === "tool-call")
+    const toolCalls = result[0].content.filter((part) => part.type === "tool-call")
     expect(toolCalls.length).toBe(1)
     expect(toolCalls[0].toolName).toBe("bash")
     expect(toolCalls[0].input).toEqual({
@@ -69,7 +73,7 @@ After running the tests, I'll analyze the results.`
     })
 
     // Check that reasoning was cleaned
-    const reasoningParts = result[0].content.filter((part: any) => part.type === "reasoning")
+    const reasoningParts = result[0].content.filter((part) => part.type === "reasoning")
     expect(reasoningParts.length).toBe(1)
     expect(reasoningParts[0].text).not.toContain("<invoke")
     expect(reasoningParts[0].text).not.toContain("bun test")
@@ -131,10 +135,14 @@ After running the tests, I'll analyze the results.`
     // or extract them - the fix should handle this case appropriately
     expect(result).toHaveLength(1)
 
+    if (typeof result[0].content === "string") {
+      throw new Error("Expected content to be an array, not a string")
+    }
+
     // Either the thinking block is cleaned OR the tool call is extracted
     const reasoningText = result[0].content
-      .filter((part: any) => part.type === "reasoning")
-      .map((part: any) => part.text)
+      .filter((part) => part.type === "reasoning")
+      .map((part) => part.text)
       .join("")
 
     // The behavior depends on implementation - either:
@@ -204,23 +212,23 @@ After running the tests, I'll analyze the results.`
     expect(result).toHaveLength(1)
 
     // All three tool calls should be extracted
-    const toolCalls = result[0].content.filter((part: any) => part.type === "tool-call")
-    expect(toolCalls.length).toBe(3)
+    const toolCalls2 = (result[0].content as any).filter((part: any) => part.type === "tool-call")
+    expect(toolCalls2.length).toBe(3)
 
-    expect(toolCalls[0].toolName).toBe("bash")
-    expect(toolCalls[0].input).toEqual({
+    expect(toolCalls2[0].toolName).toBe("bash")
+    expect(toolCalls2[0].input).toEqual({
       command: "ls -la",
       description: "List files",
     })
 
-    expect(toolCalls[1].toolName).toBe("bash")
-    expect(toolCalls[1].input).toEqual({
+    expect(toolCalls2[1].toolName).toBe("bash")
+    expect(toolCalls2[1].input).toEqual({
       command: "bun install",
       description: "Install dependencies",
     })
 
-    expect(toolCalls[2].toolName).toBe("bash")
-    expect(toolCalls[2].input).toEqual({
+    expect(toolCalls2[2].toolName).toBe("bash")
+    expect(toolCalls2[2].input).toEqual({
       command: "bun test",
       description: "Run tests",
     })
@@ -282,11 +290,15 @@ After running the tests, I'll analyze the results.`
     expect(result).toHaveLength(1)
     expect(result[0].content).toHaveLength(3)
 
-    const reasoning = result[0].content.filter((part: any) => part.type === "reasoning")
+    if (typeof result[0].content === "string") {
+      throw new Error("Expected content to be an array, not a string")
+    }
+
+    const reasoning = result[0].content.filter((part) => part.type === "reasoning")
     expect(reasoning.length).toBe(1)
     expect(reasoning[0].text).toBe("Let me check the tests first.")
 
-    const toolCalls = result[0].content.filter((part: any) => part.type === "tool-call")
+    const toolCalls = result[0].content.filter((part) => part.type === "tool-call")
     expect(toolCalls.length).toBe(1)
     expect(toolCalls[0].input).toEqual({ command: "bun test" })
   })
