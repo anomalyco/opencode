@@ -12,6 +12,7 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
+import { Plugin } from "../plugin"
 
 export namespace Agent {
   export const Info = z
@@ -160,6 +161,34 @@ export namespace Agent {
       },
     }
 
+    // Load plugin agents (can override built-ins, but will be overridden by config)
+    const pluginAgents = await Plugin.agents()
+    for (const [key, value] of Object.entries(pluginAgents)) {
+      let item = result[key]
+      if (!item) {
+        item = result[key] = {
+          name: key,
+          mode: value.mode ?? "all",
+          permission: PermissionNext.merge(defaults, user),
+          options: {},
+          native: false,
+        }
+      }
+      if (value.model) item.model = Provider.parseModel(value.model)
+      item.prompt = value.prompt ?? item.prompt
+      item.description = value.description ?? item.description
+      item.temperature = value.temperature ?? item.temperature
+      item.topP = value.top_p ?? item.topP
+      item.mode = value.mode ?? item.mode
+      item.color = value.color ?? item.color
+      item.steps = value.steps ?? item.steps
+      item.options = mergeDeep(item.options, value.options ?? {})
+      if (value.permission) {
+        item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission))
+      }
+    }
+
+    // Config-based agents override plugin agents
     for (const [key, value] of Object.entries(cfg.agent ?? {})) {
       if (value.disable) {
         delete result[key]
