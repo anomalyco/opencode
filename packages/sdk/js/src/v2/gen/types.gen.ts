@@ -32,7 +32,7 @@ export type Project = {
     updated: number
     initialized?: number
   }
-  sandboxes?: Array<string>
+  sandboxes: Array<string>
 }
 
 export type EventProjectUpdated = {
