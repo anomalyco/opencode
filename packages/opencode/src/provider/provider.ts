@@ -1029,6 +1029,10 @@ export namespace Provider {
       if (providerID.startsWith("opencode")) {
         priority = ["gpt-5-nano"]
       }
+      if (providerID.startsWith("github-copilot")) {
+        // prioritize free models for github copilot
+        priority = ["claude-haiku-4.5", "gpt-5-mini", ...priority]
+      }
       for (const item of priority) {
         for (const model of Object.keys(provider.models)) {
           if (model.includes(item)) return getModel(providerID, model)
