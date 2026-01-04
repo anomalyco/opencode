@@ -1,7 +1,7 @@
 name: Duplicate PR Check
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened]
 
 jobs:
@@ -33,19 +33,27 @@ jobs:
       - name: Install opencode
         run: curl -fsSL https://opencode.ai/install | bash
 
+      - name: Build prompt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo "Check for duplicate PRs related to this new PR:"
+            echo ""
+            echo "Title: $(gh pr view "$PR_NUMBER" --json title --jq .title)"
+            echo ""
+            echo "Description:"
+            gh pr view "$PR_NUMBER" --json body --jq .body
+          } > pr_info.txt
+
       - name: Check for duplicate PRs
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          COMMENT=$(opencode run --agent duplicate-pr --print "Check for duplicate PRs related to this new PR:
-
-          Title: $PR_TITLE
-
-          Description: $PR_BODY")
+          COMMENT=$(opencode run --agent duplicate-pr --print -f pr_info.txt "Check the attached file for PR details and search for duplicates")
 
           gh pr comment "$PR_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
 
