@@ -195,7 +195,10 @@ export namespace Worktree {
     const base = input?.name ? slug(input.name) : ""
     const info = await candidate(root, base || undefined)
 
-    const created = await $`git worktree add -b ${info.branch} ${info.directory}`.nothrow().cwd(Instance.worktree)
+    const created = await $`git worktree add -b ${info.branch} ${info.directory}`
+      .quiet()
+      .nothrow()
+      .cwd(Instance.worktree)
     if (created.exitCode !== 0) {
       throw new CreateFailedError({ message: errorText(created) || "Failed to create git worktree" })
     }
