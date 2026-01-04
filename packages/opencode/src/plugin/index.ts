@@ -1,4 +1,11 @@
-import type { Hooks, PluginInput, Plugin as PluginInstance } from "@opencode-ai/plugin"
+import type {
+  Hooks,
+  PluginInput,
+  Plugin as PluginInstance,
+  CommandDefinition,
+  SkillDefinition,
+  AgentDefinition,
+} from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
@@ -20,7 +27,13 @@ export namespace Plugin {
       fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
-    const hooks = []
+    const hooks: Hooks[] = []
+
+    // Collect extensions from plugins
+    const commands: Record<string, CommandDefinition> = {}
+    const skills: Record<string, SkillDefinition> = {}
+    const agents: Record<string, AgentDefinition> = {}
+
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -50,17 +63,49 @@ export namespace Plugin {
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
         const init = await fn(input)
         hooks.push(init)
+
+        // Extract extension definitions from plugin
+        if (init.command) {
+          for (const [name, def] of Object.entries(init.command)) {
+            if (commands[name]) {
+              log.warn("duplicate plugin command", { name, existing: "plugin" })
+            }
+            log.debug("registered plugin command", { name })
+            commands[name] = def
+          }
+        }
+        if (init.skill) {
+          for (const [name, def] of Object.entries(init.skill)) {
+            if (skills[name]) {
+              log.warn("duplicate plugin skill", { name, existing: "plugin" })
+            }
+            log.debug("registered plugin skill", { name })
+            skills[name] = def
+          }
+        }
+        if (init.agent) {
+          for (const [name, def] of Object.entries(init.agent)) {
+            if (agents[name]) {
+              log.warn("duplicate plugin agent", { name, existing: "plugin" })
+            }
+            log.debug("registered plugin agent", { name })
+            agents[name] = def
+          }
+        }
       }
     }
 
     return {
       hooks,
       input,
+      commands,
+      skills,
+      agents,
     }
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "command" | "skill" | "agent">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -95,5 +140,17 @@ export namespace Plugin {
         })
       }
     })
+  }
+
+  export async function commands() {
+    return state().then((x) => x.commands)
+  }
+
+  export async function skills() {
+    return state().then((x) => x.skills)
+  }
+
+  export async function agents() {
+    return state().then((x) => x.agents)
   }
 }
