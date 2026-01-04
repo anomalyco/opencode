@@ -107,7 +107,7 @@ export function Session() {
   const kv = useKV()
   const { theme } = useTheme()
   const promptRef = usePromptRef()
-  const session = createMemo(() => sync.session.get(route.sessionID)!)
+  const session = createMemo(() => sync.session.get(route.sessionID))
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
     return sync.data.session
@@ -116,7 +116,7 @@ export function Session() {
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
-    if (session().parentID) return sync.data.permission[route.sessionID] ?? []
+    if (session()?.parentID) return sync.data.permission[route.sessionID] ?? []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
 
@@ -381,7 +381,7 @@ export function Session() {
       onSelect: async (dialog) => {
         const status = sync.data.session_status?.[route.sessionID]
         if (status?.type !== "idle") await sdk.client.session.abort({ sessionID: route.sessionID }).catch(() => {})
-        const revert = session().revert?.messageID
+        const revert = session()?.revert?.messageID
         const message = messages().findLast((x) => (!revert || x.id < revert) && x.role === "user")
         if (!message) return
         sdk.client.session
@@ -416,7 +416,7 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         dialog.clear()
-        const messageID = session().revert?.messageID
+        const messageID = session()?.revert?.messageID
         if (!messageID) return
         const message = messages().find((x) => x.role === "user" && x.id > messageID)
         if (!message) {
@@ -715,6 +715,7 @@ export function Session() {
       onSelect: async (dialog) => {
         try {
           const sessionData = session()
+          if (!sessionData) return
           const sessionMessages = messages()
           const transcript = formatTranscript(
             sessionData,
@@ -741,6 +742,7 @@ export function Session() {
       onSelect: async (dialog) => {
         try {
           const sessionData = session()
+          if (!sessionData) return
           const sessionMessages = messages()
 
           const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
@@ -1025,7 +1027,7 @@ export function Session() {
                 <PermissionPrompt request={permissions()[0]} />
               </Show>
               <Prompt
-                visible={!session().parentID && permissions().length === 0}
+                visible={!session()?.parentID && permissions().length === 0}
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
