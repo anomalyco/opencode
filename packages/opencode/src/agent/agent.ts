@@ -10,6 +10,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_RLM from "./prompt/rlm.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 
@@ -112,6 +113,41 @@ export namespace Agent {
         options: {},
         mode: "subagent",
         native: true,
+      },
+      rlm: {
+        name: "rlm",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+            repl: "allow",
+            read: "allow",
+            grep: "allow",
+            glob: "allow",
+            task: "allow",
+          }),
+          user,
+        ),
+        description: `Recursive Language Model agent for processing arbitrarily long contexts. Use this when you need to analyze documents, codebases, or data that exceeds normal context limits. The agent treats long prompts as part of an external Python REPL environment and can programmatically examine, decompose, and recursively call itself over snippets of the input.`,
+        prompt: PROMPT_RLM,
+        options: {},
+        mode: "subagent",
+        native: true,
+      },
+      "rlm-sub": {
+        name: "rlm-sub",
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+          }),
+          user,
+        ),
+        description: `Sub-agent for RLM recursive calls. Handles semantic analysis tasks delegated by the main RLM agent.`,
+        options: {},
+        mode: "subagent",
+        native: true,
+        hidden: true,
       },
       compaction: {
         name: "compaction",

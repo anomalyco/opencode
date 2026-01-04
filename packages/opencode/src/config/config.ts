@@ -402,6 +402,7 @@ export namespace Config {
       list: PermissionRule.optional(),
       bash: PermissionRule.optional(),
       task: PermissionRule.optional(),
+      repl: PermissionRule.optional(),
       external_directory: PermissionRule.optional(),
       todowrite: PermissionAction.optional(),
       todoread: PermissionAction.optional(),
@@ -923,6 +924,12 @@ export namespace Config {
           chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+          repl_tool: z
+            .boolean()
+            .optional()
+            .describe(
+              "Enable the REPL tool for Recursive Language Model (RLM) processing. This allows the LLM to interact with arbitrarily long contexts through a Python REPL environment.",
+            ),
           openTelemetry: z
             .boolean()
             .optional()
