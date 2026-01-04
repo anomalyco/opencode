@@ -10,7 +10,7 @@ import type { Provider } from "../../src/provider/provider"
 
 Log.init({ print: false })
 
-function createModel(opts: { context: number; output: number; cost?: Provider.Model["cost"] }): Provider.Model {
+function createModel(opts: { context: number; output: number; inputLimit?: number; cost?: Provider.Model["cost"] }): Provider.Model {
   return {
     id: "test-model",
     providerID: "test",
@@ -18,6 +18,7 @@ function createModel(opts: { context: number; output: number; cost?: Provider.Mo
     limit: {
       context: opts.context,
       output: opts.output,
+      input: opts.inputLimit,
     },
     cost: opts.cost ?? { input: 0, output: 0, cache: { read: 0, write: 0 } },
     capabilities: {
@@ -99,6 +100,18 @@ describe("session.compaction.isOverflow", () => {
         const model = createModel({ context: 100_000, output: 32_000 })
         const tokens = { input: 75_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(false)
+      },
+    })
+  })
+
+  test("returns true when input limit is reached", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 32_000, inputLimit: 50_000 })
+        const tokens = { input: 40_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(true)
       },
     })
   })

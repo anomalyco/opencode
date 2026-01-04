@@ -48,6 +48,7 @@ export namespace ModelsDev {
     limit: z.object({
       context: z.number(),
       output: z.number(),
+      input: z.number().optional(),
     }),
     modalities: z
       .object({

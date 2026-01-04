@@ -465,6 +465,7 @@ export namespace Provider {
       limit: z.object({
         context: z.number(),
         output: z.number(),
+        input: z.number().optional(),
       }),
       status: z.enum(["alpha", "beta", "deprecated", "active"]),
       options: z.record(z.string(), z.any()),
@@ -527,6 +528,7 @@ export namespace Provider {
       limit: {
         context: model.limit.context,
         output: model.limit.output,
+        input: model.limit.input,
       },
       capabilities: {
         temperature: model.temperature,
