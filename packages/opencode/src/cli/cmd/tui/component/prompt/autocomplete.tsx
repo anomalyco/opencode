@@ -172,7 +172,7 @@ export function Autocomplete(props: {
       props.setExtmark(partIndex, extmarkId)
     })
 
-    if (part.type === "file" && part.source?.path) {
+    if (part.type === "file" && part.source && part.source.type === "file") {
       frecency.updateFrecency(part.source.path)
     }
   }
