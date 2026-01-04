@@ -3,7 +3,7 @@
 ## Build/Test Commands
 
 - **Install**: `bun install`
-- **Run**: `bun run index.ts`
+- **Run**: `bun run --conditions=browser ./src/index.ts`
 - **Typecheck**: `bun run typecheck` (npm run typecheck)
 - **Test**: `bun test` (runs all tests)
 - **Single test**: `bun test test/tool/tool.test.ts` (specific test file)
