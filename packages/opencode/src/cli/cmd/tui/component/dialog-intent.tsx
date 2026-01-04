@@ -6,7 +6,15 @@ import { createEffect, For, Show, Switch, Match, createMemo, createSignal } from
 import { useKeyboard } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import { useSDK } from "../context/sdk"
-import type { IntentInfo, FormField, SelectOption } from "@/intent/types"
+import type {
+  IntentInfo,
+  FormField,
+  SelectOption,
+  ConfirmIntent,
+  SelectIntent,
+  MultiSelectIntent,
+  FormIntent,
+} from "@/intent/types"
 
 export type DialogIntentProps = {
   info: IntentInfo
@@ -37,32 +45,34 @@ export function DialogIntent(props: DialogIntentProps) {
     props.onComplete?.()
   }
 
+  const intent = props.info.intent
+
   return (
     <Switch>
-      <Match when={props.info.intent.type === "confirm"}>
+      <Match when={intent.type === "confirm"}>
         <ConfirmDialog
-          info={props.info}
+          intent={intent as ConfirmIntent}
           onConfirm={() => respond({ type: "submit" })}
           onCancel={() => respond({ type: "cancel" })}
         />
       </Match>
-      <Match when={props.info.intent.type === "select"}>
+      <Match when={intent.type === "select"}>
         <SelectDialog
-          info={props.info}
+          intent={intent as SelectIntent}
           onSelect={(value) => respond({ type: "submit", data: { selected: value } })}
           onCancel={() => respond({ type: "cancel" })}
         />
       </Match>
-      <Match when={props.info.intent.type === "multiselect"}>
+      <Match when={intent.type === "multiselect"}>
         <MultiSelectDialog
-          info={props.info}
+          intent={intent as MultiSelectIntent}
           onSubmit={(values) => respond({ type: "submit", data: { selected: values } })}
           onCancel={() => respond({ type: "cancel" })}
         />
       </Match>
-      <Match when={props.info.intent.type === "form"}>
+      <Match when={intent.type === "form"}>
         <FormDialog
-          info={props.info}
+          intent={intent as FormIntent}
           onSubmit={(data) => respond({ type: "submit", data })}
           onCancel={() => respond({ type: "cancel" })}
         />
@@ -71,20 +81,9 @@ export function DialogIntent(props: DialogIntentProps) {
   )
 }
 
-function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCancel: () => void }) {
+function ConfirmDialog(props: { intent: ConfirmIntent; onConfirm: () => void; onCancel: () => void }) {
   const { theme } = useTheme()
-  const dialog = useDialog()
   const [store, setStore] = createStore({ active: "confirm" as "confirm" | "cancel" })
-
-  const intent = () =>
-    props.info.intent as {
-      type: "confirm"
-      title: string
-      message: string
-      confirmLabel?: string
-      cancelLabel?: string
-      variant?: string
-    }
 
   useKeyboard((evt) => {
     if (evt.name === "return" && store.active === "confirm") {
@@ -111,12 +110,12 @@ function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCance
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          {intent().title}
+          {props.intent.title}
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
       <box paddingBottom={1}>
-        <text fg={theme.textMuted}>{intent().message}</text>
+        <text fg={theme.textMuted}>{props.intent.message}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingBottom={1}>
         <For each={["cancel", "confirm"]}>
@@ -125,10 +124,10 @@ function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCance
               paddingLeft={1}
               paddingRight={1}
               backgroundColor={key === store.active ? theme.primary : undefined}
-              onMouseUp={() => key === "confirm" ? props.onConfirm() : props.onCancel()}
+              onMouseUp={() => (key === "confirm" ? props.onConfirm() : props.onCancel())}
             >
               <text fg={key === store.active ? theme.selectedListItemText : theme.textMuted}>
-                {key === "confirm" ? intent().confirmLabel || "Yes" : intent().cancelLabel || "No"}
+                {key === "confirm" ? props.intent.confirmLabel : props.intent.cancelLabel}
               </text>
             </box>
           )}
@@ -138,32 +137,23 @@ function ConfirmDialog(props: { info: IntentInfo; onConfirm: () => void; onCance
   )
 }
 
-function SelectDialog(props: { info: IntentInfo; onSelect: (value: string) => void; onCancel: () => void }) {
+function SelectDialog(props: { intent: SelectIntent; onSelect: (value: string) => void; onCancel: () => void }) {
   const { theme } = useTheme()
   const [selected, setSelected] = createSignal(0)
-
-  const intent = () =>
-    props.info.intent as {
-      type: "select"
-      title: string
-      description?: string
-      options: SelectOption[]
-      default?: string
-    }
-  const options = () => intent().options
+  const options = props.intent.options
 
   useKeyboard((evt) => {
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
       evt.preventDefault()
-      setSelected((s) => (s > 0 ? s - 1 : options().length - 1))
+      setSelected((s) => (s > 0 ? s - 1 : options.length - 1))
     }
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
       evt.preventDefault()
-      setSelected((s) => (s < options().length - 1 ? s + 1 : 0))
+      setSelected((s) => (s < options.length - 1 ? s + 1 : 0))
     }
     if (evt.name === "return") {
       evt.preventDefault()
-      const opt = options()[selected()]
+      const opt = options[selected()]
       if (opt) props.onSelect(opt.value)
     }
     if (evt.name === "escape") {
@@ -176,15 +166,15 @@ function SelectDialog(props: { info: IntentInfo; onSelect: (value: string) => vo
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          {intent().title}
+          {props.intent.title}
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
-      <Show when={intent().description}>
-        <text fg={theme.textMuted}>{intent().description}</text>
+      <Show when={props.intent.description}>
+        <text fg={theme.textMuted}>{props.intent.description}</text>
       </Show>
       <box paddingTop={1} paddingBottom={1}>
-        <For each={options()}>
+        <For each={options}>
           {(opt, index) => (
             <box
               flexDirection="row"
@@ -208,22 +198,15 @@ function SelectDialog(props: { info: IntentInfo; onSelect: (value: string) => vo
   )
 }
 
-function MultiSelectDialog(props: { info: IntentInfo; onSubmit: (values: string[]) => void; onCancel: () => void }) {
+function MultiSelectDialog(props: {
+  intent: MultiSelectIntent
+  onSubmit: (values: string[]) => void
+  onCancel: () => void
+}) {
   const { theme } = useTheme()
   const [focused, setFocused] = createSignal(0)
   const [selectedValues, setSelectedValues] = createStore<Record<string, boolean>>({})
-
-  const intent = () =>
-    props.info.intent as {
-      type: "multiselect"
-      title: string
-      description?: string
-      options: SelectOption[]
-      default?: string[]
-      min?: number
-      max?: number
-    }
-  const options = () => intent().options
+  const options = props.intent.options
 
   const getSelected = () =>
     Object.entries(selectedValues)
@@ -233,15 +216,15 @@ function MultiSelectDialog(props: { info: IntentInfo; onSubmit: (values: string[
   useKeyboard((evt) => {
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
       evt.preventDefault()
-      setFocused((s) => (s > 0 ? s - 1 : options().length - 1))
+      setFocused((s) => (s > 0 ? s - 1 : options.length - 1))
     }
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
       evt.preventDefault()
-      setFocused((s) => (s < options().length - 1 ? s + 1 : 0))
+      setFocused((s) => (s < options.length - 1 ? s + 1 : 0))
     }
     if (evt.name === "space") {
       evt.preventDefault()
-      const opt = options()[focused()]
+      const opt = options[focused()]
       if (opt) {
         setSelectedValues(opt.value, !selectedValues[opt.value])
       }
@@ -260,15 +243,15 @@ function MultiSelectDialog(props: { info: IntentInfo; onSubmit: (values: string[
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          {intent().title}
+          {props.intent.title}
         </text>
         <text fg={theme.textMuted}>esc / space to toggle / enter to submit</text>
       </box>
-      <Show when={intent().description}>
-        <text fg={theme.textMuted}>{intent().description}</text>
+      <Show when={props.intent.description}>
+        <text fg={theme.textMuted}>{props.intent.description}</text>
       </Show>
       <box paddingTop={1} paddingBottom={1}>
-        <For each={options()}>
+        <For each={options}>
           {(opt, index) => (
             <box
               flexDirection="row"
@@ -295,23 +278,18 @@ function MultiSelectDialog(props: { info: IntentInfo; onSubmit: (values: string[
   )
 }
 
-function FormDialog(props: { info: IntentInfo; onSubmit: (data: Record<string, any>) => void; onCancel: () => void }) {
+function FormDialog(props: {
+  intent: FormIntent
+  onSubmit: (data: Record<string, any>) => void
+  onCancel: () => void
+}) {
   const { theme } = useTheme()
   const [focusedField, setFocusedField] = createSignal(0)
   const [formData, setFormData] = createStore<Record<string, any>>({})
+  const fields = props.intent.fields
 
-  const intent = () =>
-    props.info.intent as {
-      type: "form"
-      title: string
-      description?: string
-      fields: FormField[]
-      submitLabel?: string
-      cancelLabel?: string
-    }
-  const fields = () => intent().fields
   const visibleFields = createMemo(() => {
-    return fields().filter((field) => {
+    return fields.filter((field) => {
       if (!("condition" in field) || !field.condition) return true
       const conditionField = field.condition.field
       const conditionValue = field.condition.equals
@@ -355,12 +333,12 @@ function FormDialog(props: { info: IntentInfo; onSubmit: (data: Record<string, a
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          {intent().title}
+          {props.intent.title}
         </text>
         <text fg={theme.textMuted}>esc / enter to submit</text>
       </box>
-      <Show when={intent().description}>
-        <text fg={theme.textMuted}>{intent().description}</text>
+      <Show when={props.intent.description}>
+        <text fg={theme.textMuted}>{props.intent.description}</text>
       </Show>
       <box paddingTop={1} paddingBottom={1}>
         <For each={visibleFields()}>
@@ -377,7 +355,7 @@ function FormDialog(props: { info: IntentInfo; onSubmit: (data: Record<string, a
       </box>
       <box flexDirection="row" justifyContent="flex-end" gap={1} paddingBottom={1}>
         <box paddingLeft={1} paddingRight={1} onMouseUp={() => props.onCancel()}>
-          <text fg={theme.textMuted}>{intent().cancelLabel || "Cancel"}</text>
+          <text fg={theme.textMuted}>{props.intent.cancelLabel}</text>
         </box>
         <box
           paddingLeft={1}
@@ -385,7 +363,7 @@ function FormDialog(props: { info: IntentInfo; onSubmit: (data: Record<string, a
           backgroundColor={theme.primary}
           onMouseUp={() => props.onSubmit(formData)}
         >
-          <text fg={theme.selectedListItemText}>{intent().submitLabel || "Submit"}</text>
+          <text fg={theme.selectedListItemText}>{props.intent.submitLabel}</text>
         </box>
       </box>
     </box>
@@ -434,7 +412,7 @@ function FormFieldRenderer(props: {
               focusedBackgroundColor={theme.backgroundPanel}
               cursorColor={theme.primary}
               focusedTextColor={theme.text}
-              placeholder={"placeholder" in props.field ? props.field.placeholder ?? "" : "Type here..."}
+              placeholder={"placeholder" in props.field ? (props.field.placeholder ?? "") : "Type here..."}
             />
           </box>
         </Match>
@@ -508,7 +486,8 @@ function SelectFieldRenderer(props: {
             <text fg={index() === selectedIndex() ? theme.selectedListItemText : theme.text}>{opt.label}</text>
             <Show when={opt.description}>
               <text fg={index() === selectedIndex() ? theme.selectedListItemText : theme.textMuted}>
-                {" "}- {opt.description}
+                {" "}
+                - {opt.description}
               </text>
             </Show>
           </box>
@@ -570,7 +549,8 @@ function MultiSelectFieldRenderer(props: {
             </text>
             <Show when={opt.description}>
               <text fg={index() === focusedIndex() ? theme.selectedListItemText : theme.textMuted}>
-                {" "}- {opt.description}
+                {" "}
+                - {opt.description}
               </text>
             </Show>
           </box>
