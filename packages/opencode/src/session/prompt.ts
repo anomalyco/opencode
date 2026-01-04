@@ -378,6 +378,7 @@ export namespace SessionPrompt {
         )
         let executionError: Error | undefined
         const taskAgent = await Agent.get(task.agent)
+        const toolLogger = Log.create({ service: "tool" })
         const taskCtx: Tool.Context = {
           agent: task.agent,
           messageID: assistantMessage.id,
@@ -401,8 +402,7 @@ export namespace SessionPrompt {
             })
           },
           log(level, message, extra) {
-            const logger = Log.create({ service: "tool" })
-            logger[level](message, extra)
+            toolLogger[level](message, extra)
           },
         }
         const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
@@ -644,6 +644,7 @@ export namespace SessionPrompt {
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
+    const toolLogger = Log.create({ service: "tool" })
 
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
@@ -678,8 +679,7 @@ export namespace SessionPrompt {
         })
       },
       log(level, message, extra) {
-        const logger = Log.create({ service: "tool" })
-        logger[level](message, extra)
+        toolLogger[level](message, extra)
       },
     })
 
@@ -927,6 +927,7 @@ export namespace SessionPrompt {
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
               const stat = await Bun.file(filepath).stat()
+              const toolLogger = Log.create({ service: "tool" })
 
               if (stat.isDirectory()) {
                 part.mime = "application/x-directory"
@@ -992,8 +993,7 @@ export namespace SessionPrompt {
                       metadata: async () => {},
                       ask: async () => {},
                       log(level, message, extra) {
-                        const logger = Log.create({ service: "tool" })
-                        logger[level](message, extra)
+                        toolLogger[level](message, extra)
                       },
                     }
                     const result = await t.execute(args, readCtx)
@@ -1057,8 +1057,7 @@ export namespace SessionPrompt {
                   metadata: async () => {},
                   ask: async () => {},
                   log(level, message, extra) {
-                    const logger = Log.create({ service: "tool" })
-                    logger[level](message, extra)
+                    toolLogger[level](message, extra)
                   },
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
