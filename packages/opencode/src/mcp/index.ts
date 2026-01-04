@@ -54,6 +54,22 @@ export namespace MCP {
   )
 
   type MCPClient = Client
+  type ToolsCacheEntry = {
+    seq: number
+    tools: MCPToolDef[]
+  }
+
+  function cloneToolDefs(tools: MCPToolDef[]) {
+    return tools.map((tool) => ({ ...tool }))
+  }
+
+  function invalidateToolsCache(state: {
+    toolsSeq: Record<string, number>
+    toolsCache: Record<string, ToolsCacheEntry>
+  }, serverName: string) {
+    state.toolsSeq[serverName] = (state.toolsSeq[serverName] ?? 0) + 1
+    delete state.toolsCache[serverName]
+  }
 
   export const Status = z
     .discriminatedUnion("status", [
@@ -159,6 +175,13 @@ export namespace MCP {
       const config = cfg.mcp ?? {}
       const clients: Record<string, MCPClient> = {}
       const status: Record<string, Status> = {}
+      const toolsCache: Record<string, ToolsCacheEntry> = {}
+      const toolsSeq: Record<string, number> = {}
+      const unsubscribeToolsChanged = Bus.subscribe(ToolsChanged, (event) => {
+        const serverName = event.properties.server
+        toolsSeq[serverName] = (toolsSeq[serverName] ?? 0) + 1
+        delete toolsCache[serverName]
+      })
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
@@ -186,9 +209,13 @@ export namespace MCP {
       return {
         status,
         clients,
+        toolsCache,
+        toolsSeq,
+        unsubscribeToolsChanged,
       }
     },
     async (state) => {
+      state.unsubscribeToolsChanged?.()
       await Promise.all(
         Object.values(state.clients).map((client) =>
           client.close().catch((error) => {
@@ -198,6 +225,12 @@ export namespace MCP {
           }),
         ),
       )
+      for (const key of Object.keys(state.toolsCache)) {
+        delete state.toolsCache[key]
+      }
+      for (const key of Object.keys(state.toolsSeq)) {
+        delete state.toolsSeq[key]
+      }
       pendingOAuthTransports.clear()
     },
   )
@@ -256,18 +289,21 @@ export namespace MCP {
         error: "unknown error",
       }
       s.status[name] = status
+      invalidateToolsCache(s, name)
       return {
         status,
       }
     }
     if (!result.mcpClient) {
       s.status[name] = result.status
+      invalidateToolsCache(s, name)
       return {
         status: s.status,
       }
     }
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
+    invalidateToolsCache(s, name)
 
     return {
       status: s.status,
@@ -525,6 +561,7 @@ export namespace MCP {
     if (result.mcpClient) {
       s.clients[name] = result.mcpClient
     }
+    invalidateToolsCache(s, name)
   }
 
   export async function disconnect(name: string) {
@@ -537,6 +574,7 @@ export namespace MCP {
       delete s.clients[name]
     }
     s.status[name] = { status: "disabled" }
+    invalidateToolsCache(s, name)
   }
 
   export async function tools() {
@@ -550,20 +588,35 @@ export namespace MCP {
         continue
       }
 
-      const toolsResult = await client.listTools().catch((e) => {
-        log.error("failed to get tools", { clientName, error: e.message })
-        const failedStatus = {
-          status: "failed" as const,
-          error: e instanceof Error ? e.message : String(e),
+      const currentSeq = s.toolsSeq[clientName] ?? 0
+      const cached = s.toolsCache[clientName]
+      let toolDefs: MCPToolDef[] | undefined
+
+      if (cached && cached.seq === currentSeq) {
+        toolDefs = cloneToolDefs(cached.tools)
+      } else {
+        const toolsResult = await client.listTools().catch((e) => {
+          log.error("failed to get tools", { clientName, error: e.message })
+          const failedStatus = {
+            status: "failed" as const,
+            error: e instanceof Error ? e.message : String(e),
+          }
+          s.status[clientName] = failedStatus
+          delete s.clients[clientName]
+          invalidateToolsCache(s, clientName)
+          return undefined
+        })
+        if (!toolsResult) {
+          continue
         }
-        s.status[clientName] = failedStatus
-        delete s.clients[clientName]
-        return undefined
-      })
-      if (!toolsResult) {
-        continue
+        toolDefs = toolsResult.tools
+        s.toolsCache[clientName] = {
+          seq: currentSeq,
+          tools: toolsResult.tools,
+        }
       }
-      for (const mcpTool of toolsResult.tools) {
+
+      for (const mcpTool of toolDefs) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
         result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client)
