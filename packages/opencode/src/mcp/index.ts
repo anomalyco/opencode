@@ -28,6 +28,17 @@ export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 5000
 
+  export const Resource = z
+    .object({
+      name: z.string(),
+      uri: z.string(),
+      description: z.string().optional(),
+      mimeType: z.string().optional(),
+      client: z.string(),
+    })
+    .meta({ ref: "McpResource" })
+  export type Resource = z.infer<typeof Resource>
+
   export const ToolsChanged = BusEvent.define(
     "mcp.tools.changed",
     z.object({
@@ -136,6 +147,7 @@ export namespace MCP {
   // Prompt cache types
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
 
+  type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
   type McpEntry = NonNullable<Config.Info["mcp"]>[string]
   function isMcpConfigured(entry: McpEntry): entry is Config.Mcp {
     return typeof entry === "object" && entry !== null && "type" in entry
@@ -209,6 +221,28 @@ export namespace MCP {
       const key = sanitizedClientName + ":" + sanitizedPromptName
 
       commands[key] = { ...prompt, client: clientName }
+    }
+    return commands
+  }
+
+  async function fetchResourcesForClient(clientName: string, client: Client) {
+    const resources = await client.listResources().catch((e) => {
+      log.error("failed to get prompts", { clientName, error: e.message })
+      return undefined
+    })
+
+    if (!resources) {
+      return
+    }
+
+    const commands: Record<string, ResourceInfo & { client: string }> = {}
+
+    for (const resource of resources.resources) {
+      const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const sanitizedResourceName = resource.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      const key = sanitizedClientName + ":" + sanitizedResourceName
+
+      commands[key] = { ...resource, client: clientName }
     }
     return commands
   }
@@ -559,6 +593,27 @@ export namespace MCP {
     return prompts
   }
 
+  export async function resources() {
+    const s = await state()
+    const clientsSnapshot = await clients()
+
+    const result = Object.fromEntries<ResourceInfo & { client: string }>(
+      (
+        await Promise.all(
+          Object.entries(clientsSnapshot).map(async ([clientName, client]) => {
+            if (s.status[clientName]?.status !== "connected") {
+              return []
+            }
+
+            return Object.entries((await fetchResourcesForClient(clientName, client)) ?? {})
+          }),
+        )
+      ).flat(),
+    )
+
+    return result
+  }
+
   export async function getPrompt(clientName: string, name: string, args?: Record<string, string>) {
     const clientsSnapshot = await clients()
     const client = clientsSnapshot[clientName]
@@ -579,6 +634,33 @@ export namespace MCP {
         log.error("failed to get prompt from MCP server", {
           clientName,
           promptName: name,
+          error: e.message,
+        })
+        return undefined
+      })
+
+    return result
+  }
+
+  export async function readResource(clientName: string, resourceUri: string) {
+    const clientsSnapshot = await clients()
+    const client = clientsSnapshot[clientName]
+
+    if (!client) {
+      log.warn("client not found for prompt", {
+        clientName: clientName,
+      })
+      return undefined
+    }
+
+    const result = await client
+      .readResource({
+        uri: resourceUri,
+      })
+      .catch((e) => {
+        log.error("failed to get prompt from MCP server", {
+          clientName: clientName,
+          resourceUri: resourceUri,
           error: e.message,
         })
         return undefined
