@@ -189,7 +189,7 @@ function App() {
     // @ts-expect-error writeOut is not in type definitions
     renderer.writeOut(finalOsc52)
     await Clipboard.copy(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then(() => toast.show({ message: "YO MAMA: Copied to clipboard", variant: "info" }))
       .catch(toast.error)
     renderer.clearSelection()
   }
@@ -625,7 +625,7 @@ function App() {
           /* @ts-expect-error */
           renderer.writeOut(finalOsc52)
           await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+            .then(() => toast.show({ message: "YO MAMA: Copied to clipboard", variant: "info" }))
             .catch(toast.error)
           renderer.clearSelection()
         }

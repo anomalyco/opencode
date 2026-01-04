@@ -10,6 +10,7 @@ export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large"
     onClose: () => void
+    handleEscape?: () => boolean
   }>,
 ) {
   const dimensions = useTerminalDimensions()
@@ -56,15 +57,7 @@ function init() {
     size: "medium" as "medium" | "large",
   })
 
-  useKeyboard((evt) => {
-    if (evt.name === "escape" && store.stack.length > 0) {
-      const current = store.stack.at(-1)!
-      current.onClose?.()
-      setStore("stack", store.stack.slice(0, -1))
-      evt.preventDefault()
-      refocus()
-    }
-  })
+  const escapeHandlers = new Map<number, () => boolean>()
 
   const renderer = useRenderer()
   let focus: Renderable | null
@@ -85,24 +78,51 @@ function init() {
     }, 1)
   }
 
+  useKeyboard((evt) => {
+    if (evt.name === "escape" && store.stack.length > 0) {
+      if (evt.defaultPrevented) return
+      const current = store.stack.at(-1)!
+      const stackIndex = store.stack.length - 1
+      const handleEscape = escapeHandlers.get(stackIndex)
+      if (handleEscape) {
+        const handled = handleEscape()
+        if (handled) {
+          evt.preventDefault()
+          return
+        }
+      }
+      current.onClose?.()
+      const lastIndex = store.stack.length - 1
+      escapeHandlers.delete(lastIndex)
+      setStore("stack", store.stack.slice(0, -1))
+      evt.preventDefault()
+      refocus()
+    }
+  })
+
   return {
     clear() {
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
+      escapeHandlers.clear()
       batch(() => {
         setStore("size", "medium")
         setStore("stack", [])
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void) {
+    replace(input: any, onClose?: () => void, handleEscape?: () => boolean) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
       }
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
+      }
+      escapeHandlers.clear()
+      if (handleEscape) {
+        escapeHandlers.set(0, handleEscape)
       }
       setStore("size", "medium")
       setStore("stack", [
@@ -120,6 +140,21 @@ function init() {
     },
     setSize(size: "medium" | "large") {
       setStore("size", size)
+    },
+    focus: () => focus,
+    setFocus: (f: Renderable | null) => {
+      focus = f
+    },
+    refocus: () => refocus(),
+    setStackHandleEscape: (handler: (() => boolean) | undefined) => {
+      const stackIndex = store.stack.length - 1
+      if (stackIndex >= 0) {
+        if (handler) {
+          escapeHandlers.set(stackIndex, handler)
+        } else {
+          escapeHandlers.delete(stackIndex)
+        }
+      }
     },
   }
 }
@@ -146,7 +181,7 @@ export function DialogProvider(props: ParentProps) {
             /* @ts-expect-error */
             renderer.writeOut(finalOsc52)
             await Clipboard.copy(text)
-              .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+              .then(() => toast.show({ message: "DEBUG YOU DINGUS: Copied to clipboard", variant: "info" }))
               .catch(toast.error)
             renderer.clearSelection()
           }
@@ -168,4 +203,9 @@ export function useDialog() {
     throw new Error("useDialog must be used within a DialogProvider")
   }
   return value
+}
+
+export function useDialogEscape(handler: () => boolean) {
+  const dialog = useDialog()
+  dialog.setStackHandleEscape(handler)
 }

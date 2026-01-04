@@ -72,6 +72,7 @@ export namespace Server {
 
   const app = new Hono()
   export const App = lazy(() =>
+    // @ts-expect-error - Type instantiation is excessively deep (complex Hono chain)
     app
       .onError((err, c) => {
         log.error("failed", {
@@ -2353,6 +2354,68 @@ export namespace Server {
         async (c) => {
           const { name } = c.req.valid("param")
           await MCP.disconnect(name)
+          return c.json(true)
+        },
+      )
+      .get(
+        "/mcp/:name/tools",
+        describeRoute({
+          summary: "Get MCP tools",
+          description: "Get the list of tools for a specific MCP server",
+          operationId: "mcp.tools.get",
+          responses: {
+            200: {
+              description: "List of tools",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z
+                      .array(
+                        z
+                          .object({
+                            name: z.string(),
+                            description: z.string(),
+                            id: z.string(),
+                          })
+                          .meta({ ref: "McpTool" }),
+                      )
+                      .meta({ ref: "McpToolList" }),
+                  ),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ name: z.string() })),
+        async (c) => {
+          const { name } = c.req.valid("param")
+          const tools = await MCP.getTools(name)
+          return c.json(tools)
+        },
+      )
+      .post(
+        "/mcp/:name/tools/:tool/toggle",
+        describeRoute({
+          summary: "Toggle MCP tool",
+          description: "Toggle a specific tool within an MCP server",
+          operationId: "mcp.tools.toggle",
+          responses: {
+            200: {
+              description: "Tool toggled successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(404),
+          },
+        }),
+        validator("param", z.object({ name: z.string(), tool: z.string() })),
+        async (c) => {
+          const { name, tool } = c.req.valid("param")
+          await MCP.toggleTool(name, tool)
           return c.json(true)
         },
       )

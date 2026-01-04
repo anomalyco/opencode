@@ -572,6 +572,55 @@ export namespace MCP {
     return result
   }
 
+  export async function getTools(name: string) {
+    const s = await state()
+    const client = s.clients[name]
+
+    if (!client) {
+      return []
+    }
+
+    if (s.status[name]?.status !== "connected") {
+      return []
+    }
+
+    const toolsResult = await client.listTools().catch((e) => {
+      log.error("failed to get tools", { name, error: e.message })
+      return undefined
+    })
+
+    if (!toolsResult) {
+      return []
+    }
+
+    const sanitizedClientName = name.replace(/[^a-zA-Z0-9_-]/g, "_")
+    return toolsResult.tools.map((mcpTool) => {
+      const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+      return {
+        name: mcpTool.name,
+        description: mcpTool.description ?? "",
+        id: `${sanitizedClientName}_${sanitizedToolName}`,
+      }
+    })
+  }
+
+  export async function toggleTool(mcpName: string, toolName: string) {
+    const cfg = await Config.get()
+    const sanitizedClientName = mcpName.replace(/[^a-zA-Z0-9_-]/g, "_")
+    const sanitizedToolName = toolName.replace(/[^a-zA-Z0-9_-]/g, "_")
+    const toolId = `${sanitizedClientName}_${sanitizedToolName}`
+
+    const currentTools = cfg.tools ?? {}
+    const currentValue = currentTools[toolId]
+
+    const newValue = currentValue === false ? true : false
+
+    await Config.patch({
+      path: ["tools", toolId],
+      value: newValue,
+    })
+  }
+
   export async function prompts() {
     const s = await state()
     const clientsSnapshot = await clients()

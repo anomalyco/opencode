@@ -34,6 +34,7 @@ export const WebCommand = cmd({
   handler: async (args) => {
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
+    
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()

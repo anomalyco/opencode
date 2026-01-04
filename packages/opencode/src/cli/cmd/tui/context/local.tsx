@@ -362,6 +362,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           await sdk.client.mcp.connect({ name })
         }
       },
+      async getTools(name: string) {
+        const status = sync.data.mcp[name]
+        if (status?.status !== "connected") {
+          return []
+        }
+        const response = await fetch(`${sdk.url}/mcp/${encodeURIComponent(name)}/tools`)
+        if (!response.ok) {
+          throw new Error(`Failed to get tools: ${response.statusText}`)
+        }
+        return response.json()
+      },
+      async toggleTool(mcpName: string, toolName: string) {
+        const response = await fetch(`${sdk.url}/mcp/${encodeURIComponent(mcpName)}/tools/${encodeURIComponent(toolName)}/toggle`, {
+          method: "POST",
+        })
+        if (!response.ok) {
+          throw new Error(`Failed to toggle tool: ${response.statusText}`)
+        }
+      },
     }
 
     // Automatically update model when agent changes
