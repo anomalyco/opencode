@@ -269,8 +269,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     async function bootstrap() {
       console.log("bootstrapping")
+      const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
-        .list()
+        .list({ start: start })
         .then((x) => setStore("session", reconcile((x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))))
 
       // blocking - include session.list when continuing a session

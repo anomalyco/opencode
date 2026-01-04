@@ -86,6 +86,7 @@
     "@parcel/watcher": "2.5.1",
     "@pierre/diffs": "catalog:",
     "@solid-primitives/event-bus": "1.1.2",
+    "@solid-primitives/scheduled": "1.5.2",
     "@standard-schema/spec": "1.0.0",
     "@zip.js/zip.js": "2.7.62",
     "ai": "catalog:",
