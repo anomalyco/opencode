@@ -17,7 +17,6 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "github-copilot": 2,
   openai: 3,
   google: 4,
-  openrouter: 5,
 }
 
 export function createDialogProviderOptions() {
