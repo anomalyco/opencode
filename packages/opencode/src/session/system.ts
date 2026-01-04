@@ -2,7 +2,6 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
-import { Skill } from "../skill"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -45,7 +44,7 @@ export namespace SystemPrompt {
         `</env>`,
         `<files>`,
         `  ${
-          project.vcs === "git"
+          project.vcs === "git" && false
             ? await Ripgrep.tree({
                 cwd: Instance.directory,
                 limit: 200,
