@@ -1151,6 +1151,15 @@ export default function Page() {
                     })
                     const contents = createMemo(() => state()?.content?.content ?? "")
                     const cacheKey = createMemo(() => checksum(contents()))
+                    const isImage = createMemo(() => {
+                      const c = state()?.content
+                      return c?.encoding === "base64" && c?.mimeType?.startsWith("image/")
+                    })
+                    const imageDataUrl = createMemo(() => {
+                      if (!isImage()) return
+                      const c = state()?.content
+                      return `data:${c?.mimeType};base64,${c?.content}`
+                    })
                     const selectedLines = createMemo(() => {
                       const p = path()
                       if (!p) return null
@@ -1253,6 +1262,11 @@ export default function Page() {
                           )}
                         </Show>
                         <Switch>
+                          <Match when={state()?.loaded && isImage()}>
+                            <div class="px-6 py-4 pb-40">
+                              <img src={imageDataUrl()} alt={path()} class="max-w-full" />
+                            </div>
+                          </Match>
                           <Match when={state()?.loaded}>
                             <Dynamic
                               component={codeComponent}
