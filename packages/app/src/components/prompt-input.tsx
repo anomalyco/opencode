@@ -976,6 +976,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
         if (ctrl) {
           if (event.code === "KeyA") {
+            if (navigator.platform.includes("Win")) return
             const pos = text.lastIndexOf("\n", cursorPosition - 1) + 1
             setCursorPosition(editorRef, pos)
             event.preventDefault()
