@@ -11,6 +11,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let scroll: HTMLElement | undefined
   let settling = false
   let settleTimer: ReturnType<typeof setTimeout> | undefined
+  let down = false
+  let cleanup: (() => void) | undefined
 
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLElement | undefined,
@@ -45,8 +47,43 @@ export function createAutoScroll(options: AutoScrollOptions) {
     scrollToBottomNow(behavior)
   }
 
+  const stop = () => {
+    if (!active()) return
+    if (store.userScrolled) return
+
+    setStore("userScrolled", true)
+    options.onUserInteracted?.()
+  }
+
+  const handleWheel = (e: WheelEvent) => {
+    if (e.deltaY >= 0) return
+    stop()
+  }
+
+  const handlePointerUp = () => {
+    down = false
+    window.removeEventListener("pointerup", handlePointerUp)
+  }
+
+  const handlePointerDown = () => {
+    if (down) return
+    down = true
+    window.addEventListener("pointerup", handlePointerUp)
+  }
+
+  const handleTouchEnd = () => {
+    down = false
+    window.removeEventListener("touchend", handleTouchEnd)
+  }
+
+  const handleTouchStart = () => {
+    if (down) return
+    down = true
+    window.addEventListener("touchend", handleTouchEnd)
+  }
+
   const handleScroll = () => {
-    if (!options.working()) return
+    if (!active()) return
     if (!scroll) return
 
     if (distanceFromBottom() < 10) {
@@ -54,18 +91,11 @@ export function createAutoScroll(options: AutoScrollOptions) {
       return
     }
 
-    if (store.userScrolled) return
-
-    setStore("userScrolled", true)
-    options.onUserInteracted?.()
+    if (down) stop()
   }
 
   const handleInteraction = () => {
-    if (!options.working()) return
-    if (store.userScrolled) return
-
-    setStore("userScrolled", true)
-    options.onUserInteracted?.()
+    stop()
   }
 
   createResizeObserver(
@@ -99,12 +129,33 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
   onCleanup(() => {
     if (settleTimer) clearTimeout(settleTimer)
+    if (cleanup) cleanup()
   })
 
   return {
     scrollRef: (el: HTMLElement | undefined) => {
+      if (cleanup) {
+        cleanup()
+        cleanup = undefined
+      }
+
       scroll = el
-      if (el) el.style.overflowAnchor = "none"
+      down = false
+
+      if (!el) return
+
+      el.style.overflowAnchor = "none"
+      el.addEventListener("wheel", handleWheel, { passive: true })
+      el.addEventListener("pointerdown", handlePointerDown)
+      el.addEventListener("touchstart", handleTouchStart, { passive: true })
+
+      cleanup = () => {
+        el.removeEventListener("wheel", handleWheel)
+        el.removeEventListener("pointerdown", handlePointerDown)
+        el.removeEventListener("touchstart", handleTouchStart)
+        window.removeEventListener("pointerup", handlePointerUp)
+        window.removeEventListener("touchend", handleTouchEnd)
+      }
     },
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
     handleScroll,
