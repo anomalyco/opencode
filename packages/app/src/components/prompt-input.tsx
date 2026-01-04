@@ -15,7 +15,7 @@ import {
 import { createStore, produce } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
-import { useFile, type FileSelection } from "@/context/file"
+import { selectionFromLines, useFile, type FileSelection } from "@/context/file"
 import {
   ContentPart,
   DEFAULT_PROMPT,
@@ -162,6 +162,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const tab = tabs().active()
     if (!tab) return
     return files.pathFromTab(tab)
+  })
+
+  const activeFileSelection = createMemo(() => {
+    const path = activeFile()
+    if (!path) return
+    const range = files.selectedLines(path)
+    if (!range) return
+    return selectionFromLines(range)
   })
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const status = createMemo(
@@ -1256,7 +1264,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const activePath = activeFile()
     if (activePath && prompt.context.activeTab()) {
-      addContextFile(activePath)
+      addContextFile(activePath, activeFileSelection())
     }
 
     for (const item of prompt.context.items()) {
@@ -1476,22 +1484,31 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </div>
         </Show>
-        <Show when={false && (prompt.context.items().length > 0 || !!activeFile())}>
-          <div class="flex flex-wrap items-center gap-2 px-3 pt-3">
+        <Show when={prompt.context.items().length > 0 || !!activeFile()}>
+          <div class="flex flex-wrap items-center gap-1.5 px-3 pt-3">
             <Show when={prompt.context.activeTab() ? activeFile() : undefined}>
               {(path) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base max-w-full">
-                  <FileIcon node={{ path: path(), type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-12-regular min-w-0">
+                <div class="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-surface-base border border-border-base max-w-full">
+                  <FileIcon node={{ path: path(), type: "file" }} class="shrink-0 size-3.5" />
+                  <div class="flex items-center text-11-regular min-w-0">
                     <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(path())}</span>
                     <span class="text-text-strong whitespace-nowrap">{getFilename(path())}</span>
+                    <Show when={activeFileSelection()}>
+                      {(sel) => (
+                        <span class="text-text-weak whitespace-nowrap ml-1">
+                          {sel().startLine === sel().endLine
+                            ? `:${sel().startLine}`
+                            : `:${sel().startLine}-${sel().endLine}`}
+                        </span>
+                      )}
+                    </Show>
                     <span class="text-text-weak whitespace-nowrap ml-1">{language.t("prompt.context.active")}</span>
                   </div>
                   <IconButton
                     type="button"
                     icon="close"
                     variant="ghost"
-                    class="h-6 w-6"
+                    class="h-5 w-5"
                     onClick={() => prompt.context.removeActive()}
                     aria-label={language.t("prompt.context.removeActiveFile")}
                   />
@@ -1501,7 +1518,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             <Show when={!prompt.context.activeTab() && !!activeFile()}>
               <button
                 type="button"
-                class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-weak hover:bg-surface-raised-base-hover"
+                class="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-surface-base border border-border-base text-11-regular text-text-weak hover:bg-surface-raised-base-hover"
                 onClick={() => prompt.context.addActive()}
               >
                 <Icon name="plus-small" size="small" />
@@ -1510,9 +1527,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </Show>
             <For each={prompt.context.items()}>
               {(item) => (
-                <div class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base max-w-full">
-                  <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-12-regular min-w-0">
+                <div class="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md bg-surface-base border border-border-base max-w-full">
+                  <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
+                  <div class="flex items-center text-11-regular min-w-0">
                     <span class="text-text-weak whitespace-nowrap truncate min-w-0">{getDirectory(item.path)}</span>
                     <span class="text-text-strong whitespace-nowrap">{getFilename(item.path)}</span>
                     <Show when={item.selection}>
@@ -1529,7 +1546,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     type="button"
                     icon="close"
                     variant="ghost"
-                    class="h-6 w-6"
+                    class="h-5 w-5"
                     onClick={() => prompt.context.remove(item.key)}
                     aria-label={language.t("prompt.context.removeFile")}
                   />

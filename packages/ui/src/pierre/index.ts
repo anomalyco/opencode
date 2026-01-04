@@ -5,6 +5,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
   before: FileContents
   after: FileContents
   annotations?: DiffLineAnnotation<T>[]
+  onRendered?: () => void
   class?: string
   classList?: ComponentProps<"div">["classList"]
 }
@@ -18,9 +19,9 @@ const unsafeCSS = `
   --diffs-bg-separator: var(--diffs-bg-separator-override, light-dark( color-mix(in lab, var(--diffs-bg) 96%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-bg) 85%, var(--diffs-mixer))));
   --diffs-fg: light-dark(var(--diffs-light), var(--diffs-dark));
   --diffs-fg-number: var(--diffs-fg-number-override, light-dark(color-mix(in lab, var(--diffs-fg) 65%, var(--diffs-bg)), color-mix(in lab, var(--diffs-fg) 65%, var(--diffs-bg))));
-  --diffs-deletion-base: var(--diffs-deletion-color-override, light-dark(var(--diffs-light-deletion-color, var(--diffs-deletion-color, rgb(255, 0, 0))), var(--diffs-dark-deletion-color, var(--diffs-deletion-color, rgb(255, 0, 0)))));
-  --diffs-addition-base: var(--diffs-addition-color-override, light-dark(var(--diffs-light-addition-color, var(--diffs-addition-color, rgb(0, 255, 0))), var(--diffs-dark-addition-color, var(--diffs-addition-color, rgb(0, 255, 0)))));
-  --diffs-modified-base: var(--diffs-modified-color-override, light-dark(var(--diffs-light-modified-color, var(--diffs-modified-color, rgb(0, 0, 255))), var(--diffs-dark-modified-color, var(--diffs-modified-color, rgb(0, 0, 255)))));
+  --diffs-deletion-base: var(--syntax-diff-delete);
+  --diffs-addition-base: var(--syntax-diff-add);
+  --diffs-modified-base: var(--syntax-diff-unknown);
   --diffs-bg-deletion: var(--diffs-bg-deletion-override, light-dark( color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-deletion-base)), color-mix(in lab, var(--diffs-bg) 92%, var(--diffs-deletion-base))));
   --diffs-bg-deletion-number: var(--diffs-bg-deletion-number-override, light-dark( color-mix(in lab, var(--diffs-bg) 91%, var(--diffs-deletion-base)), color-mix(in lab, var(--diffs-bg) 85%, var(--diffs-deletion-base))));
   --diffs-bg-deletion-hover: var(--diffs-bg-deletion-hover-override, light-dark( color-mix(in lab, var(--diffs-bg) 80%, var(--diffs-deletion-base)), color-mix(in lab, var(--diffs-bg) 75%, var(--diffs-deletion-base))));
@@ -29,10 +30,15 @@ const unsafeCSS = `
   --diffs-bg-addition-number: var(--diffs-bg-addition-number-override, light-dark( color-mix(in lab, var(--diffs-bg) 91%, var(--diffs-addition-base)), color-mix(in lab, var(--diffs-bg) 85%, var(--diffs-addition-base))));
   --diffs-bg-addition-hover: var(--diffs-bg-addition-hover-override, light-dark( color-mix(in lab, var(--diffs-bg) 80%, var(--diffs-addition-base)), color-mix(in lab, var(--diffs-bg) 70%, var(--diffs-addition-base))));
   --diffs-bg-addition-emphasis: var(--diffs-bg-addition-emphasis-override, light-dark(rgb(from var(--diffs-addition-base) r g b / 0.07), rgb(from var(--diffs-addition-base) r g b / 0.1)));
-  --diffs-selection-base: var(--diffs-modified-base);
+  --diffs-selection-base: var(--text-interactive-base);
   --diffs-selection-number-fg: light-dark( color-mix(in lab, var(--diffs-selection-base) 65%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-selection-base) 75%, var(--diffs-mixer)));
-  --diffs-bg-selection: var(--diffs-bg-selection-override, light-dark( color-mix(in lab, var(--diffs-bg) 82%, var(--diffs-selection-base)), color-mix(in lab, var(--diffs-bg) 75%, var(--diffs-selection-base))));
-  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, light-dark( color-mix(in lab, var(--diffs-bg) 75%, var(--diffs-selection-base)), color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-selection-base))));
+  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--diffs-selection-base) r g b / 0.18));
+  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, rgb(from var(--diffs-selection-base) r g b / 0.22));
+  --diffs-bg-selection-text: rgb(from var(--diffs-selection-base) r g b / 0.12);
+}
+
+[data-diffs] ::selection {
+  background-color: var(--diffs-bg-selection-text);
 }
 
 [data-diffs-header],
@@ -56,6 +62,9 @@ const unsafeCSS = `
   }
   [data-separator-content] {
     height: 24px !important;
+  }
+  [data-column-number] {
+    background-color: var(--background-stronger);
   }
   [data-code] {
     overflow-x: auto !important;
