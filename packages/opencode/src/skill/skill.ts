@@ -7,6 +7,7 @@ import { Log } from "../util/log"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { exists } from "fs/promises"
+import { Plugin } from "../plugin"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -40,6 +41,16 @@ export namespace Skill {
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
+
+    // Load plugin skills first (lowest priority, will be overridden by file-based)
+    const pluginSkills = await Plugin.skills()
+    for (const [name, skill] of Object.entries(pluginSkills)) {
+      skills[name] = {
+        name: skill.name,
+        description: skill.description,
+        location: `plugin:${name}`,
+      }
+    }
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(match)
