@@ -441,12 +441,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     active: slashActive,
     onInput: slashOnInput,
     onKeyDown: slashOnKeyDown,
+    refetch: slashRefetch,
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
     filterKeys: ["trigger", "title", "description"],
     onSelect: handleSlashSelect,
   })
+
+  createEffect(
+    on(
+      () => sync.data.command,
+      () => slashRefetch(),
+      { defer: true },
+    ),
+  )
 
   createEffect(
     on(
