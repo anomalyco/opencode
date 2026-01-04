@@ -1,7 +1,8 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.0.216",
+  "version": "1.0.224",
   "type": "module",
+  "license": "MIT",
   "exports": {
     "./*": "./src/components/*.tsx",
     "./pierre": "./src/pierre/index.ts",

@@ -115,9 +115,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         createStore<{
           user: (ModelKey & { visibility: "show" | "hide"; favorite?: boolean })[]
           recent: ModelKey[]
+          variant?: Record<string, string | undefined>
         }>({
           user: [],
           recent: [],
+          variant: {},
         }),
       )
 
@@ -272,6 +274,45 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         setVisibility(model: ModelKey, visible: boolean) {
           updateVisibility(model, visible ? "show" : "hide")
         },
+        variant: {
+          current() {
+            const m = current()
+            if (!m) return undefined
+            const key = `${m.provider.id}/${m.id}`
+            return store.variant?.[key]
+          },
+          list() {
+            const m = current()
+            if (!m) return []
+            if (!m.variants) return []
+            return Object.keys(m.variants)
+          },
+          set(value: string | undefined) {
+            const m = current()
+            if (!m) return
+            const key = `${m.provider.id}/${m.id}`
+            if (!store.variant) {
+              setStore("variant", { [key]: value })
+            } else {
+              setStore("variant", key, value)
+            }
+          },
+          cycle() {
+            const variants = this.list()
+            if (variants.length === 0) return
+            const currentVariant = this.current()
+            if (!currentVariant) {
+              this.set(variants[0])
+              return
+            }
+            const index = variants.indexOf(currentVariant)
+            if (index === -1 || index === variants.length - 1) {
+              this.set(undefined)
+              return
+            }
+            this.set(variants[index + 1])
+          },
+        },
       }
     })()
 
@@ -389,7 +430,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         //   ]
         // })
         // setStore("active", relativePath)
-        context.addActive()
+        // context.addActive()
         if (options?.pinned) setStore("node", path, "pinned", true)
         if (options?.view && store.node[relativePath].view === undefined) setStore("node", path, "view", options.view)
         if (store.node[relativePath]?.loaded) return
@@ -497,66 +538,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })()
 
-    const context = (() => {
-      const [store, setStore] = createStore<{
-        activeTab: boolean
-        files: string[]
-        activeFile?: string
-        items: (ContextItem & { key: string })[]
-      }>({
-        activeTab: true,
-        files: [],
-        items: [],
-      })
-      const files = createMemo(() => store.files.map((x) => file.node(x)))
-      const activeFile = createMemo(() => (store.activeFile ? file.node(store.activeFile) : undefined))
-
-      return {
-        all() {
-          return store.items
-        },
-        // active() {
-        //   return store.activeTab ? file.active() : undefined
-        // },
-        addActive() {
-          setStore("activeTab", true)
-        },
-        removeActive() {
-          setStore("activeTab", false)
-        },
-        add(item: ContextItem) {
-          let key = item.type
-          switch (item.type) {
-            case "file":
-              key += `${item.path}:${item.selection?.startLine}:${item.selection?.endLine}`
-              break
-          }
-          if (store.items.find((x) => x.key === key)) return
-          setStore("items", (x) => [...x, { key, ...item }])
-        },
-        remove(key: string) {
-          setStore("items", (x) => x.filter((x) => x.key !== key))
-        },
-        files,
-        openFile(path: string) {
-          file.init(path).then(() => {
-            setStore("files", (x) => [...x, path])
-            setStore("activeFile", path)
-          })
-        },
-        activeFile,
-        setActiveFile(path: string | undefined) {
-          setStore("activeFile", path)
-        },
-      }
-    })()
-
     const result = {
       slug: createMemo(() => base64Encode(sdk.directory)),
       model,
       agent,
       file,
-      context,
     }
     return result
   },
