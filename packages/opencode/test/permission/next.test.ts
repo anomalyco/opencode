@@ -451,7 +451,7 @@ test("ask - throws RejectedError when action is deny", async () => {
           always: [],
           ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
         }),
-      ).rejects.toBeInstanceOf(PermissionNext.AutoRejectedError)
+      ).rejects.toBeInstanceOf(PermissionNext.DeniedError)
     },
   })
 })
@@ -628,7 +628,7 @@ test("ask - checks all patterns and stops on first deny", async () => {
             { permission: "bash", pattern: "rm *", action: "deny" },
           ],
         }),
-      ).rejects.toBeInstanceOf(PermissionNext.AutoRejectedError)
+      ).rejects.toBeInstanceOf(PermissionNext.DeniedError)
     },
   })
 })
