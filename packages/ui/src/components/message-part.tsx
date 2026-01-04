@@ -915,12 +915,10 @@ ToolRegistry.register({
               before={{
                 name: props.metadata?.filediff?.file || props.input.filePath,
                 contents: props.metadata?.filediff?.before || props.input.oldString,
-                cacheKey: checksum(props.metadata?.filediff?.before || props.input.oldString),
               }}
               after={{
                 name: props.metadata?.filediff?.file || props.input.filePath,
                 contents: props.metadata?.filediff?.after || props.input.newString,
-                cacheKey: checksum(props.metadata?.filediff?.after || props.input.newString),
               }}
             />
           </div>
