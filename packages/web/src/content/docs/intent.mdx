@@ -13,13 +13,13 @@ This follows the same event-based pattern as the [Permission](/docs/permissions)
 
 Intents provide composable UI primitives:
 
-| Type | Description | Returns |
-|------|-------------|---------|
-| `confirm` | Yes/no dialog with variants | `boolean` |
-| `select` | Single-choice selection | `string \| undefined` |
-| `multiselect` | Multi-choice selection | `string[]` |
-| `form` | Multi-field input form | `Record<string, any>` |
-| `toast` | Non-blocking notification | `void` |
+| Type          | Description                 | Returns               |
+| ------------- | --------------------------- | --------------------- |
+| `confirm`     | Yes/no dialog with variants | `boolean`             |
+| `select`      | Single-choice selection     | `string \| undefined` |
+| `multiselect` | Multi-choice selection      | `string[]`            |
+| `form`        | Multi-field input form      | `Record<string, any>` |
+| `toast`       | Non-blocking notification   | `void`                |
 
 All blocking intents (everything except `toast`) display a modal dialog and wait for user response.
 
@@ -42,13 +42,13 @@ export const MyPlugin: Plugin = async ({ ui }) => {
           if (!ui) {
             return { output: "UI not available" }
           }
-          
+
           // Use ui helpers here
           const confirmed = await ui.confirm(
             { sessionID, messageID },
-            { title: "Proceed?", message: "Continue with action?" }
+            { title: "Proceed?", message: "Continue with action?" },
           )
-          
+
           return { output: confirmed ? "Confirmed" : "Cancelled" }
         },
       },
@@ -72,7 +72,7 @@ const confirmed = await ui.confirm(
     title: "Delete Files",
     message: "This will permanently delete 3 files. Continue?",
     variant: "danger", // "info" | "warning" | "danger"
-  }
+  },
 )
 
 if (!confirmed) {
@@ -82,11 +82,11 @@ if (!confirmed) {
 
 **Options:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `title` | `string` | Yes | Dialog title |
-| `message` | `string` | No | Additional context |
-| `variant` | `"info" \| "warning" \| "danger"` | No | Visual style (default: `"info"`) |
+| Field     | Type                              | Required | Description                      |
+| --------- | --------------------------------- | -------- | -------------------------------- |
+| `title`   | `string`                          | Yes      | Dialog title                     |
+| `message` | `string`                          | No       | Additional context               |
+| `variant` | `"info" \| "warning" \| "danger"` | No       | Visual style (default: `"info"`) |
 
 **Returns:** `boolean` — `true` if confirmed, `false` if denied
 
@@ -107,7 +107,7 @@ const choice = await ui.select(
       { value: "mysql", label: "MySQL", description: "Wide hosting support" },
       { value: "sqlite", label: "SQLite", description: "Zero configuration" },
     ],
-  }
+  },
 )
 
 if (!choice) {
@@ -117,19 +117,19 @@ if (!choice) {
 
 **Options:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `title` | `string` | Yes | Dialog title |
-| `message` | `string` | No | Additional context |
-| `options` | `Option[]` | Yes | 2-8 options to choose from |
+| Field     | Type       | Required | Description                |
+| --------- | ---------- | -------- | -------------------------- |
+| `title`   | `string`   | Yes      | Dialog title               |
+| `message` | `string`   | No       | Additional context         |
+| `options` | `Option[]` | Yes      | 2-8 options to choose from |
 
 **Option fields:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `value` | `string` | Yes | Value returned when selected |
-| `label` | `string` | Yes | Display text |
-| `description` | `string` | No | Additional context shown below label |
+| Field         | Type     | Required | Description                          |
+| ------------- | -------- | -------- | ------------------------------------ |
+| `value`       | `string` | Yes      | Value returned when selected         |
+| `label`       | `string` | Yes      | Display text                         |
+| `description` | `string` | No       | Additional context shown below label |
 
 **Returns:** `string | undefined` — Selected value, or `undefined` if cancelled
 
@@ -153,7 +153,7 @@ const features = await ui.multiselect(
     ],
     min: 1, // At least one required
     max: 3, // Maximum three allowed
-  }
+  },
 )
 
 if (features.length === 0) {
@@ -163,13 +163,13 @@ if (features.length === 0) {
 
 **Options:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `title` | `string` | Yes | Dialog title |
-| `message` | `string` | No | Additional context |
-| `options` | `Option[]` | Yes | 2-8 options to choose from |
-| `min` | `number` | No | Minimum selections required |
-| `max` | `number` | No | Maximum selections allowed |
+| Field     | Type       | Required | Description                 |
+| --------- | ---------- | -------- | --------------------------- |
+| `title`   | `string`   | Yes      | Dialog title                |
+| `message` | `string`   | No       | Additional context          |
+| `options` | `Option[]` | Yes      | 2-8 options to choose from  |
+| `min`     | `number`   | No       | Minimum selections required |
+| `max`     | `number`   | No       | Maximum selections allowed  |
 
 **Returns:** `string[]` — Array of selected values (empty if cancelled)
 
@@ -213,7 +213,7 @@ const result = await ui.form(
         ],
       },
     ],
-  }
+  },
 )
 
 // result = { framework: "next", features: ["typescript", "tailwind"] }
@@ -222,11 +222,11 @@ const result = await ui.form(
 
 **Form options:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `title` | `string` | Yes | Form title |
-| `message` | `string` | No | Additional context |
-| `fields` | `Field[]` | Yes | 1-10 form fields |
+| Field     | Type      | Required | Description        |
+| --------- | --------- | -------- | ------------------ |
+| `title`   | `string`  | Yes      | Form title         |
+| `message` | `string`  | No       | Additional context |
+| `fields`  | `Field[]` | Yes      | 1-10 form fields   |
 
 **Field types:**
 
@@ -303,17 +303,17 @@ await ui.toast(
     title: "Build Complete",
     message: "Project compiled successfully",
     variant: "success", // "info" | "success" | "warning" | "error"
-  }
+  },
 )
 ```
 
 **Options:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `title` | `string` | Yes | Toast title |
-| `message` | `string` | No | Additional message |
-| `variant` | `"info" \| "success" \| "warning" \| "error"` | No | Visual style |
+| Field     | Type                                          | Required | Description        |
+| --------- | --------------------------------------------- | -------- | ------------------ |
+| `title`   | `string`                                      | Yes      | Toast title        |
+| `message` | `string`                                      | No       | Additional message |
+| `variant` | `"info" \| "success" \| "warning" \| "error"` | No       | Visual style       |
 
 **Returns:** `void` — Returns immediately
 
@@ -323,14 +323,14 @@ await ui.toast(
 
 All intent dialogs support keyboard navigation:
 
-| Key | Action |
-|-----|--------|
-| `↑` `↓` | Navigate options |
-| `←` `→` | Switch confirm buttons |
+| Key     | Action                    |
+| ------- | ------------------------- |
+| `↑` `↓` | Navigate options          |
+| `←` `→` | Switch confirm buttons    |
 | `Space` | Toggle multiselect option |
-| `Enter` | Submit / Confirm |
-| `Esc` | Cancel |
-| `Tab` | Move between form fields |
+| `Enter` | Submit / Confirm          |
+| `Esc`   | Cancel                    |
+| `Tab`   | Move between form fields  |
 
 ---
 

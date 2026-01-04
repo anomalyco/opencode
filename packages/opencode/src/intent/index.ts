@@ -192,7 +192,7 @@ export namespace Intent {
       )
       return true
     }
-    
+
     p.resolve(input.response)
     return true
   }

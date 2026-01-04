@@ -394,10 +394,10 @@ for await (const event of events.stream) {
 
 ### Intent
 
-| Method | Description | Response |
-| ------ | ----------- | -------- |
-| `intent.list()` | List all pending intents | <a href={typesUrl}><code>Intent[]</code></a> |
-| `intent.respond({ path, body })` | Submit response to pending intent | `boolean` |
+| Method                           | Description                       | Response                                     |
+| -------------------------------- | --------------------------------- | -------------------------------------------- |
+| `intent.list()`                  | List all pending intents          | <a href={typesUrl}><code>Intent[]</code></a> |
+| `intent.respond({ path, body })` | Submit response to pending intent | `boolean`                                    |
 
 ---
 
@@ -422,14 +422,14 @@ await client.intent.respond({
 // Respond to a form intent
 await client.intent.respond({
   path: { sessionID: "session-id", intentID: "intent-id" },
-  body: { 
-    value: { 
-      fields: { 
+  body: {
+    value: {
+      fields: {
         name: "my-project",
         type: "app",
         features: ["typescript", "testing"],
-      } 
-    } 
+      },
+    },
   },
 })
 ```
