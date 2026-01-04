@@ -71,6 +71,10 @@ export const WriteTool = Tool.define("write", {
       output += `\n<project_diagnostics>\n${file}\n${limited.map(LSP.Diagnostic.pretty).join("\n")}${suffix}\n</project_diagnostics>\n`
     }
 
+    if (output) {
+      output = `Write applied\n${output.trimStart()}`
+    }
+
     return {
       title: path.relative(Instance.worktree, filepath),
       metadata: {
