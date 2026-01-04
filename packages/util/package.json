@@ -3,6 +3,7 @@
   "version": "1.0.224",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "exports": {
     "./*": "./src/*.ts"
   },
