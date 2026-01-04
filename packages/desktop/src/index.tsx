@@ -27,7 +27,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 let update: Update | null = null
 
 const platform: Platform = {
-  platform: "tauri",
+  platform: "desktop",
   version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
