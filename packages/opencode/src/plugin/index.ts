@@ -47,7 +47,13 @@ export namespace Plugin {
         if (!plugin) continue
       }
       const mod = await import(plugin)
+      // Prevent duplicate initialization when plugins export the same function
+      // as both a named export and default export (e.g., `export const X` and `export default X`).
+      // Object.entries(mod) would return both entries pointing to the same function reference.
+      const seen = new Set<PluginInstance>()
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+        if (seen.has(fn)) continue
+        seen.add(fn)
         const init = await fn(input)
         hooks.push(init)
       }
