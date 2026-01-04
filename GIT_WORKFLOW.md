@@ -11,6 +11,22 @@ geocomply    → git@github.com:GeoComply/opencode.git (PRIVATE - GeoComply fork
 haoxiangliew → https://github.com/haoxiangliew/opencode.git (PUBLIC - reference)
 ```
 
+## Branch Structure
+
+**GeoComply Private Branches:**
+
+- `geocomply/main` - Stable/production branch (for npm package builds)
+- `geocomply/dev` - Active development branch (your daily work)
+
+**Public Upstream Mirror:**
+
+- `upstream-dev` - Local mirror of `origin/dev` (sst/opencode public repo)
+- Pull latest public changes here, then sync to private branches
+
+**Personal Branches:**
+
+- `steven/*` - Your experimental/personal work branches
+
 ## Push Rules (Enforced by pre-push hook)
 
 ### ✅ ALLOWED
@@ -40,21 +56,39 @@ haoxiangliew → https://github.com/haoxiangliew/opencode.git (PUBLIC - referenc
 For features/fixes that stay private:
 
 ```bash
-# Work on geocomply-dev
-git checkout geocomply-dev
+# Work on dev branch
+git checkout dev
 # ... make changes ...
 git add .
 git commit -m "feat: add private feature"
-git push geocomply geocomply-dev
+git push geocomply dev
 ```
 
-### Workflow 2: Feature Branch (Private)
+### Workflow 2: Sync Public Upstream Changes
+
+Pull latest from public repo and merge into private:
+
+```bash
+# Update upstream mirror
+git checkout upstream-dev
+git pull origin dev
+
+# Merge into private main
+git checkout main  # or create branch from main
+git merge upstream-dev
+# Resolve conflicts if any
+
+# Push to private repo
+git push geocomply main
+```
+
+### Workflow 3: Feature Branch (Private)
 
 For organized private development:
 
 ```bash
-# Create feature branch from geocomply-dev
-git checkout geocomply-dev
+# Create feature branch from dev
+git checkout dev
 git checkout -b feature/my-feature
 
 # ... make changes ...
@@ -62,18 +96,19 @@ git add .
 git commit -m "feat: implement my feature"
 git push geocomply feature/my-feature
 
-# Create PR on GitHub: feature/my-feature → geocomply-dev
+# Create PR on GitHub: feature/my-feature → geocomply/dev
 # After merge, delete branch
 ```
 
-### Workflow 3: Contributing to Public Upstream
+### Workflow 4: Contributing to Public Upstream
 
 For features that should go to public sst/opencode:
 
 ```bash
 # Start from latest public upstream
-git fetch origin
-git checkout -b feature/public-contribution origin/dev
+git checkout upstream-dev
+git pull origin dev
+git checkout -b feature/public-contribution
 
 # ... make changes ...
 git add .
@@ -85,24 +120,25 @@ git push fork feature/public-contribution
 # Create PR on GitHub: stevenvo/opencode:feature/public-contribution → sst/opencode:dev
 ```
 
-### Workflow 4: Both Private AND Public
+### Workflow 5: Both Private AND Public
 
 For features that need to be in both repos:
 
 ```bash
 # 1. Develop on private first
-git checkout geocomply-dev
+git checkout dev
 git checkout -b feature/shared-feature
 # ... make changes ...
 git commit -m "feat: shared feature"
 git push geocomply feature/shared-feature
 
-# 2. Create PR to geocomply-dev, merge it
+# 2. Create PR to geocomply/dev, merge it
 
 # 3. Cherry-pick or rebase for public contribution
-git fetch origin
-git checkout -b feature/shared-feature-public origin/dev
-git cherry-pick <commit-hash>  # or rebase onto origin/dev
+git checkout upstream-dev
+git pull origin dev
+git checkout -b feature/shared-feature-public
+git cherry-pick <commit-hash>  # or rebase onto upstream-dev
 
 # 4. Push to your fork for public PR
 git push fork feature/shared-feature-public
