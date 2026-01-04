@@ -41,10 +41,10 @@ export function DialogViewArchivedSessions(props: { project: LocalProject }) {
         }}
       >
         {(session) => (
-          <div class="w-full flex items-center justify-between rounded-md">
-            <div class="flex items-center gap-x-3 grow min-w-0">
+          <div class="w-full flex items-center justify-between rounded-md overflow-hidden">
+            <div class="flex items-center gap-x-3 grow min-w-0 overflow-hidden">
               <Icon name="archive" size="small" class="text-text-weak shrink-0" />
-              <div class="flex items-center text-14-regular">
+              <div class="flex items-center text-14-regular overflow-hidden">
                 <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
                   {session.title}
                 </span>
