@@ -12,6 +12,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -53,8 +54,8 @@ export default function Home() {
   }
 
   return (
-    <div class="mx-auto mt-55">
-      <Logo class="w-xl opacity-12" />
+    <div class="mx-auto mt-20 md:mt-55 w-full max-w-xl px-4">
+      <Logo class="w-full opacity-12" />
       <Button
         size="large"
         variant="ghost"
@@ -87,17 +88,19 @@ export default function Home() {
                   .slice(0, 5)}
               >
                 {(project) => (
-                  <Button
-                    size="large"
-                    variant="ghost"
-                    class="text-14-mono text-left justify-between px-3"
-                    onClick={() => openProject(project.worktree)}
-                  >
-                    {project.worktree.replace(homedir(), "~")}
-                    <div class="text-14-regular text-text-weak">
-                      {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
-                    </div>
-                  </Button>
+                  <Tooltip placement="top" value={project.worktree}>
+                    <Button
+                      size="large"
+                      variant="ghost"
+                      class="text-14-mono text-left justify-between px-3 gap-2 min-w-0 w-full"
+                      onClick={() => openProject(project.worktree)}
+                    >
+                      <span class="truncate min-w-0">{project.worktree.replace(homedir(), "~")}</span>
+                      <span class="text-14-regular text-text-weak shrink-0">
+                        {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
+                      </span>
+                    </Button>
+                  </Tooltip>
                 )}
               </For>
             </ul>
