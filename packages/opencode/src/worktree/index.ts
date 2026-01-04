@@ -7,6 +7,7 @@ import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { Project } from "../project/project"
 import { fn } from "../util/fn"
+import { Config } from "@/config/config"
 
 export namespace Worktree {
   export const Info = z
@@ -209,6 +210,11 @@ export namespace Worktree {
     const ran = await runStartCommand(info.directory, cmd)
     if (ran.exitCode !== 0) {
       throw new StartCommandFailedError({ message: errorText(ran) || "Worktree start command failed" })
+    }
+
+    const opencodeDir = path.join(info.directory, ".opencode")
+    if (await Bun.file(opencodeDir).exists()) {
+      await Config.installDependencies(info.directory)
     }
 
     return info
