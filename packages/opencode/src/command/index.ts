@@ -6,6 +6,7 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { Plugin } from "../plugin"
 
 export namespace Command {
   export const Event = {
@@ -58,6 +59,7 @@ export namespace Command {
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
+    // Start with built-in commands
     const result: Record<string, Info> = {
       [Default.INIT]: {
         name: Default.INIT,
@@ -78,6 +80,23 @@ export namespace Command {
       },
     }
 
+    // Load plugin commands first (lowest priority, will be overridden by config/file-based)
+    const pluginCommands = await Plugin.commands()
+    for (const [name, command] of Object.entries(pluginCommands)) {
+      result[name] = {
+        name,
+        agent: command.agent,
+        model: command.model,
+        description: command.description,
+        get template() {
+          return command.template
+        },
+        subtask: command.subtask,
+        hints: hints(command.template),
+      }
+    }
+
+    // Config-based commands override plugin commands
     for (const [name, command] of Object.entries(cfg.command ?? {})) {
       result[name] = {
         name,
@@ -91,6 +110,8 @@ export namespace Command {
         hints: hints(command.template),
       }
     }
+
+    // MCP prompts
     for (const [name, prompt] of Object.entries(await MCP.prompts())) {
       result[name] = {
         name,
