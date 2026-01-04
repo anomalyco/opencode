@@ -10,7 +10,10 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./tool": "./src/tool.ts"
+    "./tool": "./src/tool.ts",
+    "./command": "./src/command.ts",
+    "./skill": "./src/skill.ts",
+    "./agent": "./src/agent.ts"
   },
   "files": [
     "dist"

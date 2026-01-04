@@ -14,8 +14,14 @@ import type {
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
+import { type CommandDefinition } from "./command"
+import { type SkillDefinition } from "./skill"
+import { type AgentDefinition } from "./agent"
 
 export * from "./tool"
+export * from "./command"
+export * from "./skill"
+export * from "./agent"
 
 export type ProviderContext = {
   source: "env" | "config" | "custom" | "api"
@@ -150,6 +156,24 @@ export interface Hooks {
     [key: string]: ToolDefinition
   }
   auth?: AuthHook
+  /**
+   * Register custom commands that appear as slash commands in the TUI.
+   * Keys become command names (e.g., { "my-cmd": {...} } creates /my-cmd)
+   * File-based commands with the same name will override these.
+   */
+  command?: Record<string, CommandDefinition>
+  /**
+   * Register skills that agents can load on-demand via the skill tool.
+   * Keys become skill names.
+   * File-based skills with the same name will override these.
+   */
+  skill?: Record<string, SkillDefinition>
+  /**
+   * Register custom agents for specialized tasks.
+   * Keys become agent names.
+   * File-based agents with the same name will override these.
+   */
+  agent?: Record<string, AgentDefinition>
   /**
    * Called when a new message is received
    */
