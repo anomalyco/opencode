@@ -6,82 +6,99 @@ This tool enables you to interact with arbitrarily long contexts through code ex
 
 When initialized with context, the REPL provides:
 1. A `context` variable containing the input data (string or list of strings)
-2. An `llm_query(prompt, context="")` function for recursive LLM sub-calls
-3. Standard Python libraries and the ability to import more
-4. Persistent state across code executions within the same session
+2. LLM query functions for recursive sub-agent calls (single and parallel)
+3. Context analysis helpers for intelligent decomposition
+4. Standard Python libraries and the ability to import more
+5. Persistent state across code executions within the same session
+
+## Available Functions
+
+### LLM Query Functions
+
+```python
+# Single synchronous query
+result = llm_query(prompt, ctx="")
+
+# Parallel batch queries - spawns multiple sub-agents simultaneously
+results = llm_query_parallel([
+    {"prompt": "Analyze section 1", "context": chunk1},
+    {"prompt": "Analyze section 2", "context": chunk2},
+])
+
+# Map a prompt over items with auto-batching
+summaries = llm_map("Summarize: {item}", chunks, max_parallel=10)
+```
+
+### Context Helpers
+
+```python
+# Analyze context metadata
+info = probe_context()  # Returns {type, length, lines, words, format, preview, tail}
+
+# Smart chunking with semantic boundaries
+chunks = smart_chunk(text, target_size=8000, overlap=200)
+
+# Get LLM to plan decomposition strategy
+strategy = plan_decomposition("Find security issues")
+```
 
 ## How to Use
 
 Write Python code wrapped in triple backticks with 'repl' language identifier:
 
 ```repl
-# Example: Examine the context
-print(f"Context length: {len(context)} characters")
-print(f"First 500 chars: {context[:500]}")
+# Example: Examine and process context
+info = probe_context()
+print(f"Context: {info['length']} chars, {info['lines']} lines")
+
+chunks = smart_chunk(context, target_size=5000)
+results = llm_map("Extract key facts: {item}", chunks)
+print(f"FINAL({results})")
 ```
 
-## Key Functions
+## Key Strategies
 
-### llm_query(prompt, context="")
-Query a sub-LLM for semantic understanding. Use this for:
-- Semantic transformations that can't be done with code
-- Classifying or labeling data
-- Summarizing sections of context
-- Answering questions about specific content
-
-```repl
-# Example: Classify a chunk semantically
-chunk = context[:10000]
-classification = llm_query(f"Classify this text into categories: {chunk}")
-print(classification)
+### 1. Parallel Processing (Recommended)
+Use `llm_query_parallel` or `llm_map` for processing multiple chunks:
+```python
+chunks = smart_chunk(context)
+# This spawns len(chunks) parallel sub-LLM queries:
+results = llm_query_parallel([
+    {"prompt": f"Analyze: {c}"} for c in chunks
+])
 ```
 
-## Strategies for Long Contexts
-
-1. **Chunking and Iterating**: Split context into manageable pieces
-```repl
-chunks = context.split('\n')
-for i, chunk in enumerate(chunks[:10]):
-    result = llm_query(f"Summarize: {chunk}")
-    print(f"Chunk {i}: {result}")
-```
-
-2. **Filtering with Code**: Use regex/string operations to narrow search
-```repl
+### 2. Filter Before Querying
+Use regex/code to reduce LLM calls:
+```python
 import re
-relevant = [line for line in context.split('\n') if 'keyword' in line.lower()]
-print(f"Found {len(relevant)} relevant lines")
+relevant = [l for l in context.split('\n') if re.search(r'error', l, re.I)]
+results = llm_map("Classify: {item}", relevant)
 ```
 
-3. **Building Answers Incrementally**: Store intermediate results
-```repl
-answers = []
-for section in sections:
-    answer = llm_query(f"Extract key facts: {section}")
-    answers.append(answer)
-final = llm_query(f"Combine these facts: {answers}")
+### 3. Hierarchical Map-Reduce
+For very large contexts, use multiple stages:
+```python
+# Stage 1: Extract
+chunks = smart_chunk(context, target_size=5000)
+extractions = llm_map("Extract key points: {item}", chunks)
+
+# Stage 2: Synthesize
+final = llm_query(f"Combine findings: {extractions}")
+print(f"FINAL({final})")
 ```
 
 ## Providing Final Answers
 
-When you have completed your analysis, you MUST wrap your answer in one of these tags:
+You MUST wrap your answer in one of these patterns:
 
-- `FINAL(your answer here)` - Return a direct text answer
-- `FINAL_VAR(variable_name)` - Return the contents of a variable
-
-```repl
-# Direct answer
-print("FINAL(The answer is 42)")
-
-# Or return a built-up variable
-result = "Complex answer built from multiple sub-queries..."
-print(f"FINAL_VAR(result)")
-```
+- `print(f"FINAL(your answer)")` - Return a direct text answer
+- `print(f"FINAL_VAR(variable_name)")` - Return a variable's contents
 
 ## Important Notes
 
-- Output is truncated to prevent context overflow; use llm_query for analysis
-- Sub-LLM calls can handle ~500K characters each
+- **Use parallel functions** - `llm_query_parallel` and `llm_map` are much faster
+- **Model decides parallelism** - You determine chunk sizes based on data
+- Output is truncated to 50K chars; use sub-queries for analysis
 - Variables persist across code executions in the same session
-- Always explicitly explore the context before answering queries
-- Batch information into sub-LLM calls to minimize API costs
+- Always probe the context before answering queries

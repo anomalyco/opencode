@@ -40,11 +40,14 @@ setInterval(() => {
 }, 60_000)
 
 interface ReplResponse {
-  type: "output" | "error" | "final" | "final_var" | "llm_request"
+  type: "output" | "error" | "final" | "final_var" | "llm_request" | "llm_batch_request"
   content: string
   varName?: string
   prompt?: string
   queryContext?: string
+  // For batch requests
+  queries?: Array<{ prompt: string; queryContext?: string }>
+  batchId?: string
 }
 
 // Python REPL script with integrated LLM query support
@@ -53,12 +56,14 @@ import sys
 import json
 import re
 import traceback
+import uuid
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 
 # Store context and variables
 context = ""
 _variables = {}
+_batch_counter = 0
 
 def llm_query(prompt, ctx=""):
     """Query a sub-LLM with the given prompt and optional context.
@@ -83,6 +88,209 @@ def llm_query(prompt, ctx=""):
         if line.startswith("__LLM_RESULT__") and line.endswith("__END_LLM_RESULT__"):
             result = line[14:-17]
             return result
+
+def llm_query_parallel(queries):
+    """Execute multiple LLM queries in parallel.
+
+    Args:
+        queries: List of dicts with 'prompt' and optional 'context' keys,
+                 OR list of strings (treated as prompts with no context)
+
+    Returns:
+        List of results in the same order as queries
+
+    Example:
+        results = llm_query_parallel([
+            {"prompt": "Summarize section 1", "context": chunk1},
+            {"prompt": "Summarize section 2", "context": chunk2},
+            {"prompt": "Summarize section 3", "context": chunk3},
+        ])
+    """
+    global _batch_counter
+    _batch_counter += 1
+    batch_id = f"batch_{_batch_counter}"
+
+    # Normalize queries to list of dicts
+    normalized = []
+    for q in queries:
+        if isinstance(q, str):
+            normalized.append({"prompt": q, "queryContext": ""})
+        else:
+            normalized.append({
+                "prompt": q.get("prompt", ""),
+                "queryContext": q.get("context", q.get("queryContext", ""))
+            })
+
+    # Send batch request
+    request = json.dumps({
+        "type": "llm_batch_request",
+        "queries": normalized,
+        "batchId": batch_id
+    })
+    print(f"__REPL_RESPONSE__{request}__END_REPL_RESPONSE__", flush=True)
+
+    # Wait for batch results
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return ["Error: Connection closed"] * len(queries)
+        line = line.strip()
+        if line.startswith("__LLM_BATCH_RESULT__") and line.endswith("__END_LLM_BATCH_RESULT__"):
+            result_json = line[20:-22]
+            try:
+                results = json.loads(result_json)
+                return results
+            except:
+                return ["Error: Invalid batch result"] * len(queries)
+
+def llm_map(prompt_template, items, max_parallel=10):
+    """Apply an LLM query to each item using parallel execution.
+
+    Args:
+        prompt_template: String with {item} placeholder, or callable(item) -> prompt
+        items: List of items to process
+        max_parallel: Maximum concurrent queries (default 10)
+
+    Returns:
+        List of results in same order as items
+
+    Example:
+        summaries = llm_map("Summarize this text: {item}", chunks)
+        # Or with a function:
+        summaries = llm_map(lambda x: f"Analyze: {x[:500]}", chunks)
+    """
+    results = []
+    for i in range(0, len(items), max_parallel):
+        batch = items[i:i+max_parallel]
+        queries = []
+        for item in batch:
+            if callable(prompt_template):
+                prompt = prompt_template(item)
+            else:
+                prompt = prompt_template.format(item=item)
+            queries.append({"prompt": prompt})
+        batch_results = llm_query_parallel(queries)
+        results.extend(batch_results)
+    return results
+
+# Context analysis helpers
+def probe_context():
+    """Analyze the context and return useful metadata."""
+    info = {
+        "type": str(type(context).__name__),
+        "length": len(context) if context else 0,
+    }
+
+    if isinstance(context, str):
+        info["lines"] = context.count('\\n') + 1
+        info["words"] = len(context.split())
+        # Detect structure
+        if context.strip().startswith('{') or context.strip().startswith('['):
+            info["format"] = "json"
+        elif '\\n---\\n' in context:
+            info["format"] = "yaml_multi_doc"
+        elif re.search(r'^#{1,6}\\s', context, re.MULTILINE):
+            info["format"] = "markdown"
+        elif '<html' in context.lower() or '<!doctype' in context.lower():
+            info["format"] = "html"
+        else:
+            info["format"] = "text"
+
+        # Sample
+        info["preview"] = context[:1000] if len(context) > 1000 else context
+        info["tail"] = context[-500:] if len(context) > 500 else ""
+
+    return info
+
+def smart_chunk(text, target_size=8000, overlap=200, separators=None):
+    """Split text into chunks that preserve semantic boundaries.
+
+    Args:
+        text: String to chunk
+        target_size: Target chunk size in characters
+        overlap: Overlap between chunks
+        separators: List of separators to try, in order of preference
+
+    Returns:
+        List of chunks
+    """
+    if separators is None:
+        separators = [
+            '\\n## ',      # Markdown h2
+            '\\n# ',       # Markdown h1
+            '\\n\\n\\n',   # Triple newline
+            '\\n\\n',      # Paragraph
+            '\\n',         # Line
+            '. ',          # Sentence
+        ]
+
+    if len(text) <= target_size:
+        return [text]
+
+    chunks = []
+    current = ""
+
+    # Try to find best separator
+    best_sep = '\\n'
+    for sep in separators:
+        if sep in text:
+            best_sep = sep
+            break
+
+    parts = text.split(best_sep)
+
+    for part in parts:
+        part_with_sep = part + best_sep
+        if len(current) + len(part_with_sep) > target_size and current:
+            chunks.append(current.strip())
+            # Keep overlap from end of previous chunk
+            if overlap > 0:
+                current = current[-overlap:] + part_with_sep
+            else:
+                current = part_with_sep
+        else:
+            current += part_with_sep
+
+    if current.strip():
+        chunks.append(current.strip())
+
+    return chunks
+
+def plan_decomposition(task_description):
+    """Ask the LLM to plan how to decompose the context for a given task.
+
+    Returns a strategy dict with recommended approach.
+    """
+    info = probe_context()
+
+    planning_prompt = f"""Given a context with these properties:
+- Type: {info['type']}
+- Length: {info['length']} characters
+- Lines: {info.get('lines', 'N/A')}
+- Format: {info.get('format', 'unknown')}
+- Preview: {info.get('preview', '')[:500]}...
+
+Task: {task_description}
+
+Recommend a decomposition strategy. Respond in JSON format:
+{{
+    "approach": "chunk|filter|hierarchical|map_reduce",
+    "chunk_size": <number or null>,
+    "filter_pattern": "<regex or null>",
+    "num_stages": <1-3>,
+    "description": "<brief strategy description>"
+}}"""
+
+    result = llm_query(planning_prompt)
+    try:
+        # Try to extract JSON from response
+        match = re.search(r'\\{[^{}]*\\}', result, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+    except:
+        pass
+
+    return {"approach": "chunk", "chunk_size": 8000, "description": result}
 
 def _check_final_patterns(output):
     """Check for FINAL() or FINAL_VAR() patterns in output."""
@@ -313,6 +521,25 @@ async function executeInRepl(
             }
           }
 
+          // Check if this is a batch LLM query request (parallel execution)
+          if (response.type === "llm_batch_request" && response.queries) {
+            try {
+              const batchResults = await handleLlmBatchQuery(ctx, response.queries)
+              const resultsJson = JSON.stringify(batchResults)
+              state.process.stdin?.write(
+                `__LLM_BATCH_RESULT__${resultsJson}__END_LLM_BATCH_RESULT__\n`,
+              )
+              return
+            } catch (e) {
+              const errorMsg = e instanceof Error ? e.message : String(e)
+              const errorResults = response.queries.map(() => `Error: ${errorMsg}`)
+              state.process.stdin?.write(
+                `__LLM_BATCH_RESULT__${JSON.stringify(errorResults)}__END_LLM_BATCH_RESULT__\n`,
+              )
+              return
+            }
+          }
+
           // Normal response - we're done
           resolved = true
           cleanup()
@@ -382,6 +609,72 @@ async function handleLlmQuery(
     return textPart?.text ?? ""
   } catch (e) {
     log.error("llm_query failed", { error: e, sessionId: ctx.sessionID })
+    throw e
+  }
+}
+
+async function handleLlmBatchQuery(
+  ctx: Tool.Context,
+  queries: Array<{ prompt: string; queryContext?: string }>,
+): Promise<string[]> {
+  log.info("handling llm_batch_query", {
+    sessionId: ctx.sessionID,
+    queryCount: queries.length,
+  })
+
+  try {
+    // Get model from parent session
+    const messages = await Session.messages({ sessionID: ctx.sessionID })
+    const userMsg = messages.find((m) => m.info.role === "user")
+    const model = userMsg?.info.role === "user" ? userMsg.info.model : await Provider.defaultModel()
+
+    const agent = (await Agent.get("rlm-sub")) || (await Agent.get("general"))
+    if (!agent) {
+      throw new Error("No agent available for sub-LLM batch call")
+    }
+
+    // Execute all queries in parallel
+    const results = await Promise.all(
+      queries.map(async (query, index) => {
+        try {
+          const childSession = await Session.create({
+            parentID: ctx.sessionID,
+            title: `RLM batch sub-query ${index + 1}/${queries.length}`,
+          })
+
+          const fullPrompt = query.queryContext
+            ? `${query.prompt}\n\nContext:\n${query.queryContext}`
+            : query.prompt
+
+          const result = await SessionPrompt.prompt({
+            messageID: Identifier.ascending("message"),
+            sessionID: childSession.id,
+            model,
+            agent: agent.name,
+            parts: [{ type: "text", text: fullPrompt }],
+          })
+
+          const textPart = result.parts.find((p) => p.type === "text") as
+            | { text: string }
+            | undefined
+          return textPart?.text ?? ""
+        } catch (e) {
+          const errorMsg = e instanceof Error ? e.message : String(e)
+          log.error("batch query item failed", { error: e, index, sessionId: ctx.sessionID })
+          return `Error: ${errorMsg}`
+        }
+      }),
+    )
+
+    log.info("batch query completed", {
+      sessionId: ctx.sessionID,
+      queryCount: queries.length,
+      successCount: results.filter((r) => !r.startsWith("Error:")).length,
+    })
+
+    return results
+  } catch (e) {
+    log.error("llm_batch_query failed", { error: e, sessionId: ctx.sessionID })
     throw e
   }
 }
