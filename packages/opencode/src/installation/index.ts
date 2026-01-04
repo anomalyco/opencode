@@ -111,8 +111,10 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
-    if (tapFormula.includes("opencode")) return "sst/tap/opencode"
+    const oldTapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
+    if (oldTapFormula.includes("opencode")) return "sst/tap/opencode"
+    const newTapFormula = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
+    if (newTapFormula.includes("opencode")) return "anomalyco/tap/opencode"
     const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
     return "opencode"
@@ -137,7 +139,44 @@ export namespace Installation {
         cmd = $`bun install -g opencode-ai@${target}`
         break
       case "brew": {
-        const formula = await getBrewFormula()
+        let formula = await getBrewFormula()
+        if (formula.includes("sst")) {
+          const uninstall = await $`brew uninstall ${formula}`
+            .env({
+              HOMEBREW_NO_AUTO_UPDATE: "1",
+              ...process.env,
+            })
+            .quiet()
+            .throws(false)
+          log.info("uninstalled old tap", {
+            formula,
+            stdout: uninstall.stdout.toString(),
+            stderr: uninstall.stderr.toString(),
+          })
+          if (uninstall.exitCode !== 0)
+            throw new UpgradeFailedError({
+              stderr: uninstall.stderr.toString("utf8"),
+            })
+          const untap = await $`brew untap sst/tap`
+            .env({
+              HOMEBREW_NO_AUTO_UPDATE: "1",
+              ...process.env,
+            })
+            .quiet()
+            .throws(false)
+          if (untap.exitCode !== 0) {
+            log.warn("failed to untap old tap", {
+              exitCode: untap.exitCode,
+              stderr: untap.stderr.toString(),
+            })
+          } else {
+            log.info("untapped old tap", {
+              stdout: untap.stdout.toString(),
+              stderr: untap.stderr.toString(),
+            })
+          }
+          formula = "anomalyco/tap/opencode"
+        }
         cmd = $`brew install ${formula}`.env({
           HOMEBREW_NO_AUTO_UPDATE: "1",
           ...process.env,
