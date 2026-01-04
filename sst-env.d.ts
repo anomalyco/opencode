@@ -148,6 +148,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_MODELS7": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZenData": {
       "name": string
       "type": "sst.cloudflare.Bucket"
