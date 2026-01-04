@@ -1,5 +1,42 @@
 import { describe, expect, test } from "bun:test"
+import type { ModelMessage } from "ai"
 import { ProviderTransform } from "../../src/provider/transform"
+import type { Provider } from "../../src/provider/provider"
+
+const createModel = (): Provider.Model => ({
+  id: "z.ai/glm-4.7",
+  providerID: "zai-coding-plan",
+  api: {
+    id: "glm-4.7",
+    url: "https://api.z.ai/api/anthropic",
+    npm: "@ai-sdk/openai-compatible",
+  },
+  name: "GLM-4.7",
+  capabilities: {
+    temperature: true,
+    reasoning: true,
+    attachment: false,
+    toolcall: true,
+    input: { text: true, audio: false, image: false, video: false, pdf: false },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: {
+      field: "reasoning_content",
+    },
+  },
+  cost: {
+    input: 0.001,
+    output: 0.002,
+    cache: { read: 0.0001, write: 0.0002 },
+  },
+  limit: {
+    context: 128000,
+    output: 8192,
+  },
+  status: "active",
+  options: {},
+  headers: {},
+  release_date: "2024-01-01",
+})
 
 describe("ProviderTransform.message - GLM-4.7 malformed thinking block", () => {
   test("GLM-4.7 with tool call XML in reasoning_content should extract malformed tool calls", () => {
@@ -10,47 +47,14 @@ describe("ProviderTransform.message - GLM-4.7 malformed thinking block", () => {
 </invoke>
 After running the tests, I'll analyze the results.`
 
-    const msgs = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [{ type: "reasoning", text: malformedReasoning }],
       },
-    ] as any[]
+    ]
 
-    const result = ProviderTransform.message(msgs, {
-      id: "z.ai/glm-4.7",
-      providerID: "zai-coding-plan",
-      api: {
-        id: "glm-4.7",
-        url: "https://api.z.ai/api/anthropic",
-        npm: "@ai-sdk/openai-compatible",
-      },
-      name: "GLM-4.7",
-      capabilities: {
-        temperature: true,
-        reasoning: true,
-        attachment: false,
-        toolcall: true,
-        input: { text: true, audio: false, image: false, video: false, pdf: false },
-        output: { text: true, audio: false, image: false, video: false, pdf: false },
-        interleaved: {
-          field: "reasoning_content",
-        },
-      },
-      cost: {
-        input: 0.001,
-        output: 0.002,
-        cache: { read: 0.0001, write: 0.0002 },
-      },
-      limit: {
-        context: 128000,
-        output: 8192,
-      },
-      status: "active",
-      options: {},
-      headers: {},
-      release_date: "2024-01-01",
-    } as any)
+    const result = ProviderTransform.message(msgs, createModel())
 
     // The fix should:
     // 1. Extract the tool call from reasoning_content
@@ -89,47 +93,14 @@ After running the tests, I'll analyze the results.`
   <next_step_required>true</next_step_required>
 </invoke>`
 
-    const msgs = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [{ type: "reasoning", text: thinkingBlock }],
       },
-    ] as any[]
+    ]
 
-    const result = ProviderTransform.message(msgs, {
-      id: "z.ai/glm-4.7",
-      providerID: "zai-coding-plan",
-      api: {
-        id: "glm-4.7",
-        url: "https://api.z.ai/api/anthropic",
-        npm: "@ai-sdk/openai-compatible",
-      },
-      name: "GLM-4.7",
-      capabilities: {
-        temperature: true,
-        reasoning: true,
-        attachment: false,
-        toolcall: true,
-        input: { text: true, audio: false, image: false, video: false, pdf: false },
-        output: { text: true, audio: false, image: false, video: false, pdf: false },
-        interleaved: {
-          field: "reasoning_content",
-        },
-      },
-      cost: {
-        input: 0.001,
-        output: 0.002,
-        cache: { read: 0.0001, write: 0.0002 },
-      },
-      limit: {
-        context: 128000,
-        output: 8192,
-      },
-      status: "active",
-      options: {},
-      headers: {},
-      release_date: "2024-01-01",
-    } as any)
+    const result = ProviderTransform.message(msgs, createModel())
 
     // For thinking-specific tools like pal_thinkdeep, we may want to keep them in reasoning
     // or extract them - the fix should handle this case appropriately
@@ -167,75 +138,46 @@ After running the tests, I'll analyze the results.`
   <description>Run tests</description>
 </invoke>`
 
-    const msgs = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [{ type: "reasoning", text: malformedReasoning }],
       },
-    ] as any[]
+    ]
 
-    const result = ProviderTransform.message(msgs, {
-      id: "z.ai/glm-4.7",
-      providerID: "zai-coding-plan",
-      api: {
-        id: "glm-4.7",
-        url: "https://api.z.ai/api/anthropic",
-        npm: "@ai-sdk/openai-compatible",
-      },
-      name: "GLM-4.7",
-      capabilities: {
-        temperature: true,
-        reasoning: true,
-        attachment: false,
-        toolcall: true,
-        input: { text: true, audio: false, image: false, video: false, pdf: false },
-        output: { text: true, audio: false, image: false, video: false, pdf: false },
-        interleaved: {
-          field: "reasoning_content",
-        },
-      },
-      cost: {
-        input: 0.001,
-        output: 0.002,
-        cache: { read: 0.0001, write: 0.0002 },
-      },
-      limit: {
-        context: 128000,
-        output: 8192,
-      },
-      status: "active",
-      options: {},
-      headers: {},
-      release_date: "2024-01-01",
-    } as any)
+    const result = ProviderTransform.message(msgs, createModel())
 
     expect(result).toHaveLength(1)
 
     // All three tool calls should be extracted
-    const toolCalls2 = (result[0].content as any).filter((part: any) => part.type === "tool-call")
-    expect(toolCalls2.length).toBe(3)
+    if (typeof result[0].content === "string") {
+      throw new Error("Expected content to be an array, not a string")
+    }
 
-    expect(toolCalls2[0].toolName).toBe("bash")
-    expect(toolCalls2[0].input).toEqual({
+    const toolCalls = result[0].content.filter((part) => part.type === "tool-call")
+    expect(toolCalls.length).toBe(3)
+
+    expect(toolCalls[0].toolName).toBe("bash")
+    expect(toolCalls[0].input).toEqual({
       command: "ls -la",
       description: "List files",
     })
 
-    expect(toolCalls2[1].toolName).toBe("bash")
-    expect(toolCalls2[1].input).toEqual({
+    expect(toolCalls[1].toolName).toBe("bash")
+    expect(toolCalls[1].input).toEqual({
       command: "bun install",
       description: "Install dependencies",
     })
 
-    expect(toolCalls2[2].toolName).toBe("bash")
-    expect(toolCalls2[2].input).toEqual({
+    expect(toolCalls[2].toolName).toBe("bash")
+    expect(toolCalls[2].input).toEqual({
       command: "bun test",
       description: "Run tests",
     })
   })
 
   test("Properly formatted GLM-4.7 response should not be affected", () => {
-    const msgs = [
+    const msgs: ModelMessage[] = [
       {
         role: "assistant",
         content: [
@@ -249,42 +191,9 @@ After running the tests, I'll analyze the results.`
           { type: "text", text: "Tests passed!" },
         ],
       },
-    ] as any[]
+    ]
 
-    const result = ProviderTransform.message(msgs, {
-      id: "z.ai/glm-4.7",
-      providerID: "zai-coding-plan",
-      api: {
-        id: "glm-4.7",
-        url: "https://api.z.ai/api/anthropic",
-        npm: "@ai-sdk/openai-compatible",
-      },
-      name: "GLM-4.7",
-      capabilities: {
-        temperature: true,
-        reasoning: true,
-        attachment: false,
-        toolcall: true,
-        input: { text: true, audio: false, image: false, video: false, pdf: false },
-        output: { text: true, audio: false, image: false, video: false, pdf: false },
-        interleaved: {
-          field: "reasoning_content",
-        },
-      },
-      cost: {
-        input: 0.001,
-        output: 0.002,
-        cache: { read: 0.0001, write: 0.0002 },
-      },
-      limit: {
-        context: 128000,
-        output: 8192,
-      },
-      status: "active",
-      options: {},
-      headers: {},
-      release_date: "2024-01-01",
-    } as any)
+    const result = ProviderTransform.message(msgs, createModel())
 
     // Should preserve existing structure
     expect(result).toHaveLength(1)
