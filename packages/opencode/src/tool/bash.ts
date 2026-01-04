@@ -1,6 +1,7 @@
 import z from "zod"
 import { spawn } from "child_process"
 import { Tool } from "./tool"
+import path from "path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
@@ -136,7 +137,7 @@ export const BashTool = Tool.define("bash", async () => {
         await ctx.ask({
           permission: "external_directory",
           patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => x + "*"),
+          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
           metadata: {},
         })
       }
