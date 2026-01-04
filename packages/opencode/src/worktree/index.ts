@@ -7,6 +7,7 @@ import { Global } from "../global"
 import { Instance } from "../project/instance"
 import { Project } from "../project/project"
 import { fn } from "../util/fn"
+import { Config } from "@/config/config"
 
 export namespace Worktree {
   export const Info = z
