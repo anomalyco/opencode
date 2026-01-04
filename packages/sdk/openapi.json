@@ -4541,6 +4541,44 @@
         ]
       }
     },
+    "/mcp/resources": {
+      "get": {
+        "operationId": "mcp.resources",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get MCP resources",
+        "description": "Get all available MCP resources from connected servers.",
+        "responses": {
+          "200": {
+            "description": "MCP resources",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.mcp.resources({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/lsp": {
       "get": {
         "operationId": "lsp.status",
@@ -9842,7 +9880,7 @@
             "maximum": 9007199254740991
           }
         },
-        "required": ["name", "mode", "permission", "options"]
+        "required": ["name", "mode", "builtIn", "permission", "options"]
       },
       "MCPStatusConnected": {
         "type": "object",

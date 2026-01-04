@@ -2338,6 +2338,27 @@ export namespace Server {
         },
       )
       .get(
+        "/experimental/resource",
+        describeRoute({
+          summary: "Get MCP resources",
+          description: "Get all available MCP resources from connected servers. Optionally filter by name.",
+          operationId: "experimental.resource.list",
+          responses: {
+            200: {
+              description: "MCP resources",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Resource)),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await MCP.resources())
+        },
+      )
+      .get(
         "/lsp",
         describeRoute({
           summary: "Get LSP status",

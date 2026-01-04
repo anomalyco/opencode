@@ -117,7 +117,15 @@ export namespace MessageV2 {
     ref: "SymbolSource",
   })
 
-  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource]).meta({
+  export const ResourceSource = FilePartSourceBase.extend({
+    type: z.literal("resource"),
+    clientName: z.string(),
+    uri: z.string(),
+  }).meta({
+    ref: "ResourceSource",
+  })
+
+  export const FilePartSource = z.discriminatedUnion("type", [FileSource, SymbolSource, ResourceSource]).meta({
     ref: "FilePartSource",
   })
 

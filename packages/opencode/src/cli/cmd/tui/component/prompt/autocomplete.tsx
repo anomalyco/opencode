@@ -231,6 +231,40 @@ export function Autocomplete(props: {
     },
   )
 
+  const mcpResources = createMemo(() => {
+    if (!store.visible || store.visible === "/") return []
+
+    const options: AutocompleteOption[] = []
+    const width = props.anchor().width - 4
+
+    for (const res of Object.values(sync.data.mcp_resource)) {
+      options.push({
+        display: Locale.truncateMiddle(`${res.name} (${res.uri})`, width),
+        description: res.description,
+        onSelect: () => {
+          insertPart(res.name, {
+            type: "file",
+            mime: res.mimeType ?? "text/plain",
+            filename: res.name,
+            url: res.uri,
+            source: {
+              type: "resource",
+              text: {
+                start: 0,
+                end: 0,
+                value: "",
+              },
+              clientName: res.client,
+              uri: res.uri,
+            },
+          })
+        },
+      })
+    }
+
+    return options
+  })
+
   const agents = createMemo(() => {
     const agents = sync.data.agent
     return agents
@@ -416,7 +450,7 @@ export function Autocomplete(props: {
     const commandsValue = commands()
 
     const mixed: AutocompleteOption[] = (
-      store.visible === "@" ? [...agentsValue, ...(filesValue || [])] : [...commandsValue]
+      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
     ).filter((x) => x.disabled !== true)
 
     const currentFilter = filter()
