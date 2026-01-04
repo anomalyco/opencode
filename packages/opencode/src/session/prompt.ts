@@ -400,6 +400,10 @@ export namespace SessionPrompt {
               ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
             })
           },
+          log(level, message, extra) {
+            const logger = Log.create({ service: "tool" })
+            logger[level](message, extra)
+          },
         }
         const result = await taskTool.execute(taskArgs, taskCtx).catch((error) => {
           executionError = error
@@ -672,6 +676,10 @@ export namespace SessionPrompt {
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: PermissionNext.merge(input.agent.permission, input.session.permission ?? []),
         })
+      },
+      log(level, message, extra) {
+        const logger = Log.create({ service: "tool" })
+        logger[level](message, extra)
       },
     })
 
@@ -983,6 +991,10 @@ export namespace SessionPrompt {
                       extra: { bypassCwdCheck: true, model },
                       metadata: async () => {},
                       ask: async () => {},
+                      log(level, message, extra) {
+                        const logger = Log.create({ service: "tool" })
+                        logger[level](message, extra)
+                      },
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -1044,6 +1056,10 @@ export namespace SessionPrompt {
                   extra: { bypassCwdCheck: true },
                   metadata: async () => {},
                   ask: async () => {},
+                  log(level, message, extra) {
+                    const logger = Log.create({ service: "tool" })
+                    logger[level](message, extra)
+                  },
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [

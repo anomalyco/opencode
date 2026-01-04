@@ -5,6 +5,7 @@ export type ToolContext = {
   messageID: string
   agent: string
   abort: AbortSignal
+  log(level: "debug" | "info" | "warn" | "error", message: string, extra?: Record<string, unknown>): void
 }
 
 export function tool<Args extends z.ZodRawShape>(input: {

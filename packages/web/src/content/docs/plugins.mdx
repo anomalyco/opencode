@@ -105,7 +105,12 @@ export const MyPlugin = async (ctx) => {
 
 ```js title=".opencode/plugin/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
-  console.log("Plugin initialized!")
+  // Use client.app.log() instead of console.log to avoid leaking output
+  await client.app.log({
+    service: "my-plugin",
+    level: "info",
+    message: "Plugin initialized",
+  })
 
   return {
     // Hook implementations go here
@@ -290,7 +295,11 @@ Your custom tools will be available to opencode alongside built-in tools.
 
 ### Logging
 
-Use `client.app.log()` instead of `console.log` for structured logging:
+Use structured logging instead of `console.log` to avoid output leaking to stdout.
+
+#### In plugins
+
+Use `client.app.log()` for logging in plugin initialization and hooks:
 
 ```ts title=".opencode/plugin/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
@@ -300,6 +309,29 @@ export const MyPlugin = async ({ client }) => {
     message: "Plugin initialized",
     extra: { foo: "bar" },
   })
+}
+```
+
+#### In custom tools
+
+Use `ctx.log()` for logging in custom tool implementations:
+
+```ts title=".opencode/plugin/custom-tool.ts"
+import { type Plugin, tool } from "@opencode-ai/plugin"
+
+export const CustomToolPlugin: Plugin = async (ctx) => {
+  return {
+    tool: {
+      mytool: tool({
+        description: "A tool that logs",
+        args: { name: tool.schema.string() },
+        async execute(args, ctx) {
+          ctx.log("info", "Tool executed", { name: args.name })
+          return `Hello ${args.name}!`
+        },
+      }),
+    },
+  }
 }
 ```
 
