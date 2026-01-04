@@ -71,12 +71,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let input: InputRenderable
 
   const filtered = createMemo(() => {
+    if (props.skipFilter) {
+      return props.options.filter((x) => x.disabled !== true)
+    }
     const needle = store.filter.toLowerCase()
     const result = pipe(
       props.options,
       filter((x) => x.disabled !== true),
-      (x) =>
-        !needle || props.skipFilter ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj),
+      (x) => (!needle ? x : fuzzysort.go(needle, x, { keys: ["title", "category"] }).map((x) => x.obj)),
     )
     return result
   })
@@ -312,12 +314,12 @@ function Option(props: {
   return (
     <>
       <Show when={props.current}>
-        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0.5}>
+        <text flexShrink={0} fg={props.active ? fg : props.current ? theme.primary : theme.text} marginRight={0}>
           ●
         </text>
       </Show>
       <Show when={!props.current && props.gutter}>
-        <box flexShrink={0} marginRight={0.5}>
+        <box flexShrink={0} marginRight={0}>
           {props.gutter}
         </box>
       </Show>
