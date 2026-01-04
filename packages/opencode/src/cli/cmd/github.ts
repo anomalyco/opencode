@@ -1237,15 +1237,53 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
 
       async function createPR(base: string, branch: string, title: string, body: string) {
         console.log("Creating pull request...")
-        const pr = await octoRest.rest.pulls.create({
-          owner,
-          repo,
-          head: branch,
-          base,
-          title,
-          body,
-        })
+
+        // Check if an open PR already exists for this head→base combination
+        // This handles the case where the agent created a PR via gh pr create during its run
+        try {
+          const existing = await withRetry(() =>
+            octoRest.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${branch}`,
+              base,
+              state: "open",
+            }),
+          )
+
+          if (existing.data.length > 0) {
+            console.log(`PR #${existing.data[0].number} already exists for branch ${branch}`)
+            return existing.data[0].number
+          }
+        } catch (e) {
+          // If the check fails, proceed to create - we'll get a clear error if a PR already exists
+          console.log(`Failed to check for existing PR: ${e}`)
+        }
+
+        const pr = await withRetry(() =>
+          octoRest.rest.pulls.create({
+            owner,
+            repo,
+            head: branch,
+            base,
+            title,
+            body,
+          }),
+        )
         return pr.data.number
+      }
+
+      async function withRetry<T>(fn: () => Promise<T>, retries = 1, delayMs = 5000): Promise<T> {
+        try {
+          return await fn()
+        } catch (e) {
+          if (retries > 0) {
+            console.log(`Retrying after ${delayMs}ms...`)
+            await Bun.sleep(delayMs)
+            return withRetry(fn, retries - 1, delayMs)
+          }
+          throw e
+        }
       }
 
       function footer(opts?: { image?: boolean }) {
