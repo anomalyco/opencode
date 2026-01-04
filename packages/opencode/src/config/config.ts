@@ -19,6 +19,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { existsSync } from "fs"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -114,7 +115,10 @@ export namespace Config {
         }
       }
 
-      installDependencies(dir)
+      const exists = existsSync(path.join(dir, "node_modules"))
+      const installing = installDependencies(dir)
+      if (!exists) await installing
+
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
@@ -184,9 +188,7 @@ export namespace Config {
     }
   })
 
-  async function installDependencies(dir: string) {
-    // if (Installation.isLocal()) return
-
+  export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
 
     if (!(await Bun.file(pkg).exists())) {
@@ -501,7 +503,7 @@ export namespace Config {
       }
 
       // Convert legacy tools config to permissions
-      const permission: Permission = { ...agent.permission }
+      const permission: Permission = {}
       for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
         const action = enabled ? "allow" : "deny"
         // write, edit, patch, multiedit all map to edit permission
@@ -511,6 +513,7 @@ export namespace Config {
           permission[tool] = action
         }
       }
+      Object.assign(permission, agent.permission)
 
       // Convert legacy maxSteps to steps
       const steps = agent.steps ?? agent.maxSteps
