@@ -27,7 +27,7 @@ async function respondToIntent(
   intentID: string,
   response: { type: "submit" | "cancel"; data?: Record<string, any> },
 ) {
-  await fetch(`${baseUrl}/session/${sessionID}/intent/${intentID}`, {
+  await fetch(`${baseUrl}/intent/${sessionID}/${intentID}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ response }),
