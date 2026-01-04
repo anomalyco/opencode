@@ -40,7 +40,7 @@ export namespace SystemPrompt {
         `  Working directory: ${Instance.directory}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
-        `  Today's date: ${new Date().toDateString()}`,
+        `  Today's date: ${new Date().toDateString()} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}`,
         `</env>`,
         `<files>`,
         `  ${
