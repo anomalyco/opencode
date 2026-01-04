@@ -161,9 +161,7 @@ export namespace Config {
     }
   })
 
-  async function installDependencies(dir: string) {
-    // if (Installation.isLocal()) return
-
+  export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
 
     if (!(await Bun.file(pkg).exists())) {
