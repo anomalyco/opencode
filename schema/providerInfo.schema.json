@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/providerInfo.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 479-491",
+  "title": "ProviderInfo",
+  "description": "AI model provider metadata aggregating models and configuration. Providers expose collections of models with specific configurations, authentication requirements, and API endpoints.",
+  "type": "object",
+  "required": ["id", "name", "source", "models"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique provider identifier",
+      "examples": [
+        "anthropic",
+        "openai",
+        "google",
+        "azure",
+        "github-copilot"
+      ]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable provider name",
+      "examples": ["Anthropic", "OpenAI", "Google"]
+    },
+    "source": {
+      "$ref": "providerSource.schema.json"
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Environment variables used for authentication",
+      "examples": [
+        ["ANTHROPIC_API_KEY"],
+        ["OPENAI_API_KEY"]
+      ]
+    },
+    "key": {
+      "type": "string",
+      "description": "Partial/masked API key hint (for display purposes)"
+    },
+    "options": {
+      "$ref": "providerOptions.schema.json"
+    },
+    "models": {
+      "type": "object",
+      "description": "Curated models for this provider (configured/enabled models only, not all discoverable models)",
+      "additionalProperties": {
+        "$ref": "modelInfo.schema.json"
+      }
+    }
+  },
+  "x-design-notes": {
+    "provider-vs-model": "A Provider (Anthropic, OpenAI) exposes multiple Models (Claude, GPT)",
+    "authentication": "Each provider has its own authentication, API endpoint, and configuration",
+    "model-sharing": "Models within a provider share the same auth credentials",
+    "curated-models": "models field contains only curated models (configured/enabled), not all discoverable models"
+  }
+}

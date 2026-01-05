@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/experimentalPricing.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 410-470",
+  "title": "ExperimentalPricing",
+  "description": "Experimental pricing tier for large contexts (over 200K tokens)",
+  "type": "object",
+  "required": ["input", "output", "cache"],
+  "properties": {
+    "input": {
+      "type": "number",
+      "description": "Input token cost at experimental tier",
+      "minimum": 0
+    },
+    "output": {
+      "type": "number",
+      "description": "Output token cost at experimental tier",
+      "minimum": 0
+    },
+    "cache": {
+      "$ref": "cacheCost.schema.json"
+    }
+  }
+}

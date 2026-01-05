@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/modelCapabilities.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 410-470",
+  "title": "ModelCapabilities",
+  "description": "Model capabilities - what features the model supports (boolean flags)",
+  "type": "object",
+  "required": ["temperature", "reasoning", "attachment", "toolcall", "input", "output"],
+  "properties": {
+    "temperature": {
+      "type": "boolean",
+      "description": "Supports temperature parameter for controlling randomness"
+    },
+    "reasoning": {
+      "type": "boolean",
+      "description": "Supports extended reasoning (chain-of-thought)"
+    },
+    "attachment": {
+      "type": "boolean",
+      "description": "Supports file attachments"
+    },
+    "toolcall": {
+      "type": "boolean",
+      "description": "Supports tool/function calling"
+    },
+    "input": {
+      "$ref": "ioCapabilities.schema.json",
+      "description": "Input modality capabilities"
+    },
+    "output": {
+      "$ref": "ioCapabilities.schema.json",
+      "description": "Output modality capabilities"
+    }
+  }
+}

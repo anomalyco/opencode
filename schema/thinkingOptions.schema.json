@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/thinkingOptions.json",
+  "$comment": "Source: packages/opencode/src/provider/transform.ts @ 2fd9737 (2026-01-02) lines 323-340",
+  "title": "ThinkingOptions",
+  "description": "Anthropic Claude extended thinking configuration",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "description": "Thinking mode type",
+      "examples": ["enabled"]
+    },
+    "budgetTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum tokens allocated for extended thinking"
+    }
+  }
+}

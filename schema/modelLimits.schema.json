@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/modelLimits.json",
+  "$comment": "Source: packages/opencode/src/provider/models.ts @ 81fef60 (2025-12-30) lines 36-39\nNote: Uses number type to match server z.number()",
+  "title": "ModelLimits",
+  "description": "Model context and output limits",
+  "type": "object",
+  "required": ["context", "output"],
+  "properties": {
+    "context": {
+      "type": "number",
+      "description": "Context window size in tokens",
+      "minimum": 0
+    },
+    "output": {
+      "type": "number",
+      "description": "Maximum output tokens",
+      "minimum": 0
+    }
+  }
+}

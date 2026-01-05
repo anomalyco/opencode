@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/modelInfo.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 410-470",
+  "title": "ModelInfo",
+  "description": "Comprehensive model metadata including capabilities, pricing, limits, and configurable options. Foundation schema referenced by Provider, Session, and other schemas.",
+  "type": "object",
+  "required": ["id", "providerID", "name", "api", "capabilities", "cost", "limits", "status", "options", "headers"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique model identifier",
+      "examples": [
+        "claude-3-5-sonnet-20241022",
+        "gpt-4",
+        "gemini-2.0-flash-exp"
+      ]
+    },
+    "providerID": {
+      "type": "string",
+      "description": "Provider identifier this model belongs to",
+      "examples": ["anthropic", "openai", "google"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable model name",
+      "examples": [
+        "Claude 3.5 Sonnet",
+        "GPT-4",
+        "Gemini 2.0 Flash"
+      ]
+    },
+    "api": {
+      "$ref": "modelAPI.schema.json"
+    },
+    "capabilities": {
+      "$ref": "modelCapabilities.schema.json"
+    },
+    "cost": {
+      "$ref": "modelCost.schema.json"
+    },
+    "limits": {
+      "$ref": "modelLimits.schema.json"
+    },
+    "status": {
+      "$ref": "modelStatus.schema.json"
+    },
+    "options": {
+      "type": "object",
+      "description": "Configurable runtime settings (provider-specific, stored as flexible map)",
+      "additionalProperties": true
+    },
+    "headers": {
+      "type": "object",
+      "description": "Custom HTTP headers for API calls",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  }
+}

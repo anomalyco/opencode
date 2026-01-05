@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "typecheck": "bun turbo typecheck",
+    "generate": "bun ./script/generate.ts",
+    "generate:schemas": "bun ./script/generate-from-schemas.ts",
     "prepare": "husky",
     "random": "echo 'Random script'",
     "hello": "echo 'Hello World!'",
@@ -62,7 +64,10 @@
   "devDependencies": {
     "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
     "husky": "9.1.7",
+    "json-schema-to-zod": "2.7.0",
     "prettier": "3.6.2",
     "sst": "3.17.23",
     "turbo": "2.5.6"

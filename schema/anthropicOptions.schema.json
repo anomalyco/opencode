@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/anthropicOptions.json",
+  "$comment": "Source: packages/opencode/src/provider/transform.ts @ 2fd9737 (2026-01-02) lines 323-340",
+  "title": "AnthropicOptions",
+  "description": "Anthropic-specific options (Claude extended thinking)",
+  "type": "object",
+  "properties": {
+    "thinking": {
+      "$ref": "thinkingOptions.schema.json"
+    }
+  }
+}

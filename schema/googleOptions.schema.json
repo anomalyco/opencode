@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/googleOptions.json",
+  "$comment": "Source: packages/opencode/src/provider/transform.ts @ 2fd9737 (2026-01-02) lines 357-379",
+  "title": "GoogleOptions",
+  "description": "Google/Gemini-specific options",
+  "type": "object",
+  "properties": {
+    "thinkingConfig": {
+      "$ref": "thinkingConfig.schema.json"
+    }
+  }
+}

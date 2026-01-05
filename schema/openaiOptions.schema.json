@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/openaiOptions.json",
+  "$comment": "Source: packages/opencode/src/provider/sdk/openai-compatible/src/responses/openai-responses-language-model.ts @ 6e2379a (2025-11-29) lines 1671-1711",
+  "title": "OpenAIOptions",
+  "description": "OpenAI/OpenRouter/Responses API-specific options",
+  "type": "object",
+  "properties": {
+    "reasoningEffort": {
+      "type": "string",
+      "enum": ["low", "medium", "minimal", "high"],
+      "description": "Reasoning effort level (reasoning models only)"
+    },
+    "reasoningSummary": {
+      "type": "string",
+      "description": "Auto or custom reasoning summary"
+    },
+    "textVerbosity": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Response verbosity level"
+    },
+    "serviceTier": {
+      "type": "string",
+      "enum": ["auto", "flex", "priority"],
+      "description": "Processing priority tier"
+    },
+    "logprobs": {
+      "oneOf": [
+        {
+          "type": "boolean",
+          "description": "Enable/disable token log probabilities"
+        },
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Number of top tokens to return logprobs for"
+        }
+      ]
+    },
+    "maxToolCalls": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum number of built-in tool calls"
+    },
+    "parallelToolCalls": {
+      "type": "boolean",
+      "description": "Allow parallel tool execution"
+    },
+    "store": {
+      "type": "boolean",
+      "description": "Store conversation for training purposes"
+    },
+    "strictJsonSchema": {
+      "type": "boolean",
+      "description": "Enforce strict JSON schema validation"
+    },
+    "promptCacheKey": {
+      "type": "string",
+      "description": "Prompt cache key for optimization"
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Additional response fields to include"
+    },
+    "metadata": {
+      "type": "string",
+      "description": "Custom metadata as JSON string"
+    },
+    "user": {
+      "type": "string",
+      "description": "End-user identifier for monitoring"
+    },
+    "instructions": {
+      "type": "string",
+      "description": "System instructions"
+    },
+    "safetyIdentifier": {
+      "type": "string",
+      "description": "Safety classification identifier"
+    },
+    "previousResponseId": {
+      "type": "string",
+      "description": "Continue from previous response"
+    }
+  }
+}

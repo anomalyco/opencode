@@ -10,7 +10,12 @@
     "customConditions": ["browser"],
     "paths": {
       "@/*": ["./src/*"],
-      "@tui/*": ["./src/cli/cmd/tui/*"]
+      "@tui/*": ["./src/cli/cmd/tui/*"],
+      "@generated/*": ["./generated/*"]
     }
-  }
+  },
+  "include": [
+    "src/**/*",
+    "generated/**/*"
+  ]
 }

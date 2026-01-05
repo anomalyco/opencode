@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/cacheCost.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 410-470",
+  "title": "CacheCost",
+  "description": "Cache operation costs per token",
+  "type": "object",
+  "required": ["read", "write"],
+  "properties": {
+    "read": {
+      "type": "number",
+      "description": "Cache read cost per token",
+      "minimum": 0
+    },
+    "write": {
+      "type": "number",
+      "description": "Cache write cost per token",
+      "minimum": 0
+    }
+  }
+}

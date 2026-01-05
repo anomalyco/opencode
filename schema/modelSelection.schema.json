@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/modelSelection.json",
+  "title": "ModelSelection",
+  "description": "Model selection for a session (references a model within a provider)",
+  "type": "object",
+  "required": ["provider", "modelId", "name"],
+  "properties": {
+    "provider": {
+      "$ref": "providerInfo.schema.json",
+      "description": "Provider with curated models list"
+    },
+    "modelId": {
+      "type": "string",
+      "description": "Model ID (must exist in provider.models)",
+      "examples": ["claude-3-5-sonnet-20241022"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name for the selected model",
+      "examples": ["Claude 3.5 Sonnet"]
+    }
+  }
+}

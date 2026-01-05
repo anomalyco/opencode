@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/providerList.json",
+  "$comment": "Source: packages/opencode/src/server/server.ts @ 21dc3c2 (2026-01-04) lines 1698-1700 (GET /config/providers response schema)",
+  "title": "ProviderList",
+  "description": "List of all available providers with their default model selections",
+  "type": "object",
+  "required": ["providers", "default"],
+  "properties": {
+    "providers": {
+      "type": "array",
+      "items": {
+        "$ref": "providerInfo.schema.json"
+      },
+      "description": "All configured providers with their curated models"
+    },
+    "default": {
+      "type": "object",
+      "description": "Default model ID per provider ID",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "examples": [
+        {
+          "anthropic": "claude-3-5-sonnet-20241022",
+          "openai": "gpt-4",
+          "google": "gemini-2.0-flash-exp"
+        }
+      ]
+    }
+  },
+  "x-api-mapping": {
+    "endpoint": "GET /config/providers",
+    "description": "Returns all configured providers with their curated model lists"
+  }
+}

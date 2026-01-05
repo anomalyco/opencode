@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/modelOptions.json",
+  "$comment": "Source: packages/opencode/src/provider/models.ts @ 81fef60 (2025-12-30) line 48\nNote: Uses typed submessages for compile-time safety instead of generic map",
+  "title": "ModelOptions",
+  "description": "Configurable runtime settings for models (provider-specific)",
+  "type": "object",
+  "properties": {
+    "universal": {
+      "$ref": "universalOptions.schema.json",
+      "description": "Universal options supported by all providers"
+    },
+    "openai": {
+      "$ref": "openaiOptions.schema.json",
+      "description": "OpenAI/OpenRouter/Responses-specific options"
+    },
+    "google": {
+      "$ref": "googleOptions.schema.json",
+      "description": "Google/Gemini-specific options"
+    },
+    "anthropic": {
+      "$ref": "anthropicOptions.schema.json",
+      "description": "Anthropic/Claude-specific options"
+    }
+  }
+}

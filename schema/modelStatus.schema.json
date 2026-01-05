@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/modelStatus.json",
+  "$comment": "Source: packages/opencode/src/provider/models.ts @ 81fef60 (2025-12-30) line 47",
+  "title": "ModelStatus",
+  "description": "Model availability status",
+  "type": "string",
+  "enum": ["alpha", "beta", "active", "deprecated"],
+  "x-enum-descriptions": {
+    "alpha": "Early testing phase",
+    "beta": "Public beta",
+    "active": "Generally available",
+    "deprecated": "No longer recommended for use"
+  }
+}

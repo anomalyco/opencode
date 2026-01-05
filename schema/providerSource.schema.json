@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/providerSource.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) line 481",
+  "title": "ProviderSource",
+  "description": "How the provider was configured or discovered",
+  "type": "string",
+  "enum": ["env", "config", "custom", "api"],
+  "x-enum-descriptions": {
+    "env": "Configured via environment variables",
+    "config": "Configured via config file",
+    "custom": "Custom provider definition",
+    "api": "Discovered via API"
+  }
+}

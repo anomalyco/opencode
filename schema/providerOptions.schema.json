@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/providerOptions.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 481, 880-920 (SDK initialization usage)\nNote: Flexible schema because different providers support different options",
+  "title": "ProviderOptions",
+  "description": "Provider SDK initialization options (passed to AI SDK provider constructor)",
+  "type": "object",
+  "properties": {
+    "baseURL": {
+      "type": "string",
+      "format": "uri",
+      "description": "API endpoint override",
+      "examples": [
+        "https://api.openai.com/v1",
+        "https://api.anthropic.com"
+      ]
+    },
+    "apiKey": {
+      "type": "string",
+      "description": "API authentication key"
+    },
+    "headers": {
+      "type": "object",
+      "description": "Custom HTTP headers (e.g., Anthropic beta feature flags)",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "examples": [
+        {
+          "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14"
+        }
+      ]
+    },
+    "timeout": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Request timeout in milliseconds"
+    },
+    "custom": {
+      "type": "object",
+      "description": "Provider-specific options (e.g., Azure's useCompletionUrls)",
+      "additionalProperties": true
+    }
+  }
+}

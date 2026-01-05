@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/modelAPI.json",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 410-470",
+  "title": "ModelAPI",
+  "description": "API configuration for a model",
+  "type": "object",
+  "required": ["id", "url", "npm"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "API model identifier (may differ from display ID)"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "API endpoint URL"
+    },
+    "npm": {
+      "type": "string",
+      "description": "npm package name for the AI SDK provider",
+      "examples": [
+        "@ai-sdk/anthropic",
+        "@ai-sdk/openai",
+        "@ai-sdk/google",
+        "@ai-sdk/openai-compatible"
+      ]
+    }
+  }
+}

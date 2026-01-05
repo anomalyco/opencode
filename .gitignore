@@ -11,6 +11,7 @@ tmp
 dist
 ts-dist
 .turbo
+packages/*/generated
 **/.serena
 .serena/
 /result

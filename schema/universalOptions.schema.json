@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/universalOptions.json",
+  "$comment": "Source: packages/opencode/src/provider/transform.ts @ 2fd9737 (2026-01-02) lines 214, 525+",
+  "title": "UniversalOptions",
+  "description": "Universal settings supported by all models (when capabilities allow)",
+  "type": "object",
+  "properties": {
+    "temperature": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 2.0,
+      "description": "Temperature parameter for controlling randomness (only when model.capabilities.temperature == true)"
+    },
+    "maxOutputTokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Override model's default output token limit"
+    }
+  }
+}

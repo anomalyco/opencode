@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/ioCapabilities.json",
+  "$comment": "Source: packages/opencode/src/provider/models.ts @ 81fef60 (2025-12-30) lines 40-44",
+  "title": "IOCapabilities",
+  "description": "Input/output modality capabilities",
+  "type": "object",
+  "required": ["text", "audio", "image", "video", "pdf"],
+  "properties": {
+    "text": {
+      "type": "boolean",
+      "description": "Supports text input/output"
+    },
+    "audio": {
+      "type": "boolean",
+      "description": "Supports audio input/output"
+    },
+    "image": {
+      "type": "boolean",
+      "description": "Supports image input/output"
+    },
+    "video": {
+      "type": "boolean",
+      "description": "Supports video input/output"
+    },
+    "pdf": {
+      "type": "boolean",
+      "description": "Supports PDF input/output"
+    }
+  }
+}
