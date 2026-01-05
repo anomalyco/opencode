@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/oauth.json",
+  "$comment": "Source: packages/opencode/src/auth/index.ts @ c50f588 (2026-01-05) lines 7-15",
+  "title": "OAuth",
+  "description": "OAuth authentication credentials with refresh and access tokens",
+  "type": "object",
+  "required": ["type", "refresh", "access", "expires"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "oauth",
+      "description": "Authentication type discriminator"
+    },
+    "refresh": {
+      "type": "string",
+      "description": "OAuth refresh token"
+    },
+    "access": {
+      "type": "string",
+      "description": "OAuth access token"
+    },
+    "expires": {
+      "type": "number",
+      "description": "Token expiration time (Unix timestamp in milliseconds)"
+    },
+    "enterpriseUrl": {
+      "type": "string",
+      "description": "Optional enterprise-specific OAuth endpoint URL"
+    }
+  }
+}

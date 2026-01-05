@@ -104,6 +104,9 @@ function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): s
 
   // Handle basic types
   if (schema.type === "string") {
+    if (schema.const !== undefined) {
+      return `z.literal("${schema.const}")`
+    }
     if (schema.enum) {
       const values = schema.enum.map((v) => `"${v}"`).join(", ")
       return `z.enum([${values}])`
@@ -112,10 +115,16 @@ function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): s
   }
 
   if (schema.type === "number" || schema.type === "integer") {
+    if (schema.const !== undefined) {
+      return `z.literal(${schema.const})`
+    }
     return "z.number()"
   }
 
   if (schema.type === "boolean") {
+    if (schema.const !== undefined) {
+      return `z.literal(${schema.const})`
+    }
     return "z.boolean()"
   }
 

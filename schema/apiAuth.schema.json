@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/apiAuth.json",
+  "$comment": "Source: packages/opencode/src/auth/index.ts @ c50f588 (2026-01-05) lines 17-22",
+  "title": "ApiAuth",
+  "description": "API key authentication credentials",
+  "type": "object",
+  "required": ["type", "key"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "api",
+      "description": "Authentication type discriminator"
+    },
+    "key": {
+      "type": "string",
+      "description": "API key for authentication"
+    }
+  }
+}

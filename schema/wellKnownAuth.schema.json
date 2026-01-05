@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/wellKnownAuth.json",
+  "$comment": "Source: packages/opencode/src/auth/index.ts @ c50f588 (2026-01-05) lines 24-30",
+  "title": "WellKnownAuth",
+  "description": "Well-known authentication credentials (key and token pair)",
+  "type": "object",
+  "required": ["type", "key", "token"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "wellknown",
+      "description": "Authentication type discriminator"
+    },
+    "key": {
+      "type": "string",
+      "description": "Well-known authentication key"
+    },
+    "token": {
+      "type": "string",
+      "description": "Well-known authentication token"
+    }
+  }
+}
