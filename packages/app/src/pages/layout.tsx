@@ -22,10 +22,11 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { Mark } from "@opencode-ai/ui/logo"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session } from "@opencode-ai/sdk/v2/client"
@@ -44,8 +45,9 @@ import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
+import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
-import { Header } from "@/components/header"
+
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
@@ -60,16 +62,8 @@ export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
     lastSession: {} as { [directory: string]: string },
     activeDraggable: undefined as string | undefined,
-    mobileSidebarOpen: false,
     mobileProjectsExpanded: {} as Record<string, boolean>,
   })
-
-  const mobileSidebar = {
-    open: () => store.mobileSidebarOpen,
-    show: () => setStore("mobileSidebarOpen", true),
-    hide: () => setStore("mobileSidebarOpen", false),
-    toggle: () => setStore("mobileSidebarOpen", (x) => !x),
-  }
 
   const mobileProjects = {
     expanded: (directory: string) => store.mobileProjectsExpanded[directory] ?? true,
@@ -91,6 +85,7 @@ export default function Layout(props: ParentProps) {
   const platform = usePlatform()
   const server = useServer()
   const notification = useNotification()
+  const permission = usePermission()
   const navigate = useNavigate()
   const providers = useProviders()
   const dialog = useDialog()
@@ -131,11 +126,15 @@ export default function Layout(props: ParentProps) {
     })
   }
 
-  onMount(async () => {
-    if (platform.checkUpdate && platform.update && platform.restart) {
-      const { updateAvailable, version } = await platform.checkUpdate()
-      if (updateAvailable) {
-        showToast({
+  onMount(() => {
+    if (!platform.checkUpdate || !platform.update || !platform.restart) return
+
+    let toastId: number | undefined
+
+    async function pollUpdate() {
+      const { updateAvailable, version } = await platform.checkUpdate!()
+      if (updateAvailable && toastId === undefined) {
+        toastId = showToast({
           persistent: true,
           icon: "download",
           title: "Update available",
@@ -156,31 +155,48 @@ export default function Layout(props: ParentProps) {
         })
       }
     }
+
+    pollUpdate()
+    const interval = setInterval(pollUpdate, 10 * 60 * 1000)
+    onCleanup(() => clearInterval(interval))
   })
 
   onMount(() => {
-    const seenSessions = new Set<string>()
     const toastBySession = new Map<string, number>()
+    const alertedAtBySession = new Map<string, number>()
+    const permissionAlertCooldownMs = 5000
+
     const unsub = globalSDK.event.listen((e) => {
-      if (e.details?.type !== "permission.updated") return
+      if (e.details?.type !== "permission.asked") return
       const directory = e.name
-      const permission = e.details.properties
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
-      const currentSession = params.id
+      const perm = e.details.properties
+      if (permission.autoResponds(perm)) return
+
       const [store] = globalSync.child(directory)
-      const session = store.session.find((s) => s.id === permission.sessionID)
+      const session = store.session.find((s) => s.id === perm.sessionID)
+      const sessionKey = `${directory}:${perm.sessionID}`
+
       const sessionTitle = session?.title ?? "New session"
       const projectName = getFilename(directory)
       const description = `${sessionTitle} in ${projectName} needs permission`
-      const href = `/${base64Encode(directory)}/session/${permission.sessionID}`
+      const href = `/${base64Encode(directory)}/session/${perm.sessionID}`
+
+      const now = Date.now()
+      const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
+      if (now - lastAlerted < permissionAlertCooldownMs) return
+      alertedAtBySession.set(sessionKey, now)
+
       void platform.notify("Permission required", description, href)
 
-      if (directory === currentDir && permission.sessionID === currentSession) return
+      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentSession = params.id
+      if (directory === currentDir && perm.sessionID === currentSession) return
       if (directory === currentDir && session?.parentID === currentSession) return
 
-      const sessionKey = `${directory}:${permission.sessionID}`
-      if (seenSessions.has(sessionKey)) return
-      seenSessions.add(sessionKey)
+      const existingToastId = toastBySession.get(sessionKey)
+      if (existingToastId !== undefined) {
+        toaster.dismiss(existingToastId)
+      }
 
       const toastId = showToast({
         persistent: true,
@@ -213,7 +229,7 @@ export default function Layout(props: ParentProps) {
       if (toastId !== undefined) {
         toaster.dismiss(toastId)
         toastBySession.delete(sessionKey)
-        seenSessions.delete(sessionKey)
+        alertedAtBySession.delete(sessionKey)
       }
       const [store] = globalSync.child(currentDir)
       const childSessions = store.session.filter((s) => s.parentID === currentSession)
@@ -223,7 +239,7 @@ export default function Layout(props: ParentProps) {
         if (childToastId !== undefined) {
           toaster.dismiss(childToastId)
           toastBySession.delete(childKey)
-          seenSessions.delete(childKey)
+          alertedAtBySession.delete(childKey)
         }
       }
     })
@@ -444,13 +460,13 @@ export default function Layout(props: ParentProps) {
     if (!directory) return
     const lastSession = store.lastSession[directory]
     navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
-    mobileSidebar.hide()
+    layout.mobileSidebar.hide()
   }
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
     navigate(`/${params.dir}/session/${session?.id}`)
-    mobileSidebar.hide()
+    layout.mobileSidebar.hide()
   }
 
   function openProject(directory: string, navigate = true) {
@@ -649,14 +665,13 @@ export default function Layout(props: ParentProps) {
       <>
         <div
           data-session-id={props.session.id}
-          class="group/session relative w-full pr-2 py-1 rounded-md cursor-default transition-colors
+          class="group/session relative w-full rounded-md cursor-default transition-colors
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
-          style={{ "padding-left": "16px" }}
         >
           <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
             <A
               href={`${props.slug}/session/${props.session.id}`}
-              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
+              class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
                 <span
@@ -708,17 +723,13 @@ export default function Layout(props: ParentProps) {
             </A>
           </Tooltip>
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
-            <Tooltip
+            <TooltipKeybind
               placement={props.mobile ? "bottom" : "right"}
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Archive session</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("session.archive")}</span>
-                </div>
-              }
+              title="Archive session"
+              keybind={command.keybind("session.archive")}
             >
               <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
-            </Tooltip>
+            </TooltipKeybind>
           </div>
         </div>
       </>
@@ -728,10 +739,17 @@ export default function Layout(props: ParentProps) {
   const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const showExpanded = createMemo(() => props.mobile || layout.sidebar.opened())
-    const slug = createMemo(() => base64Encode(props.project.worktree))
+    const defaultWorktree = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const [store, setProjectStore] = globalSync.child(props.project.worktree)
-    const sessions = createMemo(() => store.session.toSorted(sortSessions))
+    const stores = createMemo(() =>
+      [props.project.worktree, ...(props.project.sandboxes ?? [])].map((dir) => globalSync.child(dir)[0]),
+    )
+    const sessions = createMemo(() =>
+      stores()
+        .flatMap((store) => store.session.filter((session) => session.directory === store.path.directory))
+        .toSorted(sortSessions),
+    )
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
     const loadMoreSessions = async () => {
@@ -786,24 +804,21 @@ export default function Layout(props: ParentProps) {
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <Tooltip
-                    placement="top"
-                    value={
-                      <div class="flex items-center gap-2">
-                        <span>New session</span>
-                        <span class="text-icon-base text-12-medium">{command.keybind("session.new")}</span>
-                      </div>
-                    }
-                  >
-                    <IconButton as={A} href={`${slug()}/session`} icon="plus-small" variant="ghost" />
-                  </Tooltip>
+                  <TooltipKeybind placement="top" title="New session" keybind={command.keybind("session.new")}>
+                    <IconButton as={A} href={`${defaultWorktree()}/session`} icon="plus-small" variant="ghost" />
+                  </TooltipKeybind>
                 </div>
               </Button>
               <Collapsible.Content>
                 <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
                   <For each={rootSessions()}>
                     {(session) => (
-                      <SessionItem session={session} slug={slug()} project={props.project} mobile={props.mobile} />
+                      <SessionItem
+                        session={session}
+                        slug={base64Encode(session.directory)}
+                        project={props.project}
+                        mobile={props.mobile}
+                      />
                     )}
                   </For>
                   <Show when={rootSessions().length === 0}>
@@ -815,7 +830,7 @@ export default function Layout(props: ParentProps) {
                         <div class="flex-1 min-w-0">
                           <Tooltip placement={props.mobile ? "bottom" : "right"} value="New session">
                             <A
-                              href={`${slug()}/session`}
+                              href={`${defaultWorktree()}/session`}
                               class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
@@ -871,75 +886,85 @@ export default function Layout(props: ParentProps) {
   const SidebarContent = (sidebarProps: { mobile?: boolean }) => {
     const expanded = () => sidebarProps.mobile || layout.sidebar.opened()
     return (
-      <>
-        <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
+      <div class="flex flex-col self-stretch h-full items-center justify-between overflow-hidden min-h-0">
+        <div class="flex flex-col items-start self-stretch gap-4 min-h-0">
           <Show when={!sidebarProps.mobile}>
-            <Tooltip
-              class="shrink-0"
-              placement="right"
-              value={
-                <div class="flex items-center gap-2">
-                  <span>Toggle sidebar</span>
-                  <span class="text-icon-base text-12-medium">{command.keybind("sidebar.toggle")}</span>
-                </div>
-              }
-              inactive={expanded()}
-            >
-              <Button
-                variant="ghost"
-                size="large"
-                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
-                onClick={layout.sidebar.toggle}
-              >
-                <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left" : "layout-right"}
-                    size="small"
-                    class="group-hover/sidebar-toggle:hidden"
-                  />
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left-partial" : "layout-right-partial"}
-                    size="small"
-                    class="hidden group-hover/sidebar-toggle:inline-block"
-                  />
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left-full" : "layout-right-full"}
-                    size="small"
-                    class="hidden group-active/sidebar-toggle:inline-block"
-                  />
-                </div>
-                <Show when={layout.sidebar.opened()}>
-                  <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
-                    Toggle sidebar
-                  </div>
-                </Show>
-              </Button>
-            </Tooltip>
-          </Show>
-          <DragDropProvider
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragOver={handleDragOver}
-            collisionDetector={closestCenter}
-          >
-            <DragDropSensors />
-            <ConstrainDragXAxis />
             <div
-              ref={(el) => {
-                if (!sidebarProps.mobile) scrollContainerRef = el
+              classList={{
+                "border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75 shrink-0": true,
+                "justify-start": expanded(),
               }}
-              class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
             >
-              <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
-                <For each={layout.projects.list()}>
-                  {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
-                </For>
-              </SortableProvider>
+              <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2 w-full" data-tauri-drag-region>
+                <Mark class="shrink-0" />
+              </A>
             </div>
-            <DragOverlay>
-              <ProjectDragOverlay />
-            </DragOverlay>
-          </DragDropProvider>
+          </Show>
+          <div class="flex flex-col items-start self-stretch gap-4 px-2 overflow-hidden min-h-0">
+            <Show when={!sidebarProps.mobile}>
+              <TooltipKeybind
+                class="shrink-0"
+                placement="right"
+                title="Toggle sidebar"
+                keybind={command.keybind("sidebar.toggle")}
+                inactive={expanded()}
+              >
+                <Button
+                  variant="ghost"
+                  size="large"
+                  class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
+                  onClick={layout.sidebar.toggle}
+                >
+                  <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left" : "layout-right"}
+                      size="small"
+                      class="group-hover/sidebar-toggle:hidden"
+                    />
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left-partial" : "layout-right-partial"}
+                      size="small"
+                      class="hidden group-hover/sidebar-toggle:inline-block"
+                    />
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left-full" : "layout-right-full"}
+                      size="small"
+                      class="hidden group-active/sidebar-toggle:inline-block"
+                    />
+                  </div>
+                  <Show when={layout.sidebar.opened()}>
+                    <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
+                      Toggle sidebar
+                    </div>
+                  </Show>
+                </Button>
+              </TooltipKeybind>
+            </Show>
+            <DragDropProvider
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragXAxis />
+              <div
+                ref={(el) => {
+                  if (!sidebarProps.mobile) scrollContainerRef = el
+                }}
+                class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
+              >
+                <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
+                  <For each={layout.projects.list()}>
+                    {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
+                  </For>
+                </SortableProvider>
+              </div>
+              <DragOverlay>
+                <ProjectDragOverlay />
+              </DragOverlay>
+            </DragDropProvider>
+          </div>
         </div>
         <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
           <Switch>
@@ -1012,27 +1037,29 @@ export default function Layout(props: ParentProps) {
             </Button>
           </Tooltip>
         </div>
-      </>
+      </div>
     )
   }
 
   return (
     <div class="relative flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
-      <Header
-        navigateToProject={navigateToProject}
-        navigateToSession={navigateToSession}
-        onMobileMenuToggle={mobileSidebar.toggle}
-      />
       <div class="flex-1 min-h-0 flex">
         <div
           classList={{
-            "hidden xl:flex": true,
-            "relative @container w-12 pb-5 shrink-0 bg-background-base": true,
-            "flex-col gap-5.5 items-start self-stretch justify-between": true,
-            "border-r border-border-weak-base contain-strict": true,
+            "hidden xl:block": true,
+            "relative shrink-0": true,
           }}
-          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : undefined }}
+          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : "48px" }}
         >
+          <div
+            classList={{
+              "@container w-full h-full pb-5 bg-background-base": true,
+              "flex flex-col gap-5.5 items-start self-stretch justify-between": true,
+              "border-r border-border-weak-base contain-strict": true,
+            }}
+          >
+            <SidebarContent />
+          </div>
           <Show when={layout.sidebar.opened()}>
             <ResizeHandle
               direction="horizontal"
@@ -1044,27 +1071,35 @@ export default function Layout(props: ParentProps) {
               onCollapse={layout.sidebar.close}
             />
           </Show>
-          <SidebarContent />
         </div>
         <div class="xl:hidden">
           <div
             classList={{
               "fixed inset-0 bg-black/50 z-40 transition-opacity duration-200": true,
-              "opacity-100 pointer-events-auto": mobileSidebar.open(),
-              "opacity-0 pointer-events-none": !mobileSidebar.open(),
+              "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
+              "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
             onClick={(e) => {
-              if (e.target === e.currentTarget) mobileSidebar.hide()
+              if (e.target === e.currentTarget) layout.mobileSidebar.hide()
             }}
           />
           <div
             classList={{
-              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pt-12 pb-5 transition-transform duration-200 ease-out": true,
-              "translate-x-0": mobileSidebar.open(),
-              "-translate-x-full": !mobileSidebar.open(),
+              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pb-5 transition-transform duration-200 ease-out": true,
+              "translate-x-0": layout.mobileSidebar.opened(),
+              "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            <div class="border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75 shrink-0">
+              <A
+                href="/"
+                class="shrink-0 h-8 flex items-center justify-start px-2 w-full"
+                onClick={() => layout.mobileSidebar.hide()}
+              >
+                <Mark class="shrink-0" />
+              </A>
+            </div>
             <SidebarContent mobile />
           </div>
         </div>

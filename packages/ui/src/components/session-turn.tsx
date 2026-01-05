@@ -2,14 +2,14 @@ import {
   AssistantMessage,
   Message as MessageType,
   Part as PartType,
-  type Permission,
+  type PermissionRequest,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -132,7 +132,7 @@ export function SessionTurn(
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyPermissions: Permission[] = []
+  const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const idle = { type: "idle" as const }
 
@@ -235,16 +235,18 @@ export function SessionTurn(
     if (props.stepsExpanded) return emptyPermissionParts
 
     const next = nextPermission()
-    if (!next) return emptyPermissionParts
+    if (!next || !next.tool) return emptyPermissionParts
 
-    for (const message of assistantMessages()) {
-      const parts = data.store.part[message.id] ?? emptyParts
-      for (const part of parts) {
-        if (part?.type !== "tool") continue
-        const tool = part as ToolPart
-        if (tool.callID === next.callID) return [{ part: tool, message }]
-      }
+    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    if (!message) return emptyPermissionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
     }
+
     return emptyPermissionParts
   })
 
@@ -321,11 +323,10 @@ export function SessionTurn(
     return s
   })
 
-  const summary = createMemo(() => message()?.summary?.body)
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
   const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
-  const hideResponsePart = createMemo(() => !working() && !summary() && !!responsePartId())
+  const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
   function duration() {
     const msg = message()
@@ -356,7 +357,6 @@ export function SessionTurn(
     retrySeconds: 0,
     status: rawStatus(),
     duration: duration(),
-    summaryWaitTimedOut: false,
   })
 
   createEffect(() => {
@@ -397,12 +397,6 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  createEffect(() => {
-    if (working()) {
-      setStore("summaryWaitTimedOut", false)
-    }
-  })
-
   createEffect(
     on(permissionCount, (count, prev) => {
       if (!count) return
@@ -410,42 +404,6 @@ export function SessionTurn(
       autoScroll.forceScrollToBottom()
     }),
   )
-
-  createEffect(() => {
-    if (working() || !isLastUserMessage()) return
-
-    const diffs = message()?.summary?.diffs
-    if (!diffs?.length) return
-    if (summary()) return
-    if (store.summaryWaitTimedOut) return
-
-    const completed = lastAssistantMessage()?.time.completed
-    if (completed && Date.now() - completed > 2000) {
-      setStore("summaryWaitTimedOut", true)
-      return
-    }
-
-    const timer = setTimeout(() => {
-      setStore("summaryWaitTimedOut", true)
-    }, 6000)
-    onCleanup(() => clearTimeout(timer))
-  })
-
-  const waitingForSummary = createMemo(() => {
-    if (!isLastUserMessage()) return false
-    if (working()) return false
-
-    const diffs = message()?.summary?.diffs
-    if (!diffs?.length) return false
-    if (summary()) return false
-
-    return !store.summaryWaitTimedOut
-  })
-
-  const showSummarySection = createMemo(() => {
-    if (working()) return false
-    return !waitingForSummary()
-  })
 
   let lastStatusChange = Date.now()
   let statusTimeout: number | undefined
@@ -523,7 +481,7 @@ export function SessionTurn(
                           size="small"
                           onClick={props.onStepsExpandedToggle ?? (() => {})}
                         >
-                          <Show when={working() || waitingForSummary()}>
+                          <Show when={working()}>
                             <Spinner />
                           </Show>
                           <Switch>
@@ -540,7 +498,6 @@ export function SessionTurn(
                               </span>
                               <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                             </Match>
-                            <Match when={waitingForSummary()}>Generating summary</Match>
                             <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
                             <Match when={props.stepsExpanded}>Hide steps</Match>
                             <Match when={!props.stepsExpanded}>Show steps</Match>
@@ -580,36 +537,12 @@ export function SessionTurn(
                         </For>
                       </div>
                     </Show>
-                    {/* Summary */}
-                    <Show when={showSummarySection()}>
+                    {/* Response */}
+                    <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
-                          <Switch>
-                            <Match when={summary()}>
-                              {(summary) => (
-                                <>
-                                  <h2 data-slot="session-turn-summary-title">Summary</h2>
-                                  <Markdown
-                                    data-slot="session-turn-markdown"
-                                    data-diffs={hasDiffs()}
-                                    text={summary()}
-                                  />
-                                </>
-                              )}
-                            </Match>
-                            <Match when={response()}>
-                              {(response) => (
-                                <>
-                                  <h2 data-slot="session-turn-summary-title">Response</h2>
-                                  <Markdown
-                                    data-slot="session-turn-markdown"
-                                    data-diffs={hasDiffs()}
-                                    text={response()}
-                                  />
-                                </>
-                              )}
-                            </Match>
-                          </Switch>
+                          <h2 data-slot="session-turn-summary-title">Response</h2>
+                          <Markdown data-slot="session-turn-markdown" data-diffs={hasDiffs()} text={response() ?? ""} />
                         </div>
                         <Accordion data-slot="session-turn-accordion" multiple>
                           <For each={msg().summary?.diffs ?? []}>
@@ -645,12 +578,10 @@ export function SessionTurn(
                                     before={{
                                       name: diff.file!,
                                       contents: diff.before!,
-                                      cacheKey: checksum(diff.before!),
                                     }}
                                     after={{
                                       name: diff.file!,
                                       contents: diff.after!,
-                                      cacheKey: checksum(diff.after!),
                                     }}
                                   />
                                 </Accordion.Content>
