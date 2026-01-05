@@ -44,6 +44,8 @@ jobs:
           {
             echo "Check for duplicate PRs related to this new PR:"
             echo ""
+            echo "CURRENT_PR_NUMBER: $PR_NUMBER"
+            echo ""
             echo "Title: $(gh pr view "$PR_NUMBER" --json title --jq .title)"
             echo ""
             echo "Description:"
