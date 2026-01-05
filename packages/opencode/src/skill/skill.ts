@@ -35,7 +35,7 @@ export namespace Skill {
     }),
   )
 
-  const OPENCODE_SKILL_GLOB = new Bun.Glob("skill/**/SKILL.md")
+  const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
 
   export const state = Instance.state(async () => {
@@ -81,13 +81,20 @@ export namespace Skill {
     }
 
     for (const dir of claudeDirs) {
-      for await (const match of CLAUDE_SKILL_GLOB.scan({
-        cwd: dir,
-        absolute: true,
-        onlyFiles: true,
-        followSymlinks: true,
-        dot: true,
-      })) {
+      const matches = await Array.fromAsync(
+        CLAUDE_SKILL_GLOB.scan({
+          cwd: dir,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: true,
+          dot: true,
+        }),
+      ).catch((error) => {
+        log.error("failed .claude directory scan for skills", { dir, error })
+        return []
+      })
+
+      for (const match of matches) {
         await addSkill(match)
       }
     }

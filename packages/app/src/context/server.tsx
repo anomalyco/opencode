@@ -11,8 +11,7 @@ export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
   if (!trimmed) return
   const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
-  const cleaned = withProtocol.replace(/\/+$/, "")
-  return cleaned.replace(/^(https?:\/\/[^/]+).*/, "$1")
+  return withProtocol.replace(/\/+$/, "")
 }
 
 export function serverDisplayName(url: string) {
@@ -23,30 +22,49 @@ export function serverDisplayName(url: string) {
     .split("/")[0]
 }
 
+function projectsKey(url: string) {
+  if (!url) return ""
+  const host = url.replace(/^https?:\/\//, "").split(":")[0]
+  if (host === "localhost" || host === "127.0.0.1") return "local"
+  return url
+}
+
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string; forceUrl?: boolean }) => {
+  init: (props: { defaultUrl: string }) => {
     const platform = usePlatform()
-    const fallback = () => normalizeServerUrl(props.defaultUrl)
-    const [forced, setForced] = createSignal(props.forceUrl ?? false)
 
     const [store, setStore, _, ready] = persisted(
-      "server.v2",
+      "server.v3",
       createStore({
         list: [] as string[],
-        active: "",
         projects: {} as Record<string, StoredProject[]>,
       }),
     )
 
+    const [active, setActiveRaw] = createSignal("")
+
     function setActive(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
+      setActiveRaw(url)
+    }
+
+    function add(input: string) {
+      const url = normalizeServerUrl(input)
+      if (!url) return
+
+      const fallback = normalizeServerUrl(props.defaultUrl)
+      if (fallback && url === fallback) {
+        setActiveRaw(url)
+        return
+      }
+
       batch(() => {
         if (!store.list.includes(url)) {
-          setStore("list", (list) => [url, ...list])
+          setStore("list", store.list.length, url)
         }
-        setStore("active", url)
+        setActiveRaw(url)
       })
     }
 
@@ -55,56 +73,33 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!url) return
 
       const list = store.list.filter((x) => x !== url)
-      const next = store.active === url ? (list[0] ?? fallback() ?? "") : store.active
+      const next = active() === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : active()
 
       batch(() => {
         setStore("list", list)
-        setStore("active", next)
+        setActiveRaw(next)
       })
     }
 
     createEffect(() => {
       if (!ready()) return
-
-      const url = fallback()
+      if (active()) return
+      const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
-
-      if (forced()) {
-        batch(() => {
-          if (!store.list.includes(url)) {
-            setStore("list", (list) => [url, ...list])
-          }
-          if (store.active !== url) {
-            setStore("active", url)
-          }
-        })
-        setForced(false)
-        return
-      }
-
-      if (store.list.length === 0) {
-        batch(() => {
-          setStore("list", [url])
-          setStore("active", url)
-        })
-        return
-      }
-
-      if (store.active && store.list.includes(store.active)) return
-      setStore("active", store.list[0])
+      setActiveRaw(url)
     })
 
-    const isReady = createMemo(() => ready() && !!store.active)
+    const isReady = createMemo(() => ready() && !!active())
 
     const [healthy, { refetch }] = createResource(
-      () => store.active || undefined,
+      () => active() || undefined,
       async (url) => {
         if (!url) return
 
         const sdk = createOpencodeClient({
           baseUrl: url,
           fetch: platform.fetch,
-          signal: AbortSignal.timeout(2000),
+          signal: AbortSignal.timeout(3000),
         })
         return sdk.global
           .health()
@@ -114,71 +109,74 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
 
     createEffect(() => {
-      if (!store.active) return
+      if (!active()) return
       const interval = setInterval(() => refetch(), 10_000)
       onCleanup(() => clearInterval(interval))
     })
 
-    const projectsList = createMemo(() => store.projects[store.active] ?? [])
+    const origin = createMemo(() => projectsKey(active()))
+    const projectsList = createMemo(() => store.projects[origin()] ?? [])
+    const isLocal = createMemo(() => origin() === "local")
 
     return {
       ready: isReady,
       healthy,
+      isLocal,
       get url() {
-        return store.active
+        return active()
       },
       get name() {
-        return serverDisplayName(store.active)
+        return serverDisplayName(active())
       },
       get list() {
         return store.list
       },
       setActive,
-      add: setActive,
+      add,
       remove,
       projects: {
         list: projectsList,
         open(directory: string) {
-          const url = store.active
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           if (current.find((x) => x.worktree === directory)) return
-          setStore("projects", url, [{ worktree: directory, expanded: true }, ...current])
+          setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
         },
         close(directory: string) {
-          const url = store.active
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           setStore(
             "projects",
-            url,
+            key,
             current.filter((x) => x.worktree !== directory),
           )
         },
         expand(directory: string) {
-          const url = store.active
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", url, index, "expanded", true)
+          if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
         collapse(directory: string) {
-          const url = store.active
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           const index = current.findIndex((x) => x.worktree === directory)
-          if (index !== -1) setStore("projects", url, index, "expanded", false)
+          if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
-          const url = store.active
-          if (!url) return
-          const current = store.projects[url] ?? []
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
           const fromIndex = current.findIndex((x) => x.worktree === directory)
           if (fromIndex === -1 || fromIndex === toIndex) return
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
-          setStore("projects", url, result)
+          setStore("projects", key, result)
         },
       },
     }

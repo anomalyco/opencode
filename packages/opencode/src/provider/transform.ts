@@ -3,6 +3,7 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
+import { iife } from "@/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -16,6 +17,28 @@ function mimeToModality(mime: string): Modality | undefined {
 
 export namespace ProviderTransform {
   function normalizeMessages(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+    // Anthropic rejects messages with empty content - filter out empty string messages
+    // and remove empty text/reasoning parts from array content
+    if (model.api.npm === "@ai-sdk/anthropic") {
+      msgs = msgs
+        .map((msg) => {
+          if (typeof msg.content === "string") {
+            if (msg.content === "") return undefined
+            return msg
+          }
+          if (!Array.isArray(msg.content)) return msg
+          const filtered = msg.content.filter((part) => {
+            if (part.type === "text" || part.type === "reasoning") {
+              return part.text !== ""
+            }
+            return true
+          })
+          if (filtered.length === 0) return undefined
+          return { ...msg, content: filtered }
+        })
+        .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+    }
+
     if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
@@ -229,7 +252,6 @@ export namespace ProviderTransform {
     const id = model.id.toLowerCase()
     if (id.includes("qwen")) return 1
     if (id.includes("minimax-m2")) {
-      if (id.includes("m2.1")) return 0.9
       return 0.95
     }
     if (id.includes("gemini")) return 0.95
@@ -238,7 +260,10 @@ export namespace ProviderTransform {
 
   export function topK(model: Provider.Model) {
     const id = model.id.toLowerCase()
-    if (id.includes("minimax-m2")) return 20
+    if (id.includes("minimax-m2")) {
+      if (id.includes("m2.1")) return 40
+      return 20
+    }
     if (id.includes("gemini")) return 64
     return undefined
   }
@@ -246,7 +271,7 @@ export namespace ProviderTransform {
   const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
   const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 
-  export function variants(model: Provider.Model) {
+  export function variants(model: Provider.Model): Record<string, Record<string, any>> {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()
@@ -276,7 +301,7 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
         if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
-        if (id.includes("gpt-5")) {
+        if (id.includes("gpt-5-") || id === "gpt-5") {
           azureEfforts.unshift("minimal")
         }
         return Object.fromEntries(
@@ -292,13 +317,20 @@ export namespace ProviderTransform {
       case "@ai-sdk/openai":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
-        const openaiEfforts = ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
-        if (model.release_date >= "2025-11-13") {
-          openaiEfforts.unshift("none")
-        }
-        if (model.release_date >= "2025-12-04") {
-          openaiEfforts.push("xhigh")
-        }
+        const openaiEfforts = iife(() => {
+          if (id.includes("codex")) return WIDELY_SUPPORTED_EFFORTS
+          const arr = [...WIDELY_SUPPORTED_EFFORTS]
+          if (id.includes("gpt-5-") || id === "gpt-5") {
+            arr.unshift("minimal")
+          }
+          if (model.release_date >= "2025-11-13") {
+            arr.unshift("none")
+          }
+          if (model.release_date >= "2025-12-04") {
+            arr.push("xhigh")
+          }
+          return arr
+        })
         return Object.fromEntries(
           openaiEfforts.map((effort) => [
             effort,

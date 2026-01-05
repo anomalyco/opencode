@@ -2,13 +2,14 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
 import { Locale } from "@/util/locale"
 import { Keybind } from "@/util/keybind"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { useKV } from "../context/kv"
+import { createDebouncedSignal } from "../util/signal"
 import "opentui-spinner/solid"
 
 export function DialogSessionList() {
@@ -20,6 +21,13 @@ export function DialogSessionList() {
   const kv = useKV()
 
   const [toDelete, setToDelete] = createSignal<string>()
+  const [search, setSearch] = createDebouncedSignal("", 150)
+
+  const [searchResults] = createResource(search, async (query) => {
+    if (!query) return undefined
+    const result = await sdk.client.session.list({ search: query, limit: 30 })
+    return result.data ?? []
+  })
 
   const deleteKeybind = "ctrl+d"
 
@@ -27,9 +35,11 @@ export function DialogSessionList() {
 
   const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    return sync.data.session
+    return sessions()
       .filter((x) => x.parentID === undefined)
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => {
@@ -54,11 +64,6 @@ export function DialogSessionList() {
           ) : undefined,
         }
       })
-      .slice(0, 150)
-  })
-
-  createEffect(() => {
-    console.log("session count", sync.data.session.length)
   })
 
   onMount(() => {
@@ -69,7 +74,9 @@ export function DialogSessionList() {
     <DialogSelect
       title="Sessions"
       options={options()}
+      skipFilter={true}
       current={currentSessionID()}
+      onFilter={setSearch}
       onMove={() => {
         setToDelete(undefined)
       }}

@@ -10,11 +10,13 @@ import { Diff } from "@opencode-ai/ui/diff"
 import { Code } from "@opencode-ai/ui/code"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
+import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
+import { FileProvider } from "@/context/file"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
@@ -31,19 +33,16 @@ declare global {
   }
 }
 
-const serverDefaults = iife(() => {
+const defaultServerUrl = iife(() => {
   const param = new URLSearchParams(document.location.search).get("url")
-  if (param) return { url: param, forced: true }
+  if (param) return param
 
-  if (location.hostname.includes("opencode.ai")) return { url: "http://localhost:4096", forced: false }
-  if (window.__OPENCODE__) return { url: `http://127.0.0.1:${window.__OPENCODE__.port}`, forced: false }
+  if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+  if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
   if (import.meta.env.DEV)
-    return {
-      url: `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`,
-      forced: false,
-    }
+    return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
-  return { url: window.location.origin, forced: false }
+  return window.location.origin
 })
 
 function ServerKey(props: ParentProps) {
@@ -65,38 +64,42 @@ export function App() {
             <MarkedProvider>
               <DiffComponentProvider component={Diff}>
                 <CodeComponentProvider component={Code}>
-                  <ServerProvider defaultUrl={serverDefaults.url} forceUrl={serverDefaults.forced}>
+                  <ServerProvider defaultUrl={defaultServerUrl}>
                     <ServerKey>
                       <GlobalSDKProvider>
                         <GlobalSyncProvider>
-                          <LayoutProvider>
-                            <NotificationProvider>
-                              <Router
-                                root={(props) => (
-                                  <CommandProvider>
-                                    <Layout>{props.children}</Layout>
-                                  </CommandProvider>
+                          <Router
+                            root={(props) => (
+                              <PermissionProvider>
+                                <LayoutProvider>
+                                  <NotificationProvider>
+                                    <CommandProvider>
+                                      <Layout>{props.children}</Layout>
+                                    </CommandProvider>
+                                  </NotificationProvider>
+                                </LayoutProvider>
+                              </PermissionProvider>
+                            )}
+                          >
+                            <Route path="/" component={Home} />
+                            <Route path="/:dir" component={DirectoryLayout}>
+                              <Route path="/" component={() => <Navigate href="session" />} />
+                              <Route
+                                path="/session/:id?"
+                                component={(p) => (
+                                  <Show when={p.params.id ?? "new"} keyed>
+                                    <TerminalProvider>
+                                      <FileProvider>
+                                        <PromptProvider>
+                                          <Session />
+                                        </PromptProvider>
+                                      </FileProvider>
+                                    </TerminalProvider>
+                                  </Show>
                                 )}
-                              >
-                                <Route path="/" component={Home} />
-                                <Route path="/:dir" component={DirectoryLayout}>
-                                  <Route path="/" component={() => <Navigate href="session" />} />
-                                  <Route
-                                    path="/session/:id?"
-                                    component={(p) => (
-                                      <Show when={p.params.id ?? "new"} keyed>
-                                        <TerminalProvider>
-                                          <PromptProvider>
-                                            <Session />
-                                          </PromptProvider>
-                                        </TerminalProvider>
-                                      </Show>
-                                    )}
-                                  />
-                                </Route>
-                              </Router>
-                            </NotificationProvider>
-                          </LayoutProvider>
+                              />
+                            </Route>
+                          </Router>
                         </GlobalSyncProvider>
                       </GlobalSDKProvider>
                     </ServerKey>
