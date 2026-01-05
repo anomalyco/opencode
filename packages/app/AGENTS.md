@@ -1,6 +1,6 @@
 ## Debugging
 
-- To test the opencode app, use the playwrite mcp server, the app is already
+- To test the opencode app, use the playwright MCP server, the app is already
   running at http://localhost:3000
 - NEVER try to restart the app, or the server process, EVER.
 
