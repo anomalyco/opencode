@@ -1,7 +1,7 @@
 import { Database, eq, sql, inArray } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable } from "../src/schema/billing.sql.js"
+import { BillingTable, PaymentTable, UsageTable } from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
 
 // get input from command line
@@ -92,6 +92,32 @@ async function printWorkspace(workspaceID: string) {
           paymentID: row.paymentID
             ? `https://dashboard.stripe.com/acct_1RszBH2StuRr0lbX/payments/${row.paymentID}`
             : null,
+        })),
+      ),
+  )
+
+  await printTable("Usage", (tx) =>
+    tx
+      .select({
+        model: UsageTable.model,
+        provider: UsageTable.provider,
+        inputTokens: UsageTable.inputTokens,
+        outputTokens: UsageTable.outputTokens,
+        reasoningTokens: UsageTable.reasoningTokens,
+        cacheReadTokens: UsageTable.cacheReadTokens,
+        cacheWrite5mTokens: UsageTable.cacheWrite5mTokens,
+        cacheWrite1hTokens: UsageTable.cacheWrite1hTokens,
+        cost: UsageTable.cost,
+        timeCreated: UsageTable.timeCreated,
+      })
+      .from(UsageTable)
+      .where(eq(UsageTable.workspaceID, workspace.id))
+      .orderBy(sql`${UsageTable.timeCreated} DESC`)
+      .limit(1000)
+      .then((rows) =>
+        rows.map((row) => ({
+          ...row,
+          cost: `$${(row.cost / 100000000).toFixed(2)}`,
         })),
       ),
   )

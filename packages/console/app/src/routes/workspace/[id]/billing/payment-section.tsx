@@ -77,6 +77,7 @@ export function PaymentSection() {
               <For each={payments()!}>
                 {(payment) => {
                   const date = new Date(payment.timeCreated)
+                  const isCredit = !payment.paymentID
                   return (
                     <tr>
                       <td data-slot="payment-date" title={formatDateUTC(date)}>
@@ -85,19 +86,24 @@ export function PaymentSection() {
                       <td data-slot="payment-id">{payment.id}</td>
                       <td data-slot="payment-amount" data-refunded={!!payment.timeRefunded}>
                         ${((payment.amount ?? 0) / 100000000).toFixed(2)}
+                        {isCredit ? " (credit)" : ""}
                       </td>
                       <td data-slot="payment-receipt">
-                        <button
-                          onClick={async () => {
-                            const receiptUrl = await downloadReceiptAction(params.id!, payment.paymentID!)
-                            if (receiptUrl) {
-                              window.open(receiptUrl, "_blank")
-                            }
-                          }}
-                          data-slot="receipt-button"
-                        >
-                          View
-                        </button>
+                        {isCredit ? (
+                          <span>-</span>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              const receiptUrl = await downloadReceiptAction(params.id!, payment.paymentID!)
+                              if (receiptUrl) {
+                                window.open(receiptUrl, "_blank")
+                              }
+                            }}
+                            data-slot="receipt-button"
+                          >
+                            View
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )
