@@ -35,7 +35,12 @@ export function SessionHeader() {
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
 
   const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
-  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
+  const parentSession = createMemo(() => {
+    const current = currentSession()
+    if (!current?.parentID) return undefined
+    return sync.data.session.find((s) => s.id === current.parentID)
+  })
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const worktrees = createMemo(() => layout.projects.list().map((p) => p.worktree), [], { equals: same })
 
@@ -45,6 +50,8 @@ export function SessionHeader() {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
+    // Only navigate if we're actually changing to a different session
+    if (session.id === params.id) return
     navigate(`/${params.dir}/session/${session.id}`)
   }
 
@@ -79,18 +86,56 @@ export function SessionHeader() {
               </Select>
               <div class="text-text-weaker">/</div>
             </div>
-            <Select
-              options={sessions()}
-              current={currentSession()}
-              placeholder="New session"
-              label={(x) => x.title}
-              value={(x) => x.id}
-              onSelect={navigateToSession}
-              class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
-              variant="ghost"
-            />
+            <Show
+              when={parentSession()}
+              fallback={
+                <>
+                  <Select
+                    options={sessions()}
+                    current={currentSession()}
+                    placeholder="New session"
+                    label={(x) => x.title}
+                    value={(x) => x.id}
+                    onSelect={navigateToSession}
+                    class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+                    variant="ghost"
+                  />
+                </>
+              }
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <Select
+                    options={sessions()}
+                    current={parentSession()}
+                    placeholder="Back to parent session"
+                    label={(x) => x.title}
+                    value={(x) => x.id}
+                    onSelect={(session) => {
+                      // Only navigate if selecting a different session than current parent
+                      const currentParent = parentSession()
+                      if (session && currentParent && session.id !== currentParent.id) {
+                        navigateToSession(session)
+                      }
+                    }}
+                    class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+                    variant="ghost"
+                  />
+                <div class="text-text-weaker">/</div>
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <Tooltip value="Back to parent session">
+                    <button
+                      type="button"
+                      class="flex items-center justify-center gap-1 p-1 rounded hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors flex-shrink-0"
+                      onClick={() => navigateToSession(parentSession())}
+                    >
+                      <Icon name="arrow-left" size="small" class="text-icon-base" />
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
+            </Show>
           </div>
-          <Show when={currentSession()}>
+          <Show when={currentSession() && !parentSession()}>
             <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
             </TooltipKeybind>
