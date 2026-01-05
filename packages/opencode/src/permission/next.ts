@@ -232,9 +232,9 @@ export namespace PermissionNext {
     const result = new Set<string>()
     for (const tool of tools) {
       const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
-      if (evaluate(permission, "*", ruleset).action === "deny") {
-        result.add(tool)
-      }
+      const rule = ruleset.findLast((r) => Wildcard.match(permission, r.pattern))
+      if (!rule) continue
+      if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
     }
     return result
   }
