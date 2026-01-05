@@ -116,6 +116,12 @@
     color: var(--text-weak);
   }
 
+  [data-slot="session-turn-markdown"],
+  [data-slot="session-turn-accordion"] [data-slot="accordion-content"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   [data-slot="session-turn-markdown"] {
     &[data-diffs="true"] {
       font-size: 15px;

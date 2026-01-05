@@ -2,6 +2,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
 import { Component, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Icon } from "@opencode-ai/ui/icon"
 
@@ -181,6 +182,25 @@ interface ErrorPageProps {
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
+  const [store, setStore] = createStore({
+    checking: false,
+    version: undefined as string | undefined,
+  })
+
+  async function checkForUpdates() {
+    if (!platform.checkUpdate) return
+    setStore("checking", true)
+    const result = await platform.checkUpdate()
+    setStore("checking", false)
+    if (result.updateAvailable && result.version) setStore("version", result.version)
+  }
+
+  async function installUpdate() {
+    if (!platform.update || !platform.restart) return
+    await platform.update()
+    await platform.restart()
+  }
+
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
@@ -194,13 +214,29 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           readOnly
           copyable
           multiline
-          class="max-h-96 w-full font-mono text-xs no-scrollbar whitespace-pre"
+          class="max-h-96 w-full font-mono text-xs no-scrollbar"
           label="Error Details"
           hideLabel
         />
-        <Button size="large" onClick={platform.restart}>
-          Restart
-        </Button>
+        <div class="flex items-center gap-3">
+          <Button size="large" onClick={platform.restart}>
+            Restart
+          </Button>
+          <Show when={platform.checkUpdate}>
+            <Show
+              when={store.version}
+              fallback={
+                <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
+                  {store.checking ? "Checking..." : "Check for updates"}
+                </Button>
+              }
+            >
+              <Button size="large" onClick={installUpdate}>
+                Update to {store.version}
+              </Button>
+            </Show>
+          </Show>
+        </div>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
             Please report this error to the OpenCode team

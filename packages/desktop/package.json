@@ -1,8 +1,9 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
-  "version": "1.0.208",
+  "version": "1.1.2",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",
@@ -18,6 +19,7 @@
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-os": "~2",
+    "@tauri-apps/plugin-notification": "~2",
     "@tauri-apps/plugin-process": "~2",
     "@tauri-apps/plugin-shell": "~2",
     "@tauri-apps/plugin-store": "~2",

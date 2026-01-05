@@ -167,8 +167,8 @@ else
     fi
 
     if [ -z "$requested_version" ]; then
-        url="https://github.com/sst/opencode/releases/latest/download/$filename"
-        specific_version=$(curl -s https://api.github.com/repos/sst/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+        url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
+        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 
         if [[ $? -ne 0 || -z "$specific_version" ]]; then
             echo -e "${RED}Failed to fetch version information${NC}"
@@ -177,14 +177,14 @@ else
     else
         # Strip leading 'v' if present
         requested_version="${requested_version#v}"
-        url="https://github.com/sst/opencode/releases/download/v${requested_version}/$filename"
+        url="https://github.com/anomalyco/opencode/releases/download/v${requested_version}/$filename"
         specific_version=$requested_version
-        
+
         # Verify the release exists before downloading
-        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/sst/opencode/releases/tag/v${requested_version}")
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
         if [ "$http_status" = "404" ]; then
             echo -e "${RED}Error: Release v${requested_version} not found${NC}"
-            echo -e "${MUTED}Available releases: https://github.com/sst/opencode/releases${NC}"
+            echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
             exit 1
         fi
     fi
@@ -288,11 +288,11 @@ download_with_progress() {
     {
         local length=0
         local bytes=0
-        
+
         while IFS=" " read -r -a line; do
             [ "${#line[@]}" -lt 2 ] && continue
             local tag="${line[0]} ${line[1]}"
-            
+
             if [ "$tag" = "0000: content-length:" ]; then
                 length="${line[2]}"
                 length=$(echo "$length" | tr -d '\r')
@@ -317,7 +317,7 @@ download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
-    
+
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         curl -# -L -o "$tmp_dir/$filename" "$url"
@@ -328,7 +328,7 @@ download_and_install() {
     else
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
-    
+
     mv "$tmp_dir/opencode" "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
     rm -rf "$tmp_dir"
@@ -447,4 +447,3 @@ echo -e ""
 echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
 echo -e ""
 echo -e ""
-
