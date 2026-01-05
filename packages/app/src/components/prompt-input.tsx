@@ -1111,6 +1111,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
+            parts: images.map((attachment) => ({
+              id: Identifier.ascending("part"),
+              type: "file" as const,
+              mime: attachment.mime,
+              url: attachment.dataUrl,
+              filename: attachment.filename,
+            })),
           })
           .catch((err) => {
             showToast({
@@ -1205,6 +1212,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       url: attachment.dataUrl,
       filename: attachment.filename,
     }))
+
 
     const messageID = Identifier.ascending("message")
     const textPart = {

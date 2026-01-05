@@ -1422,10 +1422,23 @@ export namespace SessionPrompt {
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    parts: z
+      .array(
+        z.discriminatedUnion("type", [
+          MessageV2.FilePart.omit({
+            messageID: true,
+            sessionID: true,
+          }).partial({
+            id: true,
+          }),
+        ]),
+      )
+      .optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
-  const argsRegex = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g
+  // Match [Image N] as single token, quoted strings, or non-space sequences
+  const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
   /**
@@ -1516,6 +1529,7 @@ export namespace SessionPrompt {
       throw error
     }
 
+    const templateParts = await resolvePromptParts(template)
     const parts =
       (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
         ? [
@@ -1525,10 +1539,10 @@ export namespace SessionPrompt {
               description: command.description ?? "",
               command: input.command,
               // TODO: how can we make task tool accept a more complex input?
-              prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
+              prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : await resolvePromptParts(template)
+        : [...templateParts, ...(input.parts ?? [])]
 
     const result = (await prompt({
       sessionID: input.sessionID,
