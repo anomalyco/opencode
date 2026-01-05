@@ -69,6 +69,59 @@ export namespace Provider {
     key?: string
   }>
 
+  /**
+   * Helper to create Google Vertex AI loaders for both standard and Anthropic variants.
+   * Reduces duplication between google-vertex and google-vertex-anthropic loaders.
+   */
+  async function createGoogleVertexLoader(providerID: string, defaultLocation: string) {
+    // Check for stored auth credentials first (service account JSON)
+    const auth = await Auth.get(providerID)
+    if (auth?.type === "api") {
+      try {
+        const creds = JSON.parse(auth.key)
+        if (creds.client_email && creds.private_key && creds.project_id) {
+          return {
+            autoload: true,
+            key: undefined,
+            options: {
+              apiKey: null,
+              project: creds.project_id,
+              location: creds.location || defaultLocation,
+              googleAuthOptions: {
+                credentials: {
+                  client_email: creds.client_email,
+                  private_key: creds.private_key,
+                },
+              },
+            },
+            async getModel(sdk: { languageModel: (id: string) => unknown }, modelID: string) {
+              return sdk.languageModel(String(modelID).trim())
+            },
+          }
+        }
+      } catch {
+        // Invalid JSON in stored credentials, fall through to env var check
+      }
+    }
+    // Fall back to environment variables (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
+    const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+    const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? defaultLocation
+    const autoload = Boolean(project)
+    if (!autoload) return { autoload: false }
+    return {
+      autoload: true,
+      key: undefined,
+      options: {
+        apiKey: null,
+        project,
+        location,
+      },
+      async getModel(sdk: { languageModel: (id: string) => unknown }, modelID: string) {
+        return sdk.languageModel(String(modelID).trim())
+      },
+    }
+  }
+
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
       return {
@@ -272,110 +325,8 @@ export namespace Provider {
         },
       }
     },
-    "google-vertex": async () => {
-      // Check for stored auth credentials first (service account JSON)
-      const auth = await Auth.get("google-vertex")
-      if (auth?.type === "api") {
-        try {
-          const creds = JSON.parse(auth.key)
-          if (creds.client_email && creds.private_key && creds.project_id) {
-            return {
-              autoload: true,
-              // Set key to undefined to prevent it from being used as apiKey
-              key: undefined,
-              options: {
-                // Explicitly set apiKey to null to prevent fallback to provider.key
-                apiKey: null,
-                project: creds.project_id,
-                location: creds.location || "us-east5",
-                googleAuthOptions: {
-                  credentials: {
-                    client_email: creds.client_email,
-                    private_key: creds.private_key,
-                  },
-                },
-              },
-              async getModel(sdk: any, modelID: string) {
-                const id = String(modelID).trim()
-                return sdk.languageModel(id)
-              },
-            }
-          }
-        } catch {
-          // Fall through to env var check
-        }
-      }
-      // Fall back to environment variables (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
-      const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
-      return {
-        autoload: true,
-        key: undefined,
-        options: {
-          apiKey: null,
-          project,
-          location,
-        },
-        async getModel(sdk: any, modelID: string) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
-        },
-      }
-    },
-    "google-vertex-anthropic": async () => {
-      // Check for stored auth credentials first (service account JSON)
-      const auth = await Auth.get("google-vertex-anthropic")
-      if (auth?.type === "api") {
-        try {
-          const creds = JSON.parse(auth.key)
-          if (creds.client_email && creds.private_key && creds.project_id) {
-            return {
-              autoload: true,
-              // Set key to undefined to prevent it from being used as apiKey
-              key: undefined,
-              options: {
-                // Explicitly set apiKey to null to prevent fallback to provider.key
-                apiKey: null,
-                project: creds.project_id,
-                location: creds.location || "global",
-                googleAuthOptions: {
-                  credentials: {
-                    client_email: creds.client_email,
-                    private_key: creds.private_key,
-                  },
-                },
-              },
-              async getModel(sdk: any, modelID: string) {
-                const id = String(modelID).trim()
-                return sdk.languageModel(id)
-              },
-            }
-          }
-        } catch {
-          // Fall through to env var check
-        }
-      }
-      // Fall back to environment variables (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
-      const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
-      return {
-        autoload: true,
-        key: undefined,
-        options: {
-          apiKey: null,
-          project,
-          location,
-        },
-        async getModel(sdk: any, modelID) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
-        },
-      }
-    },
+    "google-vertex": () => createGoogleVertexLoader("google-vertex", "us-east5"),
+    "google-vertex-anthropic": () => createGoogleVertexLoader("google-vertex-anthropic", "global"),
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
       const envServiceKey = iife(() => {

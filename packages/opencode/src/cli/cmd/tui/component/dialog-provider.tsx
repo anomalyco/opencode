@@ -9,6 +9,7 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
+import { PROVIDER_DISPLAY_NAMES } from "@/provider/display-names"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -19,11 +20,6 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "google-vertex": 5,
   "google-vertex-anthropic": 6,
   openrouter: 7,
-}
-
-const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  "google-vertex": "Google Vertex AI",
-  "google-vertex-anthropic": "Google Vertex AI (Anthropic)",
 }
 
 export function createDialogProviderOptions() {
@@ -253,7 +249,7 @@ function ServiceAccountPasteInput(props: { providerID: string }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
-  let textareaRef: any
+  let textareaRef: { plainText: string; focus: () => void } | undefined
 
   const providerDisplayName = () =>
     props.providerID === "google-vertex-anthropic" ? "Google Vertex AI (Anthropic)" : "Google Vertex AI"
@@ -321,7 +317,7 @@ function ServiceAccountPasteInput(props: { providerID: string }) {
       </box>
       <box paddingLeft={4} paddingRight={4} paddingTop={1}>
         <textarea
-          ref={(r: any) => {
+          ref={(r: { plainText: string; focus: () => void }) => {
             textareaRef = r
             setTimeout(() => r.focus(), 1)
           }}

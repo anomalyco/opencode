@@ -2015,9 +2015,14 @@ test("google-vertex not loaded when neither credentials nor env vars set", async
     init: async () => {
       // Clean up any existing auth and env vars
       await Auth.remove("google-vertex")
+      // Clear the env vars that the custom loader checks
       Env.set("GOOGLE_CLOUD_PROJECT", "")
       Env.set("GCP_PROJECT", "")
       Env.set("GCLOUD_PROJECT", "")
+      // Also clear the env vars that the database env loader checks
+      Env.set("GOOGLE_VERTEX_PROJECT", "")
+      Env.set("GOOGLE_VERTEX_LOCATION", "")
+      Env.set("GOOGLE_APPLICATION_CREDENTIALS", "")
     },
     fn: async () => {
       const providers = await Provider.list()

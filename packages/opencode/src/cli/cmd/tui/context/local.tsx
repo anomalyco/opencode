@@ -9,6 +9,7 @@ import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
+import { PROVIDER_DISPLAY_NAMES } from "@/provider/display-names"
 import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
@@ -213,10 +214,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return modelStore.favorite
         },
         parsed: createMemo(() => {
-          const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-            "google-vertex": "Google Vertex AI",
-            "google-vertex-anthropic": "Google Vertex AI (Anthropic)",
-          }
           const value = currentModel()
           if (!value) {
             return {
