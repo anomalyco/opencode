@@ -644,13 +644,13 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const [sessionStore] = globalSync.child(props.session.directory)
     const hasPermissions = createMemo(() => {
-      const store = globalSync.child(props.project.worktree)[0]
-      const permissions = store.permission?.[props.session.id] ?? []
+      const permissions = sessionStore.permission?.[props.session.id] ?? []
       if (permissions.length > 0) return true
-      const childSessions = store.session.filter((s) => s.parentID === props.session.id)
+      const childSessions = sessionStore.session.filter((s) => s.parentID === props.session.id)
       for (const child of childSessions) {
-        const childPermissions = store.permission?.[child.id] ?? []
+        const childPermissions = sessionStore.permission?.[child.id] ?? []
         if (childPermissions.length > 0) return true
       }
       return false
@@ -658,7 +658,7 @@ export default function Layout(props: ParentProps) {
     const isWorking = createMemo(() => {
       if (props.session.id === params.id) return false
       if (hasPermissions()) return false
-      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
     return (
@@ -759,6 +759,10 @@ export default function Layout(props: ParentProps) {
     const isExpanded = createMemo(() =>
       props.mobile ? mobileProjects.expanded(props.project.worktree) : props.project.expanded,
     )
+    const isActive = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return props.project.worktree === current || props.project.sandboxes?.includes(current)
+    })
     const handleOpenChange = (open: boolean) => {
       if (props.mobile) {
         if (open) mobileProjects.expand(props.project.worktree)
@@ -777,7 +781,10 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg"
+                classList={{
+                  "group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg": true,
+                  "bg-surface-raised-base-hover": isActive() && !isExpanded(),
+                }}
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <ProjectAvatar
