@@ -152,7 +152,7 @@ To use Amazon Bedrock with OpenCode:
    **Available options:**
    - `region` - AWS region (e.g., `us-east-1`, `eu-west-1`)
    - `profile` - AWS named profile from `~/.aws/credentials`
-   - `endpoint` - Custom endpoint URL for VPC endpoints
+   - `endpoint` - Custom endpoint URL for VPC endpoints (alias for generic `baseURL` option)
 
    :::tip
    Configuration file options take precedence over environment variables.
@@ -176,6 +176,10 @@ To use Amazon Bedrock with OpenCode:
      }
    }
    ```
+
+   :::note
+   The `endpoint` option is an alias for the generic `baseURL` option, using AWS-specific terminology. If both `endpoint` and `baseURL` are specified, `endpoint` takes precedence.
+   :::
 
    #### Authentication Methods
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console

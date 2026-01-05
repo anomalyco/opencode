@@ -207,9 +207,10 @@ export namespace Provider {
         credentialProvider: fromNodeProviderChain(credentialProviderOptions),
       }
 
-      // Add endpoint if specified in config
-      if (providerConfig?.options?.endpoint) {
-        providerOptions.endpoint = providerConfig.options.endpoint
+      // Add custom endpoint if specified (endpoint takes precedence over baseURL)
+      const endpoint = providerConfig?.options?.endpoint ?? providerConfig?.options?.baseURL
+      if (endpoint) {
+        providerOptions.baseURL = endpoint
       }
 
       return {

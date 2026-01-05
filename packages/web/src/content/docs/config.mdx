@@ -230,7 +230,7 @@ Amazon Bedrock supports AWS-specific configuration:
 
 - `region` - AWS region for Bedrock (defaults to `AWS_REGION` env var or `us-east-1`)
 - `profile` - AWS named profile from `~/.aws/credentials` (defaults to `AWS_PROFILE` env var)
-- `endpoint` - Custom endpoint URL, useful for VPC endpoints
+- `endpoint` - Custom endpoint URL for VPC endpoints. This is an alias for the generic `baseURL` option using AWS-specific terminology. If both are specified, `endpoint` takes precedence.
 
 :::note
 Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over profile-based authentication. See [authentication precedence](/docs/providers#authentication-precedence) for details.
