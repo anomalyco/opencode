@@ -561,53 +561,52 @@ export async function handler(
     if (!authInfo) return
 
     const cost = authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
-    await Database.transaction(async (tx) => {
-      await tx.insert(UsageTable).values({
-        workspaceID: authInfo.workspaceID,
-        id: Identifier.create("usage"),
-        model: modelInfo.id,
-        provider: providerInfo.id,
-        inputTokens,
-        outputTokens,
-        reasoningTokens,
-        cacheReadTokens,
-        cacheWrite5mTokens,
-        cacheWrite1hTokens,
-        cost,
-        keyID: authInfo.apiKeyId,
-      })
-      await tx
-        .update(BillingTable)
-        .set({
-          balance: sql`${BillingTable.balance} - ${cost}`,
-          monthlyUsage: sql`
+    await Database.use((db) =>
+      Promise.all([
+        db.insert(UsageTable).values({
+          workspaceID: authInfo.workspaceID,
+          id: Identifier.create("usage"),
+          model: modelInfo.id,
+          provider: providerInfo.id,
+          inputTokens,
+          outputTokens,
+          reasoningTokens,
+          cacheReadTokens,
+          cacheWrite5mTokens,
+          cacheWrite1hTokens,
+          cost,
+          keyID: authInfo.apiKeyId,
+        }),
+        db
+          .update(BillingTable)
+          .set({
+            balance: sql`${BillingTable.balance} - ${cost}`,
+            monthlyUsage: sql`
               CASE
                 WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-          timeMonthlyUsageUpdated: sql`now()`,
-        })
-        .where(eq(BillingTable.workspaceID, authInfo.workspaceID))
-      await tx
-        .update(UserTable)
-        .set({
-          monthlyUsage: sql`
+            timeMonthlyUsageUpdated: sql`now()`,
+          })
+          .where(eq(BillingTable.workspaceID, authInfo.workspaceID)),
+        db
+          .update(UserTable)
+          .set({
+            monthlyUsage: sql`
               CASE
                 WHEN MONTH(${UserTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-          timeMonthlyUsageUpdated: sql`now()`,
-        })
-        .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)))
-    })
-
-    await Database.use((tx) =>
-      tx
-        .update(KeyTable)
-        .set({ timeUsed: sql`now()` })
-        .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
+            timeMonthlyUsageUpdated: sql`now()`,
+          })
+          .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+        db
+          .update(KeyTable)
+          .set({ timeUsed: sql`now()` })
+          .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
+      ]),
     )
 
     return { costInMicroCents: cost }
