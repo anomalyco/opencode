@@ -12,7 +12,6 @@ import { createStore } from "solid-js/store"
 import { type FileDiff } from "@opencode-ai/sdk/v2"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { Dynamic } from "solid-js/web"
-import { checksum } from "@opencode-ai/util/encode"
 
 export type SessionReviewDiffStyle = "unified" | "split"
 
@@ -124,13 +123,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                     diffStyle={diffStyle()}
                     before={{
                       name: diff.file!,
-                      contents: diff.before!,
-                      cacheKey: checksum(diff.before),
+                      contents: typeof diff.before === "string" ? diff.before : "",
                     }}
                     after={{
                       name: diff.file!,
-                      contents: diff.after!,
-                      cacheKey: checksum(diff.after),
+                      contents: typeof diff.after === "string" ? diff.after : "",
                     }}
                   />
                 </Accordion.Content>

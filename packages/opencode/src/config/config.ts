@@ -18,6 +18,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { existsSync } from "fs"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -103,7 +104,10 @@ export namespace Config {
         }
       }
 
-      installDependencies(dir)
+      const exists = existsSync(path.join(dir, "node_modules"))
+      const installing = installDependencies(dir)
+      if (!exists) await installing
+
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
@@ -161,9 +165,7 @@ export namespace Config {
     }
   })
 
-  async function installDependencies(dir: string) {
-    if (Installation.isLocal()) return
-
+  export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
 
     if (!(await Bun.file(pkg).exists())) {
@@ -393,27 +395,52 @@ export namespace Config {
   })
   export type PermissionRule = z.infer<typeof PermissionRule>
 
+  // Capture original key order before zod reorders, then rebuild in original order
+  const permissionPreprocess = (val: unknown) => {
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      return { __originalKeys: Object.keys(val), ...val }
+    }
+    return val
+  }
+
+  const permissionTransform = (x: unknown): Record<string, PermissionRule> => {
+    if (typeof x === "string") return { "*": x as PermissionAction }
+    const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
+    const { __originalKeys, ...rest } = obj
+    if (!__originalKeys) return rest as Record<string, PermissionRule>
+    const result: Record<string, PermissionRule> = {}
+    for (const key of __originalKeys) {
+      if (key in rest) result[key] = rest[key] as PermissionRule
+    }
+    return result
+  }
+
   export const Permission = z
-    .object({
-      read: PermissionRule.optional(),
-      edit: PermissionRule.optional(),
-      glob: PermissionRule.optional(),
-      grep: PermissionRule.optional(),
-      list: PermissionRule.optional(),
-      bash: PermissionRule.optional(),
-      task: PermissionRule.optional(),
-      external_directory: PermissionRule.optional(),
-      todowrite: PermissionAction.optional(),
-      todoread: PermissionAction.optional(),
-      webfetch: PermissionAction.optional(),
-      websearch: PermissionAction.optional(),
-      codesearch: PermissionAction.optional(),
-      lsp: PermissionRule.optional(),
-      doom_loop: PermissionAction.optional(),
-    })
-    .catchall(PermissionRule)
-    .or(PermissionAction)
-    .transform((x) => (typeof x === "string" ? { "*": x } : x))
+    .preprocess(
+      permissionPreprocess,
+      z
+        .object({
+          __originalKeys: z.string().array().optional(),
+          read: PermissionRule.optional(),
+          edit: PermissionRule.optional(),
+          glob: PermissionRule.optional(),
+          grep: PermissionRule.optional(),
+          list: PermissionRule.optional(),
+          bash: PermissionRule.optional(),
+          task: PermissionRule.optional(),
+          external_directory: PermissionRule.optional(),
+          todowrite: PermissionAction.optional(),
+          todoread: PermissionAction.optional(),
+          webfetch: PermissionAction.optional(),
+          websearch: PermissionAction.optional(),
+          codesearch: PermissionAction.optional(),
+          lsp: PermissionRule.optional(),
+          doom_loop: PermissionAction.optional(),
+        })
+        .catchall(PermissionRule)
+        .or(PermissionAction),
+    )
+    .transform(permissionTransform)
     .meta({
       ref: "PermissionConfig",
     })
@@ -478,7 +505,7 @@ export namespace Config {
       }
 
       // Convert legacy tools config to permissions
-      const permission: Permission = { ...agent.permission }
+      const permission: Permission = {}
       for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
         const action = enabled ? "allow" : "deny"
         // write, edit, patch, multiedit all map to edit permission
@@ -488,6 +515,7 @@ export namespace Config {
           permission[tool] = action
         }
       }
+      Object.assign(permission, agent.permission)
 
       // Convert legacy maxSteps to steps
       const steps = agent.steps ?? agent.maxSteps
@@ -818,7 +846,20 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+      mcp: z
+        .record(
+          z.string(),
+          z.union([
+            Mcp,
+            z
+              .object({
+                enabled: z.boolean(),
+              })
+              .strict(),
+          ]),
+        )
+        .optional()
+        .describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
         .union([
           z.literal(false),

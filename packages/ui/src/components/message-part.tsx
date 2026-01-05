@@ -759,6 +759,13 @@ ToolRegistry.register({
       })
     }
 
+    const handleSubtitleClick = () => {
+      const sessionId = childSessionId()
+      if (sessionId && data.navigateToSession) {
+        data.navigateToSession(sessionId)
+      }
+    }
+
     const renderChildToolPart = () => {
       const toolData = childToolPart()
       if (!toolData) return null
@@ -797,6 +804,7 @@ ToolRegistry.register({
                       titleClass: "capitalize",
                       subtitle: props.input.description,
                     }}
+                    onSubtitleClick={handleSubtitleClick}
                   />
                 }
               >
@@ -826,6 +834,7 @@ ToolRegistry.register({
                 titleClass: "capitalize",
                 subtitle: props.input.description,
               }}
+              onSubtitleClick={handleSubtitleClick}
             >
               <div
                 ref={autoScroll.scrollRef}
@@ -915,12 +924,10 @@ ToolRegistry.register({
               before={{
                 name: props.metadata?.filediff?.file || props.input.filePath,
                 contents: props.metadata?.filediff?.before || props.input.oldString,
-                cacheKey: checksum(props.metadata?.filediff?.before || props.input.oldString),
               }}
               after={{
                 name: props.metadata?.filediff?.file || props.input.filePath,
                 contents: props.metadata?.filediff?.after || props.input.newString,
-                cacheKey: checksum(props.metadata?.filediff?.after || props.input.newString),
               }}
             />
           </div>
