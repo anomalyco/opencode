@@ -12,6 +12,9 @@ import { Shell } from "@/shell/shell"
 export namespace Pty {
   const log = Log.create({ service: "pty" })
 
+  const BUFFER_LIMIT = 1024 * 1024 * 2
+  const BUFFER_CHUNK = 64 * 1024
+
   const pty = lazy(async () => {
     const { spawn } = await import("bun-pty")
     return spawn
@@ -126,15 +129,19 @@ export namespace Pty {
     }
     state().set(id, session)
     ptyProcess.onData((data) => {
-      if (session.subscribers.size === 0) {
-        session.buffer += data
-        return
-      }
+      let open = false
       for (const ws of session.subscribers) {
-        if (ws.readyState === 1) {
-          ws.send(data)
+        if (ws.readyState !== 1) {
+          session.subscribers.delete(ws)
+          continue
         }
+        open = true
+        ws.send(data)
       }
+      if (open) return
+      session.buffer += data
+      if (session.buffer.length <= BUFFER_LIMIT) return
+      session.buffer = session.buffer.slice(-BUFFER_LIMIT)
     })
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
@@ -196,8 +203,18 @@ export namespace Pty {
     log.info("client connected to session", { id })
     session.subscribers.add(ws)
     if (session.buffer) {
-      ws.send(session.buffer)
+      const buffer = session.buffer.length <= BUFFER_LIMIT ? session.buffer : session.buffer.slice(-BUFFER_LIMIT)
       session.buffer = ""
+      try {
+        for (let i = 0; i < buffer.length; i += BUFFER_CHUNK) {
+          ws.send(buffer.slice(i, i + BUFFER_CHUNK))
+        }
+      } catch {
+        session.subscribers.delete(ws)
+        session.buffer = buffer
+        ws.close()
+        return
+      }
     }
     return {
       onMessage: (message: string | ArrayBuffer) => {

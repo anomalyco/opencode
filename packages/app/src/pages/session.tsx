@@ -863,9 +863,9 @@ export default function Page() {
                                 data-message-id={message.id}
                                 classList={{
                                   "min-w-0 w-full max-w-full": true,
-                                  "last:min-h-[calc(100vh-13.5rem)] md:last:min-h-[calc(100vh-14.5rem)]":
+                                  "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-32px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-32px)]":
                                     platform.platform !== "desktop",
-                                  "last:min-h-[calc(100vh-15rem)] md:last:min-h-[calc(100vh-16rem)]":
+                                  "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-32px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-32px)]":
                                     platform.platform === "desktop",
                                 }}
                               >
