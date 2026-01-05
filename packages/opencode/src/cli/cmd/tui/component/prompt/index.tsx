@@ -264,9 +264,17 @@ export function Prompt(props: PromptProps) {
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
   let promptPartTypeId: number
 
+  // Track mounted state to prevent accessing layout nodes after unmount
+  // This fixes "Out of bounds call_indirect" errors in yoga-layout WASM
+  let mounted = true
+  onCleanup(() => {
+    mounted = false
+  })
+
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     input.insertText(evt.properties.text)
     setTimeout(() => {
+      if (!mounted || !input) return
       input.getLayoutNode().markDirty()
       input.gotoBufferEnd()
       renderer.requestRender()
@@ -284,6 +292,7 @@ export function Prompt(props: PromptProps) {
     // Track both the placeholder text and sessionID changes
     if (input) {
       setTimeout(() => {
+        if (!mounted || !input) return
         input.getLayoutNode().markDirty()
         renderer.requestRender()
       }, 0)
@@ -1094,6 +1103,7 @@ export function Prompt(props: PromptProps) {
 
                 // Force layout update and render for the pasted content
                 setTimeout(() => {
+                  if (!mounted || !input) return
                   input.getLayoutNode().markDirty()
                   input.gotoBufferEnd()
                   renderer.requestRender()
@@ -1102,6 +1112,7 @@ export function Prompt(props: PromptProps) {
               ref={(r: TextareaRenderable) => {
                 input = r
                 setTimeout(() => {
+                  if (!mounted || !input) return
                   input.cursorColor = theme.text
                 }, 0)
               }}
