@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/userMessage.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 263-286",
+  "title": "UserMessage",
+  "description": "User message with model selection and optional summary",
+  "type": "object",
+  "required": ["id", "sessionID", "role", "time", "agent", "model"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "role": {
+      "type": "string",
+      "const": "user",
+      "description": "Message role discriminator"
+    },
+    "time": {
+      "type": "object",
+      "description": "Message timing",
+      "required": ["created"],
+      "properties": {
+        "created": {
+          "type": "number",
+          "description": "Creation timestamp (ms)"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "description": "Optional message summary with diffs",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Summary title"
+        },
+        "body": {
+          "type": "string",
+          "description": "Summary body"
+        },
+        "diffs": {
+          "type": "array",
+          "items": {
+            "$ref": "fileDiff.schema.json"
+          },
+          "description": "File diffs included in summary"
+        }
+      },
+      "required": ["diffs"]
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent name"
+    },
+    "model": {
+      "type": "object",
+      "description": "Model selection",
+      "required": ["providerID", "modelID"],
+      "properties": {
+        "providerID": {
+          "type": "string",
+          "description": "Provider identifier"
+        },
+        "modelID": {
+          "type": "string",
+          "description": "Model identifier"
+        }
+      }
+    },
+    "system": {
+      "type": "string",
+      "description": "Optional system prompt override"
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "boolean"
+      },
+      "description": "Tool enablement map"
+    },
+    "variant": {
+      "type": "string",
+      "description": "Optional message variant"
+    }
+  }
+}

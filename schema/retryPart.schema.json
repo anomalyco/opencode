@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/retryPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 195-205",
+  "title": "RetryPart",
+  "description": "Retry marker part with attempt count and error details",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "attempt", "error", "time"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "retry",
+      "description": "Part type discriminator"
+    },
+    "attempt": {
+      "type": "number",
+      "description": "Retry attempt number"
+    },
+    "error": {
+      "$ref": "apiError.schema.json",
+      "description": "Error that triggered the retry"
+    },
+    "time": {
+      "type": "object",
+      "description": "Timing information",
+      "required": ["created"],
+      "properties": {
+        "created": {
+          "type": "number",
+          "description": "Creation timestamp (ms)"
+        }
+      }
+    }
+  }
+}

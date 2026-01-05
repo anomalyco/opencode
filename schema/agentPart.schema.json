@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/agentPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 163-176",
+  "title": "AgentPart",
+  "description": "Agent reference part with optional source location",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "name"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "agent",
+      "description": "Part type discriminator"
+    },
+    "name": {
+      "type": "string",
+      "description": "Agent name"
+    },
+    "source": {
+      "type": "object",
+      "description": "Source location information",
+      "required": ["value", "start", "end"],
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "Source value/content"
+        },
+        "start": {
+          "type": "integer",
+          "description": "Start offset"
+        },
+        "end": {
+          "type": "integer",
+          "description": "End offset"
+        }
+      }
+    }
+  }
+}

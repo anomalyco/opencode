@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/providerAuthError.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 38-43 (via NamedError.create)",
+  "title": "ProviderAuthError",
+  "description": "Provider authentication error (wrapped in NamedError format)",
+  "type": "object",
+  "required": ["name", "data"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "ProviderAuthError",
+      "description": "Error type name"
+    },
+    "data": {
+      "type": "object",
+      "required": ["providerID", "message"],
+      "properties": {
+        "providerID": {
+          "type": "string",
+          "description": "Provider that failed authentication"
+        },
+        "message": {
+          "type": "string",
+          "description": "Error message"
+        }
+      }
+    }
+  }
+}

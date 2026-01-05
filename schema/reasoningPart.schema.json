@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/reasoningPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 98-109",
+  "title": "ReasoningPart",
+  "description": "Reasoning/thinking content part with required timing",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "text", "time"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "reasoning",
+      "description": "Part type discriminator"
+    },
+    "text": {
+      "type": "string",
+      "description": "Reasoning text content"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional metadata"
+    },
+    "time": {
+      "type": "object",
+      "description": "Timing information",
+      "required": ["start"],
+      "properties": {
+        "start": {
+          "type": "number",
+          "description": "Start timestamp (ms)"
+        },
+        "end": {
+          "type": "number",
+          "description": "End timestamp (ms)"
+        }
+      }
+    }
+  }
+}

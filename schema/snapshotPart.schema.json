@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/snapshotPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 64-70",
+  "title": "SnapshotPart",
+  "description": "Snapshot reference part",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "snapshot"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "snapshot",
+      "description": "Part type discriminator"
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Snapshot identifier or reference"
+    }
+  }
+}

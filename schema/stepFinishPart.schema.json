@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/stepFinishPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 215-232",
+  "title": "StepFinishPart",
+  "description": "Step finish marker with token usage and cost",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "reason", "cost", "tokens"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "step-finish",
+      "description": "Part type discriminator"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Reason for step completion"
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Optional snapshot reference at step finish"
+    },
+    "cost": {
+      "type": "number",
+      "description": "Cost of this step"
+    },
+    "tokens": {
+      "type": "object",
+      "description": "Token usage breakdown",
+      "required": ["input", "output", "reasoning", "cache"],
+      "properties": {
+        "input": {
+          "type": "number",
+          "description": "Input tokens used"
+        },
+        "output": {
+          "type": "number",
+          "description": "Output tokens generated"
+        },
+        "reasoning": {
+          "type": "number",
+          "description": "Reasoning tokens used"
+        },
+        "cache": {
+          "type": "object",
+          "description": "Cache token usage",
+          "required": ["read", "write"],
+          "properties": {
+            "read": {
+              "type": "number",
+              "description": "Cache read tokens"
+            },
+            "write": {
+              "type": "number",
+              "description": "Cache write tokens"
+            }
+          }
+        }
+      }
+    }
+  }
+}

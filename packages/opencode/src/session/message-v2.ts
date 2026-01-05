@@ -31,6 +31,19 @@ import {
 } from "@generated/validators/toolStateError"
 import { toolStateSchema, type ToolState as GeneratedToolState } from "@generated/validators/toolState"
 import { toolPartSchema, type ToolPart as GeneratedToolPart } from "@generated/validators/toolPart"
+import { textPartSchema, type TextPart as GeneratedTextPart } from "@generated/validators/textPart"
+import { reasoningPartSchema, type ReasoningPart as GeneratedReasoningPart } from "@generated/validators/reasoningPart"
+import { snapshotPartSchema, type SnapshotPart as GeneratedSnapshotPart } from "@generated/validators/snapshotPart"
+import { patchPartSchema, type PatchPart as GeneratedPatchPart } from "@generated/validators/patchPart"
+import { agentPartSchema, type AgentPart as GeneratedAgentPart } from "@generated/validators/agentPart"
+import { compactionPartSchema, type CompactionPart as GeneratedCompactionPart } from "@generated/validators/compactionPart"
+import { subtaskPartSchema, type SubtaskPart as GeneratedSubtaskPart } from "@generated/validators/subtaskPart"
+import { stepStartPartSchema, type StepStartPart as GeneratedStepStartPart } from "@generated/validators/stepStartPart"
+import { stepFinishPartSchema, type StepFinishPart as GeneratedStepFinishPart } from "@generated/validators/stepFinishPart"
+import { partSchema, type Part as GeneratedPart } from "@generated/validators/part"
+import { userMessageSchema, type UserMessage as GeneratedUserMessage } from "@generated/validators/userMessage"
+import { assistantMessageSchema, type AssistantMessage as GeneratedAssistantMessage } from "@generated/validators/assistantMessage"
+import { messageSchema, type Message as GeneratedMessage } from "@generated/validators/message"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -55,59 +68,32 @@ export namespace MessageV2 {
   )
   export type APIError = z.infer<typeof APIError.Schema>
 
+  // Note: PartBase is kept for RetryPart which needs to reference APIError.Schema
+  // Other parts use generated validators from JSON Schema
   const PartBase = z.object({
     id: z.string(),
     sessionID: z.string(),
     messageID: z.string(),
   })
 
-  export const SnapshotPart = PartBase.extend({
-    type: z.literal("snapshot"),
-    snapshot: z.string(),
-  }).meta({
-    ref: "SnapshotPart",
-  })
-  export type SnapshotPart = z.infer<typeof SnapshotPart>
+  // Generated from JSON Schema - see schema/snapshotPart.schema.json
+  export const SnapshotPart = snapshotPartSchema
+  export type SnapshotPart = GeneratedSnapshotPart
 
-  export const PatchPart = PartBase.extend({
-    type: z.literal("patch"),
-    hash: z.string(),
-    files: z.string().array(),
-  }).meta({
-    ref: "PatchPart",
-  })
-  export type PatchPart = z.infer<typeof PatchPart>
+  // Generated from JSON Schema - see schema/patchPart.schema.json
+  export const PatchPart = patchPartSchema
+  export type PatchPart = GeneratedPatchPart
 
-  export const TextPart = PartBase.extend({
-    type: z.literal("text"),
-    text: z.string(),
-    synthetic: z.boolean().optional(),
-    ignored: z.boolean().optional(),
-    time: z
-      .object({
-        start: z.number(),
-        end: z.number().optional(),
-      })
-      .optional(),
-    metadata: z.record(z.string(), z.any()).optional(),
-  }).meta({
-    ref: "TextPart",
-  })
-  export type TextPart = z.infer<typeof TextPart>
+  // Generated from JSON Schema - see schema/textPart.schema.json
+  export const TextPart = textPartSchema
+  export type TextPart = GeneratedTextPart
 
-  export const ReasoningPart = PartBase.extend({
-    type: z.literal("reasoning"),
-    text: z.string(),
-    metadata: z.record(z.string(), z.any()).optional(),
-    time: z.object({
-      start: z.number(),
-      end: z.number().optional(),
-    }),
-  }).meta({
-    ref: "ReasoningPart",
-  })
-  export type ReasoningPart = z.infer<typeof ReasoningPart>
+  // Generated from JSON Schema - see schema/reasoningPart.schema.json
+  export const ReasoningPart = reasoningPartSchema
+  export type ReasoningPart = GeneratedReasoningPart
 
+  // FilePartSource types are kept inline because SymbolSource references LSP.Range
+  // which is an external dependency not captured in JSON Schema
   const FilePartSourceBase = z.object({
     text: z
       .object({
@@ -149,6 +135,7 @@ export namespace MessageV2 {
     ref: "FilePartSource",
   })
 
+  // FilePart is kept inline because it references FilePartSource which uses LSP.Range
   export const FilePart = PartBase.extend({
     type: z.literal("file"),
     mime: z.string(),
@@ -160,38 +147,22 @@ export namespace MessageV2 {
   })
   export type FilePart = z.infer<typeof FilePart>
 
-  export const AgentPart = PartBase.extend({
-    type: z.literal("agent"),
-    name: z.string(),
-    source: z
-      .object({
-        value: z.string(),
-        start: z.number().int(),
-        end: z.number().int(),
-      })
-      .optional(),
-  }).meta({
-    ref: "AgentPart",
-  })
-  export type AgentPart = z.infer<typeof AgentPart>
+  // Generated from JSON Schema - see schema/agentPart.schema.json
+  export const AgentPart = agentPartSchema
+  export type AgentPart = GeneratedAgentPart
 
-  export const CompactionPart = PartBase.extend({
-    type: z.literal("compaction"),
-    auto: z.boolean(),
-  }).meta({
-    ref: "CompactionPart",
-  })
-  export type CompactionPart = z.infer<typeof CompactionPart>
+  // Generated from JSON Schema - see schema/compactionPart.schema.json
+  export const CompactionPart = compactionPartSchema
+  export type CompactionPart = GeneratedCompactionPart
 
-  export const SubtaskPart = PartBase.extend({
-    type: z.literal("subtask"),
-    prompt: z.string(),
-    description: z.string(),
-    agent: z.string(),
-    command: z.string().optional(),
-  })
-  export type SubtaskPart = z.infer<typeof SubtaskPart>
+  // Generated from JSON Schema - see schema/subtaskPart.schema.json
+  export const SubtaskPart = subtaskPartSchema
+  export type SubtaskPart = GeneratedSubtaskPart
 
+  // Note: RetryPart uses APIError.Schema which is a NamedError class.
+  // The retryPartSchema references apiErrorSchema which has the same shape.
+  // We keep the inline definition to maintain the APIError.Schema reference
+  // for runtime error handling compatibility.
   export const RetryPart = PartBase.extend({
     type: z.literal("retry"),
     attempt: z.number(),
@@ -204,32 +175,13 @@ export namespace MessageV2 {
   })
   export type RetryPart = z.infer<typeof RetryPart>
 
-  export const StepStartPart = PartBase.extend({
-    type: z.literal("step-start"),
-    snapshot: z.string().optional(),
-  }).meta({
-    ref: "StepStartPart",
-  })
-  export type StepStartPart = z.infer<typeof StepStartPart>
+  // Generated from JSON Schema - see schema/stepStartPart.schema.json
+  export const StepStartPart = stepStartPartSchema
+  export type StepStartPart = GeneratedStepStartPart
 
-  export const StepFinishPart = PartBase.extend({
-    type: z.literal("step-finish"),
-    reason: z.string(),
-    snapshot: z.string().optional(),
-    cost: z.number(),
-    tokens: z.object({
-      input: z.number(),
-      output: z.number(),
-      reasoning: z.number(),
-      cache: z.object({
-        read: z.number(),
-        write: z.number(),
-      }),
-    }),
-  }).meta({
-    ref: "StepFinishPart",
-  })
-  export type StepFinishPart = z.infer<typeof StepFinishPart>
+  // Generated from JSON Schema - see schema/stepFinishPart.schema.json
+  export const StepFinishPart = stepFinishPartSchema
+  export type StepFinishPart = GeneratedStepFinishPart
 
   // Generated from JSON Schema - see schema/toolStatePending.schema.json
   export const ToolStatePending = toolStatePendingSchema

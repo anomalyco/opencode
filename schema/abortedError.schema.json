@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/abortedError.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current line 37 (via NamedError.create)",
+  "title": "MessageAbortedError",
+  "description": "Message aborted error (wrapped in NamedError format)",
+  "type": "object",
+  "required": ["name", "data"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "MessageAbortedError",
+      "description": "Error type name"
+    },
+    "data": {
+      "type": "object",
+      "required": ["message"],
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "Abort reason message"
+        }
+      }
+    }
+  }
+}

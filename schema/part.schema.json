@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/part.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 288-305",
+  "title": "Part",
+  "description": "Discriminated union of all message part types",
+  "oneOf": [
+    { "$ref": "textPart.schema.json" },
+    { "$ref": "subtaskPart.schema.json" },
+    { "$ref": "reasoningPart.schema.json" },
+    { "$ref": "filePart.schema.json" },
+    { "$ref": "toolPart.schema.json" },
+    { "$ref": "stepStartPart.schema.json" },
+    { "$ref": "stepFinishPart.schema.json" },
+    { "$ref": "snapshotPart.schema.json" },
+    { "$ref": "patchPart.schema.json" },
+    { "$ref": "agentPart.schema.json" },
+    { "$ref": "retryPart.schema.json" },
+    { "$ref": "compactionPart.schema.json" }
+  ]
+}

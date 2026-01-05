@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/outputLengthError.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current line 36 (via NamedError.create)",
+  "title": "MessageOutputLengthError",
+  "description": "Message output length error (wrapped in NamedError format)",
+  "type": "object",
+  "required": ["name", "data"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "const": "MessageOutputLengthError",
+      "description": "Error type name"
+    },
+    "data": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+}

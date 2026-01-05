@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/patchPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 72-79",
+  "title": "PatchPart",
+  "description": "Patch/diff part with file list",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "hash", "files"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "patch",
+      "description": "Part type discriminator"
+    },
+    "hash": {
+      "type": "string",
+      "description": "Patch hash identifier"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of affected files"
+    }
+  }
+}

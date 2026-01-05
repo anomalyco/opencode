@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/subtaskPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 186-193",
+  "title": "SubtaskPart",
+  "description": "Subtask reference part for delegated work",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "subtask",
+      "description": "Part type discriminator"
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Subtask prompt/instruction"
+    },
+    "description": {
+      "type": "string",
+      "description": "Subtask description"
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent handling the subtask"
+    },
+    "command": {
+      "type": "string",
+      "description": "Optional command associated with subtask"
+    }
+  }
+}

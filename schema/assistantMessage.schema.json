@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/assistantMessage.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ current lines 308-350",
+  "title": "AssistantMessage",
+  "description": "Assistant message with model info, tokens, and optional error",
+  "type": "object",
+  "required": ["id", "sessionID", "role", "time", "parentID", "modelID", "providerID", "mode", "agent", "path", "cost", "tokens"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "role": {
+      "type": "string",
+      "const": "assistant",
+      "description": "Message role discriminator"
+    },
+    "time": {
+      "type": "object",
+      "description": "Message timing",
+      "required": ["created"],
+      "properties": {
+        "created": {
+          "type": "number",
+          "description": "Creation timestamp (ms)"
+        },
+        "completed": {
+          "type": "number",
+          "description": "Completion timestamp (ms)"
+        }
+      }
+    },
+    "error": {
+      "$ref": "messageError.schema.json",
+      "description": "Optional error that occurred during processing"
+    },
+    "parentID": {
+      "type": "string",
+      "description": "Parent message identifier (the user message this responds to)"
+    },
+    "modelID": {
+      "type": "string",
+      "description": "Model identifier used for this response"
+    },
+    "providerID": {
+      "type": "string",
+      "description": "Provider identifier used for this response"
+    },
+    "mode": {
+      "type": "string",
+      "description": "Mode (deprecated)"
+    },
+    "agent": {
+      "type": "string",
+      "description": "Agent name"
+    },
+    "path": {
+      "type": "object",
+      "description": "Working directory context",
+      "required": ["cwd", "root"],
+      "properties": {
+        "cwd": {
+          "type": "string",
+          "description": "Current working directory"
+        },
+        "root": {
+          "type": "string",
+          "description": "Project root directory"
+        }
+      }
+    },
+    "summary": {
+      "type": "boolean",
+      "description": "Whether this message has a summary"
+    },
+    "cost": {
+      "type": "number",
+      "description": "Total cost of this response"
+    },
+    "tokens": {
+      "type": "object",
+      "description": "Token usage breakdown",
+      "required": ["input", "output", "reasoning", "cache"],
+      "properties": {
+        "input": {
+          "type": "number",
+          "description": "Input tokens used"
+        },
+        "output": {
+          "type": "number",
+          "description": "Output tokens generated"
+        },
+        "reasoning": {
+          "type": "number",
+          "description": "Reasoning tokens used"
+        },
+        "cache": {
+          "type": "object",
+          "description": "Cache token usage",
+          "required": ["read", "write"],
+          "properties": {
+            "read": {
+              "type": "number",
+              "description": "Cache read tokens"
+            },
+            "write": {
+              "type": "number",
+              "description": "Cache write tokens"
+            }
+          }
+        }
+      }
+    },
+    "finish": {
+      "type": "string",
+      "description": "Finish reason"
+    }
+  }
+}
