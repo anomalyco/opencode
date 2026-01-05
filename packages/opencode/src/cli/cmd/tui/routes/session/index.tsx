@@ -65,6 +65,7 @@ import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
 import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
+import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -190,6 +191,15 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+
+  // Allow exit when in child session (prompt is hidden)
+  const exit = useExit()
+  useKeyboard((evt) => {
+    if (!session()?.parentID) return
+    if (keybind.match("app_exit", evt)) {
+      exit()
+    }
+  })
 
   // Helper: Find next visible message boundary in direction
   const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
