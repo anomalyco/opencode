@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionAskedEvent.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 146a9b8ab (2026-01-05) line 68",
+  "title": "PermissionAskedEvent",
+  "description": "Event payload for permission.asked - permission request created",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "permission.asked",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "$ref": "permissionRequest.schema.json",
+      "description": "Permission request details"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionRepliedEvent.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 146a9b8ab (2026-01-05) lines 69-76",
+  "title": "PermissionRepliedEvent",
+  "description": "Event payload for permission.replied - permission response received",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "permission.replied",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["sessionID", "requestID", "reply"],
+      "properties": {
+        "sessionID": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "requestID": {
+          "type": "string",
+          "description": "Permission request identifier"
+        },
+        "reply": {
+          "$ref": "permissionReply.schema.json",
+          "description": "User's reply to the permission request"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

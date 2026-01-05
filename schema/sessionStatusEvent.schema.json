@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionStatusEvent.json",
+  "$comment": "Source: packages/opencode/src/session/status.ts @ 146a9b8ab (2026-01-05) lines 28-34",
+  "title": "SessionStatusEvent",
+  "description": "Event payload for session.status - session status changed",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "session.status",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["sessionID", "status"],
+      "properties": {
+        "sessionID": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "status": {
+          "$ref": "sessionStatus.schema.json",
+          "description": "New session status"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

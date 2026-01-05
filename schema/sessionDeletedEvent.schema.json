@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionDeletedEvent.json",
+  "$comment": "Source: packages/opencode/src/session/index.ts @ 146a9b8ab (2026-01-05) lines 69-74",
+  "title": "SessionDeletedEvent",
+  "description": "Event payload for session.deleted - session deleted",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "session.deleted",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["info"],
+      "properties": {
+        "info": {
+          "$ref": "sessionInfo.schema.json",
+          "description": "Deleted session information"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

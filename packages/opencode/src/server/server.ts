@@ -2,6 +2,10 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Log } from "../util/log"
+
+// Generated from JSON Schema - see schema/event.schema.json and schema/globalEvent.schema.json
+import { eventSchema } from "@generated/validators/event"
+import { globalEventSchema } from "@generated/validators/globalEvent"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -160,16 +164,8 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(
-                    z
-                      .object({
-                        directory: z.string(),
-                        payload: BusEvent.payloads(),
-                      })
-                      .meta({
-                        ref: "GlobalEvent",
-                      }),
-                  ),
+                  // Generated from JSON Schema - see schema/globalEvent.schema.json
+                  schema: resolver(globalEventSchema),
                 },
               },
             },
@@ -2757,7 +2753,8 @@ export namespace Server {
               description: "Event stream",
               content: {
                 "text/event-stream": {
-                  schema: resolver(BusEvent.payloads()),
+                  // Generated from JSON Schema - see schema/event.schema.json
+                  schema: resolver(eventSchema),
                 },
               },
             },

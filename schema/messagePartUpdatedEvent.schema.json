@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/messagePartUpdatedEvent.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 146a9b8ab (2026-01-05) lines 323-329",
+  "title": "MessagePartUpdatedEvent",
+  "description": "Event payload for message.part.updated - streaming content chunk",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "message.part.updated",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["part"],
+      "properties": {
+        "part": {
+          "$ref": "part.schema.json",
+          "description": "Updated part content"
+        },
+        "delta": {
+          "type": "string",
+          "description": "Optional delta text for incremental updates"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

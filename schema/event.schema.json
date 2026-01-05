@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/event.json",
+  "$comment": "Source: packages/opencode/src/bus/bus-event.ts @ 146a9b8ab (2026-01-05) - BusEvent.payloads() aggregator",
+  "title": "Event",
+  "description": "Discriminated union of all SSE event types (discriminator: type)",
+  "oneOf": [
+    { "$ref": "messageUpdatedEvent.schema.json" },
+    { "$ref": "messageRemovedEvent.schema.json" },
+    { "$ref": "messagePartUpdatedEvent.schema.json" },
+    { "$ref": "messagePartRemovedEvent.schema.json" },
+    { "$ref": "sessionCreatedEvent.schema.json" },
+    { "$ref": "sessionUpdatedEvent.schema.json" },
+    { "$ref": "sessionDeletedEvent.schema.json" },
+    { "$ref": "sessionStatusEvent.schema.json" },
+    { "$ref": "permissionAskedEvent.schema.json" },
+    { "$ref": "permissionRepliedEvent.schema.json" }
+  ]
+}

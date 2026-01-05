@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/messageUpdatedEvent.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 146a9b8ab (2026-01-05) lines 310-315",
+  "title": "MessageUpdatedEvent",
+  "description": "Event payload for message.updated - message metadata changed",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "message.updated",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["info"],
+      "properties": {
+        "info": {
+          "$ref": "message.schema.json",
+          "description": "Updated message information"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionUpdatedEvent.json",
+  "$comment": "Source: packages/opencode/src/session/index.ts @ 146a9b8ab (2026-01-05) lines 63-68",
+  "title": "SessionUpdatedEvent",
+  "description": "Event payload for session.updated - session metadata changed",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "session.updated",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["info"],
+      "properties": {
+        "info": {
+          "$ref": "sessionInfo.schema.json",
+          "description": "Updated session information"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

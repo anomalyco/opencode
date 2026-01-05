@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/globalEvent.json",
+  "$comment": "Source: packages/opencode/src/server/server.ts @ 146a9b8ab (2026-01-05) - GET /global/event endpoint",
+  "title": "GlobalEvent",
+  "description": "Global event wrapper with directory context (from GET /global/event SSE endpoint)",
+  "type": "object",
+  "required": ["directory", "payload"],
+  "properties": {
+    "directory": {
+      "type": "string",
+      "description": "Working directory context for this event"
+    },
+    "payload": {
+      "$ref": "event.schema.json",
+      "description": "The actual event payload"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/messageRemovedEvent.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 146a9b8ab (2026-01-05) lines 316-322",
+  "title": "MessageRemovedEvent",
+  "description": "Event payload for message.removed - message deleted",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "message.removed",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["sessionID", "messageID"],
+      "properties": {
+        "sessionID": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "messageID": {
+          "type": "string",
+          "description": "Removed message identifier"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

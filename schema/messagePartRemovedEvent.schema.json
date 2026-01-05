@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/messagePartRemovedEvent.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 146a9b8ab (2026-01-05) lines 330-337",
+  "title": "MessagePartRemovedEvent",
+  "description": "Event payload for message.part.removed - part deleted",
+  "type": "object",
+  "required": ["type", "properties"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "message.part.removed",
+      "description": "Event type discriminator"
+    },
+    "properties": {
+      "type": "object",
+      "required": ["sessionID", "messageID", "partID"],
+      "properties": {
+        "sessionID": {
+          "type": "string",
+          "description": "Session identifier"
+        },
+        "messageID": {
+          "type": "string",
+          "description": "Message identifier"
+        },
+        "partID": {
+          "type": "string",
+          "description": "Removed part identifier"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

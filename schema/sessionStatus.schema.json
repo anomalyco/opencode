@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionStatus.json",
+  "$comment": "Source: packages/opencode/src/session/status.ts @ 146a9b8ab (2026-01-05) lines 7-25",
+  "title": "SessionStatus",
+  "description": "Session status information (idle, retry, or busy)",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "idle"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["type", "attempt", "message", "next"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "retry"
+        },
+        "attempt": {
+          "type": "number",
+          "description": "Retry attempt number"
+        },
+        "message": {
+          "type": "string",
+          "description": "Retry message/reason"
+        },
+        "next": {
+          "type": "number",
+          "description": "Timestamp for next retry attempt"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "busy"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

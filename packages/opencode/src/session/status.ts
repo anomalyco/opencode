@@ -3,26 +3,13 @@ import { Bus } from "@/bus"
 import { Instance } from "@/project/instance"
 import z from "zod"
 
+// Generated from JSON Schema - see schema/sessionStatus.schema.json
+import { sessionStatusSchema, type SessionStatus as GeneratedSessionStatus } from "@generated/validators/sessionStatus"
+
 export namespace SessionStatus {
-  export const Info = z
-    .union([
-      z.object({
-        type: z.literal("idle"),
-      }),
-      z.object({
-        type: z.literal("retry"),
-        attempt: z.number(),
-        message: z.string(),
-        next: z.number(),
-      }),
-      z.object({
-        type: z.literal("busy"),
-      }),
-    ])
-    .meta({
-      ref: "SessionStatus",
-    })
-  export type Info = z.infer<typeof Info>
+  // Generated from JSON Schema - see schema/sessionStatus.schema.json
+  export const Info = sessionStatusSchema
+  export type Info = GeneratedSessionStatus
 
   export const Event = {
     Status: BusEvent.define(
