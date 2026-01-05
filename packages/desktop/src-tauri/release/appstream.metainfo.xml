@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ai.opencode.opencode</id>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+
+  <name>OpenCode</name>
+  <summary>Open source AI coding agent</summary>
+
+  <developer id="ly.anoma">
+    <name>Anomaly Innovations Inc.</name>
+  </developer>
+
+  <description>
+    <p>
+      OpenCode is an open source agent that helps you write and run code with any AI model.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">ai.opencode.opencode.desktop</launchable>
+
+  <content_rating type="oars-1.1" />
+
+  <url type="bugtracker">https://github.com/anomalyco/opencode/issues</url>
+  <url type="homepage">https://opencode.ai</url>
+  <url type="vcs-browser">https://github.com/anomalyco/opencode</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://opencode.ai/docs/_astro/screenshot.Bs5D4atL_ZvsvFu.webp</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="1.0.223" date="2026-01-01">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.223</url>
+    </release>
+    <release version="1.0.222" date="2026-01-01">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.222</url>
+    </release>
+    <release version="1.0.221" date="2025-12-31">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.221</url>
+    </release>
+    <release version="1.0.220" date="2025-12-31">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.220</url>
+    </release>
+    <release version="1.0.219" date="2025-12-31">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.219</url>
+    </release>
+    <release version="1.0.218" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.218</url>
+    </release>
+    <release version="1.0.217" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.217</url>
+    </release>
+    <release version="1.0.216" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.216</url>
+    </release>
+    <release version="1.0.215" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.215</url>
+    </release>
+    <release version="1.0.214" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.214</url>
+    </release>
+    <release version="1.0.213" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.213</url>
+    </release>
+    <release version="1.0.212" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.212</url>
+    </release>
+    <release version="1.0.211" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.211</url>
+    </release>
+    <release version="1.0.210" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.210</url>
+    </release>
+    <release version="1.0.209" date="2025-12-30">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.209</url>
+    </release>
+    <release version="1.0.208" date="2025-12-29">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.208</url>
+    </release>
+    <release version="1.0.207" date="2025-12-29">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.207</url>
+    </release>
+    <release version="1.0.206" date="2025-12-28">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.206</url>
+    </release>
+    <release version="1.0.205" date="2025-12-28">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.205</url>
+    </release>
+    <release version="1.0.204" date="2025-12-27">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.204</url>
+    </release>
+    <release version="1.0.203" date="2025-12-26">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.203</url>
+    </release>
+    <release version="1.0.202" date="2025-12-26">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.202</url>
+    </release>
+    <release version="1.0.201" date="2025-12-25">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.201</url>
+    </release>
+    <release version="1.0.200" date="2025-12-25">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.200</url>
+    </release>
+    <release version="1.0.199" date="2025-12-25">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.199</url>
+    </release>
+    <release version="1.0.198" date="2025-12-24">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.198</url>
+    </release>
+    <release version="1.0.195" date="2025-12-24">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.195</url>
+    </release>
+    <release version="1.0.194" date="2025-12-24">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.194</url>
+    </release>
+    <release version="1.0.193" date="2025-12-23">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.193</url>
+    </release>
+    <release version="1.0.191" date="2025-12-23">
+      <url type="details">https://github.com/anomalyco/opencode/releases/tag/v1.0.191</url>
+    </release>
+  </releases>
+</component>
