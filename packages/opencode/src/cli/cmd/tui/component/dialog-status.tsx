@@ -1,15 +1,39 @@
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, RGBA } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
-import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { For, Match, Switch, Show, createMemo, createResource } from "solid-js"
+import { AnthropicUsage } from "@/usage/anthropic"
+import { OpenAIUsage } from "@/usage/openai"
 
 export type DialogStatusProps = {}
+
+function UsageBar(props: { percent: number; fg: RGBA; bgMuted: RGBA }) {
+  const width = 20
+  const filled = Math.round((props.percent / 100) * width)
+  const empty = width - filled
+  return (
+    <text>
+      <span style={{ fg: props.fg }}>{"█".repeat(filled)}</span>
+      <span style={{ fg: props.bgMuted }}>{"░".repeat(empty)}</span>
+    </text>
+  )
+}
 
 export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
+
+  const [anthropicUsage, { refetch: refetchAnthropicUsage }] = createResource(
+    () => AnthropicUsage.fetch(),
+    { initialValue: null }
+  )
+
+  const [openaiUsage, { refetch: refetchOpenAIUsage }] = createResource(
+    () => OpenAIUsage.fetch(),
+    { initialValue: null }
+  )
 
   const plugins = createMemo(() => {
     const list = sync.data.config.plugin ?? []
@@ -36,6 +60,12 @@ export function DialogStatus() {
     return result.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
+  const getUsageColor = (percent: number) => {
+    if (percent >= 90) return theme.error
+    if (percent >= 70) return theme.warning
+    return theme.success
+  }
+
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
@@ -44,6 +74,99 @@ export function DialogStatus() {
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
+
+      <Show when={anthropicUsage()} fallback={null}>
+        {(usage) => (
+          <box>
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              Anthropic Usage
+            </text>
+            <Show when={usage().five_hour}>
+              {(fiveHour) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.text}>5h:</text>
+                  <UsageBar percent={fiveHour().utilization} fg={getUsageColor(fiveHour().utilization)} bgMuted={theme.textMuted} />
+                  <text fg={getUsageColor(fiveHour().utilization)}>{fiveHour().utilization}%</text>
+                  <text fg={theme.textMuted}>
+                    (reset: {AnthropicUsage.formatResetTime(fiveHour().resets_at)})
+                  </text>
+                </box>
+              )}
+            </Show>
+            <Show when={usage().seven_day}>
+              {(sevenDay) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.text}>7d:</text>
+                  <UsageBar percent={sevenDay().utilization} fg={getUsageColor(sevenDay().utilization)} bgMuted={theme.textMuted} />
+                  <text fg={getUsageColor(sevenDay().utilization)}>{sevenDay().utilization}%</text>
+                  <text fg={theme.textMuted}>
+                    (reset: {AnthropicUsage.formatResetTime(sevenDay().resets_at)})
+                  </text>
+                </box>
+              )}
+            </Show>
+            <Show when={usage().seven_day_opus}>
+              {(opus) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.text}>Opus 7d:</text>
+                  <UsageBar percent={opus().utilization} fg={getUsageColor(opus().utilization)} bgMuted={theme.textMuted} />
+                  <text fg={getUsageColor(opus().utilization)}>{opus().utilization}%</text>
+                  <text fg={theme.textMuted}>
+                    (reset: {AnthropicUsage.formatResetTime(opus().resets_at)})
+                  </text>
+                </box>
+              )}
+            </Show>
+          </box>
+        )}
+      </Show>
+
+      <Show when={openaiUsage()} fallback={null}>
+        {(usage) => (
+          <box>
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              OpenAI Usage ({OpenAIUsage.getPlanDisplayName(usage().plan_type)})
+            </text>
+            <Show when={usage().rate_limit?.primary_window}>
+              {(primary) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.text}>{OpenAIUsage.formatWindowDuration(primary().limit_window_seconds)}:</text>
+                  <UsageBar percent={primary().used_percent} fg={getUsageColor(primary().used_percent)} bgMuted={theme.textMuted} />
+                  <text fg={getUsageColor(primary().used_percent)}>{Math.round(primary().used_percent)}%</text>
+                  <text fg={theme.textMuted}>
+                    (reset: {OpenAIUsage.formatResetTime(primary().reset_at)})
+                  </text>
+                </box>
+              )}
+            </Show>
+            <Show when={usage().rate_limit?.secondary_window}>
+              {(secondary) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.text}>{OpenAIUsage.formatWindowDuration(secondary().limit_window_seconds)}:</text>
+                  <UsageBar percent={secondary().used_percent} fg={getUsageColor(secondary().used_percent)} bgMuted={theme.textMuted} />
+                  <text fg={getUsageColor(secondary().used_percent)}>{Math.round(secondary().used_percent)}%</text>
+                  <text fg={theme.textMuted}>
+                    (reset: {OpenAIUsage.formatResetTime(secondary().reset_at)})
+                  </text>
+                </box>
+              )}
+            </Show>
+            <Show when={usage().credits}>
+              {(credits) => (
+                <box flexDirection="row" gap={1}>
+                  <text fg={theme.text}>Credits:</text>
+                  <Show when={credits().unlimited} fallback={
+                    <text fg={theme.text}>{OpenAIUsage.formatCredits(credits().balance)}</text>
+                  }>
+                    <text fg={theme.success}>Unlimited</text>
+                  </Show>
+                </box>
+              )}
+            </Show>
+          </box>
+        )}
+      </Show>
+
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>

@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, For, Show, Switch, Match, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,6 +11,8 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { AnthropicUsage } from "@/usage/anthropic"
+import { OpenAIUsage } from "@/usage/openai"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -25,7 +27,25 @@ export function Sidebar(props: { sessionID: string }) {
     diff: true,
     todo: true,
     lsp: true,
+    usage: true,
   })
+
+  const [anthropicUsage] = createResource(() => AnthropicUsage.fetch(), { initialValue: null })
+  const [openaiUsage] = createResource(() => OpenAIUsage.fetch(), { initialValue: null })
+
+  const getUsageColor = (percent: number) => {
+    if (percent >= 90) return theme.error
+    if (percent >= 70) return theme.warning
+    return theme.success
+  }
+
+  const usageBar = (percent: number) => {
+    const width = 10
+    const filled = Math.round((percent / 100) * width)
+    return "█".repeat(filled) + "░".repeat(width - filled)
+  }
+
+  const hasUsageData = createMemo(() => anthropicUsage() || openaiUsage())
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
@@ -96,6 +116,68 @@ export function Sidebar(props: { sessionID: string }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            <Show when={hasUsageData()}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => setExpanded("usage", !expanded.usage)}
+                >
+                  <text fg={theme.text}>{expanded.usage ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>Usage</b>
+                  </text>
+                </box>
+                <Show when={expanded.usage}>
+                  <Show when={anthropicUsage()}>
+                    {(usage) => (
+                      <>
+                        <text fg={theme.textMuted}>Anthropic</text>
+                        <Show when={usage().five_hour}>
+                          {(w) => (
+                            <text fg={theme.textMuted}>
+                              5h <span style={{ fg: getUsageColor(w().utilization) }}>{usageBar(w().utilization)}</span>
+                              {" "}{w().utilization}% ({AnthropicUsage.formatResetTime(w().resets_at)})
+                            </text>
+                          )}
+                        </Show>
+                        <Show when={usage().seven_day}>
+                          {(w) => (
+                            <text fg={theme.textMuted}>
+                              7d <span style={{ fg: getUsageColor(w().utilization) }}>{usageBar(w().utilization)}</span>
+                              {" "}{w().utilization}% ({AnthropicUsage.formatResetTime(w().resets_at)})
+                            </text>
+                          )}
+                        </Show>
+                      </>
+                    )}
+                  </Show>
+                  <Show when={openaiUsage()}>
+                    {(usage) => (
+                      <>
+                        <text fg={theme.textMuted}>OpenAI ({OpenAIUsage.getPlanDisplayName(usage().plan_type)})</text>
+                        <Show when={usage().rate_limit?.primary_window}>
+                          {(w) => (
+                            <text fg={theme.textMuted}>
+                              {OpenAIUsage.formatWindowDuration(w().limit_window_seconds)} <span style={{ fg: getUsageColor(w().used_percent) }}>{usageBar(w().used_percent)}</span>
+                              {" "}{Math.round(w().used_percent)}% ({OpenAIUsage.formatResetTime(w().reset_at)})
+                            </text>
+                          )}
+                        </Show>
+                        <Show when={usage().rate_limit?.secondary_window}>
+                          {(w) => (
+                            <text fg={theme.textMuted}>
+                              {OpenAIUsage.formatWindowDuration(w().limit_window_seconds)} <span style={{ fg: getUsageColor(w().used_percent) }}>{usageBar(w().used_percent)}</span>
+                              {" "}{Math.round(w().used_percent)}% ({OpenAIUsage.formatResetTime(w().reset_at)})
+                            </text>
+                          )}
+                        </Show>
+                      </>
+                    )}
+                  </Show>
+                </Show>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box
