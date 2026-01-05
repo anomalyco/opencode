@@ -892,6 +892,7 @@ export namespace SessionPrompt {
             return pieces
           }
           const url = new URL(part.url)
+          const toolLogger = Log.create({ service: "tool" })
           switch (url.protocol) {
             case "data:":
               if (part.mime === "text/plain") {
@@ -927,7 +928,6 @@ export namespace SessionPrompt {
               // Decode the pathname since URL constructor doesn't automatically decode it
               const filepath = fileURLToPath(part.url)
               const stat = await Bun.file(filepath).stat()
-              const toolLogger = Log.create({ service: "tool" })
 
               if (stat.isDirectory()) {
                 part.mime = "application/x-directory"
