@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionAction.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 47c670a (2026-01-03) lines 15-17",
+  "title": "PermissionAction",
+  "description": "Permission action enum (allow, deny, ask)",
+  "type": "string",
+  "enum": ["allow", "deny", "ask"]
+}

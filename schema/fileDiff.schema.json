@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/fileDiff.json",
+  "$comment": "Source: packages/opencode/src/snapshot/index.ts @ 0e08655 (2025-11-26) lines 147-157",
+  "title": "FileDiff",
+  "description": "File diff metadata showing changes (additions/deletions) for a single file",
+  "type": "object",
+  "required": ["file", "before", "after", "additions", "deletions"],
+  "properties": {
+    "file": {
+      "type": "string",
+      "description": "File path"
+    },
+    "before": {
+      "type": "string",
+      "description": "Content hash or identifier before changes"
+    },
+    "after": {
+      "type": "string",
+      "description": "Content hash or identifier after changes"
+    },
+    "additions": {
+      "type": "number",
+      "description": "Number of lines added"
+    },
+    "deletions": {
+      "type": "number",
+      "description": "Number of lines deleted"
+    }
+  }
+}

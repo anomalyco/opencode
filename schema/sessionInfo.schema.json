@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionInfo.json",
+  "$comment": "Source: packages/opencode/src/session/index.ts @ 351ddee (2026-01-01) lines 39-79",
+  "title": "SessionInfo",
+  "description": "Core session identity and metadata (server-managed)",
+  "type": "object",
+  "required": ["id", "projectID", "directory", "title", "version", "time"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^ses_",
+      "description": "Unique session identifier (prefixed with ses_)"
+    },
+    "projectID": {
+      "type": "string",
+      "description": "Project identifier this session belongs to"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Working directory for this session"
+    },
+    "parentID": {
+      "type": "string",
+      "pattern": "^ses_",
+      "description": "Parent session ID (for forked/child sessions, prefixed with ses_)"
+    },
+    "summary": {
+      "$ref": "sessionSummary.schema.json",
+      "description": "Session summary statistics"
+    },
+    "share": {
+      "$ref": "sessionShare.schema.json",
+      "description": "Share information if session is publicly shared"
+    },
+    "title": {
+      "type": "string",
+      "description": "Session title"
+    },
+    "version": {
+      "type": "string",
+      "description": "OpenCode version that created this session"
+    },
+    "time": {
+      "$ref": "sessionTime.schema.json",
+      "description": "Timestamp metadata"
+    },
+    "permission": {
+      "$ref": "permissionRuleset.schema.json",
+      "description": "Permission rules for this session"
+    },
+    "revert": {
+      "$ref": "sessionRevert.schema.json",
+      "description": "Revert state information"
+    }
+  }
+}

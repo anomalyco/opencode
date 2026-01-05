@@ -9,29 +9,25 @@ import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import z from "zod"
 
+// Generated from JSON Schema - see schema/*.schema.json
+import { permissionActionSchema, type PermissionAction } from "@generated/validators/permissionAction"
+import { permissionRuleSchema, type PermissionRule } from "@generated/validators/permissionRule"
+import { permissionRulesetSchema, type PermissionRuleset } from "@generated/validators/permissionRuleset"
+
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
 
-  export const Action = z.enum(["allow", "deny", "ask"]).meta({
-    ref: "PermissionAction",
-  })
-  export type Action = z.infer<typeof Action>
+  // Generated from JSON Schema - see schema/permissionAction.schema.json
+  export const Action = permissionActionSchema
+  export type Action = PermissionAction
 
-  export const Rule = z
-    .object({
-      permission: z.string(),
-      pattern: z.string(),
-      action: Action,
-    })
-    .meta({
-      ref: "PermissionRule",
-    })
-  export type Rule = z.infer<typeof Rule>
+  // Generated from JSON Schema - see schema/permissionRule.schema.json
+  export const Rule = permissionRuleSchema
+  export type Rule = PermissionRule
 
-  export const Ruleset = Rule.array().meta({
-    ref: "PermissionRuleset",
-  })
-  export type Ruleset = z.infer<typeof Ruleset>
+  // Generated from JSON Schema - see schema/permissionRuleset.schema.json
+  export const Ruleset = permissionRulesetSchema
+  export type Ruleset = PermissionRuleset
 
   export function fromConfig(permission: Config.Permission) {
     const ruleset: Ruleset = []

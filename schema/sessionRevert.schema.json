@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionRevert.json",
+  "$comment": "Source: packages/opencode/src/session/index.ts @ 351ddee (2026-01-01) lines 67-73",
+  "title": "SessionRevert",
+  "description": "Session revert state information (for reverting to a previous message)",
+  "type": "object",
+  "required": ["messageID"],
+  "properties": {
+    "messageID": {
+      "type": "string",
+      "description": "Message ID to revert to"
+    },
+    "partID": {
+      "type": "string",
+      "description": "Specific part ID within the message to revert to (optional)"
+    },
+    "snapshot": {
+      "type": "string",
+      "description": "Snapshot identifier for the revert point (optional)"
+    },
+    "diff": {
+      "type": "string",
+      "description": "Diff information for the revert (optional)"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionTime.json",
+  "$comment": "Source: packages/opencode/src/session/index.ts @ 351ddee (2026-01-01) lines 60-65",
+  "title": "SessionTime",
+  "description": "Session timestamp metadata (created, updated, compacting, archived)",
+  "type": "object",
+  "required": ["created", "updated"],
+  "properties": {
+    "created": {
+      "type": "number",
+      "description": "Unix timestamp in milliseconds when session was created"
+    },
+    "updated": {
+      "type": "number",
+      "description": "Unix timestamp in milliseconds when session was last updated"
+    },
+    "compacting": {
+      "type": "number",
+      "description": "Unix timestamp in milliseconds when session compaction started (optional)"
+    },
+    "archived": {
+      "type": "number",
+      "description": "Unix timestamp in milliseconds when session was archived (optional)"
+    }
+  }
+}

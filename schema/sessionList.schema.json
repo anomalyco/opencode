@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionList.json",
+  "$comment": "Usage: API response type for listing sessions, generated into SDK types",
+  "title": "SessionList",
+  "description": "List of sessions (API response)",
+  "type": "object",
+  "required": ["sessions"],
+  "properties": {
+    "sessions": {
+      "type": "array",
+      "description": "Array of session metadata",
+      "items": {
+        "$ref": "sessionInfo.schema.json"
+      }
+    }
+  }
+}

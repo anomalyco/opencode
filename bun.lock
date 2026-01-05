@@ -364,13 +364,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/schemas": {
-      "name": "@opencode-ai/schemas",
-      "version": "0.1.0",
-      "devDependencies": {
-        "typescript": "catalog:",
-      },
-    },
     "packages/script": {
       "name": "@opencode-ai/script",
       "devDependencies": {
@@ -1188,8 +1181,6 @@
     "@opencode-ai/function": ["@opencode-ai/function@workspace:packages/function"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
-
-    "@opencode-ai/schemas": ["@opencode-ai/schemas@workspace:packages/schemas"],
 
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 

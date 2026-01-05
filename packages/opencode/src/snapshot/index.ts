@@ -7,6 +7,9 @@ import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 
+// Generated from JSON Schema - see schema/fileDiff.schema.json
+import { fileDiffSchema, type FileDiff as FileDiffType } from "@generated/validators/fileDiff"
+
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
 
@@ -144,18 +147,9 @@ export namespace Snapshot {
     return result.text().trim()
   }
 
-  export const FileDiff = z
-    .object({
-      file: z.string(),
-      before: z.string(),
-      after: z.string(),
-      additions: z.number(),
-      deletions: z.number(),
-    })
-    .meta({
-      ref: "FileDiff",
-    })
-  export type FileDiff = z.infer<typeof FileDiff>
+  // Generated from JSON Schema - see schema/fileDiff.schema.json
+  export const FileDiff = fileDiffSchema
+  export type FileDiff = FileDiffType
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []

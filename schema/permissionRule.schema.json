@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionRule.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 47c670a (2026-01-03) lines 20-26",
+  "title": "PermissionRule",
+  "description": "Permission rule mapping a permission type and pattern to an action",
+  "type": "object",
+  "required": ["permission", "pattern", "action"],
+  "properties": {
+    "permission": {
+      "type": "string",
+      "description": "Permission type identifier"
+    },
+    "pattern": {
+      "type": "string",
+      "description": "Pattern to match (supports wildcards)"
+    },
+    "action": {
+      "$ref": "permissionAction.schema.json",
+      "description": "Action to take when pattern matches"
+    }
+  }
+}

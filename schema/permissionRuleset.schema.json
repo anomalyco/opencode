@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionRuleset.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 47c670a (2026-01-03) lines 30-32",
+  "title": "PermissionRuleset",
+  "description": "Collection of permission rules defining access controls",
+  "type": "array",
+  "items": {
+    "$ref": "permissionRule.schema.json"
+  }
+}

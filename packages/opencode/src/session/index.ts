@@ -20,6 +20,9 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 
+// Generated from JSON Schema - see schema/sessionInfo.schema.json
+import { sessionInfoSchema, type SessionInfo } from "@generated/validators/sessionInfo"
+
 export namespace Session {
   const log = Log.create({ service: "session" })
 
@@ -36,47 +39,9 @@ export namespace Session {
     ).test(title)
   }
 
-  export const Info = z
-    .object({
-      id: Identifier.schema("session"),
-      projectID: z.string(),
-      directory: z.string(),
-      parentID: Identifier.schema("session").optional(),
-      summary: z
-        .object({
-          additions: z.number(),
-          deletions: z.number(),
-          files: z.number(),
-          diffs: Snapshot.FileDiff.array().optional(),
-        })
-        .optional(),
-      share: z
-        .object({
-          url: z.string(),
-        })
-        .optional(),
-      title: z.string(),
-      version: z.string(),
-      time: z.object({
-        created: z.number(),
-        updated: z.number(),
-        compacting: z.number().optional(),
-        archived: z.number().optional(),
-      }),
-      permission: PermissionNext.Ruleset.optional(),
-      revert: z
-        .object({
-          messageID: z.string(),
-          partID: z.string().optional(),
-          snapshot: z.string().optional(),
-          diff: z.string().optional(),
-        })
-        .optional(),
-    })
-    .meta({
-      ref: "Session",
-    })
-  export type Info = z.output<typeof Info>
+  // Generated from JSON Schema - see schema/sessionInfo.schema.json
+  export const Info = sessionInfoSchema
+  export type Info = SessionInfo
 
   export const ShareInfo = z
     .object({

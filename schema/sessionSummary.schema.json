@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionSummary.json",
+  "$comment": "Source: packages/opencode/src/session/index.ts @ 351ddee (2026-01-01) lines 45-51",
+  "title": "SessionSummary",
+  "description": "Session summary statistics (file changes, additions, deletions)",
+  "type": "object",
+  "required": ["additions", "deletions", "files"],
+  "properties": {
+    "additions": {
+      "type": "number",
+      "description": "Total number of lines added across all files"
+    },
+    "deletions": {
+      "type": "number",
+      "description": "Total number of lines deleted across all files"
+    },
+    "files": {
+      "type": "number",
+      "description": "Number of files modified"
+    },
+    "diffs": {
+      "type": "array",
+      "description": "Detailed file-by-file diff information (optional)",
+      "items": {
+        "$ref": "fileDiff.schema.json"
+      }
+    }
+  }
+}

@@ -111,6 +111,11 @@ function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): s
       const values = schema.enum.map((v) => `"${v}"`).join(", ")
       return `z.enum([${values}])`
     }
+    if (schema.pattern) {
+      // Escape backslashes in the pattern for JavaScript regex
+      const escapedPattern = schema.pattern.replace(/\\/g, "\\\\")
+      return `z.string().regex(/${escapedPattern}/)`
+    }
     return "z.string()"
   }
 

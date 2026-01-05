@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/sessionShare.json",
+  "$comment": "Source: packages/opencode/src/session/index.ts @ 351ddee (2026-01-01) lines 53-56",
+  "title": "SessionShare",
+  "description": "Session share information (public URL)",
+  "type": "object",
+  "required": ["url"],
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "Public URL for shared session"
+    }
+  }
+}
