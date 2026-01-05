@@ -312,7 +312,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     function resolveSystemTheme() {
-      console.log("resolved system theme")
       renderer
         .getPalette({
           size: 16,
@@ -345,6 +344,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const sdk = useSDK()
     sdk.event.on("server.instance.disposed", () => {
+      renderer.clearPaletteCache()
       resolveSystemTheme()
     })
 
