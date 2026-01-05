@@ -27,15 +27,9 @@ export function DialogStatus() {
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
-  const [anthropicUsage] = createResource(
-    () => AnthropicUsage.fetch(),
-    { initialValue: null }
-  )
+  const [anthropicUsage] = createResource(() => AnthropicUsage.fetch(), { initialValue: null })
 
-  const [openaiUsage] = createResource(
-    () => OpenAIUsage.fetch(),
-    { initialValue: null }
-  )
+  const [openaiUsage] = createResource(() => OpenAIUsage.fetch(), { initialValue: null })
 
   const plugins = createMemo(() => {
     const list = sync.data.config.plugin ?? []
@@ -62,7 +56,7 @@ export function DialogStatus() {
     return result.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  const colorFor = (percent: number) => colorFor(percent, theme)
+  const colorFor = (percent: number) => getUsageColor(percent, theme)
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
@@ -83,11 +77,13 @@ export function DialogStatus() {
               {(fiveHour) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>5h:</text>
-                  <UsageBar percent={fiveHour().utilization} fg={colorFor(fiveHour().utilization)} bgMuted={theme.textMuted} />
+                  <UsageBar
+                    percent={fiveHour().utilization}
+                    fg={colorFor(fiveHour().utilization)}
+                    bgMuted={theme.textMuted}
+                  />
                   <text fg={colorFor(fiveHour().utilization)}>{fiveHour().utilization}%</text>
-                  <text fg={theme.textMuted}>
-                    (reset: {AnthropicUsage.formatResetTime(fiveHour().resets_at)})
-                  </text>
+                  <text fg={theme.textMuted}>(reset: {AnthropicUsage.formatResetTime(fiveHour().resets_at)})</text>
                 </box>
               )}
             </Show>
@@ -95,11 +91,13 @@ export function DialogStatus() {
               {(sevenDay) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>7d:</text>
-                  <UsageBar percent={sevenDay().utilization} fg={colorFor(sevenDay().utilization)} bgMuted={theme.textMuted} />
+                  <UsageBar
+                    percent={sevenDay().utilization}
+                    fg={colorFor(sevenDay().utilization)}
+                    bgMuted={theme.textMuted}
+                  />
                   <text fg={colorFor(sevenDay().utilization)}>{sevenDay().utilization}%</text>
-                  <text fg={theme.textMuted}>
-                    (reset: {AnthropicUsage.formatResetTime(sevenDay().resets_at)})
-                  </text>
+                  <text fg={theme.textMuted}>(reset: {AnthropicUsage.formatResetTime(sevenDay().resets_at)})</text>
                 </box>
               )}
             </Show>
@@ -109,9 +107,7 @@ export function DialogStatus() {
                   <text fg={theme.text}>Opus 7d:</text>
                   <UsageBar percent={opus().utilization} fg={colorFor(opus().utilization)} bgMuted={theme.textMuted} />
                   <text fg={colorFor(opus().utilization)}>{opus().utilization}%</text>
-                  <text fg={theme.textMuted}>
-                    (reset: {AnthropicUsage.formatResetTime(opus().resets_at)})
-                  </text>
+                  <text fg={theme.textMuted}>(reset: {AnthropicUsage.formatResetTime(opus().resets_at)})</text>
                 </box>
               )}
             </Show>
@@ -129,11 +125,13 @@ export function DialogStatus() {
               {(primary) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>{OpenAIUsage.formatWindowDuration(primary().limit_window_seconds)}:</text>
-                  <UsageBar percent={primary().used_percent} fg={colorFor(primary().used_percent)} bgMuted={theme.textMuted} />
+                  <UsageBar
+                    percent={primary().used_percent}
+                    fg={colorFor(primary().used_percent)}
+                    bgMuted={theme.textMuted}
+                  />
                   <text fg={colorFor(primary().used_percent)}>{Math.round(primary().used_percent)}%</text>
-                  <text fg={theme.textMuted}>
-                    (reset: {OpenAIUsage.formatResetTime(primary().reset_at)})
-                  </text>
+                  <text fg={theme.textMuted}>(reset: {OpenAIUsage.formatResetTime(primary().reset_at)})</text>
                 </box>
               )}
             </Show>
@@ -141,11 +139,13 @@ export function DialogStatus() {
               {(secondary) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>{OpenAIUsage.formatWindowDuration(secondary().limit_window_seconds)}:</text>
-                  <UsageBar percent={secondary().used_percent} fg={colorFor(secondary().used_percent)} bgMuted={theme.textMuted} />
+                  <UsageBar
+                    percent={secondary().used_percent}
+                    fg={colorFor(secondary().used_percent)}
+                    bgMuted={theme.textMuted}
+                  />
                   <text fg={colorFor(secondary().used_percent)}>{Math.round(secondary().used_percent)}%</text>
-                  <text fg={theme.textMuted}>
-                    (reset: {OpenAIUsage.formatResetTime(secondary().reset_at)})
-                  </text>
+                  <text fg={theme.textMuted}>(reset: {OpenAIUsage.formatResetTime(secondary().reset_at)})</text>
                 </box>
               )}
             </Show>
@@ -153,9 +153,10 @@ export function DialogStatus() {
               {(credits) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>Credits:</text>
-                  <Show when={credits().unlimited} fallback={
-                    <text fg={theme.text}>{OpenAIUsage.formatCredits(credits().balance)}</text>
-                  }>
+                  <Show
+                    when={credits().unlimited}
+                    fallback={<text fg={theme.text}>{OpenAIUsage.formatCredits(credits().balance)}</text>}
+                  >
                     <text fg={theme.success}>Unlimited</text>
                   </Show>
                 </box>
