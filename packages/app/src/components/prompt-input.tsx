@@ -165,6 +165,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
+  const imageAttachments = createMemo(
+    () => prompt.current().filter((part) => part.type === "image") as ImageAttachmentPart[],
+  )
 
   const [store, setStore] = createStore<{
     popover: "at" | "slash" | null
@@ -172,7 +175,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: Prompt | null
     placeholder: number
     dragging: boolean
-    imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
   }>({
@@ -181,7 +183,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     dragging: false,
-    imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
   })
@@ -274,21 +275,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         mime: file.type,
         dataUrl,
       }
-      setStore(
-        produce((draft) => {
-          draft.imageAttachments.push(attachment)
-        }),
-      )
+      const cursorPosition = prompt.cursor() ?? getCursorPosition(editorRef)
+      prompt.set([...prompt.current(), attachment], cursorPosition)
     }
     reader.readAsDataURL(file)
   }
 
   const removeImageAttachment = (id: string) => {
-    setStore(
-      produce((draft) => {
-        draft.imageAttachments = draft.imageAttachments.filter((a) => a.id !== id)
-      }),
-    )
+    const current = prompt.current()
+    const next = current.filter((part) => part.type !== "image" || part.id !== id)
+    prompt.set(next, prompt.cursor())
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
@@ -538,8 +534,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     on(
       () => prompt.current(),
       (currentParts) => {
+        const inputParts = currentParts.filter((part) => part.type !== "image") as Prompt
         const domParts = parseFromDOM()
-        if (isNormalizedEditor() && isPromptEqual(currentParts, domParts)) return
+        if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
 
         const selection = window.getSelection()
         let cursorPosition: number | null = null
@@ -547,7 +544,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           cursorPosition = getCursorPosition(editorRef)
         }
 
-        renderEditor(currentParts)
+        renderEditor(inputParts)
 
         if (cursorPosition !== null) {
           setCursorPosition(editorRef, cursorPosition)
@@ -638,11 +635,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleInput = () => {
     const rawParts = parseFromDOM()
+    const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
     const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const trimmed = rawText.replace(/\u200B/g, "").trim()
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = trimmed.length === 0 && !hasNonText
+    const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
 
     if (shouldReset) {
       setStore("popover", null)
@@ -681,7 +679,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
-    prompt.set(rawParts, cursorPosition)
+    prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
 
@@ -784,16 +782,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .map((p) => ("content" in p ? p.content : ""))
       .join("")
       .trim()
-    if (!text) return
+    const hasImages = prompt.some((part) => part.type === "image")
+    if (!text && !hasImages) return
 
     const entry = clonePromptParts(prompt)
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
     const lastEntry = currentHistory.entries[0]
-    if (lastEntry) {
-      const lastText = lastEntry.map((p) => ("content" in p ? p.content : "")).join("")
-      if (lastText === text) return
-    }
+    if (lastEntry && isPromptEqual(lastEntry, entry)) return
 
     setCurrentHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
   }
@@ -967,7 +963,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const images = store.imageAttachments.slice()
+    const images = imageAttachments().slice()
     const mode = store.mode
 
     if (text.trim().length === 0 && images.length === 0) {
@@ -1061,14 +1057,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const clearInput = () => {
       prompt.reset()
-      setStore("imageAttachments", [])
       setStore("mode", "normal")
       setStore("popover", null)
     }
 
     const restoreInput = () => {
       prompt.set(currentPrompt, promptLength(currentPrompt))
-      setStore("imageAttachments", images)
       setStore("mode", mode)
       setStore("popover", null)
       requestAnimationFrame(() => {
@@ -1471,9 +1465,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </For>
           </div>
         </Show>
-        <Show when={store.imageAttachments.length > 0}>
+        <Show when={imageAttachments().length > 0}>
           <div class="flex flex-wrap gap-2 px-3 pt-3">
-            <For each={store.imageAttachments}>
+            <For each={imageAttachments()}>
               {(attachment) => (
                 <div class="relative group">
                   <Show
@@ -1525,7 +1519,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "font-mono!": store.mode === "shell",
             }}
           />
-          <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
+          <Show when={!prompt.dirty()}>
             <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? "Enter shell command..."
@@ -1658,7 +1652,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             >
               <IconButton
                 type="submit"
-                disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
+                disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"
