@@ -1213,7 +1213,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       filename: attachment.filename,
     }))
 
-
     const messageID = Identifier.ascending("message")
     const textPart = {
       id: Identifier.ascending("part"),
