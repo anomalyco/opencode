@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createMemo, onMount } from "solid-js"
+import { batch, createEffect, createMemo, onMount } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
@@ -91,8 +91,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         : globalSync.data.project.find((x) => x.worktree === project.worktree)
       return [
         {
-          ...project,
           ...(metadata ?? {}),
+          ...project,
           icon: { url: metadata?.icon?.url, color: metadata?.icon?.color },
         },
       ]
@@ -108,6 +108,41 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
       return project
     }
+
+    const roots = createMemo(() => {
+      const map = new Map<string, string>()
+      for (const project of globalSync.data.project) {
+        const sandboxes = project.sandboxes ?? []
+        for (const sandbox of sandboxes) {
+          map.set(sandbox, project.worktree)
+        }
+      }
+      return map
+    })
+
+    createEffect(() => {
+      const map = roots()
+      if (map.size === 0) return
+
+      const projects = server.projects.list()
+      const seen = new Set(projects.map((project) => project.worktree))
+
+      batch(() => {
+        for (const project of projects) {
+          const root = map.get(project.worktree)
+          if (!root) continue
+
+          server.projects.close(project.worktree)
+
+          if (!seen.has(root)) {
+            server.projects.open(root)
+            seen.add(root)
+          }
+
+          if (project.expanded) server.projects.expand(root)
+        }
+      })
+    })
 
     const enriched = createMemo(() => server.projects.list().flatMap(enrich))
     const list = createMemo(() => enriched().flatMap(colorize))
@@ -125,11 +160,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       projects: {
         list,
         open(directory: string) {
-          if (server.projects.list().find((x) => x.worktree === directory)) {
-            return
-          }
-          globalSync.project.loadSessions(directory)
-          server.projects.open(directory)
+          const root = roots().get(directory) ?? directory
+          if (server.projects.list().find((x) => x.worktree === root)) return
+          globalSync.project.loadSessions(root)
+          server.projects.open(root)
         },
         close(directory: string) {
           server.projects.close(directory)
