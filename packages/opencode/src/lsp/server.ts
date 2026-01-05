@@ -1488,6 +1488,55 @@ export namespace LSPServer {
     },
   }
 
+  export const PHPActor: Info = {
+    id: "phpactor",
+    extensions: [".php"],
+    root: NearestRoot([".phpactor.json", "composer.json", "composer.lock"]),
+    async spawn(root) {
+      let bin = Bun.which("phpactor")
+      if (!bin) {
+        const composerPaths = [
+          path.join(os.homedir(), ".composer", "vendor", "bin", "phpactor"),
+          path.join(os.homedir(), ".config", "composer", "vendor", "bin", "phpactor"),
+        ]
+        for (const phpactorPath of composerPaths) {
+          if (await Bun.file(phpactorPath).exists()) {
+            bin = phpactorPath
+            break
+          }
+        }
+      }
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading phpactor from GitHub releases")
+
+        const downloadResponse = await fetch("https://github.com/phpactor/phpactor/releases/latest/download/phpactor.phar")
+        if (!downloadResponse.ok) {
+          log.error("Failed to download phpactor")
+          return
+        }
+
+        bin = path.join(Global.Path.bin, "phpactor")
+        await Bun.file(bin).write(downloadResponse)
+
+        if (process.platform !== "win32") {
+          await $`chmod +x ${bin}`.quiet().nothrow()
+        }
+
+        log.info("installed phpactor", { binary: bin })
+      }
+      return {
+        process: spawn(bin, ["language-server"], {
+          cwd: root,
+          env: {
+            ...process.env,
+          },
+        }),
+        initialization: {},
+      }
+    },
+  }
+
   export const PHPIntelephense: Info = {
     id: "php intelephense",
     extensions: [".php"],
