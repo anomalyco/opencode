@@ -117,10 +117,7 @@ export namespace Config {
       }),
     )
     const globalClaude = `${Global.Path.home}/.claude`
-    const globalClaudeExists = await fs.stat(globalClaude).then(
-      () => true,
-      () => false,
-    )
+    const globalClaudeExists = await fs.exists(globalClaude)
     if (globalClaudeExists) claudeDirs.push(globalClaude)
 
     const uniqueClaudeDirs = unique(claudeDirs)
@@ -217,11 +214,7 @@ export namespace Config {
       if (!md.data) continue
 
       const name = (() => {
-        const patterns = [
-          "/.opencode/command/",
-          "/.claude/commands/",
-          "/command/",
-        ]
+        const patterns = ["/.opencode/command/", "/.claude/commands/", "/command/"]
         const pattern = patterns.find((p) => item.includes(p))
 
         if (pattern) {

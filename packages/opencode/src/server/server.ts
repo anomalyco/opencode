@@ -63,6 +63,12 @@ export namespace Server {
     return _url ?? new URL("http://localhost:4096")
   }
 
+  function getDirectory(c: {
+    req: { query: (k: string) => string | undefined; header: (k: string) => string | undefined }
+  }) {
+    return c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+  }
+
   export const Event = {
     Connected: BusEvent.define("server.connected", z.object({})),
     Disposed: BusEvent.define("global.disposed", z.object({})),
@@ -243,7 +249,7 @@ export namespace Server {
         },
       )
       .use(async (c, next) => {
-        const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+        const directory = getDirectory(c)
         return Instance.provide({
           directory,
           init: InstanceBootstrap,
@@ -1345,7 +1351,7 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const directory = getDirectory(c)
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
 
@@ -1385,7 +1391,7 @@ export namespace Server {
         ),
         validator("json", SessionPrompt.PromptInput.omit({ sessionID: true })),
         async (c) => {
-          const directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const directory = getDirectory(c)
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
 
