@@ -8,6 +8,7 @@ import { ModelsDev } from "../provider/models"
 import { mergeDeep, pipe, unique } from "remeda"
 import { Global } from "../global"
 import fs from "fs/promises"
+import { exists } from "fs/promises"
 import { lazy } from "../util/lazy"
 import { NamedError } from "@opencode-ai/util/error"
 import { Flag } from "../flag/flag"
@@ -90,6 +91,12 @@ export namespace Config {
     if (Flag.OPENCODE_CONFIG_DIR) {
       directories.push(Flag.OPENCODE_CONFIG_DIR)
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+    }
+
+    // Load Claude-compatible commands first (lower precedence)
+    // OpenCode commands loaded later will override these
+    for (const dir of await getClaudeDirectories()) {
+      result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
     }
 
     for (const dir of unique(directories)) {
@@ -201,7 +208,7 @@ export namespace Config {
       if (!md.data) continue
 
       const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
+        const patterns = ["/.opencode/command/", "/command/", "/.claude/commands/"]
         const pattern = patterns.find((p) => item.includes(p))
 
         if (pattern) {
@@ -224,6 +231,25 @@ export namespace Config {
       throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
     }
     return result
+  }
+
+  // Get Claude-compatible directories for command discovery
+  async function getClaudeDirectories(): Promise<string[]> {
+    const claudeDirs = await Array.fromAsync(
+      Filesystem.up({
+        targets: [".claude"],
+        start: Instance.directory,
+        stop: Instance.worktree,
+      }),
+    )
+
+    // Also include global ~/.claude/
+    const globalClaude = `${Global.Path.home}/.claude`
+    if (await exists(globalClaude)) {
+      claudeDirs.push(globalClaude)
+    }
+
+    return claudeDirs
   }
 
   const AGENT_GLOB = new Bun.Glob("{agent,agents}/**/*.md")

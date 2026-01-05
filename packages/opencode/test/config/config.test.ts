@@ -247,6 +247,96 @@ test("handles command configuration", async () => {
   })
 })
 
+test("loads commands from .claude/commands/ directory", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const claudeCommandsDir = path.join(dir, ".claude", "commands")
+      await fs.mkdir(claudeCommandsDir, { recursive: true })
+
+      await Bun.write(
+        path.join(claudeCommandsDir, "test-claude.md"),
+        `---
+description: Claude-compatible test command
+---
+This is a Claude-compatible command template`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.command?.["test-claude"]).toEqual({
+        template: "This is a Claude-compatible command template",
+        description: "Claude-compatible test command",
+      })
+    },
+  })
+})
+
+test("opencode commands take precedence over claude commands with same name", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Create .claude/commands/test.md
+      const claudeCommandsDir = path.join(dir, ".claude", "commands")
+      await fs.mkdir(claudeCommandsDir, { recursive: true })
+      await Bun.write(
+        path.join(claudeCommandsDir, "test.md"),
+        `---
+description: Claude version
+---
+Claude template`,
+      )
+
+      // Create .opencode/command/test.md (should take precedence)
+      const opencodeCommandsDir = path.join(dir, ".opencode", "command")
+      await fs.mkdir(opencodeCommandsDir, { recursive: true })
+      await Bun.write(
+        path.join(opencodeCommandsDir, "test.md"),
+        `---
+description: OpenCode version
+---
+OpenCode template`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.command?.["test"]?.description).toBe("OpenCode version")
+      expect(config.command?.["test"]?.template).toBe("OpenCode template")
+    },
+  })
+})
+
+test("loads nested commands from .claude/commands/ subdirectories", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const claudeCommandsDir = path.join(dir, ".claude", "commands", "frontend")
+      await fs.mkdir(claudeCommandsDir, { recursive: true })
+
+      await Bun.write(
+        path.join(claudeCommandsDir, "component.md"),
+        `---
+description: Create frontend component
+---
+Create a new component`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.command?.["frontend/component"]).toEqual({
+        template: "Create a new component",
+        description: "Create frontend component",
+      })
+    },
+  })
+})
+
 test("migrates autoshare to share field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

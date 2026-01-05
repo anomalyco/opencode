@@ -81,6 +81,13 @@ You can also define commands using markdown files. Place them in:
 
 - Global: `~/.config/opencode/command/`
 - Per-project: `.opencode/command/`
+- Global Claude-compatible: `~/.claude/commands/`
+- Per-project Claude-compatible: `.claude/commands/`
+
+:::note
+OpenCode native paths (`.opencode/command/`) take precedence over Claude-compatible paths (`.claude/commands/`).
+This allows seamless migration from Claude Code while still supporting OpenCode-specific overrides.
+:::
 
 ```markdown title="~/.config/opencode/command/test.md"
 ---
