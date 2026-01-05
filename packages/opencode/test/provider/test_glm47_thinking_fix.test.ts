@@ -110,17 +110,15 @@ After running the tests, I'll analyze the results.`
       throw new Error("Expected content to be an array, not a string")
     }
 
-    // Either the thinking block is cleaned OR the tool call is extracted
-    const reasoningText = result[0].content
-      .filter((part) => part.type === "reasoning")
-      .map((part) => part.text)
-      .join("")
-
-    // The behavior depends on implementation - either:
-    // 1. Extract pal_thinkdeep as a tool-call
-    // 2. Or keep it in reasoning (since it's a thinking tool, not execution)
-    // 3. Or clean it from reasoning
-    expect(true).toBe(true) // Placeholder - actual behavior depends on fix
+    const toolCalls = result[0].content.filter((part) => part.type === "tool-call")
+    expect(toolCalls.length).toBe(1)
+    expect(toolCalls[0].toolName).toBe("pal_thinkdeep")
+    expect(toolCalls[0].input).toEqual({
+      step: "Reviewing Phase 1.8 implementation",
+      step_number: "1",
+      total_steps: "4",
+      next_step_required: "true",
+    })
   })
 
   test("GLM-4.7 with multiple tool calls in reasoning should extract all", () => {
@@ -149,7 +147,6 @@ After running the tests, I'll analyze the results.`
 
     expect(result).toHaveLength(1)
 
-    // All three tool calls should be extracted
     if (typeof result[0].content === "string") {
       throw new Error("Expected content to be an array, not a string")
     }
@@ -195,8 +192,8 @@ After running the tests, I'll analyze the results.`
 
     const result = ProviderTransform.message(msgs, createModel())
 
-    // Should preserve existing structure
     expect(result).toHaveLength(1)
+    // Should preserve existing structure
     expect(result[0].content).toHaveLength(3)
 
     if (typeof result[0].content === "string") {
