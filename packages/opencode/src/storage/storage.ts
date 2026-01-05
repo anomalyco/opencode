@@ -162,7 +162,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       await fs.unlink(target).catch(() => {})
-    })
+    }, target)
   }
 
   export async function read<T>(key: string[]) {
@@ -172,7 +172,7 @@ export namespace Storage {
       using _ = await Lock.read(target)
       const result = await Bun.file(target).json()
       return result as T
-    })
+    }, target)
   }
 
   export async function update<T>(key: string[], fn: (draft: T) => void) {
@@ -184,7 +184,7 @@ export namespace Storage {
       fn(content)
       await Bun.write(target, JSON.stringify(content, null, 2))
       return content as T
-    })
+    }, target)
   }
 
   export async function write<T>(key: string[], content: T) {
@@ -193,18 +193,40 @@ export namespace Storage {
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
       await Bun.write(target, JSON.stringify(content, null, 2))
-    })
+    }, target)
   }
 
-  async function withErrorHandling<T>(body: () => Promise<T>) {
-    return body().catch((e) => {
-      if (!(e instanceof Error)) throw e
-      const errnoException = e as NodeJS.ErrnoException
-      if (errnoException.code === "ENOENT") {
-        throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
+  const RETRYABLE_ERRORS = new Set(["UV_UNKNOWN", "EBUSY", "EPERM", "EACCES", "EAGAIN"])
+  const MAX_RETRIES = 3
+  const RETRY_DELAY_MS = 100
+
+  async function withErrorHandling<T>(body: () => Promise<T>, target?: string) {
+    let lastError: Error | undefined
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await body()
+      } catch (e) {
+        if (!(e instanceof Error)) throw e
+        const errnoException = e as NodeJS.ErrnoException
+        if (errnoException.code === "ENOENT") {
+          throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
+        }
+        lastError = e
+        // Retry for transient errors (file locking, anti-virus, etc.)
+        if (RETRYABLE_ERRORS.has(errnoException.code ?? "") && attempt < MAX_RETRIES) {
+          log.warn("storage operation failed, retrying", {
+            attempt: attempt + 1,
+            maxRetries: MAX_RETRIES,
+            code: errnoException.code,
+            path: errnoException.path ?? target,
+          })
+          await Bun.sleep(RETRY_DELAY_MS * (attempt + 1))
+          continue
+        }
+        throw e
       }
-      throw e
-    })
+    }
+    throw lastError
   }
 
   const glob = new Bun.Glob("**/*")
