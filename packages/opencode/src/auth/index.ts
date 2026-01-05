@@ -1,36 +1,27 @@
 import path from "path"
 import { Global } from "../global"
 import fs from "fs/promises"
-import z from "zod"
+import { authSchema, type Auth as AuthType } from "@generated/validators/auth"
+import { oauthSchema, type Oauth as OauthType } from "@generated/validators/oauth"
+import { apiAuthSchema, type ApiAuth as ApiAuthType } from "@generated/validators/apiAuth"
+import { wellKnownAuthSchema, type WellKnownAuth as WellKnownAuthType } from "@generated/validators/wellKnownAuth"
 
 export namespace Auth {
-  export const Oauth = z
-    .object({
-      type: z.literal("oauth"),
-      refresh: z.string(),
-      access: z.string(),
-      expires: z.number(),
-      enterpriseUrl: z.string().optional(),
-    })
-    .meta({ ref: "OAuth" })
+  // Generated from JSON Schema - see schema/oauth.schema.json
+  export const Oauth = oauthSchema
+  export type Oauth = OauthType
 
-  export const Api = z
-    .object({
-      type: z.literal("api"),
-      key: z.string(),
-    })
-    .meta({ ref: "ApiAuth" })
+  // Generated from JSON Schema - see schema/apiAuth.schema.json
+  export const Api = apiAuthSchema
+  export type Api = ApiAuthType
 
-  export const WellKnown = z
-    .object({
-      type: z.literal("wellknown"),
-      key: z.string(),
-      token: z.string(),
-    })
-    .meta({ ref: "WellKnownAuth" })
+  // Generated from JSON Schema - see schema/wellKnownAuth.schema.json
+  export const WellKnown = wellKnownAuthSchema
+  export type WellKnown = WellKnownAuthType
 
-  export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
-  export type Info = z.infer<typeof Info>
+  // Generated from JSON Schema - see schema/auth.schema.json
+  export const Info = authSchema
+  export type Info = AuthType
 
   const filepath = path.join(Global.Path.data, "auth.json")
 
