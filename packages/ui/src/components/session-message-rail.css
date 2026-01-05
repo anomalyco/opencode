@@ -7,6 +7,9 @@
   position: absolute;
   left: 1.5rem;
   margin-top: 0.625rem;
+  top: 0;
+  bottom: 8rem;
+  overflow-y: auto;
 }
 
 [data-slot="session-message-rail-compact"] {
