@@ -66,6 +66,7 @@ import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
+import { useLanguage, type Language } from "@/context/language"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -105,6 +106,7 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
+  const language = useLanguage()  
   const initialDir = params.dir
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
@@ -112,6 +114,11 @@ export default function Layout(props: ParentProps) {
     system: "System",
     light: "Light",
     dark: "Dark",
+  }
+  const languages: Language[] = ["en", "zh"]
+  const languageLabel: Record<Language, string> = {
+    en: "English",
+    zh: "中文",
   }
 
   const [editor, setEditor] = createStore({
@@ -235,7 +242,7 @@ export default function Layout(props: ParentProps) {
     theme.setTheme(nextThemeId)
     const nextTheme = theme.themes()[nextThemeId]
     showToast({
-      title: "Theme switched",
+      title: language.t("theme.switched"),
       description: nextTheme?.name ?? nextThemeId,
     })
   }
@@ -248,7 +255,7 @@ export default function Layout(props: ParentProps) {
     const next = colorSchemeOrder[nextIndex]
     theme.setColorScheme(next)
     showToast({
-      title: "Color scheme",
+      title: language.t("theme.colorScheme"),
       description: colorSchemeLabel[next],
     })
   }
@@ -264,18 +271,18 @@ export default function Layout(props: ParentProps) {
         toastId = showToast({
           persistent: true,
           icon: "download",
-          title: "Update available",
-          description: `A new version of OpenCode (${version}) is now available to install.`,
+          title: language.t("notification.updateAvailable"),
+          description: language.t("notification.updateDesc", { version: version || "" }),
           actions: [
             {
-              label: "Install and restart",
+              label: language.t("notification.installAndRestart"),
               onClick: async () => {
                 await platform.update!()
                 await platform.restart!()
               },
             },
             {
-              label: "Not yet",
+              label: language.t("notification.notYet"),
               onClick: "dismiss",
             },
           ],
@@ -291,7 +298,7 @@ export default function Layout(props: ParentProps) {
   onMount(() => {
     const alerts = {
       "permission.asked": {
-        title: "Permission required",
+        title: language.t("notification.permissionRequired"),
         icon: "checklist" as const,
         description: (sessionTitle: string, projectName: string) =>
           `${sessionTitle} in ${projectName} needs permission`,
@@ -345,11 +352,11 @@ export default function Layout(props: ParentProps) {
         description,
         actions: [
           {
-            label: "Go to session",
+            label: language.t("notification.goToSession"),
             onClick: () => navigate(href),
           },
           {
-            label: "Dismiss",
+            label: language.t("notification.dismiss"),
             onClick: "dismiss",
           },
         ],
@@ -777,21 +784,21 @@ export default function Layout(props: ParentProps) {
     const commands: CommandOption[] = [
       {
         id: "sidebar.toggle",
-        title: "Toggle sidebar",
+        title: language.t("sidebar.toggle"),
         category: "View",
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
       },
       {
         id: "project.open",
-        title: "Open project",
+        title: language.t("project.open"),
         category: "Project",
         keybind: "mod+o",
         onSelect: () => chooseProject(),
       },
       {
         id: "provider.connect",
-        title: "Connect provider",
+        title: language.t("provider.connect"),
         category: "Provider",
         onSelect: () => connectProvider(),
       },
@@ -803,7 +810,7 @@ export default function Layout(props: ParentProps) {
       },
       {
         id: "session.previous",
-        title: "Previous session",
+        title: language.t("session.previous"),
         category: "Session",
         keybind: "alt+arrowup",
         onSelect: () => navigateSessionByOffset(-1),
@@ -817,7 +824,7 @@ export default function Layout(props: ParentProps) {
       },
       {
         id: "session.archive",
-        title: "Archive session",
+        title: language.t("session.archive"),
         category: "Session",
         keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,
@@ -828,7 +835,7 @@ export default function Layout(props: ParentProps) {
       },
       {
         id: "theme.cycle",
-        title: "Cycle theme",
+        title: language.t("theme.cycle"),
         category: "Theme",
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
@@ -866,6 +873,33 @@ export default function Layout(props: ParentProps) {
           theme.previewColorScheme(scheme)
           return () => theme.cancelPreview()
         },
+      })
+    }
+
+    // Add language switching commands
+    commands.push({
+      id: "language.cycle",
+      title: "Cycle language",
+      category: "Language",
+      keybind: "mod+shift+l",
+      onSelect: () => {
+        const currentIndex = languages.indexOf(language.language())
+        const nextIndex = (currentIndex + 1) % languages.length
+        const nextLang = languages[nextIndex]
+        language.setLanguage(nextLang)
+        showToast({
+          title: "Language switched",
+          description: languageLabel[nextLang],
+        })
+      },
+    })
+
+    for (const lang of languages) {
+      commands.push({
+        id: `language.set.${lang}`,
+        title: `Use language: ${languageLabel[lang]}`,
+        category: "Language",
+        onSelect: () => language.setLanguage(lang),
       })
     }
 
@@ -2076,7 +2110,7 @@ export default function Layout(props: ParentProps) {
                               layout.mobileSidebar.hide()
                             }}
                           >
-                            New session
+                            {language.t("session.new")}
                           </Button>
                         </div>
                         <div class="flex-1 min-h-0">

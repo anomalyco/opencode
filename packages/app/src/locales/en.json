@@ -1,0 +1,74 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "open": "Open",
+    "new": "New",
+    "settings": "Settings",
+    "search": "Search",
+    "clear": "Clear",
+    "confirm": "Confirm",
+    "retry": "Retry",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "done": "Done"
+  },
+  "sidebar": {
+    "toggle": "Toggle sidebar",
+    "openProject": "Open project",
+    "connectProvider": "Connect provider",
+    "shareFeedback": "Share feedback",
+    "newSession": "New session",
+    "archiveSession": "Archive session",
+    "editProject": "Edit project",
+    "closeProject": "Close project",
+    "gettingStarted": "Getting started",
+    "gettingStartedDesc1": "OpenCode includes free models so you can start immediately.",
+    "gettingStartedDesc2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc."
+  },
+  "session": {
+    "new": "New session",
+    "previous": "Previous session",
+    "next": "Next session",
+    "archive": "Archive session",
+    "noFiles": "No files changed",
+    "filesChanged": "{count} file{plural, s} changed"
+  },
+  "theme": {
+    "switched": "Theme switched",
+    "colorScheme": "Color scheme",
+    "cycle": "Cycle theme",
+    "cycleColorScheme": "Cycle color scheme"
+  },
+  "dialog": {
+    "selectDirectory": "Select directory",
+    "selectFile": "Select file",
+    "editProject": "Edit project",
+    "connectProvider": "Connect provider",
+    "selectServer": "Select server",
+    "selectModel": "Select model"
+  },
+  "notification": {
+    "permissionRequired": "Permission required",
+    "updateAvailable": "Update available",
+    "updateDesc": "A new version of OpenCode ({version}) is now available to install.",
+    "installAndRestart": "Install and restart",
+    "notYet": "Not yet",
+    "goToSession": "Go to session",
+    "dismiss": "Dismiss"
+  },
+  "server": {
+    "switch": "Switch server"
+  },
+  "provider": {
+    "connect": "Connect provider"
+  },
+  "project": {
+    "open": "Open project"
+  }
+}

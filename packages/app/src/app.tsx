@@ -12,6 +12,7 @@ import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
+import { LanguageProvider } from "@/context/language"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
 import { TerminalProvider } from "@/context/terminal"
@@ -78,6 +79,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
   return (
     <ServerProvider defaultUrl={defaultServerUrl()}>
       <ServerKey>
+        <LanguageProvider>
         <GlobalSDKProvider>
           <GlobalSyncProvider>
             <Router
@@ -121,6 +123,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
             </Router>
           </GlobalSyncProvider>
         </GlobalSDKProvider>
+        </LanguageProvider>
       </ServerKey>
     </ServerProvider>
   )
