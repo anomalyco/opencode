@@ -22,6 +22,7 @@ import mercury from "./theme/mercury.json" with { type: "json" }
 import monokai from "./theme/monokai.json" with { type: "json" }
 import nightowl from "./theme/nightowl.json" with { type: "json" }
 import nord from "./theme/nord.json" with { type: "json" }
+import osakaJade from "./theme/osaka-jade.json" with { type: "json" }
 import onedark from "./theme/one-dark.json" with { type: "json" }
 import opencode from "./theme/opencode.json" with { type: "json" }
 import orng from "./theme/orng.json" with { type: "json" }
@@ -39,6 +40,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { useSDK } from "./sdk"
 
 type ThemeColors = {
   primary: RGBA
@@ -155,6 +157,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   nightowl,
   nord,
   ["one-dark"]: onedark,
+  ["osaka-jade"]: osakaJade,
   opencode,
   orng,
   ["lucent-orng"]: lucentOrng,
@@ -284,6 +287,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     createEffect(() => {
+      const theme = sync.data.config.theme
+      console.log("theme", theme)
+      if (theme) setStore("active", theme)
+    })
+
+    createEffect(() => {
       getCustomThemes()
         .then((custom) => {
           setStore(
@@ -302,32 +311,42 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     })
 
-    const renderer = useRenderer()
-    renderer
-      .getPalette({
-        size: 16,
-      })
-      .then((colors) => {
-        if (!colors.palette[0]) {
-          if (store.active === "system") {
-            setStore(
-              produce((draft) => {
-                draft.active = "opencode"
-                draft.ready = true
-              }),
-            )
-          }
-          return
-        }
-        setStore(
-          produce((draft) => {
-            draft.themes.system = generateSystem(colors, store.mode)
+    function resolveSystemTheme() {
+      console.log("resolved system theme")
+      renderer
+        .getPalette({
+          size: 16,
+        })
+        .then((colors) => {
+          if (!colors.palette[0]) {
             if (store.active === "system") {
-              draft.ready = true
+              setStore(
+                produce((draft) => {
+                  draft.active = "opencode"
+                  draft.ready = true
+                }),
+              )
             }
-          }),
-        )
-      })
+            return
+          }
+          setStore(
+            produce((draft) => {
+              draft.themes.system = generateSystem(colors, store.mode)
+              if (store.active === "system") {
+                draft.ready = true
+              }
+            }),
+          )
+        })
+    }
+
+    const renderer = useRenderer()
+    resolveSystemTheme()
+
+    const sdk = useSDK()
+    sdk.event.on("server.instance.disposed", () => {
+      resolveSystemTheme()
+    })
 
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
@@ -399,8 +418,20 @@ async function getCustomThemes() {
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const palette = colors.palette.filter((x) => x !== null).map((x) => RGBA.fromHex(x))
   const isDark = mode == "dark"
+
+  const col = (i: number) => {
+    const value = colors.palette[i]
+    if (value) return RGBA.fromHex(value)
+    return ansiToRgba(i)
+  }
+
+  const tint = (base: RGBA, overlay: RGBA, alpha: number) => {
+    const r = base.r + (overlay.r - base.r) * alpha
+    const g = base.g + (overlay.g - base.g) * alpha
+    const b = base.b + (overlay.b - base.b) * alpha
+    return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
+  }
 
   // Generate gray scale based on terminal background
   const grays = generateGrayScale(bg, isDark)
@@ -408,15 +439,23 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
 
   // ANSI color references
   const ansiColors = {
-    black: palette[0],
-    red: palette[1],
-    green: palette[2],
-    yellow: palette[3],
-    blue: palette[4],
-    magenta: palette[5],
-    cyan: palette[6],
-    white: palette[7],
+    black: col(0),
+    red: col(1),
+    green: col(2),
+    yellow: col(3),
+    blue: col(4),
+    magenta: col(5),
+    cyan: col(6),
+    white: col(7),
+    redBright: col(9),
+    greenBright: col(10),
   }
+
+  const diffAlpha = isDark ? 0.22 : 0.14
+  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
+  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
+  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
+  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
 
   return {
     theme: {
@@ -452,14 +491,14 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       diffRemoved: ansiColors.red,
       diffContext: grays[7],
       diffHunkHeader: grays[7],
-      diffHighlightAdded: ansiColors.green,
-      diffHighlightRemoved: ansiColors.red,
-      diffAddedBg: grays[2],
-      diffRemovedBg: grays[2],
+      diffHighlightAdded: ansiColors.greenBright,
+      diffHighlightRemoved: ansiColors.redBright,
+      diffAddedBg,
+      diffRemovedBg,
       diffContextBg: grays[1],
       diffLineNumber: grays[6],
-      diffAddedLineNumberBg: grays[3],
-      diffRemovedLineNumberBg: grays[3],
+      diffAddedLineNumberBg,
+      diffRemovedLineNumberBg,
 
       // Markdown colors
       markdownText: fg,

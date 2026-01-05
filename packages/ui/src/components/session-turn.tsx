@@ -2,14 +2,14 @@ import {
   AssistantMessage,
   Message as MessageType,
   Part as PartType,
-  type Permission,
+  type PermissionRequest,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { checksum } from "@opencode-ai/util/encode"
+
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -132,7 +132,7 @@ export function SessionTurn(
   const emptyMessages: MessageType[] = []
   const emptyParts: PartType[] = []
   const emptyAssistant: AssistantMessage[] = []
-  const emptyPermissions: Permission[] = []
+  const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const idle = { type: "idle" as const }
 
@@ -235,16 +235,18 @@ export function SessionTurn(
     if (props.stepsExpanded) return emptyPermissionParts
 
     const next = nextPermission()
-    if (!next) return emptyPermissionParts
+    if (!next || !next.tool) return emptyPermissionParts
 
-    for (const message of assistantMessages()) {
-      const parts = data.store.part[message.id] ?? emptyParts
-      for (const part of parts) {
-        if (part?.type !== "tool") continue
-        const tool = part as ToolPart
-        if (tool.callID === next.callID) return [{ part: tool, message }]
-      }
+    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    if (!message) return emptyPermissionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
     }
+
     return emptyPermissionParts
   })
 
@@ -576,12 +578,10 @@ export function SessionTurn(
                                     before={{
                                       name: diff.file!,
                                       contents: diff.before!,
-                                      cacheKey: checksum(diff.before!),
                                     }}
                                     after={{
                                       name: diff.file!,
                                       contents: diff.after!,
-                                      cacheKey: checksum(diff.after!),
                                     }}
                                   />
                                 </Accordion.Content>
