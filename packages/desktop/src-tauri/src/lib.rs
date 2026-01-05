@@ -189,6 +189,16 @@ pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // When a second instance is launched, focus the existing window instead
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = window.unminimize();
+                }
+            }
+        }))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -222,6 +232,10 @@ pub fn run() {
                     let timestamp = Instant::now();
                     loop {
                         if timestamp.elapsed() > Duration::from_secs(7) {
+                            // Kill the sidecar before showing dialog to prevent orphaned processes
+                            let _ = child.kill();
+                            println!("Killed sidecar due to startup timeout");
+
                             let res = app.dialog()
                               .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
                               .title("Startup Failed")
