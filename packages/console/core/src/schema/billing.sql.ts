@@ -1,4 +1,4 @@
-import { bigint, boolean, int, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
+import { bigint, boolean, index, int, mysqlTable, uniqueIndex, varchar } from "drizzle-orm/mysql-core"
 import { timestamps, ulid, utc, workspaceColumns } from "../drizzle/types"
 import { workspaceIndexes } from "./workspace.sql"
 
@@ -55,5 +55,5 @@ export const UsageTable = mysqlTable(
     cost: bigint("cost", { mode: "number" }).notNull(),
     keyID: ulid("key_id"),
   },
-  (table) => [...workspaceIndexes(table)],
+  (table) => [...workspaceIndexes(table), index("usage_time_created").on(table.workspaceID, table.timeCreated)],
 )
