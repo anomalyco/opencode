@@ -1,26 +1,12 @@
 import { Title } from "@solidjs/meta"
-import { createAsync, query } from "@solidjs/router"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { A, createAsync, query } from "@solidjs/router"
+import { createMemo, For, Show } from "solid-js"
 import { Database, desc } from "@opencode-ai/console-core/drizzle/index.js"
 import { BenchmarkTable } from "@opencode-ai/console-core/schema/benchmark.sql.js"
 
-interface TaskSource {
-  repo: string
-  from: string
-  to: string
-}
-
-interface Task {
-  averageScore: number
-  task: {
-    id: string
-    source: TaskSource
-  }
-}
-
 interface BenchmarkResult {
   averageScore: number
-  tasks: Task[]
+  tasks: { averageScore: number; task: { id: string } }[]
 }
 
 async function getBenchmarks() {
@@ -31,17 +17,15 @@ async function getBenchmarks() {
   return rows.map((row) => {
     const parsed = JSON.parse(row.result) as BenchmarkResult
     const taskScores: Record<string, number> = {}
-    const taskData: Record<string, Task> = {}
     for (const t of parsed.tasks) {
       taskScores[t.task.id] = t.averageScore
-      taskData[t.task.id] = t
     }
     return {
+      id: row.id,
       agent: row.agent,
       model: row.model,
       averageScore: parsed.averageScore,
       taskScores,
-      taskData,
     }
   })
 }
@@ -50,7 +34,6 @@ const queryBenchmarks = query(getBenchmarks, "benchmarks.list")
 
 export default function Bench() {
   const benchmarks = createAsync(() => queryBenchmarks())
-  const [modalTask, setModalTask] = createSignal<Task | null>(null)
 
   const taskIds = createMemo(() => {
     const ids = new Set<string>()
@@ -63,34 +46,32 @@ export default function Bench() {
   })
 
   return (
-    <main data-page="bench">
+    <main data-page="bench" style={{ padding: "2rem" }}>
       <Title>Benchmark</Title>
-      <table>
+      <h1 style={{ "margin-bottom": "1.5rem" }}>Benchmarks</h1>
+      <table style={{ "border-collapse": "collapse", width: "100%" }}>
         <thead>
           <tr>
-            <th>Agent</th>
-            <th>Model</th>
-            <th>Average Score</th>
-            <For each={taskIds()}>{(id) => <th>{id}</th>}</For>
+            <th style={{ "text-align": "left", padding: "0.75rem" }}>Agent</th>
+            <th style={{ "text-align": "left", padding: "0.75rem" }}>Model</th>
+            <th style={{ "text-align": "left", padding: "0.75rem" }}>Score</th>
+            <For each={taskIds()}>{(id) => <th style={{ "text-align": "left", padding: "0.75rem" }}>{id}</th>}</For>
           </tr>
         </thead>
         <tbody>
           <For each={benchmarks()}>
             {(row) => (
               <tr>
-                <td>{row.agent}</td>
-                <td>{row.model}</td>
-                <td>{row.averageScore.toFixed(3)}</td>
+                <td style={{ padding: "0.75rem" }}>{row.agent}</td>
+                <td style={{ padding: "0.75rem" }}>{row.model}</td>
+                <td style={{ padding: "0.75rem" }}>{row.averageScore.toFixed(3)}</td>
                 <For each={taskIds()}>
                   {(id) => (
-                    <td>
-                      <Show when={row.taskData[id]} fallback={row.taskScores[id]?.toFixed(3) ?? ""}>
-                        <span
-                          style={{ cursor: "pointer", "text-decoration": "underline" }}
-                          onClick={() => setModalTask(row.taskData[id])}
-                        >
+                    <td style={{ padding: "0.75rem" }}>
+                      <Show when={row.taskScores[id] !== undefined} fallback="">
+                        <A href={`/bench/${row.id}:${id}`} style={{ color: "#0066cc" }}>
                           {row.taskScores[id]?.toFixed(3)}
-                        </span>
+                        </A>
                       </Show>
                     </td>
                   )}
@@ -100,72 +81,6 @@ export default function Bench() {
           </For>
         </tbody>
       </table>
-
-      <Show when={modalTask()}>
-        <div
-          data-component="modal-overlay"
-          style={{
-            position: "fixed",
-            inset: "0",
-            background: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "center",
-            "z-index": "1000",
-          }}
-          onClick={() => setModalTask(null)}
-        >
-          <div
-            data-component="modal"
-            style={{
-              background: "var(--color-background, #fff)",
-              padding: "1rem",
-              "border-radius": "8px",
-              "max-width": "80vw",
-              "max-height": "80vh",
-              overflow: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ "margin-bottom": "1rem" }}>
-              <div>
-                <strong>Repo: </strong>
-                <a
-                  href={`https://github.com/${modalTask()!.task.source.repo}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "#0066cc" }}
-                >
-                  {modalTask()!.task.source.repo}
-                </a>
-              </div>
-              <div>
-                <strong>From: </strong>
-                <a
-                  href={`https://github.com/${modalTask()!.task.source.repo}/commit/${modalTask()!.task.source.from}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "#0066cc" }}
-                >
-                  {modalTask()!.task.source.from.slice(0, 7)}
-                </a>
-              </div>
-              <div>
-                <strong>To: </strong>
-                <a
-                  href={`https://github.com/${modalTask()!.task.source.repo}/commit/${modalTask()!.task.source.to}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: "#0066cc" }}
-                >
-                  {modalTask()!.task.source.to.slice(0, 7)}
-                </a>
-              </div>
-            </div>
-            <pre style={{ color: "#000" }}>{JSON.stringify(modalTask(), null, 2)}</pre>
-          </div>
-        </div>
-      </Show>
     </main>
   )
 }

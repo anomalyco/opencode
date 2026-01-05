@@ -124,6 +124,8 @@ export async function handler(
         res.status !== 200 &&
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
         res.status !== 404 &&
+        // ie. cannot change codex model providers mid-session
+        !modelInfo.stickyProvider &&
         modelInfo.fallbackProvider &&
         providerInfo.id !== modelInfo.fallbackProvider
       ) {
@@ -170,8 +172,8 @@ export async function handler(
       const tokensInfo = providerInfo.normalizeUsage(json.usage)
       await trialLimiter?.track(tokensInfo)
       await rateLimiter?.track()
-      await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
-      await reload(authInfo)
+      const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
+      await reload(authInfo, costInfo)
       return new Response(body, {
         status: resStatus,
         statusText: res.statusText,
@@ -204,8 +206,8 @@ export async function handler(
                 if (usage) {
                   const tokensInfo = providerInfo.normalizeUsage(usage)
                   await trialLimiter?.track(tokensInfo)
-                  await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
-                  await reload(authInfo)
+                  const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
+                  await reload(authInfo, costInfo)
                 }
                 c.close()
                 return
@@ -390,6 +392,7 @@ export async function handler(
             monthlyUsage: BillingTable.monthlyUsage,
             timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
             reloadTrigger: BillingTable.reloadTrigger,
+            timeReloadLockedTill: BillingTable.timeReloadLockedTill,
           },
           user: {
             id: UserTable.id,
@@ -606,12 +609,20 @@ export async function handler(
         .set({ timeUsed: sql`now()` })
         .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
     )
+
+    return { costInMicroCents: cost }
   }
 
-  async function reload(authInfo: AuthInfo) {
+  async function reload(authInfo: AuthInfo, costInfo: Awaited<ReturnType<typeof trackUsage>>) {
     if (!authInfo) return
     if (authInfo.isFree) return
     if (authInfo.provider?.credentials) return
+
+    if (!costInfo) return
+
+    const reloadTrigger = centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100)
+    if (authInfo.billing.balance - costInfo.costInMicroCents >= reloadTrigger) return
+    if (authInfo.billing.timeReloadLockedTill && authInfo.billing.timeReloadLockedTill > new Date()) return
 
     const lock = await Database.use((tx) =>
       tx
@@ -623,10 +634,7 @@ export async function handler(
           and(
             eq(BillingTable.workspaceID, authInfo.workspaceID),
             eq(BillingTable.reload, true),
-            lt(
-              BillingTable.balance,
-              centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100),
-            ),
+            lt(BillingTable.balance, reloadTrigger),
             or(isNull(BillingTable.timeReloadLockedTill), lt(BillingTable.timeReloadLockedTill, sql`now()`)),
           ),
         ),
