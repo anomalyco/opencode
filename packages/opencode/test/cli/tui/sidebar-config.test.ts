@@ -1,28 +1,29 @@
 import { test, expect, describe } from "bun:test"
 
 // Tests for TUI sidebar config behavior
-// The sidebar uses: kv.get("sidebar", sync.data.config.tui?.sidebar ?? "auto")
-// Priority: KV store > config.tui.sidebar > "auto"
+// The sidebar uses: sync.data.config.tui?.sidebar ?? kv.get("sidebar", "auto")
+// Priority: config.tui.sidebar > KV store > "auto"
+// This allows per-workspace config to override global KV preferences
 
 describe("TUI Sidebar Config Behavior", () => {
-  test("config provides initial default before user interaction", () => {
-    // User opens OpenCode with tui.sidebar = "hide" and has never toggled sidebar
-    const kvValue = undefined
+  test("config takes precedence over KV store for per-workspace settings", () => {
+    // Workspace config set to "hide" overrides global KV preference of "show"
     const configValue = "hide"
+    const kvValue = "show"
     const defaultValue = "auto"
     
-    const result = kvValue ?? configValue ?? defaultValue
+    const result = configValue ?? kvValue ?? defaultValue
     
     expect(result).toBe("hide")
   })
 
-  test("KV store takes precedence over config after user toggles", () => {
-    // User toggled sidebar to "show" even though config says "hide"
+  test("KV store is used when no workspace config is set", () => {
+    // No workspace config, use global KV preference
+    const configValue = undefined
     const kvValue = "show"
-    const configValue = "hide"
     const defaultValue = "auto"
     
-    const result = kvValue ?? configValue ?? defaultValue
+    const result = configValue ?? kvValue ?? defaultValue
     
     expect(result).toBe("show")
   })
