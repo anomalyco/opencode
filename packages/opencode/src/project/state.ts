@@ -10,22 +10,31 @@ export namespace State {
   const recordsByKey = new Map<string, Map<any, Entry>>()
 
   export function create<S>(root: () => string, init: () => S, dispose?: (state: Awaited<S>) => Promise<void>) {
-    return () => {
+    const initFn = init
+    const getter = () => {
       const key = root()
       let entries = recordsByKey.get(key)
       if (!entries) {
         entries = new Map<string, Entry>()
         recordsByKey.set(key, entries)
       }
-      const exists = entries.get(init)
+      const exists = entries.get(initFn)
       if (exists) return exists.state as S
-      const state = init()
-      entries.set(init, {
+      const state = initFn()
+      entries.set(initFn, {
         state,
         dispose,
       })
       return state
     }
+    getter.reset = () => {
+      const key = root()
+      const entries = recordsByKey.get(key)
+      if (entries) {
+        entries.delete(initFn)
+      }
+    }
+    return getter
   }
 
   export async function dispose(key: string) {
@@ -58,7 +67,7 @@ export namespace State {
       tasks.push(task)
     }
     entries.clear()
-    await Promise.all(tasks)
+    await Promise.allSettled(tasks)
     disposalFinished = true
     log.info("state disposal completed", { key })
   }

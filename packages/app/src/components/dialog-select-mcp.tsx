@@ -1,10 +1,12 @@
 import { Component, createMemo, createSignal, Show, createEffect } from "solid-js"
+import { produce } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Button } from "@opencode-ai/ui/button"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 
 type ToolInfo = {
   name: string
@@ -29,18 +31,7 @@ export const DialogSelectMcp: Component = () => {
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toolItems = createMemo(() => {
-    const toolList = tools()
-    const cfg = sync.data.config
-
-    return toolList.map((tool) => {
-      const isEnabled = cfg?.tools?.[tool.id] !== false
-      return {
-        ...tool,
-        enabled: isEnabled,
-      }
-    })
-  })
+  const toolItems = createMemo(() => tools())
 
   createEffect(() => {
     const mcp = selectedMcp()
@@ -94,6 +85,7 @@ export const DialogSelectMcp: Component = () => {
     }
   })
 
+
   const toggle = async (name: string) => {
     if (loading() !== null) return
     setLoading(name)
@@ -109,27 +101,53 @@ export const DialogSelectMcp: Component = () => {
   }
 
   const toggleTool = async (mcpName: string, toolName: string) => {
-    if (toolLoading() !== null) return
+    if (toolLoading() !== null) {
+      return
+    }
 
     const tool = tools().find((t) => t.name === toolName)
-    if (!tool) return
+    if (!tool) {
+      return
+    }
+
+    const currentConfig = sync.data.config
+    const currentValue = currentConfig?.tools?.[tool.id]
+    const newValue = currentValue === false ? true : false
 
     setToolLoading(tool.id)
+
+    sync.set(
+      "config",
+      produce((draft) => {
+        if (!draft.tools) {
+          draft.tools = {}
+        }
+        draft.tools[tool.id] = newValue
+      }),
+    )
+
     try {
-      const response = await fetch(
-        `${sdk.url}/mcp/${encodeURIComponent(mcpName)}/tools/${encodeURIComponent(toolName)}/toggle`,
-        {
-          method: "POST",
-        },
-      )
+      const response = await fetch(`${sdk.url}/mcp/${encodeURIComponent(mcpName)}/tools/${encodeURIComponent(toolName)}/toggle`, {
+        method: "POST",
+      })
+
       if (!response.ok) {
         throw new Error(`Failed to toggle tool: ${response.statusText}`)
       }
-      const config = await sdk.client.config.get()
-      if (config.data) {
-        sync.set("config", config.data)
-      }
     } catch (error) {
+      sync.set(
+        "config",
+        produce((draft) => {
+          if (!draft.tools) {
+            draft.tools = {}
+          }
+          if (currentValue === undefined) {
+            delete draft.tools[tool.id]
+          } else {
+            draft.tools[tool.id] = currentValue
+          }
+        }),
+      )
       console.error("Failed to toggle tool:", error)
     } finally {
       setToolLoading(null)
@@ -144,7 +162,7 @@ export const DialogSelectMcp: Component = () => {
       title={isDrilledDown() ? `Tools: ${selectedMcp()}` : "MCPs"}
       description={
         isDrilledDown()
-          ? `${toolItems().filter((t) => t.enabled).length} of ${toolItems().length} tools enabled`
+          ? `${toolItems().filter((t) => sync.data.config?.tools?.[t.id] !== false).length} of ${toolItems().length} tools enabled`
           : `${enabledCount()} of ${totalCount()} enabled`
       }
     >
@@ -218,7 +236,7 @@ export const DialogSelectMcp: Component = () => {
               setSelectedMcp(null)
               setTools([])
             }}
-            class="self-start"
+            class="self-start ml-3"
           >
             ← Back
           </Button>
@@ -243,28 +261,28 @@ export const DialogSelectMcp: Component = () => {
             >
               {(tool) => {
                 const loading = () => toolLoading() === tool.id
+                const enabled = () => sync.data.config?.tools?.[tool.id] !== false
                 return (
                   <div class="w-full flex items-center justify-between gap-x-3">
                     <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-                      <div class="flex items-center gap-2">
-                        <span class="truncate">{tool.name}</span>
-                        <Show when={tool.enabled}>
-                          <span class="text-11-regular text-text-weaker">enabled</span>
-                        </Show>
-                        <Show when={!tool.enabled}>
-                          <span class="text-11-regular text-text-weaker">disabled</span>
-                        </Show>
-                        <Show when={loading()}>
-                          <span class="text-11-regular text-text-weak">...</span>
-                        </Show>
-                      </div>
-                      <Show when={tool.description}>
-                        <span class="text-11-regular text-text-weaker truncate">{tool.description}</span>
-                      </Show>
+                      <Tooltip value={tool.description} placement="top">
+                        <div class="flex items-center gap-2">
+                          <span class="truncate">{tool.name}</span>
+                          <Show when={enabled()}>
+                            <span class="text-11-regular text-text-weaker">enabled</span>
+                          </Show>
+                          <Show when={!enabled()}>
+                            <span class="text-11-regular text-text-weaker">disabled</span>
+                          </Show>
+                          <Show when={loading()}>
+                            <span class="text-11-regular text-text-weak">...</span>
+                          </Show>
+                        </div>
+                      </Tooltip>
                     </div>
                     <div onClick={(e) => e.stopPropagation()}>
                       <Switch
-                        checked={tool.enabled}
+                        checked={enabled()}
                         disabled={loading()}
                         onChange={() => {
                           if (selectedMcp()) {

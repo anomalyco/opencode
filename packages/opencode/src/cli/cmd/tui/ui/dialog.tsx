@@ -1,5 +1,5 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
+import { batch, createContext, createEffect, createMemo, onCleanup, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
@@ -181,7 +181,7 @@ export function DialogProvider(props: ParentProps) {
             /* @ts-expect-error */
             renderer.writeOut(finalOsc52)
             await Clipboard.copy(text)
-              .then(() => toast.show({ message: "DEBUG YOU DINGUS: Copied to clipboard", variant: "info" }))
+              .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
               .catch(toast.error)
             renderer.clearSelection()
           }
@@ -207,5 +207,12 @@ export function useDialog() {
 
 export function useDialogEscape(handler: () => boolean) {
   const dialog = useDialog()
-  dialog.setStackHandleEscape(handler)
+  const handlerFn = createMemo(() => handler)
+  createEffect(() => {
+    handlerFn()
+    dialog.setStackHandleEscape(() => handlerFn()())
+    onCleanup(() => {
+      dialog.setStackHandleEscape(undefined)
+    })
+  })
 }

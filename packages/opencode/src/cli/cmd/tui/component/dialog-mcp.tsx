@@ -82,12 +82,14 @@ export function DialogMcp() {
     const mcp = selectedMcp()
     if (!mcp) {
       setTools([])
+      setToolsLoading(false)
       return
     }
 
     const status = sync.data.mcp[mcp]
     if (status?.status !== "connected") {
       setTools([])
+      setToolsLoading(false)
       return
     }
 

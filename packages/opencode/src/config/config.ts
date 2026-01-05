@@ -1148,22 +1148,17 @@ export namespace Config {
   }
 
   export async function patch(edit: { path: (string | number)[]; value: any }) {
-    let configFile: string | undefined
-    let configPath: string | undefined
+    const opencodeDir = path.join(Instance.worktree, ".opencode")
+    const configPath = path.join(opencodeDir, "opencode.jsonc")
 
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      if (found.length > 0) {
-        configPath = found[found.length - 1]
-        break
-      }
-    }
-
-    if (!configPath) {
-      configPath = path.join(Instance.directory, "opencode.jsonc")
-      configFile = "{}"
-    } else {
+    let configFile: string
+    if (await Bun.file(configPath).exists()) {
       configFile = await Bun.file(configPath).text()
+    } else {
+      if (!existsSync(opencodeDir)) {
+        await fs.mkdir(opencodeDir, { recursive: true })
+      }
+      configFile = "{\n  \"$schema\": \"https://opencode.ai/config.json\"\n}"
     }
 
     const formattingOptions: FormattingOptions = {
@@ -1176,7 +1171,14 @@ export namespace Config {
     const updatedContent = applyEdits(configFile, edits)
 
     await Bun.write(configPath, updatedContent)
-    await Instance.dispose()
+
+    const isToolOnlyChange = edit.path.length > 0 && edit.path[0] === "tools"
+
+    if (!isToolOnlyChange) {
+      await Instance.dispose()
+    } else {
+      ;(state as any).reset?.()
+    }
   }
 
   export async function directories() {
