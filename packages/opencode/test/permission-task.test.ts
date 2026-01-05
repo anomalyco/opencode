@@ -148,42 +148,42 @@ describe("PermissionNext.evaluate for permission.task", () => {
     }))
 
   test("returns ask when no match (default)", () => {
-    expect(PermissionNext.evaluate("task", "code-reviewer", [])).toBe("ask")
+    expect(PermissionNext.evaluate("task", "code-reviewer", []).action).toBe("ask")
   })
 
   test("returns deny for explicit deny", () => {
     const ruleset = createRuleset({ "code-reviewer": "deny" })
-    expect(PermissionNext.evaluate("task", "code-reviewer", ruleset)).toBe("deny")
+    expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
   })
 
   test("returns allow for explicit allow", () => {
     const ruleset = createRuleset({ "code-reviewer": "allow" })
-    expect(PermissionNext.evaluate("task", "code-reviewer", ruleset)).toBe("allow")
+    expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("allow")
   })
 
   test("returns ask for explicit ask", () => {
     const ruleset = createRuleset({ "code-reviewer": "ask" })
-    expect(PermissionNext.evaluate("task", "code-reviewer", ruleset)).toBe("ask")
+    expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("ask")
   })
 
   test("matches wildcard patterns with deny", () => {
     const ruleset = createRuleset({ "orchestrator-*": "deny" })
-    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset)).toBe("deny")
-    expect(PermissionNext.evaluate("task", "orchestrator-slow", ruleset)).toBe("deny")
-    expect(PermissionNext.evaluate("task", "general", ruleset)).toBe("ask")
+    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset).action).toBe("deny")
+    expect(PermissionNext.evaluate("task", "orchestrator-slow", ruleset).action).toBe("deny")
+    expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("ask")
   })
 
   test("matches wildcard patterns with allow", () => {
     const ruleset = createRuleset({ "orchestrator-*": "allow" })
-    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset)).toBe("allow")
-    expect(PermissionNext.evaluate("task", "orchestrator-slow", ruleset)).toBe("allow")
+    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset).action).toBe("allow")
+    expect(PermissionNext.evaluate("task", "orchestrator-slow", ruleset).action).toBe("allow")
   })
 
   test("matches wildcard patterns with ask", () => {
     const ruleset = createRuleset({ "orchestrator-*": "ask" })
-    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset)).toBe("ask")
+    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset).action).toBe("ask")
     const globalRuleset = createRuleset({ "*": "ask" })
-    expect(PermissionNext.evaluate("task", "code-reviewer", globalRuleset)).toBe("ask")
+    expect(PermissionNext.evaluate("task", "code-reviewer", globalRuleset).action).toBe("ask")
   })
 
   test("later rules take precedence (last match wins)", () => {
@@ -191,13 +191,69 @@ describe("PermissionNext.evaluate for permission.task", () => {
       "orchestrator-*": "deny",
       "orchestrator-fast": "allow",
     })
-    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset)).toBe("allow")
-    expect(PermissionNext.evaluate("task", "orchestrator-slow", ruleset)).toBe("deny")
+    expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset).action).toBe("allow")
+    expect(PermissionNext.evaluate("task", "orchestrator-slow", ruleset).action).toBe("deny")
   })
 
   test("matches global wildcard", () => {
-    expect(PermissionNext.evaluate("task", "any-agent", createRuleset({ "*": "allow" }))).toBe("allow")
-    expect(PermissionNext.evaluate("task", "any-agent", createRuleset({ "*": "deny" }))).toBe("deny")
-    expect(PermissionNext.evaluate("task", "any-agent", createRuleset({ "*": "ask" }))).toBe("ask")
+    expect(PermissionNext.evaluate("task", "any-agent", createRuleset({ "*": "allow" })).action).toBe("allow")
+    expect(PermissionNext.evaluate("task", "any-agent", createRuleset({ "*": "deny" })).action).toBe("deny")
+    expect(PermissionNext.evaluate("task", "any-agent", createRuleset({ "*": "ask" })).action).toBe("ask")
+  })
+})
+
+describe("PermissionNext.disabled for task tool", () => {
+  const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): PermissionNext.Ruleset =>
+    Object.entries(rules).map(([pattern, action]) => ({
+      permission: "task",
+      pattern,
+      action,
+    }))
+
+  test("task tool is enabled when specific subagent patterns are allowed with global deny", () => {
+    const ruleset = createRuleset({
+      "orchestrator-*": "allow",
+      "*": "deny",
+    })
+    const disabled = PermissionNext.disabled(["task", "bash", "read"], ruleset)
+    expect(disabled.has("task")).toBe(false)
+  })
+
+  test("task tool is enabled when specific subagent patterns have ask permission", () => {
+    const ruleset = createRuleset({
+      "orchestrator-*": "ask",
+      "*": "deny",
+    })
+    const disabled = PermissionNext.disabled(["task"], ruleset)
+    expect(disabled.has("task")).toBe(false)
+  })
+
+  test("task tool is disabled when all rules are deny", () => {
+    const ruleset = createRuleset({ "*": "deny" })
+    const disabled = PermissionNext.disabled(["task"], ruleset)
+    expect(disabled.has("task")).toBe(true)
+  })
+
+  test("task tool is disabled when all explicit rules are deny", () => {
+    const ruleset = createRuleset({
+      "orchestrator-*": "deny",
+      general: "deny",
+    })
+    const disabled = PermissionNext.disabled(["task"], ruleset)
+    expect(disabled.has("task")).toBe(true)
+  })
+
+  test("task tool is enabled when no task rules exist (default ask)", () => {
+    const disabled = PermissionNext.disabled(["task"], [])
+    expect(disabled.has("task")).toBe(false)
+  })
+
+  test("task tool is enabled with mixed allow and deny rules", () => {
+    const ruleset = createRuleset({
+      "*": "deny",
+      "orchestrator-coder": "allow",
+    })
+    const disabled = PermissionNext.disabled(["task"], ruleset)
+    expect(disabled.has("task")).toBe(false)
   })
 })

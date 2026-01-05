@@ -15,7 +15,7 @@ import { PermissionNext } from "@/permission/next"
 export { DESCRIPTION as TASK_DESCRIPTION }
 
 export function filterSubagents(agents: Agent.Info[], ruleset: PermissionNext.Ruleset) {
-  return agents.filter((a) => PermissionNext.evaluate("task", a.name, ruleset) !== "deny")
+  return agents.filter((a) => PermissionNext.evaluate("task", a.name, ruleset).action !== "deny")
 }
 
 export const TaskTool = Tool.define("task", async () => {

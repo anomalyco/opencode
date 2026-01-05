@@ -805,15 +805,21 @@ export namespace SessionPrompt {
     if (tools.task) {
       const all = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
       const filtered = filterSubagents(all, input.agent.permission)
-      const description = TASK_DESCRIPTION.replace(
-        "{agents}",
-        filtered
-          .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
-          .join("\n"),
-      )
-      tools.task = {
-        ...tools.task,
-        description,
+
+      // If no subagents are permitted, remove the task tool entirely
+      if (filtered.length === 0) {
+        delete tools.task
+      } else {
+        const description = TASK_DESCRIPTION.replace(
+          "{agents}",
+          filtered
+            .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+            .join("\n"),
+        )
+        tools.task = {
+          ...tools.task,
+          description,
+        }
       }
     }
 
@@ -1128,7 +1134,7 @@ export namespace SessionPrompt {
         if (part.type === "agent") {
           // Check if this agent would be denied by task permission
           const perm = PermissionNext.evaluate("task", part.name, agent.permission)
-          const hint = perm === "deny" ? " . Invoked by user; guaranteed to exist." : ""
+          const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
             {
               id: Identifier.ascending("part"),
