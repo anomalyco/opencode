@@ -190,6 +190,38 @@
   }
 }
 
+[data-slot="generic-tool-section"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+
+  &:not(:last-child) {
+    margin-bottom: 12px;
+  }
+
+  [data-slot="generic-tool-label"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-weak);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  [data-slot="generic-tool-content"] {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-large);
+    color: var(--text-base);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    padding: 0;
+    background: none;
+  }
+}
+
 [data-component="edit-trigger"],
 [data-component="write-trigger"] {
   display: flex;

@@ -99,6 +99,40 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: {
+  tool: string
+  input?: Record<string, any>
+  output?: string
+  hideDetails?: boolean
+  defaultOpen?: boolean
+  forceOpen?: boolean
+}) {
+  const hasContent = () => (props.input && Object.keys(props.input).length > 0) || props.output
+
+  return (
+    <BasicTool
+      icon="mcp"
+      trigger={{ title: props.tool + " puppa" }}
+      hideDetails={props.hideDetails}
+      defaultOpen={props.defaultOpen}
+      forceOpen={props.forceOpen}
+    >
+      <Show when={hasContent()}>
+        <div data-component="tool-output" data-scrollable>
+          <Show when={props.input && Object.keys(props.input).length > 0}>
+            <div data-slot="generic-tool-section">
+              <div data-slot="generic-tool-label">Input</div>
+              <pre data-slot="generic-tool-content">{JSON.stringify(props.input, null, 2)}</pre>
+            </div>
+          </Show>
+          <Show when={props.output}>
+            <div data-slot="generic-tool-section">
+              <div data-slot="generic-tool-label">Output</div>
+              <pre data-slot="generic-tool-content">{props.output}</pre>
+            </div>
+          </Show>
+        </div>
+      </Show>
+    </BasicTool>
+  )
 }
