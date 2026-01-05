@@ -93,6 +93,8 @@ const context = createContext<{
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
+  toolExpanded: (partId: string) => boolean
+  toggleToolExpanded: (partId: string) => void
 }>()
 
 function use() {
@@ -893,7 +895,22 @@ export function Session() {
   const dialog = useDialog()
   const renderer = useRenderer()
 
-  // snap to bottom when session changes
+  const [expandedToolPartIds, setExpandedToolPartIds] = createSignal<Set<string>>(new Set())
+
+  const toolExpanded = (partId: string) => expandedToolPartIds().has(partId)
+
+  const toggleToolExpanded = (partId: string) => {
+    setExpandedToolPartIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(partId)) {
+        next.delete(partId)
+      } else {
+        next.add(partId)
+      }
+      return next
+    })
+  }
+
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
@@ -910,6 +927,8 @@ export function Session() {
         showDetails,
         diffWrapMode,
         sync,
+        toolExpanded,
+        toggleToolExpanded,
       }}
     >
       <box flexDirection="row">
@@ -1459,11 +1478,27 @@ function InlineTool(props: { icon: string; complete: any; pending: string; child
   )
 }
 
-function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void; part?: ToolPart }) {
+function BlockTool(props: {
+  title: string
+  children: JSX.Element
+  onClick?: () => void
+  onExpand?: () => void
+  part?: ToolPart
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const keybind = useKeybind()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+
+  useKeyboard((evt) => {
+    if (!hover()) return
+    if (evt.name === "o" && props.onExpand) {
+      evt.preventDefault()
+      props.onExpand()
+    }
+  })
+
   return (
     <box
       border={["left"]}
@@ -1475,11 +1510,15 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
       backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background}
-      onMouseOver={() => props.onClick && setHover(true)}
+      onMouseOver={() => setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
-        props.onClick?.()
+        if (props.onExpand) {
+          props.onExpand()
+        } else {
+          props.onClick?.()
+        }
       }}
     >
       <text paddingLeft={3} fg={theme.textMuted}>
@@ -1494,15 +1533,48 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
 }
 
 function Bash(props: ToolProps<typeof BashTool>) {
+  const ctx = use()
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const { theme } = useTheme()
+
+  const MAX_LINES = 5
+
+  const outputLines = createMemo(() => output().split("\n"))
+  const isLongOutput = createMemo(() => outputLines().length > MAX_LINES)
+  const isExpanded = createMemo(() => ctx.toolExpanded(props.part.id))
+
+  const displayOutput = createMemo(() => {
+    if (!ctx.showDetails() && !isExpanded()) {
+      if (isLongOutput()) {
+        return outputLines().slice(0, MAX_LINES).join("\n")
+      }
+    }
+    return output()
+  })
+
+  const hiddenLines = createMemo(() => {
+    if (!ctx.showDetails() && !isExpanded() && isLongOutput()) {
+      return outputLines().length - MAX_LINES
+    }
+    return 0
+  })
+
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
-        <BlockTool title={"# " + (props.input.description ?? "Shell")} part={props.part}>
+        <BlockTool
+          title={"# " + (props.input.description ?? "Shell")}
+          part={props.part}
+          onExpand={() => ctx.toggleToolExpanded(props.part.id)}
+        >
           <box gap={1}>
-            <text fg={theme.text}>$ {props.input.command}</text>
-            <text fg={theme.text}>{output()}</text>
+            <Show when={ctx.showDetails() || isExpanded()}>
+              <text fg={theme.text}>$ {props.input.command}</text>
+            </Show>
+            <text fg={theme.text}>{displayOutput()}</text>
+            <Show when={hiddenLines() > 0}>
+              <text fg={theme.textMuted}>... +{hiddenLines()} lines (press 'o' to expand)</text>
+            </Show>
           </box>
         </BlockTool>
       </Match>
