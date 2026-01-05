@@ -1,7 +1,8 @@
 {
   "name": "@opencode-ai/console-app",
-  "version": "1.0.224",
+  "version": "1.1.2",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev --host 0.0.0.0",

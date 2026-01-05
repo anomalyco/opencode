@@ -1,9 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/console-core",
-  "version": "1.0.224",
+  "version": "1.1.2",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-sts": "3.782.0",
     "@jsx-email/render": "1.1.1",

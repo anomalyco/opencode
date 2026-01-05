@@ -21,6 +21,7 @@ import { Format } from "../format"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Instance } from "../project/instance"
+import { Project } from "../project/project"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
@@ -49,6 +50,7 @@ import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
+import { Worktree } from "../worktree"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -85,6 +87,7 @@ export namespace Server {
           let status: ContentfulStatusCode
           if (err instanceof Storage.NotFoundError) status = 404
           else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (err.name.startsWith("Worktree")) status = 400
           else status = 500
           return c.json(err.toObject(), { status })
         }
@@ -616,6 +619,53 @@ export namespace Server {
           })
         },
       )
+      .post(
+        "/experimental/worktree",
+        describeRoute({
+          summary: "Create worktree",
+          description: "Create a new git worktree for the current project.",
+          operationId: "worktree.create",
+          responses: {
+            200: {
+              description: "Worktree created",
+              content: {
+                "application/json": {
+                  schema: resolver(Worktree.Info),
+                },
+              },
+            },
+            ...errors(400),
+          },
+        }),
+        validator("json", Worktree.create.schema),
+        async (c) => {
+          const body = c.req.valid("json")
+          const worktree = await Worktree.create(body)
+          return c.json(worktree)
+        },
+      )
+      .get(
+        "/experimental/worktree",
+        describeRoute({
+          summary: "List worktrees",
+          description: "List all sandbox worktrees for the current project.",
+          operationId: "worktree.list",
+          responses: {
+            200: {
+              description: "List of worktree directories",
+              content: {
+                "application/json": {
+                  schema: resolver(z.array(z.string())),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const sandboxes = await Project.sandboxes(Instance.project.id)
+          return c.json(sandboxes)
+        },
+      )
       .get(
         "/vcs",
         describeRoute({
@@ -657,13 +707,27 @@ export namespace Server {
             },
           },
         }),
+        validator(
+          "query",
+          z.object({
+            start: z.coerce
+              .number()
+              .optional()
+              .meta({ description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)" }),
+            search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
+            limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
+          }),
+        ),
         async (c) => {
-          const sessions = await Array.fromAsync(Session.list())
-          pipe(
-            await Array.fromAsync(Session.list()),
-            filter((s) => !s.time.archived),
-            sortBy((s) => s.time.updated),
-          )
+          const query = c.req.valid("query")
+          const term = query.search?.toLowerCase()
+          const sessions: Session.Info[] = []
+          for await (const session of Session.list()) {
+            if (query.start !== undefined && session.time.updated < query.start) continue
+            if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
+            sessions.push(session)
+            if (query.limit !== undefined && sessions.length >= query.limit) break
+          }
           return c.json(sessions)
         },
       )
@@ -980,6 +1044,7 @@ export namespace Server {
           return c.json(true)
         },
       )
+
       .post(
         "/session/:sessionID/share",
         describeRoute({
@@ -1602,13 +1667,14 @@ export namespace Server {
             requestID: z.string(),
           }),
         ),
-        validator("json", z.object({ reply: PermissionNext.Reply })),
+        validator("json", z.object({ reply: PermissionNext.Reply, message: z.string().optional() })),
         async (c) => {
           const params = c.req.valid("param")
           const json = c.req.valid("json")
           await PermissionNext.reply({
             requestID: params.requestID,
             reply: json.reply,
+            message: json.message,
           })
           return c.json(true)
         },
@@ -2313,6 +2379,27 @@ export namespace Server {
         },
       )
       .get(
+        "/experimental/resource",
+        describeRoute({
+          summary: "Get MCP resources",
+          description: "Get all available MCP resources from connected servers. Optionally filter by name.",
+          operationId: "experimental.resource.list",
+          responses: {
+            200: {
+              description: "MCP resources",
+              content: {
+                "application/json": {
+                  schema: resolver(z.record(z.string(), MCP.Resource)),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await MCP.resources())
+        },
+      )
+      .get(
         "/lsp",
         describeRoute({
           summary: "Get LSP status",
@@ -2622,6 +2709,32 @@ export namespace Server {
           return c.json(true)
         },
       )
+      .post(
+        "/tui/select-session",
+        describeRoute({
+          summary: "Select session",
+          description: "Navigate the TUI to display the specified session.",
+          operationId: "tui.selectSession",
+          responses: {
+            200: {
+              description: "Session selected successfully",
+              content: {
+                "application/json": {
+                  schema: resolver(z.boolean()),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator("json", TuiEvent.SessionSelect.properties),
+        async (c) => {
+          const { sessionID } = c.req.valid("json")
+          await Session.get(sessionID)
+          await Bus.publish(TuiEvent.SessionSelect, { sessionID })
+          return c.json(true)
+        },
+      )
       .route("/tui/control", TuiRoute)
       .put(
         "/auth/:providerID",
@@ -2716,39 +2829,10 @@ export namespace Server {
         const response = await proxy(`https://app.opencode.ai${path}`, {
           ...c.req,
           headers: {
+            ...c.req.raw.headers,
             host: "app.opencode.ai",
           },
         })
-        // Cloudflare doesn't return Content-Type for static assets, so we need to add it
-        const mimeTypes: Record<string, string> = {
-          ".js": "application/javascript",
-          ".mjs": "application/javascript",
-          ".css": "text/css",
-          ".json": "application/json",
-          ".wasm": "application/wasm",
-          ".svg": "image/svg+xml",
-          ".png": "image/png",
-          ".jpg": "image/jpeg",
-          ".jpeg": "image/jpeg",
-          ".gif": "image/gif",
-          ".ico": "image/x-icon",
-          ".webp": "image/webp",
-          ".woff": "font/woff",
-          ".woff2": "font/woff2",
-          ".ttf": "font/ttf",
-          ".eot": "application/vnd.ms-fontobject",
-        }
-        for (const [ext, mime] of Object.entries(mimeTypes)) {
-          if (path.endsWith(ext)) {
-            const headers = new Headers(response.headers)
-            headers.set("Content-Type", mime)
-            return new Response(response.body, {
-              status: response.status,
-              statusText: response.statusText,
-              headers,
-            })
-          }
-        }
         return response
       }),
   )

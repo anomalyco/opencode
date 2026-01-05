@@ -1,4 +1,5 @@
 import z from "zod"
+import fs from "fs/promises"
 import { Filesystem } from "../util/filesystem"
 import path from "path"
 import { $ } from "bun"
@@ -32,6 +33,7 @@ export namespace Project {
         updated: z.number(),
         initialized: z.number().optional(),
       }),
+      sandboxes: z.array(z.string()),
     })
     .meta({
       ref: "Project",
@@ -45,21 +47,25 @@ export namespace Project {
   export async function fromDirectory(directory: string) {
     log.info("fromDirectory", { directory })
 
-    const { id, worktree, vcs } = await iife(async () => {
+    const { id, sandbox, worktree, vcs } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
       const git = await matches.next().then((x) => x.value)
       await matches.return()
       if (git) {
-        let worktree = path.dirname(git)
+        let sandbox = path.dirname(git)
+
+        // cached id calculation
         let id = await Bun.file(path.join(git, "opencode"))
           .text()
           .then((x) => x.trim())
           .catch(() => {})
+
+        // generate id from root commit
         if (!id) {
           const roots = await $`git rev-list --max-parents=0 --all`
             .quiet()
             .nothrow()
-            .cwd(worktree)
+            .cwd(sandbox)
             .text()
             .then((x) =>
               x
@@ -71,19 +77,37 @@ export namespace Project {
           id = roots[0]
           if (id) Bun.file(path.join(git, "opencode")).write(id)
         }
+
         if (!id)
           return {
             id: "global",
-            worktree,
+            worktree: sandbox,
+            sandbox: sandbox,
             vcs: "git",
           }
-        worktree = await $`git rev-parse --show-toplevel`
+
+        sandbox = await $`git rev-parse --show-toplevel`
           .quiet()
           .nothrow()
-          .cwd(worktree)
+          .cwd(sandbox)
           .text()
-          .then((x) => path.resolve(worktree, x.trim()))
-        return { id, worktree, vcs: "git" }
+          .then((x) => path.resolve(sandbox, x.trim()))
+        const worktree = await $`git rev-parse --git-common-dir`
+          .quiet()
+          .nothrow()
+          .cwd(sandbox)
+          .text()
+          .then((x) => {
+            const dirname = path.dirname(x.trim())
+            if (dirname === ".") return sandbox
+            return dirname
+          })
+        return {
+          id,
+          sandbox,
+          worktree,
+          vcs: "git",
+        }
       }
 
       const resolvedDirectory = path.resolve(directory)
@@ -101,6 +125,7 @@ export namespace Project {
         return {
           id,
           worktree: resolvedDirectory,
+          sandbox: resolvedDirectory,
           vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
         }
       }
@@ -108,6 +133,7 @@ export namespace Project {
       return {
         id: "global",
         worktree: "/",
+        sandbox: "/",
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
       }
     })
@@ -118,6 +144,7 @@ export namespace Project {
         id,
         worktree,
         vcs: vcs as Info["vcs"],
+        sandboxes: [],
         time: {
           created: Date.now(),
           updated: Date.now(),
@@ -127,6 +154,10 @@ export namespace Project {
         await migrateFromGlobal(id, worktree)
       }
     }
+
+    // migrate old projects before sandboxes
+    if (!existing.sandboxes) existing.sandboxes = []
+
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
     const result: Info = {
       ...existing,
@@ -137,6 +168,7 @@ export namespace Project {
         updated: Date.now(),
       },
     }
+    if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
     await Storage.write<Info>(["project", id], result)
     GlobalBus.emit("event", {
       payload: {
@@ -144,7 +176,7 @@ export namespace Project {
         properties: result,
       },
     })
-    return result
+    return { project: result, sandbox }
   }
 
   export async function discover(input: Info) {
@@ -238,4 +270,15 @@ export namespace Project {
       return result
     },
   )
+
+  export async function sandboxes(projectID: string) {
+    const project = await Storage.read<Info>(["project", projectID]).catch(() => undefined)
+    if (!project?.sandboxes) return []
+    const valid: string[] = []
+    for (const dir of project.sandboxes) {
+      const stat = await fs.stat(dir).catch(() => undefined)
+      if (stat?.isDirectory()) valid.push(dir)
+    }
+    return valid
+  }
 }

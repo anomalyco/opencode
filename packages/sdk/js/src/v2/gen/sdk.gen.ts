@@ -19,7 +19,9 @@ import type {
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
+  EventTuiSessionSelect,
   EventTuiToastShow,
+  ExperimentalResourceListResponses,
   FileListResponses,
   FilePartInput,
   FileReadResponses,
@@ -144,9 +146,15 @@ import type {
   TuiOpenThemesResponses,
   TuiPublishErrors,
   TuiPublishResponses,
+  TuiSelectSessionErrors,
+  TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  WorktreeCreateErrors,
+  WorktreeCreateInput,
+  WorktreeCreateResponses,
+  WorktreeListResponses,
 } from "./types.gen.js"
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<
@@ -680,6 +688,62 @@ export class Path extends HeyApiClient {
   }
 }
 
+export class Worktree extends HeyApiClient {
+  /**
+   * List worktrees
+   *
+   * List all sandbox worktrees for the current project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<WorktreeListResponses, unknown, ThrowOnError>({
+      url: "/experimental/worktree",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create worktree
+   *
+   * Create a new git worktree for the current project.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      worktreeCreateInput?: WorktreeCreateInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "worktreeCreateInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorktreeCreateResponses, WorktreeCreateErrors, ThrowOnError>({
+      url: "/experimental/worktree",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Vcs extends HeyApiClient {
   /**
    * Get VCS info
@@ -710,10 +774,25 @@ export class Session extends HeyApiClient {
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
+      start?: number
+      search?: string
+      limit?: number
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "start" },
+            { in: "query", key: "search" },
+            { in: "query", key: "limit" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).get<SessionListResponses, unknown, ThrowOnError>({
       url: "/session",
       ...options,
@@ -1643,6 +1722,7 @@ export class Permission extends HeyApiClient {
       requestID: string
       directory?: string
       reply?: "once" | "always" | "reject"
+      message?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1654,6 +1734,7 @@ export class Permission extends HeyApiClient {
             { in: "path", key: "requestID" },
             { in: "query", key: "directory" },
             { in: "body", key: "reply" },
+            { in: "body", key: "message" },
           ],
         },
       ],
@@ -2366,6 +2447,31 @@ export class Mcp extends HeyApiClient {
   auth = new Auth({ client: this.client })
 }
 
+export class Resource extends HeyApiClient {
+  /**
+   * Get MCP resources
+   *
+   * Get all available MCP resources from connected servers. Optionally filter by name.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ExperimentalResourceListResponses, unknown, ThrowOnError>({
+      url: "/experimental/resource",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Experimental extends HeyApiClient {
+  resource = new Resource({ client: this.client })
+}
+
 export class Lsp extends HeyApiClient {
   /**
    * Get LSP status
@@ -2688,13 +2794,48 @@ export class Tui extends HeyApiClient {
   public publish<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow
+      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
     },
     options?: Options<never, ThrowOnError>,
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }, { in: "body" }] }])
     return (options?.client ?? this.client).post<TuiPublishResponses, TuiPublishErrors, ThrowOnError>({
       url: "/tui/publish",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Select session
+   *
+   * Navigate the TUI to display the specified session.
+   */
+  public selectSession<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<TuiSelectSessionResponses, TuiSelectSessionErrors, ThrowOnError>({
+      url: "/tui/select-session",
       ...options,
       ...params,
       headers: {
@@ -2751,6 +2892,8 @@ export class OpencodeClient extends HeyApiClient {
 
   path = new Path({ client: this.client })
 
+  worktree = new Worktree({ client: this.client })
+
   vcs = new Vcs({ client: this.client })
 
   session = new Session({ client: this.client })
@@ -2770,6 +2913,8 @@ export class OpencodeClient extends HeyApiClient {
   app = new App({ client: this.client })
 
   mcp = new Mcp({ client: this.client })
+
+  experimental = new Experimental({ client: this.client })
 
   lsp = new Lsp({ client: this.client })
 

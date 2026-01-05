@@ -10,6 +10,7 @@ import type {
   PermissionRequest,
   LspStatus,
   McpStatus,
+  McpResource,
   FormatterStatus,
   SessionStatus,
   ProviderListResponse,
@@ -62,6 +63,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {
         [key: string]: McpStatus
       }
+      mcp_resource: {
+        [key: string]: McpResource
+      }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
@@ -87,6 +91,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       part: {},
       lsp: [],
       mcp: {},
+      mcp_resource: {},
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
@@ -264,8 +269,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     async function bootstrap() {
       console.log("bootstrapping")
+      const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
-        .list()
+        .list({ start: start })
         .then((x) => setStore("session", reconcile((x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))))
 
       // blocking - include session.list when continuing a session
@@ -295,6 +301,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
+            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
             sdk.client.session.status().then((x) => {
               setStore("session_status", reconcile(x.data!))
