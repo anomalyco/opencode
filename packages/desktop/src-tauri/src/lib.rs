@@ -265,8 +265,12 @@ pub fn run() {
                       .map(|m| m.size().to_logical(m.scale_factor()))
                       .unwrap_or(LogicalSize::new(1920, 1080));
 
-                  let mut window_builder =
-                      WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
+                let dev_url = match app.config().build.dev_url.as_ref() {
+                    Some(url) => url.clone(),
+                    None => "http://localhost:1420".parse().unwrap(),
+                };
+                let window_builder =
+                    WebviewWindow::builder(&app, "main", WebviewUrl::External(dev_url))
                           .title("OpenCode")
                           .inner_size(size.width as f64, size.height as f64)
                           .decorations(true)
