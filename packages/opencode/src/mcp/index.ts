@@ -817,7 +817,7 @@ export namespace MCP {
 
       // Re-add the MCP server to establish connection
       pendingOAuthTransports.delete(mcpName)
-      const result = await add(mcpName, mcpConfig)
+      const result = await add(mcpName, { ...mcpConfig, enabled: true })
 
       const statusRecord = result.status as Record<string, Status>
       return statusRecord[mcpName] ?? { status: "failed", error: "Unknown error after auth" }
