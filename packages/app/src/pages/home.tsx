@@ -53,8 +53,8 @@ export default function Home() {
   }
 
   return (
-    <div class="mx-auto mt-55">
-      <Logo class="w-xl opacity-12" />
+    <div class="mx-auto mt-55 w-full md:w-auto px-4">
+      <Logo class="md:w-xl opacity-12" />
       <Button
         size="large"
         variant="ghost"
