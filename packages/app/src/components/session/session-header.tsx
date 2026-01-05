@@ -105,21 +105,21 @@ export function SessionHeader() {
             >
               <div class="flex items-center gap-2 min-w-0">
                 <Select
-                    options={sessions()}
-                    current={parentSession()}
-                    placeholder="Back to parent session"
-                    label={(x) => x.title}
-                    value={(x) => x.id}
-                    onSelect={(session) => {
-                      // Only navigate if selecting a different session than current parent
-                      const currentParent = parentSession()
-                      if (session && currentParent && session.id !== currentParent.id) {
-                        navigateToSession(session)
-                      }
-                    }}
-                    class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
-                    variant="ghost"
-                  />
+                  options={sessions()}
+                  current={parentSession()}
+                  placeholder="Back to parent session"
+                  label={(x) => x.title}
+                  value={(x) => x.id}
+                  onSelect={(session) => {
+                    // Only navigate if selecting a different session than current parent
+                    const currentParent = parentSession()
+                    if (session && currentParent && session.id !== currentParent.id) {
+                      navigateToSession(session)
+                    }
+                  }}
+                  class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+                  variant="ghost"
+                />
                 <div class="text-text-weaker">/</div>
                 <div class="flex items-center gap-1.5 min-w-0">
                   <Tooltip value="Back to parent session">
