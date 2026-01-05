@@ -11,6 +11,8 @@ import { Flag } from "../flag/flag"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
+  const BUILTIN = ["opencode-copilot-auth@0.0.9", "opencode-anthropic-auth@0.0.5"]
+
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
@@ -29,8 +31,7 @@ export namespace Plugin {
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push("opencode-copilot-auth@0.0.9")
-      plugins.push("opencode-anthropic-auth@0.0.5")
+      plugins.push(...BUILTIN)
     }
     for (let plugin of plugins) {
       log.info("loading plugin", { path: plugin })
@@ -38,10 +39,21 @@ export namespace Plugin {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version)
+        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
+        plugin = await BunProc.install(pkg, version).catch((err) => {
+          if (builtin) return ""
+          throw err
+        })
+        if (!plugin) continue
       }
       const mod = await import(plugin)
+      // Prevent duplicate initialization when plugins export the same function
+      // as both a named export and default export (e.g., `export const X` and `export default X`).
+      // Object.entries(mod) would return both entries pointing to the same function reference.
+      const seen = new Set<PluginInstance>()
       for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
+        if (seen.has(fn)) continue
+        seen.add(fn)
         const init = await fn(input)
         hooks.push(init)
       }
