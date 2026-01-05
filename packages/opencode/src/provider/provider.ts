@@ -15,7 +15,7 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
 // Direct imports for bundled providers
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
+import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createAzure } from "@ai-sdk/azure"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
@@ -34,6 +34,7 @@ import { createCohere } from "@ai-sdk/cohere"
 import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
+import { createVercel } from "@ai-sdk/vercel"
 import { ProviderTransform } from "./transform"
 
 export namespace Provider {
@@ -58,6 +59,7 @@ export namespace Provider {
     "@ai-sdk/gateway": createGateway,
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
+    "@ai-sdk/vercel": createVercel,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
@@ -166,10 +168,22 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
+      const config = await Config.get()
+      const providerConfig = config.provider?.["amazon-bedrock"]
+
       const auth = await Auth.get("amazon-bedrock")
-      const awsProfile = Env.get("AWS_PROFILE")
+
+      // Region precedence: 1) config file, 2) env var, 3) default
+      const configRegion = providerConfig?.options?.region
+      const envRegion = Env.get("AWS_REGION")
+      const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
+
+      // Profile: config file takes precedence over env var
+      const configProfile = providerConfig?.options?.profile
+      const envProfile = Env.get("AWS_PROFILE")
+      const profile = configProfile ?? envProfile
+
       const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
-      const awsRegion = Env.get("AWS_REGION")
 
       const awsBearerToken = iife(() => {
         const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
@@ -181,17 +195,27 @@ export namespace Provider {
         return undefined
       })
 
-      if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
-
-      const defaultRegion = awsRegion ?? "us-east-1"
+      if (!profile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+
+      // Build credential provider options (only pass profile if specified)
+      const credentialProviderOptions = profile ? { profile } : {}
+
+      const providerOptions: AmazonBedrockProviderSettings = {
+        region: defaultRegion,
+        credentialProvider: fromNodeProviderChain(credentialProviderOptions),
+      }
+
+      // Add custom endpoint if specified (endpoint takes precedence over baseURL)
+      const endpoint = providerConfig?.options?.endpoint ?? providerConfig?.options?.baseURL
+      if (endpoint) {
+        providerOptions.baseURL = endpoint
+      }
+
       return {
         autoload: true,
-        options: {
-          region: defaultRegion,
-          credentialProvider: fromNodeProviderChain(),
-        },
+        options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has global prefix
           if (modelID.startsWith("global.")) {
@@ -372,7 +396,7 @@ export namespace Provider {
       return {
         autoload: true,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.chat(modelID)
+          return sdk.languageModel(modelID)
         },
         options: {
           baseURL: `https://gateway.ai.cloudflare.com/v1/${accountId}/${gateway}/compat`,
@@ -499,7 +523,7 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? provider.id,
+        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -644,7 +668,11 @@ export namespace Provider {
           api: {
             id: model.id ?? existingModel?.api.id ?? modelID,
             npm:
-              model.provider?.npm ?? provider.npm ?? existingModel?.api.npm ?? modelsDev[providerID]?.npm ?? providerID,
+              model.provider?.npm ??
+              provider.npm ??
+              existingModel?.api.npm ??
+              modelsDev[providerID]?.npm ??
+              "@ai-sdk/openai-compatible",
             url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
           },
           status: model.status ?? existingModel?.status ?? "active",
@@ -1016,15 +1044,16 @@ export namespace Provider {
         "claude-haiku-4.5",
         "3-5-haiku",
         "3.5-haiku",
+        "gemini-3-flash",
         "gemini-2.5-flash",
         "gpt-5-nano",
       ]
-      // claude-haiku-4.5 is considered a premium model in github copilot, we shouldn't use premium requests for title gen
-      if (providerID === "github-copilot") {
-        priority = priority.filter((m) => m !== "claude-haiku-4.5")
-      }
       if (providerID.startsWith("opencode")) {
         priority = ["gpt-5-nano"]
+      }
+      if (providerID.startsWith("github-copilot")) {
+        // prioritize free models for github copilot
+        priority = ["gpt-5-mini", "claude-haiku-4.5", ...priority]
       }
       for (const item of priority) {
         for (const model of Object.keys(provider.models)) {

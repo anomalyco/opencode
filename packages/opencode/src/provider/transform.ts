@@ -17,6 +17,28 @@ function mimeToModality(mime: string): Modality | undefined {
 
 export namespace ProviderTransform {
   function normalizeMessages(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+    // Anthropic rejects messages with empty content - filter out empty string messages
+    // and remove empty text/reasoning parts from array content
+    if (model.api.npm === "@ai-sdk/anthropic") {
+      msgs = msgs
+        .map((msg) => {
+          if (typeof msg.content === "string") {
+            if (msg.content === "") return undefined
+            return msg
+          }
+          if (!Array.isArray(msg.content)) return msg
+          const filtered = msg.content.filter((part) => {
+            if (part.type === "text" || part.type === "reasoning") {
+              return part.text !== ""
+            }
+            return true
+          })
+          if (filtered.length === 0) return undefined
+          return { ...msg, content: filtered }
+        })
+        .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+    }
+
     if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
@@ -279,7 +301,7 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
         if (id === "o1-mini") return {}
         const azureEfforts = ["low", "medium", "high"]
-        if (id.includes("gpt-5")) {
+        if (id.includes("gpt-5-") || id === "gpt-5") {
           azureEfforts.unshift("minimal")
         }
         return Object.fromEntries(
@@ -296,8 +318,11 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
-          if (model.id.includes("codex")) return WIDELY_SUPPORTED_EFFORTS
-          const arr = ["minimal", ...WIDELY_SUPPORTED_EFFORTS]
+          if (id.includes("codex")) return WIDELY_SUPPORTED_EFFORTS
+          const arr = [...WIDELY_SUPPORTED_EFFORTS]
+          if (id.includes("gpt-5-") || id === "gpt-5") {
+            arr.unshift("minimal")
+          }
           if (model.release_date >= "2025-11-13") {
             arr.unshift("none")
           }

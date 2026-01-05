@@ -33,7 +33,7 @@ const ClientOnlyCode = clientOnly(() => import("@opencode-ai/ui/code").then((m) 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
-      <WorkerPoolProvider pool={m.workerPool}>{props.children}</WorkerPoolProvider>
+      <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
   })),
 )
@@ -328,7 +328,7 @@ export default function () {
                               <div class="flex gap-3 items-center">
                                 <IconButton
                                   as={"a"}
-                                  href="https://github.com/sst/opencode"
+                                  href="https://github.com/anomalyco/opencode"
                                   target="_blank"
                                   icon="github"
                                   variant="ghost"
