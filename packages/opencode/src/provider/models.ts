@@ -2,9 +2,27 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
-import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
+
+// Inline fallback for fetching models data at runtime
+// Previously used macro import: import { data } from "./models-macro" with { type: "macro" }
+// Macros don't work correctly with `bun run --conditions=browser`
+async function fetchModelsData(): Promise<string> {
+  const envPath = Bun.env.MODELS_DEV_API_JSON
+  if (envPath) {
+    const file = Bun.file(envPath)
+    if (await file.exists()) {
+      return await file.text()
+    }
+  }
+  const json = await fetch("https://models.dev/api.json", {
+    headers: {
+      "User-Agent": Installation.USER_AGENT,
+    },
+  }).then((x) => x.text())
+  return json
+}
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -79,7 +97,7 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const json = await data()
+    const json = await fetchModelsData()
     return JSON.parse(json) as Record<string, Provider>
   }
 
