@@ -47,7 +47,7 @@ export function SessionHeader() {
   }
 
   return (
-    <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex" data-tauri-drag-region>
+    <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex">
       <button
         type="button"
         class="xl:hidden w-12 shrink-0 flex items-center justify-center border-r border-border-weak-base hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors"
