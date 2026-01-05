@@ -15,7 +15,7 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
 // Direct imports for bundled providers
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
+import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createAzure } from "@ai-sdk/azure"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
@@ -202,7 +202,7 @@ export namespace Provider {
       // Build credential provider options (only pass profile if specified)
       const credentialProviderOptions = profile ? { profile } : {}
 
-      const providerOptions: any = {
+      const providerOptions: AmazonBedrockProviderSettings = {
         region: defaultRegion,
         credentialProvider: fromNodeProviderChain(credentialProviderOptions),
       }
