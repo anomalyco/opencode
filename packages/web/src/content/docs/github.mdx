@@ -58,7 +58,7 @@ Or you can set it up manually.
          id-token: write
        steps:
          - name: Checkout repository
-           uses: actions/checkout@v4
+           uses: actions/checkout@v6
            with:
              fetch-depth: 1
 
@@ -134,7 +134,7 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
@@ -171,7 +171,7 @@ jobs:
       pull-requests: read
       issues: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -221,7 +221,7 @@ jobs:
             return days >= 30;
           result-encoding: string
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.check.outputs.result == 'true'
 
       - uses: anomalyco/opencode/github@latest

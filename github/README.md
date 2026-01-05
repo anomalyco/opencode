@@ -82,7 +82,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
          id-token: write
        steps:
          - name: Checkout repository
-           uses: actions/checkout@v4
+           uses: actions/checkout@v6
            with:
              fetch-depth: 1
 

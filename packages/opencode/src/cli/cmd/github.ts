@@ -393,7 +393,7 @@ jobs:
       issues: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run opencode
         uses: anomalyco/opencode/github@latest${envStr}
