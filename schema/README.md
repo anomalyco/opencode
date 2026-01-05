@@ -163,28 +163,114 @@ Add to `.vscode/settings.json` for auto-complete and validation:
 
 ## External Client Generation
 
-### Rust (Tauri, CLI)
+### Rust
 
-Use `schemars` or `typify`:
+Using [typify](https://github.com/oxidecomputer/typify) (recommended for complex schemas):
 
 ```bash
-# Coming soon
+cargo add typify schemars serde
+```
+
+```rust
+// build.rs
+use std::fs;
+use typify::{TypeSpace, TypeSpaceSettings};
+
+fn main() {
+    let schema_dir = "path/to/opencode/schema";
+    let mut type_space = TypeSpace::new(TypeSpaceSettings::default());
+    
+    // Add core schemas
+    let model_info = fs::read_to_string(format!("{}/modelInfo.schema.json", schema_dir)).unwrap();
+    let schema: schemars::schema::RootSchema = serde_json::from_str(&model_info).unwrap();
+    type_space.add_root_schema(schema).unwrap();
+    
+    // Generate Rust types
+    let contents = type_space.to_string();
+    fs::write("src/generated/types.rs", contents).unwrap();
+}
+```
+
+Using [schemafy](https://github.com/Marwes/schemafy) (simpler, macro-based):
+
+```rust
+use schemafy_lib::Expander;
+
+schemafy::schemafy!(
+    "schema/modelInfo.schema.json"
+);
+
+// Now you have ModelInfo, ModelCapabilities, etc. as Rust structs
 ```
 
 ### Python
 
-Use `datamodel-code-generator`:
+Using [datamodel-code-generator](https://github.com/koxudaxi/datamodel-code-generator):
 
 ```bash
-# Coming soon
+pip install datamodel-code-generator
+
+# Generate Pydantic v2 models from a single schema
+datamodel-codegen \
+  --input schema/modelInfo.schema.json \
+  --output opencode_types/model_info.py \
+  --output-model-type pydantic_v2.BaseModel
+
+# Generate from all schemas
+for schema in schema/*.schema.json; do
+  name=$(basename "$schema" .schema.json)
+  datamodel-codegen \
+    --input "$schema" \
+    --output "opencode_types/${name}.py" \
+    --output-model-type pydantic_v2.BaseModel
+done
 ```
 
-### C# (Blazor)
+Example generated code:
 
-Use `NJsonSchema`:
+```python
+from pydantic import BaseModel
+from typing import Optional
+
+class ModelInfo(BaseModel):
+    id: str
+    provider_id: str
+    name: str
+    family: Optional[str] = None
+    # ... etc
+```
+
+### C# (Blazor, .NET)
+
+Using [NJsonSchema](https://github.com/RicoSuter/NJsonSchema):
 
 ```bash
-# Coming soon
+dotnet add package NJsonSchema.CodeGeneration.CSharp
+```
+
+```csharp
+using NJsonSchema;
+using NJsonSchema.CodeGeneration.CSharp;
+
+// Generate C# classes from schema
+var schema = await JsonSchema.FromFileAsync("schema/modelInfo.schema.json");
+var settings = new CSharpGeneratorSettings
+{
+    Namespace = "OpenCode.Models",
+    GenerateDataAnnotations = true
+};
+var generator = new CSharpGenerator(schema, settings);
+var code = generator.GenerateFile();
+
+// Write to file
+File.WriteAllText("Generated/ModelInfo.cs", code);
+```
+
+Or use the CLI tool:
+
+```bash
+dotnet tool install -g NJsonSchema.CodeGeneration.CSharp
+njs2cs schema/modelInfo.schema.json -o Generated/ModelInfo.cs -n OpenCode.Models
 ```
 
 ## Versioning
