@@ -8253,6 +8253,12 @@
           {
             "type": "object",
             "properties": {
+              "__originalKeys": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
               "read": {
                 "$ref": "#/components/schemas/PermissionRuleConfig"
               },
