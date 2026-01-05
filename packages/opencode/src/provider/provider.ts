@@ -217,8 +217,8 @@ export namespace Provider {
         autoload: true,
         options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          // Skip region prefixing if model already has global prefix
-          if (modelID.startsWith("global.")) {
+          // Skip region prefixing if model already has a cross-region inference profile prefix
+          if (modelID.startsWith("global.") || modelID.startsWith("jp.")) {
             return sdk.languageModel(modelID)
           }
 
