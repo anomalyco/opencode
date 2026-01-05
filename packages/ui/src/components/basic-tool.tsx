@@ -112,7 +112,7 @@ export function GenericTool(props: {
   return (
     <BasicTool
       icon="mcp"
-      trigger={{ title: props.tool + " puppa" }}
+      trigger={{ title: props.tool }}
       hideDetails={props.hideDetails}
       defaultOpen={props.defaultOpen}
       forceOpen={props.forceOpen}
