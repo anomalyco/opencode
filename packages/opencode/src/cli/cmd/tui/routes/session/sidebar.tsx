@@ -43,7 +43,7 @@ export function Sidebar(props: { sessionID: string }) {
     { defer: true }
   ))
 
-  const colorFor = (percent: number) => colorFor(percent, theme)
+  const colorFor = (percent: number) => getUsageColor(percent, theme)
   const usageBar = (percent: number) => usageBarString(percent, 10)
 
   const hasUsageData = createMemo(() => anthropicUsage() || openaiUsage())
