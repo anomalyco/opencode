@@ -667,8 +667,8 @@ export namespace Config {
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
     sidebar: z
       .enum(["auto", "show", "hide"])
-      .default("auto")
-      .describe("Default sidebar visibility: 'auto' shows on wide terminals, 'show' always visible, 'hide' always hidden"),
+      .optional()
+      .describe("Sidebar visibility: 'auto' shows on wide terminals, 'show' always visible, 'hide' always hidden"),
   })
 
   export const Server = z

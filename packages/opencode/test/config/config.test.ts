@@ -870,12 +870,11 @@ test("merges legacy tools with existing permission config", async () => {
 })
 
 // TUI sidebar config tests
-// Note: The TUI uses kv.get("sidebar", config.tui?.sidebar ?? "auto") to initialize.
-// This means the config provides the default, but user preferences in the KV store take precedence.
-// The KV store is populated when users toggle the sidebar with the keybind.
-// To test with a fresh state, clear ~/.local/state/opencode/kv.json or use OPENCODE_STATE_DIR.
+// The TUI uses: sync.data.config.tui?.sidebar ?? kv.get("sidebar", "auto")
+// Priority: Config > KV store > "auto"
+// Config provides per-workspace default, KV provides global fallback
 
-test("loads TUI sidebar config with default", async () => {
+test("sidebar is undefined when not set in config", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -891,7 +890,7 @@ test("loads TUI sidebar config with default", async () => {
     directory: tmp.path,
     fn: async () => {
       const config = await Config.get()
-      expect(config.tui?.sidebar).toBe("auto")
+      expect(config.tui?.sidebar).toBeUndefined()
     },
   })
 })
