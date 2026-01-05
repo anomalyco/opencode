@@ -24,7 +24,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum, base64Decode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -1013,7 +1013,29 @@ export default function Page() {
                     const cacheKey = createMemo(() => checksum(contents()))
                     const isImage = createMemo(() => {
                       const c = state()?.content
-                      return c?.encoding === "base64" && c?.mimeType?.startsWith("image/")
+                      return (
+                        c?.encoding === "base64" &&
+                        c?.mimeType?.startsWith("image/") &&
+                        c?.mimeType !== "image/svg+xml"
+                      )
+                    })
+                    const isSvg = createMemo(() => {
+                      const c = state()?.content
+                      return c?.mimeType === "image/svg+xml"
+                    })
+                    const svgContent = createMemo(() => {
+                      if (!isSvg()) return
+                      const c = state()?.content
+                      if (!c) return
+                      if (c.encoding === "base64") return base64Decode(c.content)
+                      return c.content
+                    })
+                    const svgPreviewUrl = createMemo(() => {
+                      if (!isSvg()) return
+                      const c = state()?.content
+                      if (!c) return
+                      if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
+                      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
                     })
                     const imageDataUrl = createMemo(() => {
                       if (!isImage()) return
@@ -1142,6 +1164,32 @@ export default function Page() {
                           <Match when={state()?.loaded && isImage()}>
                             <div class="px-6 py-4 pb-40">
                               <img src={imageDataUrl()} alt={path()} class="max-w-full" />
+                            </div>
+                          </Match>
+                          <Match when={state()?.loaded && isSvg()}>
+                            <div class="flex flex-col gap-4 px-6 py-4">
+                              <Dynamic
+                                component={codeComponent}
+                                file={{
+                                  name: path() ?? "",
+                                  contents: svgContent() ?? "",
+                                  cacheKey: cacheKey(),
+                                }}
+                                enableLineSelection
+                                selectedLines={selectedLines()}
+                                onLineSelected={(range: SelectedLineRange | null) => {
+                                  const p = path()
+                                  if (!p) return
+                                  file.setSelectedLines(p, range)
+                                }}
+                                overflow="scroll"
+                                class="select-text"
+                              />
+                              <Show when={svgPreviewUrl()}>
+                                <div class="flex justify-center pb-40">
+                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                </div>
+                              </Show>
                             </div>
                           </Match>
                           <Match when={state()?.loaded}>
