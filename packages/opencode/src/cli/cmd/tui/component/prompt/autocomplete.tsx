@@ -55,6 +55,7 @@ export type AutocompleteOption = {
   aliases?: string[]
   disabled?: boolean
   description?: string
+  isDirectory?: boolean
   onSelect?: () => void
 }
 
@@ -200,8 +201,10 @@ export function Autocomplete(props: {
               url = urlObj.toString()
             }
 
+            const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
+              isDirectory: isDir,
               onSelect: () => {
                 insertPart(filename, {
                   type: "file",
@@ -511,6 +514,27 @@ export function Autocomplete(props: {
     selected.onSelect?.()
   }
 
+  function expandDirectory() {
+    const selected = options()[store.selected]
+    if (!selected) return
+
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const displayText = selected.display.trimEnd()
+    const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText("@" + path)
+
+    setStore("selected", 0)
+  }
+
   function show(mode: "@" | "/") {
     command.keybinds(false)
     setStore({
@@ -575,8 +599,18 @@ export function Autocomplete(props: {
             e.preventDefault()
             return
           }
-          if (name === "return" || name === "tab") {
+          if (name === "return") {
             select()
+            e.preventDefault()
+            return
+          }
+          if (name === "tab") {
+            const selected = options()[store.selected]
+            if (selected?.isDirectory) {
+              expandDirectory()
+            } else {
+              select()
+            }
             e.preventDefault()
             return
           }
