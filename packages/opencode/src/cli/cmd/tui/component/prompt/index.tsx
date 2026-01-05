@@ -559,6 +559,12 @@ export function Prompt(props: PromptProps) {
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
+        parts: nonTextParts
+          .filter((x) => x.type === "file")
+          .map((x) => ({
+            id: Identifier.ascending("part"),
+            ...x,
+          })),
       })
     } else {
       sdk.client.session.prompt({
