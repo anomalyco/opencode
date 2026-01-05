@@ -1,4 +1,4 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on, batch } from "solid-js"
+import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
@@ -24,7 +24,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum, base64Decode } from "@opencode-ai/util/encode"
+import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -248,6 +248,13 @@ export default function Page() {
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "review",
     newSessionWorktree: "main",
+  })
+
+  const newSessionWorktree = createMemo(() => {
+    if (store.newSessionWorktree === "create") return "create"
+    const project = sync.project
+    if (project && sync.data.path.directory !== project.worktree) return sync.data.path.directory
+    return "main"
   })
 
   const activeMessage = createMemo(() => {
@@ -866,8 +873,21 @@ export default function Page() {
               </Match>
               <Match when={true}>
                 <NewSessionView
-                  worktree={store.newSessionWorktree}
-                  onWorktreeChange={(value) => setStore("newSessionWorktree", value)}
+                  worktree={newSessionWorktree()}
+                  onWorktreeChange={(value) => {
+                    if (value === "create") {
+                      setStore("newSessionWorktree", value)
+                      return
+                    }
+
+                    setStore("newSessionWorktree", "main")
+
+                    const target = value === "main" ? sync.project?.worktree : value
+                    if (!target) return
+                    if (target === sync.data.path.directory) return
+                    layout.projects.open(target)
+                    navigate(`/${base64Encode(target)}/session`)
+                  }}
                 />
               </Match>
             </Switch>
@@ -885,7 +905,7 @@ export default function Page() {
                 ref={(el) => {
                   inputRef = el
                 }}
-                newSessionWorktree={store.newSessionWorktree}
+                newSessionWorktree={newSessionWorktree()}
                 onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
               />
             </div>
