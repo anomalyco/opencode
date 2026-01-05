@@ -571,6 +571,7 @@ function App() {
 
   sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
+    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
       if (!error) return "An error occurred"
 
