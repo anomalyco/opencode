@@ -24,6 +24,7 @@ import type {
   ExperimentalResourceListResponses,
   FileListResponses,
   FilePartInput,
+  FilePartSource,
   FileReadResponses,
   FileStatusResponses,
   FindFilesResponses,
@@ -1451,6 +1452,14 @@ export class Session extends HeyApiClient {
       arguments?: string
       command?: string
       variant?: string
+      parts?: Array<{
+        id?: string
+        type: "file"
+        mime: string
+        filename?: string
+        url: string
+        source?: FilePartSource
+      }>
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1467,6 +1476,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },
+            { in: "body", key: "parts" },
           ],
         },
       ],
