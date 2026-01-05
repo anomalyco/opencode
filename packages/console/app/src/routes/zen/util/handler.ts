@@ -392,6 +392,7 @@ export async function handler(
             monthlyUsage: BillingTable.monthlyUsage,
             timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
             reloadTrigger: BillingTable.reloadTrigger,
+            timeReloadLockedTill: BillingTable.timeReloadLockedTill,
           },
           user: {
             id: UserTable.id,
@@ -621,6 +622,7 @@ export async function handler(
 
     const reloadTrigger = centsToMicroCents((authInfo.billing.reloadTrigger ?? Billing.RELOAD_TRIGGER) * 100)
     if (authInfo.billing.balance - costInfo.costInMicroCents >= reloadTrigger) return
+    if (authInfo.billing.timeReloadLockedTill && authInfo.billing.timeReloadLockedTill > new Date()) return
 
     const lock = await Database.use((tx) =>
       tx
