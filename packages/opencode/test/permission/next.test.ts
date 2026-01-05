@@ -359,9 +359,9 @@ test("disabled - does not disable when action is ask", () => {
   expect(result.size).toBe(0)
 })
 
-test("disabled - disables when wildcard deny even with specific allow", () => {
-  // Tool is disabled because evaluate("bash", "*", ...) returns "deny"
-  // The "echo *" allow rule doesn't match the "*" pattern we're checking
+test("disabled - does not disable when specific allow after wildcard deny", () => {
+  // Tool is NOT disabled because a specific allow after wildcard deny means
+  // there's at least some usage allowed
   const result = PermissionNext.disabled(
     ["bash"],
     [
@@ -369,7 +369,7 @@ test("disabled - disables when wildcard deny even with specific allow", () => {
       { permission: "bash", pattern: "echo *", action: "allow" },
     ],
   )
-  expect(result.has("bash")).toBe(true)
+  expect(result.has("bash")).toBe(false)
 })
 
 test("disabled - does not disable when wildcard allow after deny", () => {
