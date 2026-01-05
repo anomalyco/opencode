@@ -1936,6 +1936,7 @@ export namespace Server {
         validator(
           "query",
           z.object({
+            directory: z.string().optional(),
             query: z.string(),
             dirs: z.enum(["true", "false"]).optional(),
             type: z.enum(["file", "directory"]).optional(),
@@ -1943,11 +1944,13 @@ export namespace Server {
           }),
         ),
         async (c) => {
+          const directory = c.req.valid("query").directory
           const query = c.req.valid("query").query
           const dirs = c.req.valid("query").dirs
           const type = c.req.valid("query").type
           const limit = c.req.valid("query").limit
           const results = await File.search({
+            directory,
             query,
             limit: limit ?? 10,
             dirs: dirs !== "false",

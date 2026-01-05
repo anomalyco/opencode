@@ -369,11 +369,18 @@ export namespace File {
     })
   }
 
-  export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
+  export async function search(input: {
+    directory?: string
+    query: string
+    limit?: number
+    dirs?: boolean
+    type?: "file" | "directory"
+  }) {
+    const directory = input.directory ?? Instance.directory
     const query = input.query.trim()
     const limit = input.limit ?? 100
     const kind = input.type ?? (input.dirs === false ? "file" : "all")
-    log.info("search", { query, kind })
+    log.info("search", { directory, query, kind })
 
     const result = await state().then((x) => x.files())
 
@@ -404,6 +411,34 @@ export namespace File {
     const searchLimit = kind === "directory" && !preferHidden ? limit * 20 : limit
     const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((r) => r.target)
     const output = kind === "directory" ? sortHiddenLast(sorted).slice(0, limit) : sorted
+
+    // If searching for directories and query looks like a path,
+    // check if it actually exists on disk and list its subdirectories
+    if (kind === "directory" && query.includes("/")) {
+      const normalizedQuery = query.replace(/\/+$/, "")
+      const fullPath = path.join(directory, normalizedQuery)
+      try {
+        const stat = await fs.promises.stat(fullPath)
+        if (stat.isDirectory()) {
+          // Add the directory itself if not already in results
+          if (!output.includes(normalizedQuery + "/")) {
+            output.unshift(normalizedQuery + "/")
+          }
+          // Also list immediate subdirectories
+          const children = await fs.promises.readdir(fullPath, { withFileTypes: true }).catch(() => [])
+          for (const child of children) {
+            if (!child.isDirectory()) continue
+            if (child.name.startsWith(".")) continue // Skip hidden dirs
+            const childPath = normalizedQuery + "/" + child.name + "/"
+            if (!output.includes(childPath)) {
+              output.push(childPath)
+            }
+          }
+        }
+      } catch {
+        // Path doesn't exist, ignore
+      }
+    }
 
     log.info("search", { query, kind, results: output.length })
     return output

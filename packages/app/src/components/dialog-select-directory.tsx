@@ -30,8 +30,18 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   function display(rel: string) {
-    const full = join(root(), rel)
+    // If already in display format (~/...), return as-is
+    if (rel.startsWith("~/")) return rel
+    // If absolute path, convert to ~/ format if under home
     const h = home()
+    if (rel.startsWith("/")) {
+      if (h && (rel === h || rel.startsWith(h + "/") || rel.startsWith(h + "\\"))) {
+        return "~" + rel.slice(h.length)
+      }
+      return rel
+    }
+    // Relative path - convert to display format
+    const full = join(root(), rel)
     if (!h) return full
     if (full === h) return "~"
     if (full.startsWith(h + "/") || full.startsWith(h + "\\")) {
@@ -70,12 +80,34 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   const directories = async (filter: string) => {
-    const query = normalizeQuery(filter.trim())
-    return fetchDirs(query)
+    const trimmed = filter.trim()
+    const query = normalizeQuery(trimmed)
+    const results = await fetchDirs(query)
+
+    // Transform results to match user's input format
+    const h = home()
+    if (trimmed.startsWith("~/")) {
+      // User typed ~/... so prefix results with ~/
+      return results.map((r) => "~/" + r)
+    }
+    if (h && trimmed.toLowerCase().startsWith(h.toLowerCase())) {
+      // User typed absolute path like /Users/huy/... so prefix with home
+      return results.map((r) => h + "/" + r)
+    }
+    return results
   }
 
   function resolve(rel: string) {
-    const absolute = join(root(), rel)
+    // Handle paths that are already absolute or start with ~/
+    const h = home()
+    let absolute: string
+    if (rel.startsWith("~/") && h) {
+      absolute = h + rel.slice(1) // Replace ~ with home path
+    } else if (rel.startsWith("/")) {
+      absolute = rel // Already absolute
+    } else {
+      absolute = join(root(), rel)
+    }
     props.onSelect(props.multiple ? [absolute] : absolute)
     dialog.close()
   }
@@ -87,6 +119,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         emptyMessage="No folders found"
         items={directories}
         key={(x) => x}
+        skipClientFilter
         onSelect={(path) => {
           if (!path) return
           resolve(path)

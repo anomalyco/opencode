@@ -13,6 +13,7 @@ export interface FilteredListProps<T> {
   sortBy?: (a: T, b: T) => number
   sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
   onSelect?: (value: T | undefined, index: number) => void
+  skipClientFilter?: boolean
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
@@ -25,11 +26,14 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     }),
     async ({ filter, items }) => {
       const needle = filter?.toLowerCase()
+      const isAsync = typeof props.items === "function"
       const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
       const result = pipe(
         all,
         (x) => {
-          if (!needle) return x
+          // Skip client-side filtering for async items when skipClientFilter is true
+          // (server already filtered the results)
+          if (!needle || (isAsync && props.skipClientFilter)) return x
           if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
             return fuzzysort.go(needle, x).map((x) => x.target) as T[]
           }
