@@ -5,7 +5,19 @@
   "title": "ModelInfo",
   "description": "Comprehensive model metadata including capabilities, pricing, limits, and configurable options. Foundation schema referenced by Provider, Session, and other schemas.",
   "type": "object",
-  "required": ["id", "providerID", "name", "api", "capabilities", "cost", "limits", "status", "options", "headers"],
+  "required": [
+    "id",
+    "providerID",
+    "name",
+    "api",
+    "capabilities",
+    "cost",
+    "limit",
+    "status",
+    "options",
+    "headers",
+    "release_date"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -30,6 +42,10 @@
         "Gemini 2.0 Flash"
       ]
     },
+    "family": {
+      "type": "string",
+      "description": "Model family name (optional)"
+    },
     "api": {
       "$ref": "modelAPI.schema.json"
     },
@@ -39,7 +55,7 @@
     "cost": {
       "$ref": "modelCost.schema.json"
     },
-    "limits": {
+    "limit": {
       "$ref": "modelLimits.schema.json"
     },
     "status": {
@@ -55,6 +71,18 @@
       "description": "Custom HTTP headers for API calls",
       "additionalProperties": {
         "type": "string"
+      }
+    },
+    "release_date": {
+      "type": "string",
+      "description": "Model release date"
+    },
+    "variants": {
+      "type": "object",
+      "description": "Model variants with custom configurations (optional)",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true
       }
     }
   }

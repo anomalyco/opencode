@@ -5,7 +5,7 @@
   "title": "ProviderInfo",
   "description": "AI model provider metadata aggregating models and configuration. Providers expose collections of models with specific configurations, authentication requirements, and API endpoints.",
   "type": "object",
-  "required": ["id", "name", "source", "models"],
+  "required": ["id", "name", "source", "env", "options", "models"],
   "properties": {
     "id": {
       "type": "string",

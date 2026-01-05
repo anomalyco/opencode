@@ -68,8 +68,7 @@
       "description": "Additional response fields to include"
     },
     "metadata": {
-      "type": "string",
-      "description": "Custom metadata as JSON string"
+      "description": "Custom metadata (any type)"
     },
     "user": {
       "type": "string",

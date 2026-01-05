@@ -1,10 +1,11 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://opencode.ai/schemas/v1/providerOptions.json",
-  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 481, 880-920 (SDK initialization usage)\nNote: Flexible schema because different providers support different options",
+  "$comment": "Source: packages/opencode/src/provider/provider.ts @ d72d7ab (2026-01-04) lines 481, 880-920 (SDK initialization usage)\nNote: Flexible schema because different providers support different options. Common fields documented, but additional properties allowed.",
   "title": "ProviderOptions",
-  "description": "Provider SDK initialization options (passed to AI SDK provider constructor)",
+  "description": "Provider SDK initialization options (flexible - any properties allowed)",
   "type": "object",
+  "additionalProperties": true,
   "properties": {
     "baseURL": {
       "type": "string",
@@ -36,10 +37,8 @@
       "minimum": 0,
       "description": "Request timeout in milliseconds"
     },
-    "custom": {
-      "type": "object",
-      "description": "Provider-specific options (e.g., Azure's useCompletionUrls)",
-      "additionalProperties": true
+    "fetch": {
+      "description": "Custom fetch implementation (function, not serializable in JSON schema)"
     }
   }
 }

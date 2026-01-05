@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://opencode.ai/schemas/v1/modelOptions.json",
-  "$comment": "Source: packages/opencode/src/provider/models.ts @ 81fef60 (2025-12-30) line 48\nNote: Uses typed submessages for compile-time safety instead of generic map",
+  "$comment": "Source: packages/opencode/src/provider/models.ts @ 81fef60 (2025-12-30) line 48\nUsage: Composition schema aggregating all provider-specific option schemas\nNote: This is a meta-schema that references other schemas, not a direct TypeScript type. Generated into SDK types.",
   "title": "ModelOptions",
   "description": "Configurable runtime settings for models (provider-specific)",
   "type": "object",

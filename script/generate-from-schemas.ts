@@ -60,7 +60,7 @@ async function validateSchemas() {
       const schemaForValidation = JSON.parse(JSON.stringify(schema))
       delete schemaForValidation.$id
       delete schemaForValidation.$schema
-      
+
       ajv.addSchema(schemaForValidation, file)
     } catch (err) {
       // Schema might already exist, that's ok
@@ -75,7 +75,7 @@ async function validateSchemas() {
       const schemaForValidation = JSON.parse(JSON.stringify(schema))
       delete schemaForValidation.$id
       delete schemaForValidation.$schema
-      
+
       // Validate schema structure
       ajv.compile(schemaForValidation)
       console.log(`${colors.green}✓${colors.reset} ${file} - valid`)
@@ -105,7 +105,7 @@ function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): s
   // Handle basic types
   if (schema.type === "string") {
     if (schema.enum) {
-      const values = schema.enum.map(v => `"${v}"`).join(", ")
+      const values = schema.enum.map((v) => `"${v}"`).join(", ")
       return `z.enum([${values}])`
     }
     return "z.string()"
@@ -189,8 +189,8 @@ async function generateZodValidators(schemas: Map<string, any>) {
 
     // Generate imports
     const imports = Array.from(refs)
-      .filter(ref => ref !== schemaName)
-      .map(ref => `import { ${ref}Schema } from "./${ref}"`)
+      .filter((ref) => ref !== schemaName)
+      .map((ref) => `import { ${ref}Schema } from "./${ref}"`)
       .join("\n")
 
     // Generate Zod schema

@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://opencode.ai/schemas/v1/modelSelection.json",
+  "$comment": "Usage: API response type for session model selection, generated into SDK types\nNote: This schema defines the API response structure, not a direct TypeScript type in the server code",
   "title": "ModelSelection",
   "description": "Model selection for a session (references a model within a provider)",
   "type": "object",

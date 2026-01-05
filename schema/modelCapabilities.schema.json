@@ -5,7 +5,7 @@
   "title": "ModelCapabilities",
   "description": "Model capabilities - what features the model supports (boolean flags)",
   "type": "object",
-  "required": ["temperature", "reasoning", "attachment", "toolcall", "input", "output"],
+  "required": ["temperature", "reasoning", "attachment", "toolcall", "input", "output", "interleaved"],
   "properties": {
     "temperature": {
       "type": "boolean",
@@ -30,6 +30,24 @@
     "output": {
       "$ref": "ioCapabilities.schema.json",
       "description": "Output modality capabilities"
+    },
+    "interleaved": {
+      "description": "Supports interleaved content",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "required": ["field"],
+          "properties": {
+            "field": {
+              "type": "string",
+              "enum": ["reasoning_content", "reasoning_details"]
+            }
+          }
+        }
+      ]
     }
   }
 }

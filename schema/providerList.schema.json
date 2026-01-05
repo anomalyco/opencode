@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://opencode.ai/schemas/v1/providerList.json",
-  "$comment": "Source: packages/opencode/src/server/server.ts @ 21dc3c2 (2026-01-04) lines 1698-1700 (GET /config/providers response schema)",
+  "$comment": "Source: packages/opencode/src/server/server.ts @ 21dc3c2 (2026-01-04) lines 1698-1700 (GET /config/providers response schema)\nUsage: Generated into SDK as ProviderListResponse type (packages/sdk/js/src/v2/gen/types.gen.ts)\nNote: This schema defines the API response structure, not a direct TypeScript type",
   "title": "ProviderList",
   "description": "List of all available providers with their default model selections",
   "type": "object",
