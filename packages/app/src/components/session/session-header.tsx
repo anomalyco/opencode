@@ -18,6 +18,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogConfirmDelete } from "@/components/dialog-confirm-delete"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -51,28 +52,32 @@ export function SessionHeader() {
     navigate(`/${params.dir}/session/${session.id}`)
   }
 
-  async function deleteCurrentSession() {
+  function deleteCurrentSession() {
     const session = currentSession()
     if (!session || deleting()) return
 
-    // Simple confirmation
-    if (!confirm(`Delete session "${session.title}"?`)) return
-
-    setDeleting(true)
-    try {
-      await sdk.client.session.delete({
-        sessionID: session.id,
-        directory: projectDirectory(),
-      })
-      showToast({ title: "Session deleted" })
-      // Navigate to new session page
-      navigate(`/${params.dir}/session`)
-    } catch (e) {
-      console.error("Failed to delete session", e)
-      showToast({ title: "Failed to delete session", description: String(e) })
-    } finally {
-      setDeleting(false)
-    }
+    dialog.show(() => (
+      <DialogConfirmDelete
+        title="Delete session"
+        description={`Are you sure you want to delete "${session.title}"? This action cannot be undone.`}
+        onConfirm={async () => {
+          setDeleting(true)
+          try {
+            await sdk.client.session.delete({
+              sessionID: session.id,
+              directory: projectDirectory(),
+            })
+            showToast({ title: "Session deleted" })
+            navigate(`/${params.dir}/session`)
+          } catch (e) {
+            console.error("Failed to delete session", e)
+            showToast({ title: "Failed to delete session", description: String(e) })
+          } finally {
+            setDeleting(false)
+          }
+        }}
+      />
+    ))
   }
 
   return (

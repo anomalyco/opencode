@@ -246,6 +246,18 @@ function createGlobalSync() {
         bootstrapInstance(directory)
         break
       }
+      case "session.deleted": {
+        const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+        if (result.found) {
+          setStore(
+            "session",
+            produce((draft) => {
+              draft.splice(result.index, 1)
+            }),
+          )
+        }
+        break
+      }
       case "session.updated": {
         const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
         if (event.properties.info.time.archived) {
