@@ -17,6 +17,8 @@ import { Select } from "@opencode-ai/ui/select"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogSessionList } from "@/components/dialog-session-list"
+import { DialogSessionRename } from "@/components/dialog-session-rename"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
 import type { Session } from "@opencode-ai/sdk/v2/client"
@@ -46,6 +48,18 @@ export function SessionHeader() {
   function navigateToSession(session: Session | undefined) {
     if (!session) return
     navigate(`/${params.dir}/session/${session.id}`)
+  }
+
+  function openSessionList() {
+    dialog.show(() => (
+      <DialogSessionList currentSessionId={params.id} onSelect={(session) => navigateToSession(session)} />
+    ))
+  }
+
+  function openRenameDialog() {
+    const session = currentSession()
+    if (!session) return
+    dialog.show(() => <DialogSessionRename session={session} />)
   }
 
   return (
@@ -79,18 +93,19 @@ export function SessionHeader() {
               </Select>
               <div class="text-text-weaker">/</div>
             </div>
-            <Select
-              options={sessions()}
-              current={currentSession()}
-              placeholder="New session"
-              label={(x) => x.title}
-              value={(x) => x.id}
-              onSelect={navigateToSession}
-              class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+            <Button
               variant="ghost"
-            />
+              class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+              onClick={openSessionList}
+            >
+              <span class="truncate">{currentSession()?.title ?? "New session"}</span>
+              <Icon name="chevron-down" size="small" />
+            </Button>
           </div>
           <Show when={currentSession()}>
+            <Tooltip class="hidden xl:block" value="Rename session">
+              <IconButton icon="pencil-line" variant="ghost" onClick={openRenameDialog} />
+            </Tooltip>
             <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
             </TooltipKeybind>

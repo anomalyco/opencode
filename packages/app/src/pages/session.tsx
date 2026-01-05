@@ -47,6 +47,8 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
+import { DialogSessionList } from "@/components/dialog-session-list"
+import { DialogSessionRename } from "@/components/dialog-session-rename"
 import { usePlatform } from "@/context/platform"
 import { same } from "@/utils/same"
 
@@ -336,6 +338,33 @@ export default function Page() {
       keybind: "mod+shift+s",
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
+    },
+    {
+      id: "session.list",
+      title: "Open session list",
+      description: "Browse and search all sessions",
+      category: "Session",
+      keybind: "mod+o",
+      slash: "sessions",
+      onSelect: () =>
+        dialog.show(() => (
+          <DialogSessionList
+            currentSessionId={params.id}
+            onSelect={(session) => navigate(`/${params.dir}/session/${session.id}`)}
+          />
+        )),
+    },
+    {
+      id: "session.rename",
+      title: "Rename session",
+      description: "Rename the current session",
+      category: "Session",
+      keybind: "mod+shift+e",
+      disabled: !params.id,
+      onSelect: () => {
+        const session = sync.session.get(params.id ?? "")
+        if (session) dialog.show(() => <DialogSessionRename session={session} />)
+      },
     },
     {
       id: "file.open",
