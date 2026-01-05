@@ -4,8 +4,6 @@ import { ask, message } from "@tauri-apps/plugin-dialog"
 import { invoke } from "@tauri-apps/api/core"
 import { type as ostype } from "@tauri-apps/plugin-os"
 
-import { syncCli } from "./cli"
-
 export const UPDATER_ENABLED = window.__OPENCODE__?.updaterEnabled ?? false
 
 export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {

@@ -15,7 +15,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
-import { syncCli } from "./cli"
 import pkg from "../package.json"
 
 const root = document.getElementById("root")

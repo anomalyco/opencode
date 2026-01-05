@@ -11,11 +11,3 @@ export async function installCli(): Promise<void> {
     await message(`Failed to install CLI: ${e}`, { title: "Installation Failed" })
   }
 }
-
-export async function syncCli(): Promise<void> {
-  try {
-    await invoke("sync_cli")
-  } catch (e) {
-    console.error("Failed to sync CLI:", e)
-  }
-}
