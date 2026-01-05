@@ -53,12 +53,19 @@ export namespace PermissionNext {
     return rulesets.flat()
   }
 
+  export const Command = z.object({
+    head: z.string(),
+    tail: z.string().array(),
+  })
+  export type Command = z.infer<typeof Command>
+
   export const Request = z
     .object({
       id: Identifier.schema("permission"),
       sessionID: Identifier.schema("session"),
       permission: z.string(),
-      patterns: z.string().array(),
+      patterns: z.string().array().optional(),
+      commands: Command.array().optional(),
       metadata: z.record(z.string(), z.any()),
       always: z.string().array(),
       tool: z
@@ -120,6 +127,38 @@ export namespace PermissionNext {
     async (input) => {
       const s = await state()
       const { ruleset, ...request } = input
+
+      // Handle bash commands with structured matching
+      if (request.permission === "bash" && request.commands) {
+        const commands = request.commands // capture narrowed value before closure
+        for (const command of commands) {
+          const rule = evaluateBash(command, ruleset, s.approved)
+          log.info("evaluated bash", { command, action: rule })
+          if (rule.action === "deny")
+            throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
+          if (rule.action === "ask") {
+            const id = input.id ?? Identifier.ascending("permission")
+            return new Promise<void>((resolve, reject) => {
+              const info: Request = {
+                id,
+                ...request,
+                // Include patterns for display in UI
+                patterns: commands.map((c) => [c.head, ...c.tail].join(" ")),
+              }
+              s.pending[id] = {
+                info,
+                resolve,
+                reject,
+              }
+              Bus.publish(Event.Asked, info)
+            })
+          }
+          if (rule.action === "allow") continue
+        }
+        return
+      }
+
+      // Handle standard patterns for other permission types
       for (const pattern of request.patterns ?? []) {
         const rule = evaluate(request.permission, pattern, ruleset, s.approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
@@ -196,9 +235,13 @@ export namespace PermissionNext {
         const sessionID = existing.info.sessionID
         for (const [id, pending] of Object.entries(s.pending)) {
           if (pending.info.sessionID !== sessionID) continue
-          const ok = pending.info.patterns.every(
-            (pattern) => evaluate(pending.info.permission, pattern, s.approved).action === "allow",
-          )
+          // Check if all commands/patterns are now allowed
+          const ok =
+            pending.info.permission === "bash" && pending.info.commands
+              ? pending.info.commands.every((command) => evaluateBash(command, s.approved).action === "allow")
+              : (pending.info.patterns ?? []).every(
+                  (pattern) => evaluate(pending.info.permission, pattern, s.approved).action === "allow",
+                )
           if (!ok) continue
           delete s.pending[id]
           Bus.publish(Event.Replied, {
@@ -224,6 +267,15 @@ export namespace PermissionNext {
       (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
     )
     return match ?? { action: "ask", permission, pattern: "*" }
+  }
+
+  export function evaluateBash(command: Command, ...rulesets: Ruleset[]): Rule {
+    const merged = merge(...rulesets)
+    const bashRules = merged.filter((rule) => Wildcard.match("bash", rule.permission))
+    const patterns = Object.fromEntries(bashRules.map((rule) => [rule.pattern, rule.action]))
+    const action = Wildcard.allStructured(command, patterns)
+    if (action === undefined) return { action: "ask", permission: "bash", pattern: "*" }
+    return { action, permission: "bash", pattern: "*" }
   }
 
   const EDIT_TOOLS = ["edit", "write", "patch", "multiedit"]

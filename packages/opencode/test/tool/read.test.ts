@@ -72,7 +72,7 @@ describe("tool.read external_directory permission", () => {
         await read.execute({ filePath: path.join(outerTmp.path, "secret.txt") }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
-        expect(extDirReq!.patterns.some((p) => p.includes(outerTmp.path))).toBe(true)
+        expect(extDirReq!.patterns?.some((p) => p.includes(outerTmp.path))).toBe(true)
       },
     })
   })
@@ -147,7 +147,7 @@ describe("tool.read env file blocking", () => {
           const ctxWithPermissions = {
             ...ctx,
             ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
-              for (const pattern of req.patterns) {
+              for (const pattern of req.patterns ?? []) {
                 const rule = PermissionNext.evaluate(req.permission, pattern, agent.permission)
                 if (rule.action === "deny") {
                   throw new PermissionNext.DeniedError(agent.permission)

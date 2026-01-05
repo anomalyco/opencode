@@ -86,31 +86,27 @@ export const BashTool = Tool.define("bash", async () => {
       }
       const directories = new Set<string>()
       if (!Instance.containsPath(cwd)) directories.add(cwd)
-      const patterns = new Set<string>()
+      const commands: Array<{ head: string; tail: string[] }> = []
       const always = new Set<string>()
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
-        const command = []
+        const tokens: string[] = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
           if (!child) continue
-          if (
-            child.type !== "command_name" &&
-            child.type !== "word" &&
-            child.type !== "string" &&
-            child.type !== "raw_string" &&
-            child.type !== "concatenation"
-          ) {
-            continue
-          }
-          command.push(child.text)
+          // Include all meaningful text nodes (flags, args, commands, etc.)
+          if (child.text.trim()) tokens.push(child.text)
         }
+        if (tokens.length === 0) continue
+
+        const head = tokens[0]
+        const tail = tokens.slice(1)
 
         // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
-          for (const arg of command.slice(1)) {
-            if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
+        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(head)) {
+          for (const arg of tail) {
+            if (arg.startsWith("-") || (head === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
               .cwd(cwd)
               .quiet()
@@ -130,9 +126,9 @@ export const BashTool = Tool.define("bash", async () => {
         }
 
         // cd covered by above check
-        if (command.length && command[0] !== "cd") {
-          patterns.add(command.join(" "))
-          always.add(BashArity.prefix(command).join(" ") + "*")
+        if (head !== "cd") {
+          commands.push({ head, tail })
+          always.add(BashArity.prefix(tokens).join(" ") + "*")
         }
       }
 
@@ -145,10 +141,11 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      if (patterns.size > 0) {
+      if (commands.length > 0) {
         await ctx.ask({
           permission: "bash",
-          patterns: Array.from(patterns),
+          commands,
+          patterns: commands.map((c) => [c.head, ...c.tail].join(" ")),
           always: Array.from(always),
           metadata: {},
         })
