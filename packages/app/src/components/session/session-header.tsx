@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { createMemo, createResource, Show } from "solid-js"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
@@ -20,6 +20,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
 import type { Session } from "@opencode-ai/sdk/v2/client"
+import { same } from "@/utils/same"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
@@ -36,6 +37,7 @@ export function SessionHeader() {
   const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
   const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const worktrees = createMemo(() => layout.projects.list().map((p) => p.worktree), [], { equals: same })
 
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
@@ -60,7 +62,7 @@ export function SessionHeader() {
           <div class="flex items-center gap-2 min-w-0">
             <div class="hidden xl:flex items-center gap-2">
               <Select
-                options={layout.projects.list().map((project) => project.worktree)}
+                options={worktrees()}
                 current={sync.project?.worktree ?? projectDirectory()}
                 label={(x) => getFilename(x)}
                 onSelect={(x) => (x ? navigateToProject(x) : undefined)}
