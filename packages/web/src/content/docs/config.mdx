@@ -205,6 +205,41 @@ You can also configure [local models](/docs/models#local). [Learn more](/docs/mo
 
 ---
 
+#### Provider-Specific Options
+
+Some providers support additional configuration options beyond the generic `timeout` and `apiKey` settings.
+
+##### Amazon Bedrock
+
+Amazon Bedrock supports AWS-specific configuration:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
+
+- `region` - AWS region for Bedrock (defaults to `AWS_REGION` env var or `us-east-1`)
+- `profile` - AWS named profile from `~/.aws/credentials` (defaults to `AWS_PROFILE` env var)
+- `endpoint` - Custom endpoint URL for VPC endpoints. This is an alias for the generic `baseURL` option using AWS-specific terminology. If both are specified, `endpoint` takes precedence.
+
+:::note
+Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over profile-based authentication. See [authentication precedence](/docs/providers#authentication-precedence) for details.
+:::
+
+[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
+
+---
+
 ### Themes
 
 You can configure the theme you want to use in your OpenCode config through the `theme` option.

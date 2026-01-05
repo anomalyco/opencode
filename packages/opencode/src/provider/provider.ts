@@ -15,7 +15,7 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 
 // Direct imports for bundled providers
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
+import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
 import { createAnthropic } from "@ai-sdk/anthropic"
 import { createAzure } from "@ai-sdk/azure"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
@@ -168,10 +168,22 @@ export namespace Provider {
       }
     },
     "amazon-bedrock": async () => {
+      const config = await Config.get()
+      const providerConfig = config.provider?.["amazon-bedrock"]
+
       const auth = await Auth.get("amazon-bedrock")
-      const awsProfile = Env.get("AWS_PROFILE")
+
+      // Region precedence: 1) config file, 2) env var, 3) default
+      const configRegion = providerConfig?.options?.region
+      const envRegion = Env.get("AWS_REGION")
+      const defaultRegion = configRegion ?? envRegion ?? "us-east-1"
+
+      // Profile: config file takes precedence over env var
+      const configProfile = providerConfig?.options?.profile
+      const envProfile = Env.get("AWS_PROFILE")
+      const profile = configProfile ?? envProfile
+
       const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
-      const awsRegion = Env.get("AWS_REGION")
 
       const awsBearerToken = iife(() => {
         const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
@@ -183,17 +195,27 @@ export namespace Provider {
         return undefined
       })
 
-      if (!awsProfile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
-
-      const defaultRegion = awsRegion ?? "us-east-1"
+      if (!profile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
+
+      // Build credential provider options (only pass profile if specified)
+      const credentialProviderOptions = profile ? { profile } : {}
+
+      const providerOptions: AmazonBedrockProviderSettings = {
+        region: defaultRegion,
+        credentialProvider: fromNodeProviderChain(credentialProviderOptions),
+      }
+
+      // Add custom endpoint if specified (endpoint takes precedence over baseURL)
+      const endpoint = providerConfig?.options?.endpoint ?? providerConfig?.options?.baseURL
+      if (endpoint) {
+        providerOptions.baseURL = endpoint
+      }
+
       return {
         autoload: true,
-        options: {
-          region: defaultRegion,
-          credentialProvider: fromNodeProviderChain(),
-        },
+        options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
           // Skip region prefixing if model already has global prefix
           if (modelID.startsWith("global.")) {
