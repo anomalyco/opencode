@@ -19,7 +19,6 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
 }
 
 interface PR {
-  number: number
   title: string
   html_url: string
 }
@@ -30,11 +29,6 @@ export default tool({
     query: tool.schema.string().describe("Search query for PR titles and descriptions"),
     limit: tool.schema.number().describe("Maximum number of results to return").default(10),
     offset: tool.schema.number().describe("Number of results to skip for pagination").default(0),
-    excludePR: tool.schema
-      .number()
-      .min(1)
-      .optional()
-      .describe("PR number to exclude from results (typically the current PR)"),
   },
   async execute(args) {
     const owner = "anomalyco"
@@ -50,9 +44,7 @@ export default tool({
       return `No PRs found matching "${args.query}"`
     }
 
-    const allPrs = result.items as PR[]
-    // Exclude the current PR from results to avoid self-duplicate detection
-    const prs = args.excludePR ? allPrs.filter((pr) => pr.number !== args.excludePR) : allPrs
+    const prs = result.items as PR[]
 
     if (prs.length === 0) {
       return `No other PRs found matching "${args.query}"`
