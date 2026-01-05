@@ -22,7 +22,10 @@ export namespace ProviderTransform {
     if (model.api.npm === "@ai-sdk/anthropic") {
       msgs = msgs
         .map((msg) => {
-          if (typeof msg.content === "string") return msg
+          if (typeof msg.content === "string") {
+            if (msg.content === "") return undefined
+            return msg
+          }
           if (!Array.isArray(msg.content)) return msg
           const filtered = msg.content.filter((part) => {
             if (part.type === "text" || part.type === "reasoning") {
