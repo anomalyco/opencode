@@ -1,5 +1,17 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createMemo } from "solid-js"
+import {
+  createEffect,
+  on,
+  Component,
+  Show,
+  For,
+  onMount,
+  onCleanup,
+  Switch,
+  Match,
+  createMemo,
+  createSignal,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -246,6 +258,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const isFocused = createFocusSignal(() => editorRef)
+  const [composing, setComposing] = createSignal(false)
+  const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
@@ -868,6 +882,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
+    if (event.key === "Enter" && isImeComposing(event)) {
+      return
+    }
+
     if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       if (store.popover === "at") {
         atOnKeyDown(event)
@@ -1093,6 +1111,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
+            parts: images.map((attachment) => ({
+              id: Identifier.ascending("part"),
+              type: "file" as const,
+              mime: attachment.mime,
+              url: attachment.dataUrl,
+              filename: attachment.filename,
+            })),
           })
           .catch((err) => {
             showToast({
@@ -1489,6 +1514,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
             contenteditable="true"
             onInput={handleInput}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
