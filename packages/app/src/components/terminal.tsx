@@ -146,11 +146,12 @@ export const Terminal = (props: TerminalProps) => {
         term.resize(local.pty.cols, local.pty.rows)
       }
       term.reset()
-      term.write(local.pty.buffer)
-      if (local.pty.scrollY) {
-        term.scrollToLine(local.pty.scrollY)
-      }
-      fitAddon.fit()
+      term.write(local.pty.buffer, () => {
+        if (local.pty.scrollY) {
+          term.scrollToLine(local.pty.scrollY)
+        }
+        fitAddon.fit()
+      })
     }
 
     fitAddon.observeResize()
