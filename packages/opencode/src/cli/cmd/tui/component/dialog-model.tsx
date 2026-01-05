@@ -72,6 +72,7 @@ export function DialogModel(props: { providerID?: string }) {
         (provider) => provider.id !== "opencode",
         (provider) => provider.name,
       ),
+      filter((provider) => (props.providerID ? provider.id === props.providerID : true)),
       flatMap((provider) =>
         pipe(
           provider.models,

@@ -4761,6 +4761,16 @@
                   "method": {
                     "description": "Auth method index",
                     "type": "number"
+                  },
+                  "inputs": {
+                    "description": "Prompt inputs collected from the user",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": ["method"]
@@ -11524,6 +11534,57 @@
         },
         "required": ["type", "prompt", "description", "agent"]
       },
+      "ProviderAuthMethodPromptOption": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          }
+        },
+        "required": ["label", "value"]
+      },
+      "ProviderAuthMethodPrompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "select"
+              },
+              {
+                "type": "string",
+                "const": "text"
+              }
+            ]
+          },
+          "key": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderAuthMethodPromptOption"
+            }
+          },
+          "conditional": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "key", "message"]
+      },
       "ProviderAuthMethod": {
         "type": "object",
         "properties": {
@@ -11541,6 +11602,12 @@
           },
           "label": {
             "type": "string"
+          },
+          "prompts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderAuthMethodPrompt"
+            }
           }
         },
         "required": ["type", "label"]

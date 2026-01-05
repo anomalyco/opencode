@@ -27,6 +27,9 @@ export function createDialogProviderOptions() {
   const sync = useSync()
   const dialog = useDialog()
   const sdk = useSDK()
+  const toast = useToast()
+  const connected = createMemo(() => new Set(sync.data.provider_next.connected))
+
   const options = createMemo(() => {
     return pipe(
       sync.data.provider_next.all,
@@ -41,6 +44,7 @@ export function createDialogProviderOptions() {
           "opencode-go": "Low cost subscription for everyone",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
+        footer: connected().has(provider.id) ? "Connected" : undefined,
         async onSelect() {
           const methods = sync.data.provider_auth[provider.id] ?? [
             {
@@ -69,10 +73,58 @@ export function createDialogProviderOptions() {
           if (index == null) return
           const method = methods[index]
           if (method.type === "oauth") {
+            const inputs: Record<string, string> = {}
+
+            for (const prompt of method.prompts ?? []) {
+              if (prompt.conditional) {
+                // Format: "key:value" - checks if inputs[key] === value
+                const [key, value] = prompt.conditional.split(":")
+                if (!key || !value || inputs[key] !== value) continue
+              }
+
+              if (prompt.type === "select") {
+                if (!prompt.options?.length) continue
+
+                const selected = await new Promise<string | null>((resolve) => {
+                  dialog.replace(
+                    () => (
+                      <DialogSelect
+                        title={prompt.message}
+                        options={prompt.options!.map((opt) => ({
+                          title: opt.label,
+                          value: opt.value,
+                          description: opt.hint,
+                        }))}
+                        onSelect={(option) => resolve(option.value)}
+                      />
+                    ),
+                    () => resolve(null),
+                  )
+                })
+                if (selected === null) return
+                inputs[prompt.key] = selected
+                continue
+              }
+
+              const text = await DialogPrompt.show(dialog, prompt.message, {
+                placeholder: prompt.placeholder ?? "Enter value",
+              })
+              if (text === null) return
+              inputs[prompt.key] = text
+            }
+
             const result = await sdk.client.provider.oauth.authorize({
               providerID: provider.id,
               method: index,
+              inputs,
             })
+            if (result.error) {
+              toast.show({
+                variant: "error",
+                message: "Connection failed. Check the URL or domain.",
+              })
+              return
+            }
             if (result.data?.method === "code") {
               dialog.replace(() => (
                 <CodeMethod providerID={provider.id} title={method.label} index={index} authorization={result.data!} />

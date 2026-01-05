@@ -2,14 +2,40 @@ import type { AuthOuathResult } from "@opencode-ai/plugin"
 import { NamedError } from "@opencode-ai/util/error"
 import * as Auth from "@/auth/service"
 import { ProviderID } from "./schema"
-import { Effect, Layer, Record, ServiceMap, Struct } from "effect"
+import { Effect, Layer, Record, ServiceMap } from "effect"
 import { filter, fromEntries, map, pipe } from "remeda"
 import z from "zod"
+
+export const MethodPromptOption = z
+  .object({
+    label: z.string(),
+    value: z.string(),
+    hint: z.string().optional(),
+  })
+  .meta({
+    ref: "ProviderAuthMethodPromptOption",
+  })
+export type MethodPromptOption = z.infer<typeof MethodPromptOption>
+
+export const MethodPrompt = z
+  .object({
+    type: z.union([z.literal("select"), z.literal("text")]),
+    key: z.string(),
+    message: z.string(),
+    placeholder: z.string().optional(),
+    options: MethodPromptOption.array().optional(),
+    conditional: z.string().optional(),
+  })
+  .meta({
+    ref: "ProviderAuthMethodPrompt",
+  })
+export type MethodPrompt = z.infer<typeof MethodPrompt>
 
 export const Method = z
   .object({
     type: z.union([z.literal("oauth"), z.literal("api")]),
     label: z.string(),
+    prompts: MethodPrompt.array().optional(),
   })
   .meta({
     ref: "ProviderAuthMethod",
@@ -49,10 +75,30 @@ export type ProviderAuthError =
   | InstanceType<typeof OauthCodeMissing>
   | InstanceType<typeof OauthCallbackFailed>
 
+// Converts plugin condition functions to serializable "key:value" strings.
+// Only handles simple `inputs.key === "value"` patterns. Complex conditions
+// or minified/transpiled output may not match — plugins should prefer
+// providing pre-serialized condition strings when possible.
+export function serializeCondition(condition: unknown): string | undefined {
+  if (typeof condition === "string") return condition
+  if (typeof condition !== "function") return undefined
+  const source = condition.toString()
+  const match = source.match(/inputs\.(\w+)\s*===?\s*["'`]([^"'`]+)["'`]/)
+  if (!match) {
+    console.warn(`[ProviderAuth] Failed to serialize condition: ${source.slice(0, 100)}`)
+    return undefined
+  }
+  return `${match[1]}:${match[2]}`
+}
+
 export namespace ProviderAuthService {
   export interface Service {
     readonly methods: () => Effect.Effect<Record<string, Method[]>>
-    readonly authorize: (input: { providerID: ProviderID; method: number }) => Effect.Effect<Authorization | undefined>
+    readonly authorize: (input: {
+      providerID: ProviderID
+      method: number
+      inputs?: Record<string, string>
+    }) => Effect.Effect<Authorization | undefined>
     readonly callback: (input: {
       providerID: ProviderID
       method: number
@@ -80,16 +126,41 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
       const pending = new Map<ProviderID, AuthOuathResult>()
 
       const methods = Effect.fn("ProviderAuthService.methods")(function* () {
-        return Record.map(hooks, (item) => item.methods.map((method): Method => Struct.pick(method, ["type", "label"])))
+        return Record.map(hooks, (item) =>
+          item.methods.map(
+            (method): Method => ({
+              type: method.type,
+              label: method.label,
+              prompts: method.prompts?.map(
+                (p: {
+                  type: string
+                  key: string
+                  message: string
+                  placeholder?: string
+                  options?: MethodPromptOption[]
+                  condition?: unknown
+                }): MethodPrompt => ({
+                  type: p.type as "select" | "text",
+                  key: p.key,
+                  message: p.message,
+                  placeholder: p.placeholder,
+                  options: p.options,
+                  conditional: serializeCondition(p.condition),
+                }),
+              ),
+            }),
+          ),
+        )
       })
 
       const authorize = Effect.fn("ProviderAuthService.authorize")(function* (input: {
         providerID: ProviderID
         method: number
+        inputs?: Record<string, string>
       }) {
         const method = hooks[input.providerID].methods[input.method]
         if (method.type !== "oauth") return
-        const result = yield* Effect.promise(() => method.authorize())
+        const result = yield* Effect.promise(() => method.authorize(input.inputs ?? {}))
         pending.set(input.providerID, result)
         return {
           url: result.url,
@@ -121,13 +192,8 @@ export class ProviderAuthService extends ServiceMap.Service<ProviderAuthService,
         }
 
         if ("refresh" in result) {
-          yield* auth.set(input.providerID, {
-            type: "oauth",
-            access: result.access,
-            refresh: result.refresh,
-            expires: result.expires,
-            ...(result.accountId ? { accountId: result.accountId } : {}),
-          })
+          const { type: _, provider: _p, ...oauth } = result
+          yield* auth.set(input.providerID, { type: "oauth", ...oauth })
         }
       })
 
