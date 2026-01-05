@@ -1085,12 +1085,21 @@ export default function Layout(props: ParentProps) {
           />
           <div
             classList={{
-              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pt-12 pb-5 transition-transform duration-200 ease-out": true,
+              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pb-5 transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            <div class="border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75 shrink-0">
+              <A
+                href="/"
+                class="shrink-0 h-8 flex items-center justify-start px-2 w-full"
+                onClick={() => layout.mobileSidebar.hide()}
+              >
+                <Mark class="shrink-0" />
+              </A>
+            </div>
             <SidebarContent mobile />
           </div>
         </div>
