@@ -1,6 +1,14 @@
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { streamText, wrapLanguageModel, type ModelMessage, type StreamTextResult, type Tool, type ToolSet } from "ai"
+import {
+  streamText,
+  wrapLanguageModel,
+  type ModelMessage,
+  type StreamTextResult,
+  type Tool,
+  type ToolSet,
+  extractReasoningMiddleware,
+} from "ai"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -9,8 +17,8 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
-import { ToolRegistry } from "@/tool/registry"
 import { Flag } from "@/flag/flag"
+import { PermissionNext } from "@/permission/next"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -74,6 +82,16 @@ export namespace LLM {
     }
 
     const provider = await Provider.getProvider(input.model.providerID)
+    const small = input.small ? ProviderTransform.smallOptions(input.model) : {}
+    const variant =
+      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+    const options = pipe(
+      ProviderTransform.options(input.model, input.sessionID, provider.options),
+      mergeDeep(small),
+      mergeDeep(input.model.options),
+      mergeDeep(input.agent.options),
+      mergeDeep(variant),
+    )
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -90,13 +108,7 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
-        options: pipe(
-          {},
-          mergeDeep(ProviderTransform.options(input.model, input.sessionID, provider.options)),
-          input.small ? mergeDeep(ProviderTransform.smallOptions(input.model)) : mergeDeep({}),
-          mergeDeep(input.model.options),
-          mergeDeep(input.agent.options),
-        ),
+        options,
       },
     )
 
@@ -181,6 +193,7 @@ export namespace LLM {
               return args.params
             },
           },
+          extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
         ],
       }),
       experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
@@ -188,13 +201,11 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    const enabled = pipe(
-      input.agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.agent)),
-      mergeDeep(input.user.tools ?? {}),
-    )
-    for (const [key, value] of Object.entries(enabled)) {
-      if (value === false) delete input.tools[key]
+    const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+    for (const tool of Object.keys(input.tools)) {
+      if (input.user.tools?.[tool] === false || disabled.has(tool)) {
+        delete input.tools[tool]
+      }
     }
     return input.tools
   }

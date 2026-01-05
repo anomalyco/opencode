@@ -5,10 +5,12 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
+import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
+import { PROVIDER_DISPLAY_NAMES } from "@/provider/display-names"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -19,11 +21,6 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "google-vertex": 5,
   "google-vertex-anthropic": 6,
   openrouter: 7,
-}
-
-const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  "google-vertex": "Google Vertex AI",
-  "google-vertex-anthropic": "Google Vertex AI (Anthropic)",
 }
 
 export function createDialogProviderOptions() {
@@ -141,7 +138,7 @@ function AutoMethod(props: AutoMethodProps) {
         <text fg={theme.textMuted}>esc</text>
       </box>
       <box gap={1}>
-        <text fg={theme.primary}>{props.authorization.url}</text>
+        <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
       <text fg={theme.textMuted}>Waiting for authorization...</text>
@@ -183,7 +180,7 @@ function CodeMethod(props: CodeMethodProps) {
       description={() => (
         <box gap={1}>
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
-          <text fg={theme.primary}>{props.authorization.url}</text>
+          <Link href={props.authorization.url} fg={theme.primary} />
           <Show when={error()}>
             <text fg={theme.error}>Invalid code</text>
           </Show>
@@ -253,7 +250,7 @@ function ServiceAccountPasteInput(props: { providerID: string }) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const [error, setError] = createSignal("")
-  let textareaRef: any
+  let textareaRef: { plainText: string; focus: () => void } | undefined
 
   const providerDisplayName = () =>
     props.providerID === "google-vertex-anthropic" ? "Google Vertex AI (Anthropic)" : "Google Vertex AI"
@@ -321,7 +318,7 @@ function ServiceAccountPasteInput(props: { providerID: string }) {
       </box>
       <box paddingLeft={4} paddingRight={4} paddingTop={1}>
         <textarea
-          ref={(r: any) => {
+          ref={(r: { plainText: string; focus: () => void }) => {
             textareaRef = r
             setTimeout(() => r.focus(), 1)
           }}

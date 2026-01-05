@@ -10,6 +10,7 @@ import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
+import { PROVIDER_DISPLAY_NAMES } from "../../provider/display-names"
 import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
@@ -36,7 +37,7 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string):
   const method = plugin.auth.methods[index]
 
   // Handle prompts for all auth types
-  await new Promise((resolve) => setTimeout(resolve, 10))
+  await Bun.sleep(10)
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {
@@ -279,10 +280,6 @@ export const AuthLoginCommand = cmd({
           openrouter: 7,
           vercel: 8,
         }
-        const displayNames: Record<string, string> = {
-          "google-vertex": "Google Vertex AI",
-          "google-vertex-anthropic": "Google Vertex AI (Anthropic)",
-        }
         let provider = await prompts.autocomplete({
           message: "Select provider",
           maxItems: 8,
@@ -295,7 +292,7 @@ export const AuthLoginCommand = cmd({
                 (x) => x.name ?? x.id,
               ),
               map((x) => ({
-                label: displayNames[x.id] ?? x.name,
+                label: PROVIDER_DISPLAY_NAMES[x.id] ?? x.name,
                 value: x.id,
                 hint: {
                   opencode: "recommended",
@@ -401,6 +398,12 @@ export const AuthLoginCommand = cmd({
 
           prompts.outro("Done")
           return
+        }
+
+        if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
+          prompts.log.info(
+            "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://opencode.ai/docs/providers/#cloudflare-ai-gateway",
+          )
         }
 
         const key = await prompts.password({

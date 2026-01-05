@@ -11,6 +11,9 @@
     [data-slot="select-select-trigger-icon"] {
       width: 16px;
       height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
       color: var(--text-weak);
       transition: transform 0.1s ease-in-out;
@@ -112,6 +115,9 @@
       pointer-events: none;
     }
     [data-slot="select-select-item-indicator"] {
+      display: flex;
+      align-items: center;
+      justify-content: center;
       margin-left: auto;
       width: 16px;
       height: 16px;

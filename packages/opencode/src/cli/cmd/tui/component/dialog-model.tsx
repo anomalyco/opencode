@@ -7,15 +7,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { Keybind } from "@/util/keybind"
 import * as fuzzysort from "fuzzysort"
-
-const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  "google-vertex": "Google Vertex AI",
-  "google-vertex-anthropic": "Google Vertex AI (Anthropic)",
-}
-
-function getProviderDisplayName(provider: { id: string; name: string }): string {
-  return PROVIDER_DISPLAY_NAMES[provider.id] ?? provider.name
-}
+import { getProviderDisplayName } from "@/provider/display-names"
 
 export function useConnected() {
   const sync = useSync()
@@ -159,7 +151,7 @@ export function DialogModel(props: { providerID?: string }) {
               (item) => item.providerID === value.providerID && item.modelID === value.modelID,
             )
             if (inFavorites) return false
-            const inRecents = recents.some(
+            const inRecents = recentList.some(
               (item) => item.providerID === value.providerID && item.modelID === value.modelID,
             )
             if (inRecents) return false
