@@ -3292,6 +3292,14 @@ export type SessionCommandData = {
     arguments: string
     command: string
     variant?: string
+    parts?: Array<{
+      id?: string
+      type: "file"
+      mime: string
+      filename?: string
+      url: string
+      source?: FilePartSource
+    }>
   }
   path: {
     /**
