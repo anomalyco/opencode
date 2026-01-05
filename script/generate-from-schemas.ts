@@ -191,11 +191,21 @@ function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): s
     if (schema.const !== undefined) {
       return `z.literal(${schema.const})`
     }
+    // Build number schema with optional constraints
+    let result = "z.number()"
     // Use .int() for integer type to match z.number().int() behavior
     if (schema.type === "integer") {
-      return "z.number().int()"
+      result += ".int()"
     }
-    return "z.number()"
+    // Add minimum constraint if present
+    if (schema.minimum !== undefined) {
+      result += `.min(${schema.minimum})`
+    }
+    // Add maximum constraint if present
+    if (schema.maximum !== undefined) {
+      result += `.max(${schema.maximum})`
+    }
+    return result
   }
 
   if (schema.type === "boolean") {

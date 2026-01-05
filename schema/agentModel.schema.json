@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/agentModel.json",
+  "$comment": "Source: packages/opencode/src/agent/agent.ts @ a14f9d216 lines 28-31",
+  "title": "AgentModel",
+  "description": "Model selection for an agent",
+  "type": "object",
+  "required": ["modelID", "providerID"],
+  "properties": {
+    "modelID": {
+      "type": "string",
+      "description": "Model identifier"
+    },
+    "providerID": {
+      "type": "string",
+      "description": "Provider identifier"
+    }
+  }
+}

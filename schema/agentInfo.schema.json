@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/agentInfo.json",
+  "$comment": "Source: packages/opencode/src/agent/agent.ts @ a14f9d216 lines 17-41",
+  "title": "AgentInfo",
+  "description": "Agent configuration and metadata",
+  "type": "object",
+  "required": ["name", "mode", "permission", "options"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Agent name identifier"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the agent"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["subagent", "primary", "all"],
+      "description": "Agent mode: subagent (spawned by other agents), primary (direct interaction), or all"
+    },
+    "native": {
+      "type": "boolean",
+      "description": "Whether this is a built-in native agent"
+    },
+    "hidden": {
+      "type": "boolean",
+      "description": "Whether to hide this agent from UI listings"
+    },
+    "topP": {
+      "type": "number",
+      "description": "Top-p sampling parameter for model inference"
+    },
+    "temperature": {
+      "type": "number",
+      "description": "Temperature parameter for model inference"
+    },
+    "color": {
+      "type": "string",
+      "description": "Hex color for UI differentiation"
+    },
+    "permission": {
+      "$ref": "permissionRuleset.schema.json",
+      "description": "Permission ruleset for the agent"
+    },
+    "model": {
+      "$ref": "agentModel.schema.json",
+      "description": "Default model selection for the agent"
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Custom system prompt for the agent"
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional agent-specific options"
+    },
+    "steps": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum number of inference steps"
+    }
+  }
+}

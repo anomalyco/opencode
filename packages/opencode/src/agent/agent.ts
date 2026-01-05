@@ -13,32 +13,13 @@ import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 
+// Generated from JSON Schema - see schema/agentInfo.schema.json
+import { agentInfoSchema, type AgentInfo } from "@generated/validators/agentInfo"
+
 export namespace Agent {
-  export const Info = z
-    .object({
-      name: z.string(),
-      description: z.string().optional(),
-      mode: z.enum(["subagent", "primary", "all"]),
-      native: z.boolean().optional(),
-      hidden: z.boolean().optional(),
-      topP: z.number().optional(),
-      temperature: z.number().optional(),
-      color: z.string().optional(),
-      permission: PermissionNext.Ruleset,
-      model: z
-        .object({
-          modelID: z.string(),
-          providerID: z.string(),
-        })
-        .optional(),
-      prompt: z.string().optional(),
-      options: z.record(z.string(), z.any()),
-      steps: z.number().int().positive().optional(),
-    })
-    .meta({
-      ref: "Agent",
-    })
-  export type Info = z.infer<typeof Info>
+  // Generated from JSON Schema - see schema/agentInfo.schema.json
+  export const Info = agentInfoSchema
+  export type Info = AgentInfo
 
   const state = Instance.state(async () => {
     const cfg = await Config.get()
