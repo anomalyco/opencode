@@ -33,6 +33,9 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
       - name: Build prompt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
