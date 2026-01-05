@@ -20,18 +20,19 @@ export function formatDateForTable(date: Date) {
 }
 
 export function formatDateUTC(date: Date) {
-  const options: Intl.DateTimeFormatOptions = {
+  const isoDate = date.toLocaleDateString("en-CA", { timeZone: "UTC" })
+  const weekday = date.toLocaleDateString("en-US", {
     weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+    timeZone: "UTC",
+  })
+  const time = date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     second: "2-digit",
     timeZoneName: "short",
     timeZone: "UTC",
-  }
-  return date.toLocaleDateString("en-US", options)
+  })
+  return `${isoDate} ${weekday} ${time}`
 }
 
 export function formatBalance(amount: number) {
