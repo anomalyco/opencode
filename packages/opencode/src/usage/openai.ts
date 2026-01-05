@@ -78,6 +78,7 @@ export namespace OpenAIUsage {
           Accept: "application/json",
           "User-Agent": "opencode-cli",
         },
+        signal: AbortSignal.timeout(10_000),
       })
 
       if (!response.ok) {
@@ -117,6 +118,9 @@ export namespace OpenAIUsage {
     const date = new Date(unixTimestamp * 1000)
     const now = new Date()
     const diffMs = date.getTime() - now.getTime()
+
+    if (diffMs <= 0) return "refreshing"
+
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMins / 60)
 
@@ -137,7 +141,10 @@ export namespace OpenAIUsage {
     if (balance === null || balance === undefined) {
       return "N/A"
     }
-    const num = typeof balance === "string" ? parseFloat(balance) : balance
+    const num = typeof balance === "string" ? Number(balance) : balance
+    if (typeof num !== "number" || !Number.isFinite(num)) {
+      return "N/A"
+    }
     return `$${num.toFixed(2)}`
   }
 }

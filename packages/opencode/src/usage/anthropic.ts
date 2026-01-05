@@ -28,6 +28,7 @@ export namespace AnthropicUsage {
           "anthropic-beta": "oauth-2025-04-20",
           Accept: "application/json",
         },
+        signal: AbortSignal.timeout(10_000),
       })
 
       if (!response.ok) {
@@ -54,6 +55,9 @@ export namespace AnthropicUsage {
     const date = new Date(isoString)
     const now = new Date()
     const diffMs = date.getTime() - now.getTime()
+
+    if (diffMs <= 0) return "refreshing"
+
     const diffMins = Math.floor(diffMs / 60000)
     const diffHours = Math.floor(diffMins / 60)
 

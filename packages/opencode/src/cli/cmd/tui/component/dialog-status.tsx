@@ -4,12 +4,14 @@ import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo, createResource } from "solid-js"
 import { AnthropicUsage } from "@/usage/anthropic"
 import { OpenAIUsage } from "@/usage/openai"
+import { getUsageColor, clampPercent } from "@/usage/utils"
 
 export type DialogStatusProps = {}
 
 function UsageBar(props: { percent: number; fg: RGBA; bgMuted: RGBA }) {
   const width = 20
-  const filled = Math.round((props.percent / 100) * width)
+  const clamped = clampPercent(props.percent)
+  const filled = Math.round((clamped / 100) * width)
   const empty = width - filled
   return (
     <text>
@@ -25,12 +27,12 @@ export function DialogStatus() {
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
-  const [anthropicUsage, { refetch: refetchAnthropicUsage }] = createResource(
+  const [anthropicUsage] = createResource(
     () => AnthropicUsage.fetch(),
     { initialValue: null }
   )
 
-  const [openaiUsage, { refetch: refetchOpenAIUsage }] = createResource(
+  const [openaiUsage] = createResource(
     () => OpenAIUsage.fetch(),
     { initialValue: null }
   )
@@ -60,11 +62,7 @@ export function DialogStatus() {
     return result.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  const getUsageColor = (percent: number) => {
-    if (percent >= 90) return theme.error
-    if (percent >= 70) return theme.warning
-    return theme.success
-  }
+  const colorFor = (percent: number) => colorFor(percent, theme)
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
@@ -85,8 +83,8 @@ export function DialogStatus() {
               {(fiveHour) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>5h:</text>
-                  <UsageBar percent={fiveHour().utilization} fg={getUsageColor(fiveHour().utilization)} bgMuted={theme.textMuted} />
-                  <text fg={getUsageColor(fiveHour().utilization)}>{fiveHour().utilization}%</text>
+                  <UsageBar percent={fiveHour().utilization} fg={colorFor(fiveHour().utilization)} bgMuted={theme.textMuted} />
+                  <text fg={colorFor(fiveHour().utilization)}>{fiveHour().utilization}%</text>
                   <text fg={theme.textMuted}>
                     (reset: {AnthropicUsage.formatResetTime(fiveHour().resets_at)})
                   </text>
@@ -97,8 +95,8 @@ export function DialogStatus() {
               {(sevenDay) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>7d:</text>
-                  <UsageBar percent={sevenDay().utilization} fg={getUsageColor(sevenDay().utilization)} bgMuted={theme.textMuted} />
-                  <text fg={getUsageColor(sevenDay().utilization)}>{sevenDay().utilization}%</text>
+                  <UsageBar percent={sevenDay().utilization} fg={colorFor(sevenDay().utilization)} bgMuted={theme.textMuted} />
+                  <text fg={colorFor(sevenDay().utilization)}>{sevenDay().utilization}%</text>
                   <text fg={theme.textMuted}>
                     (reset: {AnthropicUsage.formatResetTime(sevenDay().resets_at)})
                   </text>
@@ -109,8 +107,8 @@ export function DialogStatus() {
               {(opus) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>Opus 7d:</text>
-                  <UsageBar percent={opus().utilization} fg={getUsageColor(opus().utilization)} bgMuted={theme.textMuted} />
-                  <text fg={getUsageColor(opus().utilization)}>{opus().utilization}%</text>
+                  <UsageBar percent={opus().utilization} fg={colorFor(opus().utilization)} bgMuted={theme.textMuted} />
+                  <text fg={colorFor(opus().utilization)}>{opus().utilization}%</text>
                   <text fg={theme.textMuted}>
                     (reset: {AnthropicUsage.formatResetTime(opus().resets_at)})
                   </text>
@@ -131,8 +129,8 @@ export function DialogStatus() {
               {(primary) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>{OpenAIUsage.formatWindowDuration(primary().limit_window_seconds)}:</text>
-                  <UsageBar percent={primary().used_percent} fg={getUsageColor(primary().used_percent)} bgMuted={theme.textMuted} />
-                  <text fg={getUsageColor(primary().used_percent)}>{Math.round(primary().used_percent)}%</text>
+                  <UsageBar percent={primary().used_percent} fg={colorFor(primary().used_percent)} bgMuted={theme.textMuted} />
+                  <text fg={colorFor(primary().used_percent)}>{Math.round(primary().used_percent)}%</text>
                   <text fg={theme.textMuted}>
                     (reset: {OpenAIUsage.formatResetTime(primary().reset_at)})
                   </text>
@@ -143,8 +141,8 @@ export function DialogStatus() {
               {(secondary) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.text}>{OpenAIUsage.formatWindowDuration(secondary().limit_window_seconds)}:</text>
-                  <UsageBar percent={secondary().used_percent} fg={getUsageColor(secondary().used_percent)} bgMuted={theme.textMuted} />
-                  <text fg={getUsageColor(secondary().used_percent)}>{Math.round(secondary().used_percent)}%</text>
+                  <UsageBar percent={secondary().used_percent} fg={colorFor(secondary().used_percent)} bgMuted={theme.textMuted} />
+                  <text fg={colorFor(secondary().used_percent)}>{Math.round(secondary().used_percent)}%</text>
                   <text fg={theme.textMuted}>
                     (reset: {OpenAIUsage.formatResetTime(secondary().reset_at)})
                   </text>

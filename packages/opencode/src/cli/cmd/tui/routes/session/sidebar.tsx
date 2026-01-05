@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match, createResource } from "solid-js"
+import { createMemo, For, Show, Switch, Match, createResource, createEffect, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -13,6 +13,7 @@ import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 import { AnthropicUsage } from "@/usage/anthropic"
 import { OpenAIUsage } from "@/usage/openai"
+import { getUsageColor, usageBarString } from "@/usage/utils"
 
 export function Sidebar(props: { sessionID: string }) {
   const sync = useSync()
@@ -30,20 +31,20 @@ export function Sidebar(props: { sessionID: string }) {
     usage: true,
   })
 
-  const [anthropicUsage] = createResource(() => AnthropicUsage.fetch(), { initialValue: null })
-  const [openaiUsage] = createResource(() => OpenAIUsage.fetch(), { initialValue: null })
+  const [anthropicUsage, { refetch: refetchAnthropic }] = createResource(() => AnthropicUsage.fetch(), { initialValue: null })
+  const [openaiUsage, { refetch: refetchOpenAI }] = createResource(() => OpenAIUsage.fetch(), { initialValue: null })
 
-  const getUsageColor = (percent: number) => {
-    if (percent >= 90) return theme.error
-    if (percent >= 70) return theme.warning
-    return theme.success
-  }
+  createEffect(on(
+    () => messages().length,
+    () => {
+      refetchAnthropic()
+      refetchOpenAI()
+    },
+    { defer: true }
+  ))
 
-  const usageBar = (percent: number) => {
-    const width = 10
-    const filled = Math.round((percent / 100) * width)
-    return "█".repeat(filled) + "░".repeat(width - filled)
-  }
+  const colorFor = (percent: number) => colorFor(percent, theme)
+  const usageBar = (percent: number) => usageBarString(percent, 10)
 
   const hasUsageData = createMemo(() => anthropicUsage() || openaiUsage())
 
@@ -136,7 +137,7 @@ export function Sidebar(props: { sessionID: string }) {
                         <Show when={usage().five_hour}>
                           {(w) => (
                             <text fg={theme.textMuted}>
-                              5h <span style={{ fg: getUsageColor(w().utilization) }}>{usageBar(w().utilization)}</span>
+                              5h <span style={{ fg: colorFor(w().utilization) }}>{usageBar(w().utilization)}</span>
                               {" "}{w().utilization}% ({AnthropicUsage.formatResetTime(w().resets_at)})
                             </text>
                           )}
@@ -144,7 +145,7 @@ export function Sidebar(props: { sessionID: string }) {
                         <Show when={usage().seven_day}>
                           {(w) => (
                             <text fg={theme.textMuted}>
-                              7d <span style={{ fg: getUsageColor(w().utilization) }}>{usageBar(w().utilization)}</span>
+                              7d <span style={{ fg: colorFor(w().utilization) }}>{usageBar(w().utilization)}</span>
                               {" "}{w().utilization}% ({AnthropicUsage.formatResetTime(w().resets_at)})
                             </text>
                           )}
@@ -159,7 +160,7 @@ export function Sidebar(props: { sessionID: string }) {
                         <Show when={usage().rate_limit?.primary_window}>
                           {(w) => (
                             <text fg={theme.textMuted}>
-                              {OpenAIUsage.formatWindowDuration(w().limit_window_seconds)} <span style={{ fg: getUsageColor(w().used_percent) }}>{usageBar(w().used_percent)}</span>
+                              {OpenAIUsage.formatWindowDuration(w().limit_window_seconds)} <span style={{ fg: colorFor(w().used_percent) }}>{usageBar(w().used_percent)}</span>
                               {" "}{Math.round(w().used_percent)}% ({OpenAIUsage.formatResetTime(w().reset_at)})
                             </text>
                           )}
@@ -167,7 +168,7 @@ export function Sidebar(props: { sessionID: string }) {
                         <Show when={usage().rate_limit?.secondary_window}>
                           {(w) => (
                             <text fg={theme.textMuted}>
-                              {OpenAIUsage.formatWindowDuration(w().limit_window_seconds)} <span style={{ fg: getUsageColor(w().used_percent) }}>{usageBar(w().used_percent)}</span>
+                              {OpenAIUsage.formatWindowDuration(w().limit_window_seconds)} <span style={{ fg: colorFor(w().used_percent) }}>{usageBar(w().used_percent)}</span>
                               {" "}{Math.round(w().used_percent)}% ({OpenAIUsage.formatResetTime(w().reset_at)})
                             </text>
                           )}
