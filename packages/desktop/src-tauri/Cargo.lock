@@ -2777,6 +2777,7 @@ version = "0.0.0"
 dependencies = [
  "gtk",
  "listeners",
+ "semver",
  "serde",
  "serde_json",
  "tauri",
