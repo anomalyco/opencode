@@ -982,6 +982,30 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Filter sessions updated on or after this timestamp (milliseconds since epoch)"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter sessions by title (case-insensitive)"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "number"
+            },
+            "description": "Maximum number of sessions to return"
           }
         ],
         "summary": "List sessions",
@@ -3045,6 +3069,9 @@
                   "reply": {
                     "type": "string",
                     "enum": ["once", "always", "reject"]
+                  },
+                  "message": {
+                    "type": "string"
                   }
                 },
                 "required": ["reply"]
@@ -4538,6 +4565,46 @@
         ]
       }
     },
+    "/experimental/resource": {
+      "get": {
+        "operationId": "experimental.resource.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get MCP resources",
+        "description": "Get all available MCP resources from connected servers. Optionally filter by name.",
+        "responses": {
+          "200": {
+            "description": "MCP resources",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/McpResource"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.resource.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/lsp": {
       "get": {
         "operationId": "lsp.status",
@@ -5399,7 +5466,7 @@
             }
           }
         },
-        "required": ["id", "worktree", "time"]
+        "required": ["id", "worktree", "time", "sandboxes"]
       },
       "Event.project.updated": {
         "type": "object",
@@ -6037,6 +6104,25 @@
         },
         "required": ["text", "type", "path", "range", "name", "kind"]
       },
+      "ResourceSource": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "$ref": "#/components/schemas/FilePartSourceText"
+          },
+          "type": {
+            "type": "string",
+            "const": "resource"
+          },
+          "clientName": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": ["text", "type", "clientName", "uri"]
+      },
       "FilePartSource": {
         "anyOf": [
           {
@@ -6044,6 +6130,9 @@
           },
           {
             "$ref": "#/components/schemas/SymbolSource"
+          },
+          {
+            "$ref": "#/components/schemas/ResourceSource"
           }
         ]
       },
@@ -8816,10 +8905,24 @@
             "additionalProperties": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/McpLocalConfig"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/McpLocalConfig"
+                    },
+                    {
+                      "$ref": "#/components/schemas/McpRemoteConfig"
+                    }
+                  ]
                 },
                 {
-                  "$ref": "#/components/schemas/McpRemoteConfig"
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["enabled"],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -9901,6 +10004,27 @@
             "$ref": "#/components/schemas/MCPStatusNeedsClientRegistration"
           }
         ]
+      },
+      "McpResource": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "client": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "uri", "client"]
       },
       "LSPStatus": {
         "type": "object",

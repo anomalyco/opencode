@@ -1,4 +1,4 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on, createRenderEffect, batch } from "solid-js"
+import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on, batch } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
@@ -24,7 +24,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum, base64Decode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -47,6 +47,7 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
+import { usePlatform } from "@/context/platform"
 
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
@@ -73,12 +74,18 @@ function SessionReviewTab(props: SessionReviewTabProps) {
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
 
-  const restoreScroll = () => {
+  const restoreScroll = (retries = 0) => {
     const el = scroll
     if (!el) return
 
     const s = props.view().scroll("review")
     if (!s) return
+
+    // Wait for content to be scrollable - content may not have rendered yet
+    if (el.scrollHeight <= el.clientHeight && retries < 10) {
+      requestAnimationFrame(() => restoreScroll(retries + 1))
+      return
+    }
 
     if (el.scrollTop !== s.y) el.scrollTop = s.y
     if (el.scrollLeft !== s.x) el.scrollLeft = s.x
@@ -147,6 +154,7 @@ export default function Page() {
   const dialog = useDialog()
   const codeComponent = useCodeComponent()
   const command = useCommand()
+  const platform = usePlatform()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -241,13 +249,9 @@ export default function Page() {
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
-    userInteracted: false,
-    stepsExpanded: true,
-    mobileStepsExpanded: {} as Record<string, boolean>,
+    expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "review",
-    ignoreScrollSpy: false,
-    initialScrollDone: !params.id,
     newSessionWorktree: "main",
   })
 
@@ -309,47 +313,24 @@ export default function Page() {
     ),
   )
 
-  createEffect(
-    on(
-      () => params.id,
-      (id) => {
-        const status = sync.data.session_status[id ?? ""] ?? idle
-        batch(() => {
-          setStore("userInteracted", false)
-          setStore("stepsExpanded", status.type !== "idle")
-        })
-      },
-    ),
-  )
-
   const status = createMemo(() => sync.data.session_status[params.id ?? ""] ?? idle)
 
   createEffect(
     on(
-      () => status().type,
-      (type) => {
-        if (type !== "idle") return
-        batch(() => {
-          setStore("userInteracted", false)
-          setStore("stepsExpanded", false)
-        })
+      () => params.id,
+      () => {
+        setStore("messageId", undefined)
+        setStore("expanded", {})
       },
       { defer: true },
     ),
   )
 
-  const working = createMemo(() => status().type !== "idle" && activeMessage()?.id === lastUserMessage()?.id)
-
-  createRenderEffect((prev) => {
-    const isWorking = working()
-    if (!prev && isWorking) {
-      setStore("stepsExpanded", true)
-    }
-    if (prev && !isWorking && !store.userInteracted) {
-      setStore("stepsExpanded", false)
-    }
-    return isWorking
-  }, working())
+  createEffect(() => {
+    const id = lastUserMessage()?.id
+    if (!id) return
+    setStore("expanded", id, status().type !== "idle")
+  })
 
   command.register(() => [
     {
@@ -398,12 +379,16 @@ export default function Page() {
     {
       id: "steps.toggle",
       title: "Toggle steps",
-      description: "Show or hide the steps",
+      description: "Show or hide steps for the current message",
       category: "View",
       keybind: "mod+e",
       slash: "steps",
       disabled: !params.id,
-      onSelect: () => setStore("stepsExpanded", (x) => !x),
+      onSelect: () => {
+        const msg = activeMessage()
+        if (!msg) return
+        setStore("expanded", msg.id, (open: boolean | undefined) => !open)
+      },
     },
     {
       id: "message.previous",
@@ -673,204 +658,76 @@ export default function Page() {
   const isWorking = createMemo(() => status().type !== "idle")
   const autoScroll = createAutoScroll({
     working: isWorking,
-    onUserInteracted: () => setStore("userInteracted", true),
   })
-
-  let scrollContainer: HTMLDivElement | undefined
-  let initialScrollFrame: number | undefined
-  let initialScrollTarget: string | undefined
-
-  const cancelInitialScroll = () => {
-    if (initialScrollFrame === undefined) return
-    cancelAnimationFrame(initialScrollFrame)
-    initialScrollFrame = undefined
-  }
-
-  const ensureInitialScroll = () => {
-    cancelInitialScroll()
-    initialScrollFrame = requestAnimationFrame(() => {
-      initialScrollFrame = undefined
-      if (!params.id) {
-        initialScrollTarget = undefined
-        setStore("initialScrollDone", true)
-        return
-      }
-      const msgs = visibleUserMessages()
-      if (msgs.length === 0) {
-        if (!messagesReady()) {
-          ensureInitialScroll()
-          return
-        }
-        initialScrollTarget = undefined
-        setStore("initialScrollDone", true)
-        return
-      }
-      const last = msgs[msgs.length - 1]
-      const el = messageRefs.get(last.id)
-      if (!el || !scrollContainer) {
-        ensureInitialScroll()
-        return
-      }
-      scrollToMessage(last, "auto")
-      initialScrollTarget = last.id
-      setStore("initialScrollDone", true)
-    })
-  }
-
-  const setScrollRef = (el: HTMLDivElement | undefined) => {
-    scrollContainer = el
-    autoScroll.scrollRef(el)
-  }
-
-  const messageRefs = new Map<string, HTMLDivElement>()
-  let scrollTimer: number | undefined
-
-  createEffect(() => {
-    const msgs = visibleUserMessages()
-    if (msgs.length === 0) {
-      messageRefs.clear()
-      return
-    }
-    const ids = new Set(msgs.map((m) => m.id))
-    for (const id of messageRefs.keys()) {
-      if (ids.has(id)) continue
-      messageRefs.delete(id)
-    }
-  })
-
-  let scrollSpyIndex = 0
-
-  const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
-    setStore("ignoreScrollSpy", true)
-    setActiveMessage(message)
-
-    const msgs = visibleUserMessages()
-    const idx = msgs.findIndex((m) => m.id === message.id)
-    if (idx >= 0) scrollSpyIndex = idx
-
-    const el = messageRefs.get(message.id)
-    if (el) {
-      el.scrollIntoView({ behavior, block: "start" })
-    }
-
-    if (scrollTimer !== undefined) window.clearTimeout(scrollTimer)
-    scrollTimer = window.setTimeout(() => setStore("ignoreScrollSpy", false), 1000)
-  }
 
   let scrollSpyFrame: number | undefined
   let scrollSpyTarget: HTMLDivElement | undefined
 
+  const anchor = (id: string) => `message-${id}`
+
+  const setScrollRef = (el: HTMLDivElement | undefined) => {
+    autoScroll.scrollRef(el)
+  }
+
+  const updateHash = (id: string) => {
+    window.history.replaceState(null, "", `#${anchor(id)}`)
+  }
+
+  const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
+    setActiveMessage(message)
+
+    const el = document.getElementById(anchor(message.id))
+    if (el) el.scrollIntoView({ behavior, block: "start" })
+    updateHash(message.id)
+  }
+
+  const getActiveMessageId = (container: HTMLDivElement) => {
+    const cutoff = container.scrollTop + 100
+    const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
+    let id: string | undefined
+
+    for (const node of nodes) {
+      const next = node.dataset.messageId
+      if (!next) continue
+      if (node.offsetTop > cutoff) break
+      id = next
+    }
+
+    return id
+  }
+
   const scheduleScrollSpy = (container: HTMLDivElement) => {
-    if (store.ignoreScrollSpy) return
     scrollSpyTarget = container
     if (scrollSpyFrame !== undefined) return
 
     scrollSpyFrame = requestAnimationFrame(() => {
       scrollSpyFrame = undefined
+
       const target = scrollSpyTarget
       scrollSpyTarget = undefined
       if (!target) return
-      if (store.ignoreScrollSpy) return
 
-      const msgs = visibleUserMessages()
-      const scrollTop = target.scrollTop
-      const threshold = 100
-      const cutoff = scrollTop + threshold
+      const id = getActiveMessageId(target)
+      if (!id) return
+      if (id === store.messageId) return
 
-      if (msgs.length === 0) return
-
-      if (scrollSpyIndex >= msgs.length) scrollSpyIndex = msgs.length - 1
-      if (scrollSpyIndex < 0) scrollSpyIndex = 0
-
-      while (scrollSpyIndex + 1 < msgs.length) {
-        const next = msgs[scrollSpyIndex + 1]
-        if (!next) break
-
-        const el = messageRefs.get(next.id)
-        if (!el) break
-        if (el.offsetTop <= cutoff) {
-          scrollSpyIndex += 1
-          continue
-        }
-        break
-      }
-
-      while (scrollSpyIndex > 0) {
-        const cur = msgs[scrollSpyIndex]
-        if (!cur) break
-
-        const el = messageRefs.get(cur.id)
-        if (!el) break
-        if (el.offsetTop > cutoff) {
-          scrollSpyIndex -= 1
-          continue
-        }
-        break
-      }
-
-      const msg = msgs[scrollSpyIndex]
-      if (!msg) return
-      if (msg.id === activeMessage()?.id) return
-
-      setActiveMessage(msg)
+      setStore("messageId", id)
     })
   }
 
-  createEffect(
-    on(
-      () => params.id,
-      (id) => {
-        cancelInitialScroll()
-        if (scrollTimer !== undefined) window.clearTimeout(scrollTimer)
-        scrollTimer = undefined
-        if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
-        scrollSpyFrame = undefined
-        scrollSpyTarget = undefined
-        messageRefs.clear()
-        scrollSpyIndex = 0
-        initialScrollTarget = undefined
-        setStore("initialScrollDone", !id)
-      },
-      { defer: true },
-    ),
-  )
-
   createEffect(() => {
-    const msgs = visibleUserMessages()
-    const target = msgs.at(-1)?.id
+    const sessionID = params.id
     const ready = messagesReady()
+    if (!sessionID || !ready) return
 
-    if (!params.id) {
-      setStore("initialScrollDone", true)
-      initialScrollTarget = undefined
-      return
-    }
-
-    if (!ready) {
-      setStore("initialScrollDone", false)
-      ensureInitialScroll()
-      return
-    }
-
-    if (!store.initialScrollDone) {
-      ensureInitialScroll()
-      return
-    }
-
-    if (!initialScrollTarget && target) {
-      setStore("initialScrollDone", false)
-      ensureInitialScroll()
-    }
-  })
-
-  createEffect(() => {
-    const msgs = visibleUserMessages()
-    if (msgs.length === 0) return
     requestAnimationFrame(() => {
-      if (!scrollContainer) return
-      if (!isDesktop()) return
-      // Manually trigger spy once to set initial active message based on scroll position
-      scheduleScrollSpy(scrollContainer)
+      const id = window.location.hash.slice(1)
+      const hashTarget = id ? document.getElementById(id) : undefined
+      if (hashTarget) {
+        hashTarget.scrollIntoView({ behavior: "auto", block: "start" })
+        return
+      }
+      autoScroll.forceScrollToBottom()
     })
   })
 
@@ -880,8 +737,6 @@ export default function Page() {
 
   onCleanup(() => {
     document.removeEventListener("keydown", handleKeyDown)
-    cancelInitialScroll()
-    if (scrollTimer !== undefined) window.clearTimeout(scrollTimer)
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
   })
 
@@ -962,13 +817,10 @@ export default function Page() {
                         }}
                         onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto no-scrollbar"
-                        classList={{
-                          "opacity-0 pointer-events-none": !store.initialScrollDone,
-                        }}
                       >
                         <div
                           ref={autoScroll.contentRef}
-                          class="flex flex-col gap-45 items-start justify-start pb-32 md:pb-40 transition-[margin]"
+                          class="flex flex-col gap-32 items-start justify-start pb-32 md:pb-40 transition-[margin]"
                           classList={{
                             "mt-0.5": !showTabs(),
                             "mt-0": showTabs(),
@@ -977,16 +829,24 @@ export default function Page() {
                           <For each={visibleUserMessages()}>
                             {(message) => (
                               <div
-                                ref={(el) => messageRefs.set(message.id, el)}
-                                class="min-w-0 w-full max-w-full last:min-h-[80vh]"
+                                id={anchor(message.id)}
+                                data-message-id={message.id}
+                                classList={{
+                                  "min-w-0 w-full max-w-full": true,
+                                  "last:min-h-[calc(100vh-13.5rem)] md:last:min-h-[calc(100vh-14.5rem)]":
+                                    platform.platform !== "desktop",
+                                  "last:min-h-[calc(100vh-15rem)] md:last:min-h-[calc(100vh-16rem)]":
+                                    platform.platform === "desktop",
+                                }}
                               >
                                 <SessionTurn
                                   sessionID={params.id!}
                                   messageID={message.id}
                                   lastUserMessageID={lastUserMessage()?.id}
-                                  stepsExpanded={store.mobileStepsExpanded[message.id] ?? false}
-                                  onStepsExpandedToggle={() => setStore("mobileStepsExpanded", message.id, (x) => !x)}
-                                  onUserInteracted={() => setStore("userInteracted", true)}
+                                  stepsExpanded={store.expanded[message.id] ?? false}
+                                  onStepsExpandedToggle={() =>
+                                    setStore("expanded", message.id, (open: boolean | undefined) => !open)
+                                  }
                                   classes={{
                                     root: "min-w-0 w-full relative",
                                     content:
@@ -1151,6 +1011,35 @@ export default function Page() {
                     })
                     const contents = createMemo(() => state()?.content?.content ?? "")
                     const cacheKey = createMemo(() => checksum(contents()))
+                    const isImage = createMemo(() => {
+                      const c = state()?.content
+                      return (
+                        c?.encoding === "base64" && c?.mimeType?.startsWith("image/") && c?.mimeType !== "image/svg+xml"
+                      )
+                    })
+                    const isSvg = createMemo(() => {
+                      const c = state()?.content
+                      return c?.mimeType === "image/svg+xml"
+                    })
+                    const svgContent = createMemo(() => {
+                      if (!isSvg()) return
+                      const c = state()?.content
+                      if (!c) return
+                      if (c.encoding === "base64") return base64Decode(c.content)
+                      return c.content
+                    })
+                    const svgPreviewUrl = createMemo(() => {
+                      if (!isSvg()) return
+                      const c = state()?.content
+                      if (!c) return
+                      if (c.encoding === "base64") return `data:image/svg+xml;base64,${c.content}`
+                      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(c.content)}`
+                    })
+                    const imageDataUrl = createMemo(() => {
+                      if (!isImage()) return
+                      const c = state()?.content
+                      return `data:${c?.mimeType};base64,${c?.content}`
+                    })
                     const selectedLines = createMemo(() => {
                       const p = path()
                       if (!p) return null
@@ -1168,12 +1057,18 @@ export default function Page() {
                       return `L${sel.startLine}-${sel.endLine}`
                     })
 
-                    const restoreScroll = () => {
+                    const restoreScroll = (retries = 0) => {
                       const el = scroll
                       if (!el) return
 
                       const s = view()?.scroll(tab)
                       if (!s) return
+
+                      // Wait for content to be scrollable - content may not have rendered yet
+                      if (el.scrollHeight <= el.clientHeight && retries < 10) {
+                        requestAnimationFrame(() => restoreScroll(retries + 1))
+                        return
+                      }
 
                       if (el.scrollTop !== s.y) el.scrollTop = s.y
                       if (el.scrollLeft !== s.x) el.scrollLeft = s.x
@@ -1219,6 +1114,17 @@ export default function Page() {
                       ),
                     )
 
+                    createEffect(
+                      on(
+                        () => tabs().active() === tab,
+                        (active) => {
+                          if (!active) return
+                          if (!state()?.loaded) return
+                          requestAnimationFrame(restoreScroll)
+                        },
+                      ),
+                    )
+
                     onCleanup(() => {
                       if (scrollFrame === undefined) return
                       cancelAnimationFrame(scrollFrame)
@@ -1253,6 +1159,37 @@ export default function Page() {
                           )}
                         </Show>
                         <Switch>
+                          <Match when={state()?.loaded && isImage()}>
+                            <div class="px-6 py-4 pb-40">
+                              <img src={imageDataUrl()} alt={path()} class="max-w-full" />
+                            </div>
+                          </Match>
+                          <Match when={state()?.loaded && isSvg()}>
+                            <div class="flex flex-col gap-4 px-6 py-4">
+                              <Dynamic
+                                component={codeComponent}
+                                file={{
+                                  name: path() ?? "",
+                                  contents: svgContent() ?? "",
+                                  cacheKey: cacheKey(),
+                                }}
+                                enableLineSelection
+                                selectedLines={selectedLines()}
+                                onLineSelected={(range: SelectedLineRange | null) => {
+                                  const p = path()
+                                  if (!p) return
+                                  file.setSelectedLines(p, range)
+                                }}
+                                overflow="scroll"
+                                class="select-text"
+                              />
+                              <Show when={svgPreviewUrl()}>
+                                <div class="flex justify-center pb-40">
+                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                </div>
+                              </Show>
+                            </div>
+                          </Match>
                           <Match when={state()?.loaded}>
                             <Dynamic
                               component={codeComponent}
