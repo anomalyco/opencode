@@ -35,6 +35,7 @@ serde_json = "1"
 tokio = "1.48.0"
 listeners = "0.3"
 tauri-plugin-os = "2"
+semver = "1.0.27"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"

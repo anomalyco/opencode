@@ -1671,6 +1671,10 @@ export type Config = {
      */
     primary_tools?: Array<string>
     /**
+     * Skip automatic fetching of model information from models.dev on startup and timer
+     */
+    skip_models_refresh?: boolean
+    /**
      * Continue the agent loop when a tool call is denied
      */
     continue_loop_on_deny?: boolean
