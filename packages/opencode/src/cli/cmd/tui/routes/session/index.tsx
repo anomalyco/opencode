@@ -118,7 +118,7 @@ export function Session() {
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
-    if (session().parentID) return sync.data.permission[route.sessionID] ?? []
+    if (session()?.parentID) return sync.data.permission[route.sessionID] ?? []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
 
@@ -1044,7 +1044,7 @@ export function Session() {
                 <PermissionPrompt request={permissions()[0]} />
               </Show>
               <Prompt
-                visible={!session().parentID && permissions().length === 0}
+                visible={!session()?.parentID && permissions().length === 0}
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
