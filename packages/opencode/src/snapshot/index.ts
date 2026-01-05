@@ -179,12 +179,14 @@ export namespace Snapshot {
             .quiet()
             .nothrow()
             .text()
+      const added = isBinaryFile ? 0 : parseInt(additions)
+      const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
         file,
         before,
         after,
-        additions: parseInt(additions),
-        deletions: parseInt(deletions),
+        additions: Number.isFinite(added) ? added : 0,
+        deletions: Number.isFinite(deleted) ? deleted : 0,
       })
     }
     return result
