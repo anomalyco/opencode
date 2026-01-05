@@ -22,6 +22,9 @@ import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, close
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
+import { useAgentTerminal } from "@/context/agent-terminal"
+import { AgentTerminal } from "@/components/agent-terminal"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
 import { checksum, base64Decode } from "@opencode-ai/util/encode"
@@ -56,6 +59,25 @@ function same<T>(a: readonly T[], b: readonly T[]) {
 }
 
 type DiffStyle = "unified" | "split"
+
+function AgentTerminalTab() {
+  const params = useParams()
+  const agentTerminal = useAgentTerminal()
+
+  // Don't show Agent tab in empty state (no session yet)
+  if (!params.id) return null
+
+  return (
+    <Tabs.Trigger value="agent" class="text-syntax-keyword ml-auto">
+      <div class="flex items-center gap-1.5">
+        <Show when={agentTerminal.hasActiveCommand()} fallback={<Icon name="console" size="small" />}>
+          <Spinner class="size-3.5" />
+        </Show>
+        <span>Agent</span>
+      </div>
+    </Tabs.Trigger>
+  )
+}
 
 interface SessionReviewTabProps {
   diffs: () => FileDiff[]
@@ -294,9 +316,9 @@ export default function Page() {
   })
 
   createEffect(() => {
-    if (layout.terminal.opened()) {
+    if (layout.terminal.opened() && terminal.ready()) {
       if (terminal.all().length === 0) {
-        terminal.new()
+        terminal.new({ auto: true }) // auto-create, don't count as user interaction
       }
     }
   })
@@ -1271,9 +1293,10 @@ export default function Page() {
                     keybind={command.keybind("terminal.new")}
                     class="flex items-center"
                   >
-                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
+                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={() => terminal.new()} />
                   </TooltipKeybind>
                 </div>
+                <AgentTerminalTab />
               </Tabs.List>
               <For each={terminal.all()}>
                 {(pty) => (
@@ -1282,6 +1305,9 @@ export default function Page() {
                   </Tabs.Content>
                 )}
               </For>
+              <Tabs.Content value="agent">
+                <AgentTerminal />
+              </Tabs.Content>
             </Tabs>
             <DragOverlay>
               <Show when={store.activeTerminalDraggable}>

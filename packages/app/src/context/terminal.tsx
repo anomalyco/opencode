@@ -26,16 +26,25 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       createStore<{
         active?: string
         all: LocalPTY[]
+        hasUserInteracted: boolean
       }>({
         all: [],
+        hasUserInteracted: false,
       }),
     )
+
+    let creating = false
 
     return {
       ready,
       all: createMemo(() => Object.values(store.all)),
       active: createMemo(() => store.active),
-      new() {
+      new(options?: { auto?: boolean }) {
+        if (creating) return
+        creating = true
+        if (!options?.auto) {
+          setStore("hasUserInteracted", true)
+        }
         sdk.client.pty
           .create({ title: `Terminal ${store.all.length + 1}` })
           .then((pty) => {
@@ -48,10 +57,17 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
                 title: pty.data?.title ?? "Terminal",
               },
             ])
-            setStore("active", id)
+            // Don't auto-activate if this is an auto-created terminal
+            // Let the agent tab stay focused
+            if (!options?.auto) {
+              setStore("active", id)
+            }
           })
           .catch((e) => {
             console.error("Failed to create terminal", e)
+          })
+          .finally(() => {
+            creating = false
           })
       },
       update(pty: Partial<LocalPTY> & { id: string }) {
@@ -88,8 +104,13 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
         }
       },
       open(id: string) {
+        // Mark as user interacted if opening a PTY terminal (not the agent tab)
+        if (id !== "agent") {
+          setStore("hasUserInteracted", true)
+        }
         setStore("active", id)
       },
+      hasUserInteracted: () => store.hasUserInteracted,
       async close(id: string) {
         batch(() => {
           setStore(

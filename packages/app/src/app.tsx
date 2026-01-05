@@ -15,6 +15,7 @@ import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
 import { TerminalProvider } from "@/context/terminal"
+import { AgentTerminalProvider } from "@/context/agent-terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
 import { NotificationProvider } from "@/context/notification"
@@ -89,11 +90,13 @@ export function App() {
                                 component={(p) => (
                                   <Show when={p.params.id ?? "new"} keyed>
                                     <TerminalProvider>
-                                      <FileProvider>
-                                        <PromptProvider>
-                                          <Session />
-                                        </PromptProvider>
-                                      </FileProvider>
+                                      <AgentTerminalProvider>
+                                        <FileProvider>
+                                          <PromptProvider>
+                                            <Session />
+                                          </PromptProvider>
+                                        </FileProvider>
+                                      </AgentTerminalProvider>
                                     </TerminalProvider>
                                   </Show>
                                 )}

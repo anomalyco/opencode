@@ -45,6 +45,7 @@
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",
     "@thisbeyond/solid-dnd": "0.7.5",
+    "ansi-to-html": "0.7.2",
     "diff": "catalog:",
     "fuzzysort": "catalog:",
     "ghostty-web": "0.3.0",
