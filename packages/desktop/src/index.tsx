@@ -88,7 +88,6 @@ const platform: Platform = {
     if (!UPDATER_ENABLED || !update) return
     if (ostype() === "windows") await invoke("kill_sidecar")
     await update.install()
-    await syncCli()
   },
 
   restart: async () => {

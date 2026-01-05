@@ -1,12 +1,16 @@
+mod cli;
 mod window_customizer;
 
+use cli::{get_sidecar_path, install_cli, sync_cli};
 use std::{
     collections::VecDeque,
     net::{SocketAddr, TcpListener},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow, path::BaseDirectory};
+use tauri::{
+    path::BaseDirectory, AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow,
+};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -14,9 +18,6 @@ use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
-
-const CLI_INSTALL_DIR: &str = ".opencode/bin";
-const CLI_BINARY_NAME: &str = "opencode";
 
 #[derive(Clone)]
 struct ServerState(Arc<Mutex<Option<CommandChild>>>);
@@ -76,102 +77,6 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
         .map_err(|_| "Failed to acquire log lock")?;
 
     Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
-}
-
-fn get_cli_install_path() -> Option<std::path::PathBuf> {
-    std::env::var("HOME").ok().map(|home| {
-        std::path::PathBuf::from(home)
-            .join(CLI_INSTALL_DIR)
-            .join(CLI_BINARY_NAME)
-    })
-}
-
-fn get_sidecar_path() -> std::path::PathBuf {
-    tauri::utils::platform::current_exe()
-        .expect("Failed to get current exe")
-        .parent()
-        .expect("Failed to get parent dir")
-        .join("opencode-cli")
-}
-
-#[tauri::command]
-fn is_cli_installed() -> bool {
-    get_cli_install_path()
-        .map(|path| path.exists())
-        .unwrap_or(false)
-}
-
-#[tauri::command]
-fn get_installed_cli_path() -> Option<String> {
-    get_cli_install_path()
-        .filter(|path| path.exists())
-        .map(|path| path.to_string_lossy().to_string())
-}
-
-const INSTALL_SCRIPT: &str = include_str!("../../../../install");
-
-#[tauri::command]
-fn install_cli() -> Result<String, String> {
-    let sidecar = get_sidecar_path();
-    if !sidecar.exists() {
-        return Err("Sidecar binary not found".to_string());
-    }
-
-    let temp_script = std::env::temp_dir().join("opencode-install.sh");
-    std::fs::write(&temp_script, INSTALL_SCRIPT)
-        .map_err(|e| format!("Failed to write install script: {}", e))?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&temp_script, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Failed to set script permissions: {}", e))?;
-    }
-
-    let output = std::process::Command::new(&temp_script)
-        .arg("--binary")
-        .arg(&sidecar)
-        .output()
-        .map_err(|e| format!("Failed to run install script: {}", e))?;
-
-    let _ = std::fs::remove_file(&temp_script);
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Install script failed: {}", stderr));
-    }
-
-    let install_path = get_cli_install_path()
-        .ok_or_else(|| "Could not determine install path".to_string())?;
-
-    Ok(install_path.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-fn sync_cli() -> Result<(), String> {
-    if !is_cli_installed() {
-        return Ok(());
-    }
-
-    let sidecar = get_sidecar_path();
-    if !sidecar.exists() {
-        return Err("Sidecar binary not found".to_string());
-    }
-
-    let install_path = get_cli_install_path()
-        .ok_or_else(|| "Could not determine home directory".to_string())?;
-
-    std::fs::copy(&sidecar, &install_path)
-        .map_err(|e| format!("Failed to sync CLI binary: {}", e))?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&install_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Failed to set permissions: {}", e))?;
-    }
-
-    Ok(())
 }
 
 fn get_sidecar_port() -> u32 {
@@ -298,10 +203,7 @@ pub fn run() {
             kill_sidecar,
             copy_logs_to_clipboard,
             get_logs,
-            is_cli_installed,
-            get_installed_cli_path,
-            install_cli,
-            sync_cli
+            install_cli
         ])
         .setup(move |app| {
             let app = app.handle().clone();
@@ -385,6 +287,12 @@ pub fn run() {
                 window_builder.build().expect("Failed to create window");
 
                 app.manage(ServerState(Arc::new(Mutex::new(child))));
+            });
+
+            tauri::async_runtime::spawn(async move {
+              if let Err(e) = sync_cli() {
+                eprintln!("Failed to sync CLI: {e}");
+              }
             });
 
             Ok(())
