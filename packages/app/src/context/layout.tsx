@@ -6,6 +6,7 @@ import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
 import { Project } from "@opencode-ai/sdk/v2"
 import { persisted } from "@/utils/persist"
+import { same } from "@/utils/same"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -21,13 +22,6 @@ export function getAvatarColors(key?: string) {
     background: "var(--surface-info-base)",
     foreground: "var(--text-base)",
   }
-}
-
-function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
-  if (a === b) return true
-  if (!a || !b) return false
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
 }
 
 type SessionTabs = {

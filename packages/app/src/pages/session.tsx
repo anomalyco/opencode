@@ -48,12 +48,7 @@ import {
   NewSessionView,
 } from "@/components/session"
 import { usePlatform } from "@/context/platform"
-
-function same<T>(a: readonly T[], b: readonly T[]) {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
-}
+import { same } from "@/utils/same"
 
 type DiffStyle = "unified" | "split"
 
