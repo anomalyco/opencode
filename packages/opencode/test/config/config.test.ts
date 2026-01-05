@@ -868,3 +868,78 @@ test("merges legacy tools with existing permission config", async () => {
     },
   })
 })
+
+// TUI sidebar config tests
+// Note: The TUI uses kv.get("sidebar", config.tui?.sidebar ?? "auto") to initialize.
+// This means the config provides the default, but user preferences in the KV store take precedence.
+// The KV store is populated when users toggle the sidebar with the keybind.
+// To test with a fresh state, clear ~/.local/state/opencode/kv.json or use OPENCODE_STATE_DIR.
+
+test("loads TUI sidebar config with default", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {},
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.sidebar).toBe("auto")
+    },
+  })
+})
+
+test("loads TUI sidebar config with custom value", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            sidebar: "hide",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.sidebar).toBe("hide")
+    },
+  })
+})
+
+test("TUI sidebar config accepts all valid values", async () => {
+  for (const value of ["auto", "show", "hide"] as const) {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            tui: {
+              sidebar: value,
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.tui?.sidebar).toBe(value)
+      },
+    })
+  }
+})
