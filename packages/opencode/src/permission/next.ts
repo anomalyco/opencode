@@ -233,23 +233,27 @@ export namespace PermissionNext {
     for (const tool of tools) {
       const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
 
+      //                TODO: figure out how to blend this correctly        
       // Special case: task tool - only disable if ALL task rules are deny
       // If any rule is non-deny (allow/ask), some subagents may be usable
-      if (permission === "task") {
-        const taskRules = ruleset.filter((r) => Wildcard.match("task", r.permission))
-        // If no task rules, default is "ask" - keep tool enabled
-        // If any rule is non-deny, some subagents may be usable - keep tool enabled
-        if (taskRules.length === 0 || taskRules.some((r) => r.action !== "deny")) {
-          continue
-        }
-        // All task rules are deny - disable the tool
-        result.add(tool)
-        continue
-      }
+      //       if (permission === "task") {
+      //         const taskRules = ruleset.filter((r) => Wildcard.match("task", r.permission))
+      //         // If no task rules, default is "ask" - keep tool enabled
+      //         // If any rule is non-deny, some subagents may be usable - keep tool enabled
+      //         if (taskRules.length === 0 || taskRules.some((r) => r.action !== "deny")) {
+      //           continue
+      //         }
+      //         // All task rules are deny - disable the tool
+      //         result.add(tool)
+      //         continue
+      //       }
 
-      if (evaluate(permission, "*", ruleset).action === "deny") {
-        result.add(tool)
-      }
+      //       if (evaluate(permission, "*", ruleset).action === "deny") {
+      //         result.add(tool)
+      //       }
+      const rule = ruleset.findLast((r) => Wildcard.match(permission, r.permission))
+      if (!rule) continue
+      if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
     }
     return result
   }
