@@ -759,6 +759,10 @@ export default function Layout(props: ParentProps) {
     const isExpanded = createMemo(() =>
       props.mobile ? mobileProjects.expanded(props.project.worktree) : props.project.expanded,
     )
+    const isActive = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return props.project.worktree === current || props.project.sandboxes?.includes(current)
+    })
     const handleOpenChange = (open: boolean) => {
       if (props.mobile) {
         if (open) mobileProjects.expand(props.project.worktree)
@@ -777,7 +781,10 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg"
+                classList={{
+                  "group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg": true,
+                  "bg-surface-raised-base-hover": isActive() && !isExpanded(),
+                }}
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <ProjectAvatar
