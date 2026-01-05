@@ -503,7 +503,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-// Auto-scroll active command into view when navigating with keyboard
+  // Auto-scroll active command into view when navigating with keyboard
   createEffect(() => {
     const activeId = slashActive()
     if (!activeId || !slashPopoverRef) return
@@ -513,7 +513,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
     })
   })
-          
+
   createEffect(
     on(
       () => prompt.current(),
