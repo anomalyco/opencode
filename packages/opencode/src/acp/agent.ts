@@ -323,13 +323,33 @@ export namespace ACP {
               } finally {
                 break
               }
+
+            case "file.edited":
+              if (this.config.clientCapabilities?.fs?.writeTextFile) {
+                const filepath = event.properties.file
+                try {
+                  const content = await Bun.file(filepath).text()
+                  await this.connection.writeTextFile({
+                    sessionId,
+                    path: filepath,
+                    content,
+                  })
+                  log.info("synced file edit to ACP client", { filepath, sessionId })
+                } catch (err) {
+                  log.error("failed to sync file edit to ACP client", { error: err, filepath, sessionId })
+                }
+              }
+              break
           }
         }
       })
     }
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
-      log.info("initialize", { protocolVersion: params.protocolVersion })
+      log.info("initialize", { protocolVersion: params.protocolVersion, clientCapabilities: params.clientCapabilities })
+
+      // Store client capabilities for use in session event handling
+      this.config.clientCapabilities = params.clientCapabilities
 
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
