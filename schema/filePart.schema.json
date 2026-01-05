@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/filePart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 132-141",
+  "title": "FilePart",
+  "description": "File attachment part with MIME type and URL",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "mime", "url"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "file",
+      "description": "Part type discriminator"
+    },
+    "mime": {
+      "type": "string",
+      "description": "MIME type of the file"
+    },
+    "filename": {
+      "type": "string",
+      "description": "Original filename"
+    },
+    "url": {
+      "type": "string",
+      "description": "URL to access the file"
+    },
+    "source": {
+      "$ref": "filePartSource.schema.json",
+      "description": "Source information for the file"
+    }
+  }
+}

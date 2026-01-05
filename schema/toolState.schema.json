@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/toolState.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 276-280",
+  "title": "ToolState",
+  "description": "Discriminated union of tool execution states (pending, running, completed, error)",
+  "oneOf": [
+    { "$ref": "toolStatePending.schema.json" },
+    { "$ref": "toolStateRunning.schema.json" },
+    { "$ref": "toolStateCompleted.schema.json" },
+    { "$ref": "toolStateError.schema.json" }
+  ]
+}

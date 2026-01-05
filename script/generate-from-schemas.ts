@@ -47,6 +47,8 @@ async function validateSchemas() {
     try {
       const schema = JSON.parse(content)
       schemas.set(file, { schema, path })
+      // Populate global cache for discriminator detection
+      globalSchemaCache.set(file, { schema, path })
     } catch (error) {
       console.log(`${colors.red}✗ ${file} - Invalid JSON: ${error.message}${colors.reset}`)
       process.exit(1)
@@ -94,6 +96,72 @@ async function validateSchemas() {
   return schemas
 }
 
+// Global schema cache for resolving $ref during discriminator detection
+let globalSchemaCache: Map<string, any> = new Map()
+
+/**
+ * Find a discriminator property for a oneOf/anyOf union.
+ * A discriminator is a property that:
+ * 1. Exists in ALL members of the union
+ * 2. Has a `const` value in each member (literal type)
+ * 3. Each `const` value is unique across members
+ *
+ * Returns the property name if found, null otherwise.
+ */
+function findDiscriminator(schemas: any[], refMap: Map<string, string>): string | null {
+  if (schemas.length < 2) return null
+
+  // Resolve $ref schemas to get their actual definitions
+  const resolvedSchemas = schemas.map((s) => {
+    if (s.$ref) {
+      const refFile = s.$ref
+      const cached = globalSchemaCache.get(refFile)
+      if (cached) {
+        return cached.schema
+      }
+    }
+    return s
+  })
+
+  // Find candidate properties (properties with const in at least one schema)
+  const candidates = new Set<string>()
+  for (const schema of resolvedSchemas) {
+    if (schema.properties) {
+      for (const [propName, propDef] of Object.entries(schema.properties)) {
+        if ((propDef as any).const !== undefined) {
+          candidates.add(propName)
+        }
+      }
+    }
+  }
+
+  // Check each candidate to see if it's a valid discriminator
+  for (const candidate of candidates) {
+    const constValues = new Set<any>()
+    let isValidDiscriminator = true
+
+    for (const schema of resolvedSchemas) {
+      const prop = schema.properties?.[candidate]
+      if (!prop || prop.const === undefined) {
+        isValidDiscriminator = false
+        break
+      }
+      if (constValues.has(prop.const)) {
+        // Duplicate const value - not a valid discriminator
+        isValidDiscriminator = false
+        break
+      }
+      constValues.add(prop.const)
+    }
+
+    if (isValidDiscriminator && constValues.size === resolvedSchemas.length) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
 function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): string {
   // Handle $ref
   if (schema.$ref) {
@@ -122,6 +190,10 @@ function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): s
   if (schema.type === "number" || schema.type === "integer") {
     if (schema.const !== undefined) {
       return `z.literal(${schema.const})`
+    }
+    // Use .int() for integer type to match z.number().int() behavior
+    if (schema.type === "integer") {
+      return "z.number().int()"
     }
     return "z.number()"
   }
@@ -164,6 +236,14 @@ function jsonSchemaToZod(schema: any, refMap: Map<string, string>, depth = 0): s
   if (schema.oneOf || schema.anyOf) {
     const schemas = schema.oneOf || schema.anyOf
     const types = schemas.map((s: any) => jsonSchemaToZod(s, refMap, depth + 1))
+
+    // Check if this can be a discriminated union
+    // A discriminated union requires all members to have a common property with const literal
+    const discriminator = findDiscriminator(schemas, refMap)
+    if (discriminator) {
+      return `z.discriminatedUnion("${discriminator}", [${types.join(", ")}])`
+    }
+
     return `z.union([${types.join(", ")}])`
   }
 

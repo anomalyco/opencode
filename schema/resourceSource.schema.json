@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/resourceSource.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 120-126",
+  "title": "ResourceSource",
+  "description": "MCP resource-based source with client name and URI",
+  "type": "object",
+  "required": ["type", "clientName", "uri", "text"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "resource",
+      "description": "Source type discriminator"
+    },
+    "clientName": {
+      "type": "string",
+      "description": "MCP client name"
+    },
+    "uri": {
+      "type": "string",
+      "description": "Resource URI"
+    },
+    "text": {
+      "$ref": "filePartSourceText.schema.json",
+      "description": "Text content with line range"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/lspPosition.json",
+  "$comment": "Source: packages/opencode/src/lsp/index.ts @ 21dc3c2 (2026-01-04) lines 23-26",
+  "title": "LspPosition",
+  "description": "LSP position with line and character",
+  "type": "object",
+  "required": ["line", "character"],
+  "properties": {
+    "line": {
+      "type": "number",
+      "description": "Line number (0-based)"
+    },
+    "character": {
+      "type": "number",
+      "description": "Character offset (0-based)"
+    }
+  }
+}

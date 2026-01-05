@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/toolStateRunning.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 226-239",
+  "title": "ToolStateRunning",
+  "description": "Tool state when running",
+  "type": "object",
+  "required": ["status", "input", "time"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "running",
+      "description": "Tool state discriminator"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Tool input parameters"
+    },
+    "title": {
+      "type": "string",
+      "description": "Display title for the tool execution"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional metadata"
+    },
+    "time": {
+      "type": "object",
+      "required": ["start"],
+      "properties": {
+        "start": {
+          "type": "number",
+          "description": "Start timestamp (milliseconds)"
+        }
+      },
+      "description": "Timing information"
+    }
+  }
+}

@@ -11,6 +11,8 @@ import z from "zod"
 
 // Generated from JSON Schema - see schema/*.schema.json
 import { permissionActionSchema, type PermissionAction } from "@generated/validators/permissionAction"
+import { permissionReplySchema, type PermissionReply } from "@generated/validators/permissionReply"
+import { permissionRequestSchema, type PermissionRequest } from "@generated/validators/permissionRequest"
 import { permissionRuleSchema, type PermissionRule } from "@generated/validators/permissionRule"
 import { permissionRulesetSchema, type PermissionRuleset } from "@generated/validators/permissionRuleset"
 
@@ -49,29 +51,13 @@ export namespace PermissionNext {
     return rulesets.flat()
   }
 
-  export const Request = z
-    .object({
-      id: Identifier.schema("permission"),
-      sessionID: Identifier.schema("session"),
-      permission: z.string(),
-      patterns: z.string().array(),
-      metadata: z.record(z.string(), z.any()),
-      always: z.string().array(),
-      tool: z
-        .object({
-          messageID: z.string(),
-          callID: z.string(),
-        })
-        .optional(),
-    })
-    .meta({
-      ref: "PermissionRequest",
-    })
+  // Generated from JSON Schema - see schema/permissionRequest.schema.json
+  export const Request = permissionRequestSchema
+  export type Request = PermissionRequest
 
-  export type Request = z.infer<typeof Request>
-
-  export const Reply = z.enum(["once", "always", "reject"])
-  export type Reply = z.infer<typeof Reply>
+  // Generated from JSON Schema - see schema/permissionReply.schema.json
+  export const Reply = permissionReplySchema
+  export type Reply = PermissionReply
 
   export const Approval = z.object({
     projectID: z.string(),

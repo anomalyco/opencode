@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionRequest.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 21dc3c2 (2026-01-04) lines 52-69",
+  "title": "PermissionRequest",
+  "description": "Permission request from tool execution requiring user approval",
+  "type": "object",
+  "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^per",
+      "description": "Permission request identifier (prefixed with per)"
+    },
+    "sessionID": {
+      "type": "string",
+      "pattern": "^ses",
+      "description": "Session identifier (prefixed with ses)"
+    },
+    "permission": {
+      "type": "string",
+      "description": "Permission type being requested"
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Patterns to match for permission (e.g., file globs)"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional metadata about the permission request"
+    },
+    "always": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Patterns to remember if user approves 'always'"
+    },
+    "tool": {
+      "$ref": "permissionToolContext.schema.json",
+      "description": "Tool context that triggered the permission request"
+    }
+  }
+}

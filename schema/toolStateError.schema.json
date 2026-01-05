@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/toolStateError.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 260-274",
+  "title": "ToolStateError",
+  "description": "Tool state when execution failed with error",
+  "type": "object",
+  "required": ["status", "input", "error", "time"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "error",
+      "description": "Tool state discriminator"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Tool input parameters"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional metadata"
+    },
+    "time": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {
+          "type": "number",
+          "description": "Start timestamp (milliseconds)"
+        },
+        "end": {
+          "type": "number",
+          "description": "End timestamp (milliseconds)"
+        }
+      },
+      "description": "Timing information"
+    }
+  }
+}

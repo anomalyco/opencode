@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/filePartSource.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 128-130",
+  "title": "FilePartSource",
+  "description": "Discriminated union of file part sources (file, symbol, or resource)",
+  "oneOf": [
+    { "$ref": "fileSource.schema.json" },
+    { "$ref": "symbolSource.schema.json" },
+    { "$ref": "resourceSource.schema.json" }
+  ]
+}

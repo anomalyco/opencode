@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/toolStatePending.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 214-224",
+  "title": "ToolStatePending",
+  "description": "Tool state when pending execution",
+  "type": "object",
+  "required": ["status", "input", "raw"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "const": "pending",
+      "description": "Tool state discriminator"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Tool input parameters"
+    },
+    "raw": {
+      "type": "string",
+      "description": "Raw input string"
+    }
+  }
+}

@@ -12,6 +12,26 @@ import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 
+// Generated validators from JSON Schema - see schema/*.schema.json
+import {
+  toolStatePendingSchema,
+  type ToolStatePending as GeneratedToolStatePending,
+} from "@generated/validators/toolStatePending"
+import {
+  toolStateRunningSchema,
+  type ToolStateRunning as GeneratedToolStateRunning,
+} from "@generated/validators/toolStateRunning"
+import {
+  toolStateCompletedSchema,
+  type ToolStateCompleted as GeneratedToolStateCompleted,
+} from "@generated/validators/toolStateCompleted"
+import {
+  toolStateErrorSchema,
+  type ToolStateError as GeneratedToolStateError,
+} from "@generated/validators/toolStateError"
+import { toolStateSchema, type ToolState as GeneratedToolState } from "@generated/validators/toolState"
+import { toolPartSchema, type ToolPart as GeneratedToolPart } from "@generated/validators/toolPart"
+
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
   export const AbortedError = NamedError.create("MessageAbortedError", z.object({ message: z.string() }))
@@ -211,84 +231,29 @@ export namespace MessageV2 {
   })
   export type StepFinishPart = z.infer<typeof StepFinishPart>
 
-  export const ToolStatePending = z
-    .object({
-      status: z.literal("pending"),
-      input: z.record(z.string(), z.any()),
-      raw: z.string(),
-    })
-    .meta({
-      ref: "ToolStatePending",
-    })
+  // Generated from JSON Schema - see schema/toolStatePending.schema.json
+  export const ToolStatePending = toolStatePendingSchema
+  export type ToolStatePending = GeneratedToolStatePending
 
-  export type ToolStatePending = z.infer<typeof ToolStatePending>
+  // Generated from JSON Schema - see schema/toolStateRunning.schema.json
+  export const ToolStateRunning = toolStateRunningSchema
+  export type ToolStateRunning = GeneratedToolStateRunning
 
-  export const ToolStateRunning = z
-    .object({
-      status: z.literal("running"),
-      input: z.record(z.string(), z.any()),
-      title: z.string().optional(),
-      metadata: z.record(z.string(), z.any()).optional(),
-      time: z.object({
-        start: z.number(),
-      }),
-    })
-    .meta({
-      ref: "ToolStateRunning",
-    })
-  export type ToolStateRunning = z.infer<typeof ToolStateRunning>
+  // Generated from JSON Schema - see schema/toolStateCompleted.schema.json
+  export const ToolStateCompleted = toolStateCompletedSchema
+  export type ToolStateCompleted = GeneratedToolStateCompleted
 
-  export const ToolStateCompleted = z
-    .object({
-      status: z.literal("completed"),
-      input: z.record(z.string(), z.any()),
-      output: z.string(),
-      title: z.string(),
-      metadata: z.record(z.string(), z.any()),
-      time: z.object({
-        start: z.number(),
-        end: z.number(),
-        compacted: z.number().optional(),
-      }),
-      attachments: FilePart.array().optional(),
-    })
-    .meta({
-      ref: "ToolStateCompleted",
-    })
-  export type ToolStateCompleted = z.infer<typeof ToolStateCompleted>
+  // Generated from JSON Schema - see schema/toolStateError.schema.json
+  export const ToolStateError = toolStateErrorSchema
+  export type ToolStateError = GeneratedToolStateError
 
-  export const ToolStateError = z
-    .object({
-      status: z.literal("error"),
-      input: z.record(z.string(), z.any()),
-      error: z.string(),
-      metadata: z.record(z.string(), z.any()).optional(),
-      time: z.object({
-        start: z.number(),
-        end: z.number(),
-      }),
-    })
-    .meta({
-      ref: "ToolStateError",
-    })
-  export type ToolStateError = z.infer<typeof ToolStateError>
+  // Generated from JSON Schema - see schema/toolState.schema.json
+  export const ToolState = toolStateSchema
+  export type ToolState = GeneratedToolState
 
-  export const ToolState = z
-    .discriminatedUnion("status", [ToolStatePending, ToolStateRunning, ToolStateCompleted, ToolStateError])
-    .meta({
-      ref: "ToolState",
-    })
-
-  export const ToolPart = PartBase.extend({
-    type: z.literal("tool"),
-    callID: z.string(),
-    tool: z.string(),
-    state: ToolState,
-    metadata: z.record(z.string(), z.any()).optional(),
-  }).meta({
-    ref: "ToolPart",
-  })
-  export type ToolPart = z.infer<typeof ToolPart>
+  // Generated from JSON Schema - see schema/toolPart.schema.json
+  export const ToolPart = toolPartSchema
+  export type ToolPart = GeneratedToolPart
 
   const Base = z.object({
     id: z.string(),

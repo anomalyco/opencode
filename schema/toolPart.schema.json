@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/toolPart.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 282-291",
+  "title": "ToolPart",
+  "description": "Tool call message part with state tracking",
+  "type": "object",
+  "required": ["id", "sessionID", "messageID", "type", "callID", "tool", "state"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Part identifier"
+    },
+    "sessionID": {
+      "type": "string",
+      "description": "Session identifier"
+    },
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier"
+    },
+    "type": {
+      "type": "string",
+      "const": "tool",
+      "description": "Part type discriminator"
+    },
+    "callID": {
+      "type": "string",
+      "description": "Tool call identifier"
+    },
+    "tool": {
+      "type": "string",
+      "description": "Tool name (e.g., bash, read, write, glob)"
+    },
+    "state": {
+      "$ref": "toolState.schema.json",
+      "description": "Current tool execution state"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Additional metadata"
+    }
+  }
+}

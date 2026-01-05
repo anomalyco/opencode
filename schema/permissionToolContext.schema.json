@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionToolContext.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 21dc3c2 (2026-01-04) lines 60-64",
+  "title": "PermissionToolContext",
+  "description": "Tool context for permission request",
+  "type": "object",
+  "required": ["messageID", "callID"],
+  "properties": {
+    "messageID": {
+      "type": "string",
+      "description": "Message identifier containing the tool call"
+    },
+    "callID": {
+      "type": "string",
+      "description": "Tool call identifier"
+    }
+  }
+}

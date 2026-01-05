@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/symbolSource.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 110-118",
+  "title": "SymbolSource",
+  "description": "Symbol-based source with LSP range information",
+  "type": "object",
+  "required": ["type", "path", "range", "name", "kind", "text"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "symbol",
+      "description": "Source type discriminator"
+    },
+    "path": {
+      "type": "string",
+      "description": "File path containing the symbol"
+    },
+    "range": {
+      "$ref": "lspRange.schema.json",
+      "description": "LSP range of the symbol"
+    },
+    "name": {
+      "type": "string",
+      "description": "Symbol name"
+    },
+    "kind": {
+      "type": "integer",
+      "description": "LSP symbol kind"
+    },
+    "text": {
+      "$ref": "filePartSourceText.schema.json",
+      "description": "Text content with line range"
+    }
+  }
+}

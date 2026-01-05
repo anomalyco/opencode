@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/fileSource.json",
+  "$comment": "Source: packages/opencode/src/session/message-v2.ts @ 21dc3c2 (2026-01-04) lines 103-108",
+  "title": "FileSource",
+  "description": "File-based source with path and text content",
+  "type": "object",
+  "required": ["type", "path", "text"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "file",
+      "description": "Source type discriminator"
+    },
+    "path": {
+      "type": "string",
+      "description": "File path"
+    },
+    "text": {
+      "$ref": "filePartSourceText.schema.json",
+      "description": "Text content with line range"
+    }
+  }
+}

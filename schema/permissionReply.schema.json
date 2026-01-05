@@ -1,0 +1,9 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/permissionReply.json",
+  "$comment": "Source: packages/opencode/src/permission/next.ts @ 21dc3c2 (2026-01-04) line 73",
+  "title": "PermissionReply",
+  "description": "User reply to a permission request",
+  "type": "string",
+  "enum": ["once", "always", "reject"]
+}

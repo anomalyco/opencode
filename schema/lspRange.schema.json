@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencode.ai/schemas/v1/lspRange.json",
+  "$comment": "Source: packages/opencode/src/lsp/index.ts @ 21dc3c2 (2026-01-04) lines 21-34",
+  "title": "LspRange",
+  "description": "LSP range with start and end positions",
+  "type": "object",
+  "required": ["start", "end"],
+  "properties": {
+    "start": {
+      "$ref": "lspPosition.schema.json",
+      "description": "Start position"
+    },
+    "end": {
+      "$ref": "lspPosition.schema.json",
+      "description": "End position"
+    }
+  }
+}
