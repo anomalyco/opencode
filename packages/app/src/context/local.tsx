@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { batch, createMemo } from "solid-js"
+import { batch, createMemo, onCleanup } from "solid-js"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -465,7 +465,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const searchFilesAndDirectories = (query: string) =>
         sdk.client.find.files({ query, dirs: "true" }).then((x) => x.data!)
 
-      sdk.event.listen((e) => {
+      const unsub = sdk.event.listen((e) => {
         const event = e.details
         switch (event.type) {
           case "file.watcher.updated":
@@ -475,6 +475,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             break
         }
       })
+      onCleanup(unsub)
 
       return {
         node: async (path: string) => {
