@@ -1,5 +1,6 @@
 import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
@@ -248,6 +249,7 @@ export default function Page() {
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "review",
     newSessionWorktree: "main",
+    promptHeight: 0,
   })
 
   const newSessionWorktree = createMemo(() => {
@@ -289,6 +291,8 @@ export default function Page() {
 
   const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
+  let promptDock: HTMLDivElement | undefined
+  let scroller: HTMLDivElement | undefined
 
   createEffect(() => {
     if (!params.id) return
@@ -668,8 +672,29 @@ export default function Page() {
   const anchor = (id: string) => `message-${id}`
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
+    scroller = el
     autoScroll.scrollRef(el)
   }
+
+  createResizeObserver(
+    () => promptDock,
+    ({ height }) => {
+      const next = Math.ceil(height)
+
+      if (next === store.promptHeight) return
+
+      const el = scroller
+      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
+
+      setStore("promptHeight", next)
+
+      if (stick && el) {
+        requestAnimationFrame(() => {
+          el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
+        })
+      }
+    },
+  )
 
   const updateHash = (id: string) => {
     window.history.replaceState(null, "", `#${anchor(id)}`)
@@ -776,7 +801,10 @@ export default function Page() {
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 md:flex-none py-6 md:py-3": true,
           }}
-          style={{ width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%" }}
+          style={{
+            width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
+            "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
+          }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
@@ -791,7 +819,7 @@ export default function Page() {
                           view={view}
                           diffStyle="unified"
                           classes={{
-                            root: "pb-32",
+                            root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
                             header: "px-4",
                             container: "px-4",
                           }}
@@ -822,7 +850,7 @@ export default function Page() {
                       >
                         <div
                           ref={autoScroll.contentRef}
-                          class="flex flex-col gap-32 items-start justify-start pb-32 md:pb-40 transition-[margin]"
+                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "mt-0.5": !showTabs(),
                             "mt-0": showTabs(),
@@ -894,7 +922,10 @@ export default function Page() {
           </div>
 
           {/* Prompt input */}
-          <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none">
+          <div
+            ref={(el) => (promptDock = el)}
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+          >
             <div
               classList={{
                 "w-full md:px-6 pointer-events-auto": true,
