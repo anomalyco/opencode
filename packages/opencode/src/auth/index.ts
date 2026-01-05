@@ -32,7 +32,7 @@ export namespace Auth {
   export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
   export type Info = z.infer<typeof Info>
 
-  const filepath = path.join(Global.Path.data, "auth.json")
+  const filepath = process.env.OPENCODE_AUTH_PATH || path.join(Global.Path.data, "auth.json")
 
   export async function get(providerID: string) {
     const auth = await all()
