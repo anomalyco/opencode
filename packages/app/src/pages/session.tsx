@@ -1014,9 +1014,7 @@ export default function Page() {
                     const isImage = createMemo(() => {
                       const c = state()?.content
                       return (
-                        c?.encoding === "base64" &&
-                        c?.mimeType?.startsWith("image/") &&
-                        c?.mimeType !== "image/svg+xml"
+                        c?.encoding === "base64" && c?.mimeType?.startsWith("image/") && c?.mimeType !== "image/svg+xml"
                       )
                     })
                     const isSvg = createMemo(() => {
