@@ -109,7 +109,8 @@ export const TaskTool = Tool.define("task", async () => {
         })
       })
 
-      const model = agent.model ?? {
+      // Use runtime session model from message (modelID/providerID are required fields)
+      const model = {
         modelID: msg.info.modelID,
         providerID: msg.info.providerID,
       }
