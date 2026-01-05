@@ -160,6 +160,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         ),
       )
 
+      const latestSet = createMemo(() => new Set(latest().map((x) => `${x.providerID}:${x.modelID}`)))
+
+      const userVisibilityMap = createMemo(() => {
+        const map = new Map<string, "show" | "hide">()
+        for (const item of store.user) {
+          map.set(`${item.providerID}:${item.modelID}`, item.visibility)
+        }
+        return map
+      })
+
       const list = createMemo(() =>
         available().map((m) => ({
           ...m,
@@ -264,12 +274,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         visible(model: ModelKey) {
-          const user = store.user.find((x) => x.modelID === model.modelID && x.providerID === model.providerID)
-          return (
-            user?.visibility !== "hide" &&
-            (latest().find((x) => x.modelID === model.modelID && x.providerID === model.providerID) ||
-              user?.visibility === "show")
-          )
+          const key = `${model.providerID}:${model.modelID}`
+          const visibility = userVisibilityMap().get(key)
+          return visibility !== "hide" && (latestSet().has(key) || visibility === "show")
         },
         setVisibility(model: ModelKey, visible: boolean) {
           updateVisibility(model, visible ? "show" : "hide")
