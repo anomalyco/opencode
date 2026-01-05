@@ -106,6 +106,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
+  let slashPopoverRef!: HTMLDivElement
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -502,6 +503,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
+// Auto-scroll active command into view when navigating with keyboard
+  createEffect(() => {
+    const activeId = slashActive()
+    if (!activeId || !slashPopoverRef) return
+
+    requestAnimationFrame(() => {
+      const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
+      element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    })
+  })
+          
   createEffect(
     on(
       () => prompt.current(),
@@ -1258,6 +1270,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popover}>
         <div
+          ref={(el) => {
+            if (store.popover === "slash") slashPopoverRef = el
+          }}
           class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10
                  overflow-auto no-scrollbar flex flex-col p-2 rounded-md
                  border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
@@ -1316,6 +1331,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <For each={slashFlat()}>
                   {(cmd) => (
                     <button
+                      data-slash-id={cmd.id}
                       classList={{
                         "w-full flex items-center justify-between gap-4 rounded-md px-2 py-1": true,
                         "bg-surface-raised-base-hover": slashActive() === cmd.id,
