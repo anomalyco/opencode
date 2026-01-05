@@ -65,6 +65,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         terminal: {
           opened: false,
           height: 280,
+          position: "bottom" as "bottom" | "right",
         },
         review: {
           opened: true,
@@ -180,6 +181,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         height: createMemo(() => store.terminal.height),
         resize(height: number) {
           setStore("terminal", "height", height)
+        },
+        position: createMemo(() => store.terminal.position ?? "bottom"),
+        setPosition(position: "bottom" | "right") {
+          setStore("terminal", "position", position)
+        },
+        togglePosition() {
+          setStore("terminal", "position", (p) => (p === "bottom" ? "right" : "bottom"))
         },
       },
       review: {
