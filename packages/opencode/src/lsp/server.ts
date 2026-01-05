@@ -1322,39 +1322,22 @@ export namespace LSPServer {
   export const YamlLS: Info = {
     id: "yaml-ls",
     extensions: [".yaml", ".yml"],
-    root: NearestRoot(["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"]),
+    root: NearestRoot([
+      "package-lock.json",
+      "bun.lockb",
+      "bun.lock",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      ".yamllint",
+      ".yamllint.yml",
+      ".yamllint.yaml",
+      "kustomization.yaml",
+      "kustomization.yml",
+      "docker-compose.yaml",
+      "docker-compose.yml",
+    ]),
     async spawn(root) {
-      let binary = Bun.which("yaml-language-server")
-      const args: string[] = []
-      if (!binary) {
-        const js = path.join(
-          Global.Path.bin,
-          "node_modules",
-          "yaml-language-server",
-          "out",
-          "server",
-          "src",
-          "server.js",
-        )
-        const exists = await Bun.file(js).exists()
-        if (!exists) {
-          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "yaml-language-server"], {
-            cwd: Global.Path.bin,
-            env: {
-              ...process.env,
-              BUN_BE_BUN: "1",
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
-          }).exited
-        }
-        binary = BunProc.which()
-        args.push("run", js)
-      }
-      args.push("--stdio")
-      const proc = spawn(binary, args, {
+      const proc = spawn(BunProc.which(), ["x", "yaml-language-server", "--stdio"], {
         cwd: root,
         env: {
           ...process.env,
@@ -1363,6 +1346,16 @@ export namespace LSPServer {
       })
       return {
         process: proc,
+        initialization: {
+          yaml: {
+            completion: true,
+            validate: true,
+            hover: true,
+            schemaStore: {
+              enable: true,
+            },
+          },
+        },
       }
     },
   }
