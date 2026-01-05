@@ -45,6 +45,39 @@ You can also set all permissions at once:
 
 ---
 
+## Autonomous Mode (Skip All Prompts)
+
+To run OpenCode fully autonomously without any permission prompts (similar to Claude Code's `--dangerously-skip-permissions` flag), set `"permission": "allow"` in your config:
+
+```json title="~/.config/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+This allows all tools to run without approval:
+- File writes and edits
+- Shell/bash commands
+- Web fetches
+- All other tool calls
+
+:::caution[Security Warning]
+Autonomous mode gives the AI full control to execute any action without confirmation. Only use this in trusted environments where you understand the risks. The AI could potentially:
+- Modify or delete files
+- Run destructive shell commands
+- Make network requests
+- Access sensitive data
+:::
+
+**Use cases for autonomous mode:**
+- CI/CD pipelines and automation
+- Batch processing tasks
+- Trusted development environments
+- When you want maximum speed without interruptions
+
+---
+
 ## Granular Rules (Object Syntax)
 
 For most permissions, you can use an object to apply different actions based on the tool input.
