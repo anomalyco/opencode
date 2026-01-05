@@ -30,9 +30,16 @@ export type PermissionRespondFn = (input: {
   response: "once" | "always" | "reject"
 }) => void
 
+export type NavigateToSessionFn = (sessionID: string) => void
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
-  init: (props: { data: Data; directory: string; onPermissionRespond?: PermissionRespondFn }) => {
+  init: (props: {
+    data: Data
+    directory: string
+    onPermissionRespond?: PermissionRespondFn
+    onNavigateToSession?: NavigateToSessionFn
+  }) => {
     return {
       get store() {
         return props.data
@@ -41,6 +48,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return props.directory
       },
       respondToPermission: props.onPermissionRespond,
+      navigateToSession: props.onNavigateToSession,
     }
   },
 })
