@@ -1,111 +1,121 @@
-import { useLocal, type LocalFile } from "@/context/local"
+import { useFile } from "@/context/file"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { For, Match, Switch, type ComponentProps, type ParentProps } from "solid-js"
+import { createEffect, For, Match, splitProps, Switch, type ComponentProps, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import type { FileNode } from "@opencode-ai/sdk/v2"
 
 export default function FileTree(props: {
   path: string
   class?: string
   nodeClass?: string
   level?: number
-  onFileClick?: (file: LocalFile) => void
+  onFileClick?: (file: FileNode) => void
 }) {
-  const local = useLocal()
+  const file = useFile()
   const level = props.level ?? 0
 
-  const Node = (p: ParentProps & ComponentProps<"div"> & { node: LocalFile; as?: "div" | "button" }) => (
-    <Dynamic
-      component={p.as ?? "div"}
-      classList={{
-        "p-0.5 w-full flex items-center gap-x-2 hover:bg-background-element": true,
-        // "bg-background-element": local.file.active()?.path === p.node.path,
-        [props.nodeClass ?? ""]: !!props.nodeClass,
-      }}
-      style={`padding-left: ${level * 10}px`}
-      draggable={true}
-      onDragStart={(e: any) => {
-        const evt = e as globalThis.DragEvent
-        evt.dataTransfer!.effectAllowed = "copy"
-        evt.dataTransfer!.setData("text/plain", `file:${p.node.path}`)
+  createEffect(() => {
+    void file.tree.list(props.path)
+  })
 
-        // Create custom drag image without margins
-        const dragImage = document.createElement("div")
-        dragImage.className =
-          "flex items-center gap-x-2 px-2 py-1 bg-background-element rounded-md border border-border-1"
-        dragImage.style.position = "absolute"
-        dragImage.style.top = "-1000px"
-
-        // Copy only the icon and text content without padding
-        const icon = e.currentTarget.querySelector("svg")
-        const text = e.currentTarget.querySelector("span")
-        if (icon && text) {
-          dragImage.innerHTML = icon.outerHTML + text.outerHTML
-        }
-
-        document.body.appendChild(dragImage)
-        evt.dataTransfer!.setDragImage(dragImage, 0, 12)
-        setTimeout(() => document.body.removeChild(dragImage), 0)
-      }}
-      {...p}
-    >
-      {p.children}
-      <span
+  const Node = (
+    p: ParentProps &
+      ComponentProps<"div"> &
+      ComponentProps<"button"> & {
+        node: FileNode
+        as?: "div" | "button"
+      },
+  ) => {
+    const [local, rest] = splitProps(p, ["node", "as", "children", "class", "classList"])
+    return (
+      <Dynamic
+        component={local.as ?? "div"}
         classList={{
-          "text-xs whitespace-nowrap truncate": true,
-          "text-text-muted/40": p.node.ignored,
-          "text-text-muted/80": !p.node.ignored,
-          // "!text-text": local.file.active()?.path === p.node.path,
-          // "!text-primary": local.file.changed(p.node.path),
+          "w-full flex items-center gap-x-2 rounded-md px-2 py-1 hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          ...(local.classList ?? {}),
+          [local.class ?? ""]: !!local.class,
+          [props.nodeClass ?? ""]: !!props.nodeClass,
         }}
+        style={`padding-left: ${8 + level * 12}px`}
+        draggable={true}
+        onDragStart={(e: DragEvent) => {
+          e.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
+          e.dataTransfer?.setData("text/uri-list", `file://${local.node.path}`)
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy"
+
+          const dragImage = document.createElement("div")
+          dragImage.className =
+            "flex items-center gap-x-2 px-2 py-1 bg-surface-raised-base rounded-md border border-border-base text-12-regular text-text-strong"
+          dragImage.style.position = "absolute"
+          dragImage.style.top = "-1000px"
+
+          const icon =
+            (e.currentTarget as HTMLElement).querySelector('[data-component="file-icon"]') ??
+            (e.currentTarget as HTMLElement).querySelector("svg")
+          const text = (e.currentTarget as HTMLElement).querySelector("span")
+          if (icon && text) {
+            dragImage.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
+          }
+
+          document.body.appendChild(dragImage)
+          e.dataTransfer?.setDragImage(dragImage, 0, 12)
+          setTimeout(() => document.body.removeChild(dragImage), 0)
+        }}
+        {...rest}
       >
-        {p.node.name}
-      </span>
-      {/* <Show when={local.file.changed(p.node.path)}> */}
-      {/*   <span class="ml-auto mr-1 w-1.5 h-1.5 rounded-full bg-primary/50 shrink-0" /> */}
-      {/* </Show> */}
-    </Dynamic>
-  )
+        {local.children}
+        <span
+          classList={{
+            "text-12-regular whitespace-nowrap truncate": true,
+            "text-text-weaker": local.node.ignored,
+            "text-text-weak": !local.node.ignored,
+          }}
+        >
+          {local.node.name}
+        </span>
+      </Dynamic>
+    )
+  }
 
   return (
-    <div class={`flex flex-col ${props.class}`}>
-      <For each={local.file.children(props.path)}>
-        {(node) => (
-          <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right">
-            <Switch>
-              <Match when={node.type === "directory"}>
-                <Collapsible
-                  variant="ghost"
-                  class="w-full"
-                  forceMount={false}
-                  // open={local.file.node(node.path)?.expanded}
-                  onOpenChange={(open) => (open ? local.file.expand(node.path) : local.file.collapse(node.path))}
-                >
-                  <Collapsible.Trigger>
-                    <Node node={node}>
-                      <Collapsible.Arrow class="text-text-muted/60 ml-1" />
-                      <FileIcon
-                        node={node}
-                        // expanded={local.file.node(node.path).expanded}
-                        class="text-text-muted/60 -ml-1"
-                      />
-                    </Node>
-                  </Collapsible.Trigger>
-                  <Collapsible.Content>
-                    <FileTree path={node.path} level={level + 1} onFileClick={props.onFileClick} />
-                  </Collapsible.Content>
-                </Collapsible>
-              </Match>
-              <Match when={node.type === "file"}>
-                <Node node={node} as="button" onClick={() => props.onFileClick?.(node)}>
-                  <div class="w-4 shrink-0" />
-                  <FileIcon node={node} class="text-primary" />
-                </Node>
-              </Match>
-            </Switch>
-          </Tooltip>
-        )}
+    <div class={`flex flex-col ${props.class ?? ""}`}>
+      <For each={file.tree.children(props.path)}>
+        {(node) => {
+          const expanded = () => file.tree.state(node.path)?.expanded ?? false
+          return (
+            <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right">
+              <Switch>
+                <Match when={node.type === "directory"}>
+                  <Collapsible
+                    variant="ghost"
+                    class="w-full"
+                    forceMount={false}
+                    open={expanded()}
+                    onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
+                  >
+                    <Collapsible.Trigger>
+                      <Node node={node}>
+                        <Collapsible.Arrow class="text-icon-weak ml-1" />
+                        <FileIcon node={node} expanded={expanded()} class="text-icon-weak -ml-1 size-4" />
+                      </Node>
+                    </Collapsible.Trigger>
+                    <Collapsible.Content>
+                      <FileTree path={node.path} level={level + 1} onFileClick={props.onFileClick} />
+                    </Collapsible.Content>
+                  </Collapsible>
+                </Match>
+                <Match when={node.type === "file"}>
+                  <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
+                    <div class="w-4 shrink-0" />
+                    <FileIcon node={node} class="text-icon-weak size-4" />
+                  </Node>
+                </Match>
+              </Switch>
+            </Tooltip>
+          )
+        }}
       </For>
     </div>
   )

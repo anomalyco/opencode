@@ -32,6 +32,7 @@ import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
 import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
+import FileTree from "@/components/file-tree"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
@@ -1811,8 +1812,29 @@ export default function Page() {
           <aside
             id="review-panel"
             aria-label={language.t("session.panel.reviewAndFiles")}
-            class="relative flex-1 min-w-0 h-full border-l border-border-weak-base"
+            class="relative flex-1 min-w-0 h-full border-l border-border-weak-base flex"
           >
+            <Show when={layout.fileTree.opened()}>
+              <div class="relative shrink-0 h-full" style={{ width: `${layout.fileTree.width()}px` }}>
+                <div class="h-full bg-background-base border-r border-border-weak-base flex flex-col">
+                  <div class="hidden h-12 shrink-0 flex items-center px-3 border-b border-border-weak-base text-12-medium text-text-weak">
+                    Files
+                  </div>
+                  <div class="flex-1 min-h-0 overflow-y-auto no-scrollbar p-2">
+                    <FileTree path="" onFileClick={(node) => openTab(file.tab(node.path))} />
+                  </div>
+                </div>
+                <ResizeHandle
+                  direction="horizontal"
+                  size={layout.fileTree.width()}
+                  min={200}
+                  max={480}
+                  collapseThreshold={160}
+                  onResize={layout.fileTree.resize}
+                  onCollapse={layout.fileTree.close}
+                />
+              </div>
+            </Show>
             <DragDropProvider
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}

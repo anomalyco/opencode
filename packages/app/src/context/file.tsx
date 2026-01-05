@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { FileContent } from "@opencode-ai/sdk/v2"
+import type { FileContent, FileNode } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
@@ -37,6 +37,14 @@ export type FileState = {
   loading?: boolean
   error?: string
   content?: FileContent
+}
+
+type DirectoryState = {
+  expanded: boolean
+  loaded?: boolean
+  loading?: boolean
+  error?: string
+  children?: string[]
 }
 
 function stripFileProtocol(input: string) {
@@ -285,6 +293,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const inflight = new Map<string, Promise<void>>()
+    const treeInflight = new Map<string, Promise<void>>()
 
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
@@ -292,10 +301,21 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       file: {},
     })
 
+    const [tree, setTree] = createStore<{
+      node: Record<string, FileNode>
+      dir: Record<string, DirectoryState>
+    }>({
+      node: {},
+      dir: { "": { expanded: true } },
+    })
+
     createEffect(() => {
       scope()
       inflight.clear()
+      treeInflight.clear()
       setStore("file", {})
+      setTree("node", {})
+      setTree("dir", { "": { expanded: true } })
     })
 
     const viewCache = new Map<string, ViewCacheEntry>()
@@ -407,14 +427,156 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return promise
     }
 
+    function normalizeDir(input: string) {
+      return normalize(input).replace(/\/+$/, "")
+    }
+
+    function ensureDir(path: string) {
+      if (tree.dir[path]) return
+      setTree("dir", path, { expanded: false })
+    }
+
+    function listDir(input: string, options?: { force?: boolean }) {
+      const dir = normalizeDir(input)
+      ensureDir(dir)
+
+      const current = tree.dir[dir]
+      if (!options?.force && current?.loaded) return Promise.resolve()
+
+      const pending = treeInflight.get(dir)
+      if (pending) return pending
+
+      setTree(
+        "dir",
+        dir,
+        produce((draft) => {
+          draft.loading = true
+          draft.error = undefined
+        }),
+      )
+
+      const directory = scope()
+
+      const promise = sdk.client.file
+        .list({ path: dir })
+        .then((x) => {
+          if (scope() !== directory) return
+          const nodes = x.data ?? []
+          const prevChildren = tree.dir[dir]?.children ?? []
+          const nextChildren = nodes.map((node) => node.path)
+          const nextSet = new Set(nextChildren)
+
+          setTree(
+            "node",
+            produce((draft) => {
+              const removedDirs: string[] = []
+
+              for (const child of prevChildren) {
+                if (nextSet.has(child)) continue
+                const existing = draft[child]
+                if (existing?.type === "directory") removedDirs.push(child)
+                delete draft[child]
+              }
+
+              if (removedDirs.length > 0) {
+                const keys = Object.keys(draft)
+                for (const key of keys) {
+                  for (const removed of removedDirs) {
+                    if (!key.startsWith(removed + "/")) continue
+                    delete draft[key]
+                    break
+                  }
+                }
+              }
+
+              for (const node of nodes) {
+                draft[node.path] = node
+              }
+            }),
+          )
+
+          setTree(
+            "dir",
+            dir,
+            produce((draft) => {
+              draft.loaded = true
+              draft.loading = false
+              draft.children = nextChildren
+            }),
+          )
+        })
+        .catch((e) => {
+          if (scope() !== directory) return
+          setTree(
+            "dir",
+            dir,
+            produce((draft) => {
+              draft.loading = false
+              draft.error = e.message
+            }),
+          )
+          showToast({
+            variant: "error",
+            title: "Failed to list files",
+            description: e.message,
+          })
+        })
+        .finally(() => {
+          treeInflight.delete(dir)
+        })
+
+      treeInflight.set(dir, promise)
+      return promise
+    }
+
+    function expandDir(input: string) {
+      const dir = normalizeDir(input)
+      ensureDir(dir)
+      setTree("dir", dir, "expanded", true)
+      void listDir(dir)
+    }
+
+    function collapseDir(input: string) {
+      const dir = normalizeDir(input)
+      ensureDir(dir)
+      setTree("dir", dir, "expanded", false)
+    }
+
+    function dirState(input: string) {
+      const dir = normalizeDir(input)
+      return tree.dir[dir]
+    }
+
+    function children(input: string) {
+      const dir = normalizeDir(input)
+      const ids = tree.dir[dir]?.children
+      if (!ids) return []
+      const out: FileNode[] = []
+      for (const id of ids) {
+        const node = tree.node[id]
+        if (node) out.push(node)
+      }
+      return out
+    }
+
     const stop = sdk.event.listen((e) => {
       const event = e.details
       if (event.type !== "file.watcher.updated") return
       const path = normalize(event.properties.file)
       if (!path) return
       if (path.startsWith(".git/")) return
-      if (!store.file[path]) return
-      load(path, { force: true })
+
+      if (store.file[path]) {
+        load(path, { force: true })
+      }
+
+      const kind = event.properties.event
+      if (kind !== "add" && kind !== "unlink") return
+
+      const parent = path.split("/").slice(0, -1).join("/")
+      if (!tree.dir[parent]?.loaded) return
+
+      listDir(parent, { force: true })
     })
 
     const get = (input: string) => store.file[normalize(input)]
@@ -448,6 +610,21 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       normalize,
       tab,
       pathFromTab,
+      tree: {
+        list: listDir,
+        refresh: (input: string) => listDir(input, { force: true }),
+        state: dirState,
+        children,
+        expand: expandDir,
+        collapse: collapseDir,
+        toggle(input: string) {
+          if (dirState(input)?.expanded) {
+            collapseDir(input)
+            return
+          }
+          expandDir(input)
+        },
+      },
       get,
       load,
       scrollTop,
