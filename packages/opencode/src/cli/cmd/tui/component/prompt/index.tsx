@@ -749,7 +749,7 @@ export function Prompt(props: PromptProps) {
         >
           <box
             paddingLeft={2}
-            paddingRight={1}
+            paddingRight={2}
             paddingTop={1}
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
