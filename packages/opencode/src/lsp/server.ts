@@ -13,6 +13,7 @@ import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
+  const pathExists = async (p: string) => fs.stat(p).then(() => true).catch(() => false)
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -1145,7 +1146,7 @@ export namespace LSPServer {
       }
       const distPath = path.join(Global.Path.bin, "jdtls")
       const launcherDir = path.join(distPath, "plugins")
-      const installed = await fs.exists(launcherDir)
+      const installed = await pathExists(launcherDir)
       if (!installed) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("Downloading JDTLS LSP server.")
@@ -1163,7 +1164,7 @@ export namespace LSPServer {
         .nothrow()
         .then(({ stdout }) => stdout.toString().trim())
       const launcherJar = path.join(launcherDir, jarFileName)
-      if (!(await fs.exists(launcherJar))) {
+      if (!(await pathExists(launcherJar))) {
         log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
         return
       }
