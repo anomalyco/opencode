@@ -1299,6 +1299,10 @@ export type KeybindsConfig = {
    */
   session_parent?: string
   /**
+   * Show quota usage
+   */
+  quota_view?: string
+  /**
    * Suspend terminal
    */
   terminal_suspend?: string
@@ -4980,6 +4984,102 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+
+export type ProviderUsageListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/provider/usage"
+}
+
+export type ProviderUsageListResponses = {
+  /**
+   * Provider quota usage
+   */
+  200: {
+    providers: {
+      antigravity: {
+        status: "success" | "not_configured" | "not_authenticated" | "error"
+        message?: string
+        ui: {
+          mode: "count_and_percent" | "percent_only"
+        }
+        groups?: Array<{
+          name: string
+          display: string
+          used: number
+          max: number
+          remaining: number
+          reset_time_iso?: string | null
+        }>
+      }
+      "gemini-cli": {
+        status: "success" | "not_configured" | "not_authenticated" | "error"
+        message?: string
+        ui: {
+          mode: "count_and_percent" | "percent_only"
+        }
+        groups?: Array<{
+          name: string
+          display: string
+          used: number
+          max: number
+          remaining: number
+          reset_time_iso?: string | null
+        }>
+      }
+      "qwen-cli": {
+        status: "success" | "not_configured" | "not_authenticated" | "error"
+        message?: string
+        ui: {
+          mode: "count_and_percent" | "percent_only"
+        }
+        groups?: Array<{
+          name: string
+          display: string
+          used: number
+          max: number
+          remaining: number
+          reset_time_iso?: string | null
+        }>
+      }
+      claude: {
+        status: "success" | "not_configured" | "not_authenticated" | "error"
+        message?: string
+        ui: {
+          mode: "count_and_percent" | "percent_only"
+        }
+        groups?: Array<{
+          name: string
+          display: string
+          used: number
+          max: number
+          remaining: number
+          reset_time_iso?: string | null
+        }>
+      }
+      "nano-gpt": {
+        status: "success" | "not_configured" | "not_authenticated" | "error"
+        message?: string
+        ui: {
+          mode: "count_and_percent" | "percent_only"
+        }
+        groups?: Array<{
+          name: string
+          display: string
+          used: number
+          max: number
+          remaining: number
+          reset_time_iso?: string | null
+        }>
+      }
+    }
+  }
+}
+
+export type ProviderUsageListResponse = ProviderUsageListResponses[keyof ProviderUsageListResponses]
 
 export type EventSubscribeData = {
   body?: never

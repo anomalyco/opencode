@@ -29,6 +29,7 @@ import { FileRoutes } from "./routes/file"
 import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
+import { UsageRoute } from "./usage"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
@@ -474,6 +475,7 @@ export namespace Server {
             return c.json(await Format.status())
           },
         )
+        .route("/provider/usage", UsageRoute)
         .get(
           "/event",
           describeRoute({
