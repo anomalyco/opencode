@@ -51,6 +51,7 @@ import { PermissionNext } from "@/permission/next"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 import { Worktree } from "../worktree"
+import ignore from "ignore"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -2401,49 +2402,6 @@ export namespace Server {
         }),
         async (c) => {
           return c.json(await LSP.status())
-        },
-      )
-      .get(
-        "/lsp/diagnostics/status",
-        describeRoute({
-          summary: "Get LSP diagnostics toggle status",
-          description: "Returns the current state of LSP diagnostics toggle",
-          operationId: "lsp.diagnostics.status",
-          responses: {
-            200: {
-              description: "LSP diagnostics toggle status",
-              content: {
-                "application/json": {
-                  schema: resolver(LSP.DiagnosticsStatus),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          return c.json(await LSP.diagnosticsStatus())
-        },
-      )
-      .post(
-        "/lsp/diagnostics/toggle",
-        describeRoute({
-          summary: "Toggle LSP diagnostics",
-          description: "Toggle whether LSP diagnostics are sent to the model",
-          operationId: "lsp.diagnostics.toggle",
-          responses: {
-            200: {
-              description: "Updated diagnostics status",
-              content: {
-                "application/json": {
-                  schema: resolver(LSP.DiagnosticsStatus),
-                },
-              },
-            },
-          },
-        }),
-        async (c) => {
-          const enabled = await LSP.toggleDiagnostics()
-          return c.json({ enabled })
         },
       )
       .get(

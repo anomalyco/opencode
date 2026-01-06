@@ -372,12 +372,14 @@ function App() {
       onSelect: async () => {
         await sdk.client.lsp.diagnostics.toggle()
         const status = await sdk.client.lsp.diagnostics.status()
-        sync.set("lsp_diagnostics", status.data?.enabled)
-        toast.show({
-          variant: "info",
-          message: `LSP diagnostics ${status.data?.enabled ? "enabled" : "disabled"}`,
-          duration: 2000,
-        })
+        if (status.data) {
+          sync.set("lsp_diagnostics", status.data.enabled)
+          toast.show({
+            variant: "info",
+            message: `LSP diagnostics ${status.data.enabled ? "enabled" : "disabled"}`,
+            duration: 2000,
+          })
+        }
       },
     },
     {

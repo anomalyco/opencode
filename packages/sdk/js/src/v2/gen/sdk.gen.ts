@@ -2498,7 +2498,7 @@ export class Diagnostics extends HeyApiClient {
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
     return (options?.client ?? this.client).get<LspDiagnosticsStatusResponses, unknown, ThrowOnError>({
-      url: "/lsp/diagnostics/status",
+      url: "/tui/control/lsp/diagnostics/status",
       ...options,
       ...params,
     })
@@ -2517,7 +2517,7 @@ export class Diagnostics extends HeyApiClient {
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
     return (options?.client ?? this.client).post<LspDiagnosticsToggleResponses, unknown, ThrowOnError>({
-      url: "/lsp/diagnostics/toggle",
+      url: "/tui/control/lsp/diagnostics/toggle",
       ...options,
       ...params,
     })

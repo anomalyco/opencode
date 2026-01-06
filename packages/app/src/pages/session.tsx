@@ -443,11 +443,13 @@ export default function Page() {
       onSelect: async () => {
         await sdk.client.lsp.diagnostics.toggle()
         const status = await sdk.client.lsp.diagnostics.status()
-        sync.set("lsp_diagnostics", status.data?.enabled)
-        showToast({
-          title: "LSP Diagnostics",
-          description: `Diagnostics ${status.data?.enabled ? "enabled" : "disabled"}`,
-        })
+        if (status.data) {
+          sync.set("lsp_diagnostics", status.data.enabled)
+          showToast({
+            title: "LSP Diagnostics",
+            description: `Diagnostics ${status.data.enabled ? "enabled" : "disabled"}`,
+          })
+        }
       },
     },
     {

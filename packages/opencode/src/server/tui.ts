@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import { z } from "zod"
 import { AsyncQueue } from "../util/queue"
+import { LSP } from "@/lsp"
 
 const TuiRequest = z.object({
   path: z.string(),
@@ -67,5 +68,48 @@ export const TuiRoute = new Hono()
       const body = c.req.valid("json")
       response.push(body)
       return c.json(true)
+    },
+  )
+  .get(
+    "/lsp/diagnostics/status",
+    describeRoute({
+      summary: "Get LSP diagnostics toggle status",
+      description: "Returns the current state of LSP diagnostics toggle",
+      operationId: "lsp.diagnostics.status",
+      responses: {
+        200: {
+          description: "LSP diagnostics toggle status",
+          content: {
+            "application/json": {
+              schema: resolver(LSP.DiagnosticsStatus),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      return c.json(await LSP.diagnosticsStatus())
+    },
+  )
+  .post(
+    "/lsp/diagnostics/toggle",
+    describeRoute({
+      summary: "Toggle LSP diagnostics",
+      description: "Toggle whether LSP diagnostics are sent to the model",
+      operationId: "lsp.diagnostics.toggle",
+      responses: {
+        200: {
+          description: "Updated diagnostics status",
+          content: {
+            "application/json": {
+              schema: resolver(LSP.DiagnosticsStatus),
+            },
+          },
+        },
+      },
+    }),
+    async (c) => {
+      const enabled = await LSP.toggleDiagnostics()
+      return c.json({ enabled })
     },
   )

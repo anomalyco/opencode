@@ -60,7 +60,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [messageID: string]: Part[]
       }
       lsp: LspStatus[]
-      lsp_diagnostics: boolean | undefined
+      lsp_diagnostics: boolean
       mcp: {
         [key: string]: McpStatus
       }
@@ -91,7 +91,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       message: {},
       part: {},
       lsp: [],
-      lsp_diagnostics: undefined,
+      lsp_diagnostics: true,
       mcp: {},
       mcp_resource: {},
       formatter: [],
@@ -302,7 +302,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             ...(args.continue ? [] : [sessionListPromise]),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
-            sdk.client.lsp.diagnostics.status().then((x) => setStore("lsp_diagnostics", x.data?.enabled)),
+            sdk.client.lsp.diagnostics.status().then((x) => setStore("lsp_diagnostics", x.data?.enabled ?? true)),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
             sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
