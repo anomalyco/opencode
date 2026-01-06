@@ -37,8 +37,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
 
     const permissionsEnabled = createMemo(() => {
       const dir = directory()
-      if (!dir || !base64Decode(dir)) return false
-      const [store] = globalSync.child(base64Decode(dir))
+      if (!dir) return false
+      const [store] = globalSync.child(dir)
       return store.config.permission !== undefined
     })
 
