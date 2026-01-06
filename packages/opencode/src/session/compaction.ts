@@ -19,6 +19,7 @@ import {
   LLMExtractor,
   QualityScorer,
 } from "./compaction/index"
+import { BenchmarkMetrics } from "@/benchmark/metrics"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -30,6 +31,7 @@ export namespace SessionCompaction {
         sessionID: z.string(),
       }),
     ),
+    CompactionMetrics: BenchmarkMetrics.Event.CompactionMetrics,
   }
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
@@ -101,8 +103,10 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
+    const compactionStartTime = Date.now()
     const config = await Config.get()
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    const originalContextTokens = HybridCompactionPipeline.estimateTokens(input.messages)
     const agent = await Agent.get("compaction")
     const model = agent.model
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
@@ -227,6 +231,33 @@ export namespace SessionCompaction {
         }
       }
 
+      // Publish compaction metrics for benchmark collection
+      const hybridOutputParts = processor.message.parts.filter((p) => p.type === "text")
+      const hybridOutputText = hybridOutputParts.length > 0
+        ? (hybridOutputParts[0] as MessageV2.TextPart).text || ""
+        : ""
+      const compactedContextTokens = Token.estimate(hybridOutputText)
+      const compactionMetrics: BenchmarkMetrics.CompactionMetrics = {
+        method: "hybrid",
+        timestamp: compactionStartTime,
+        duration_ms: Date.now() - compactionStartTime,
+        tokens: {
+          input: processor.message.tokens.input,
+          output: processor.message.tokens.output,
+          total: processor.message.tokens.input + processor.message.tokens.output,
+        },
+        original_context_tokens: originalContextTokens,
+        compacted_context_tokens: compactedContextTokens,
+        compression_ratio: originalContextTokens > 0
+          ? 1 - (compactedContextTokens / originalContextTokens)
+          : 0,
+        output_text: hybridOutputText,
+      }
+      Bus.publish(Event.CompactionMetrics, {
+        sessionID: input.sessionID,
+        metrics: compactionMetrics,
+      })
+
       if (result === "continue" && input.auto) {
         const continueMsg = await Session.updateMessage({
           id: Identifier.ascending("message"),
@@ -288,6 +319,33 @@ export namespace SessionCompaction {
         },
       ],
       model,
+    })
+
+    // Publish compaction metrics for benchmark collection (legacy)
+    const legacyOutputParts = processor.message.parts.filter((p) => p.type === "text")
+    const legacyOutputText = legacyOutputParts.length > 0
+      ? (legacyOutputParts[0] as MessageV2.TextPart).text || ""
+      : ""
+    const legacyCompactedContextTokens = Token.estimate(legacyOutputText)
+    const legacyCompactionMetrics: BenchmarkMetrics.CompactionMetrics = {
+      method: "legacy",
+      timestamp: compactionStartTime,
+      duration_ms: Date.now() - compactionStartTime,
+      tokens: {
+        input: processor.message.tokens.input,
+        output: processor.message.tokens.output,
+        total: processor.message.tokens.input + processor.message.tokens.output,
+      },
+      original_context_tokens: originalContextTokens,
+      compacted_context_tokens: legacyCompactedContextTokens,
+      compression_ratio: originalContextTokens > 0
+        ? 1 - (legacyCompactedContextTokens / originalContextTokens)
+        : 0,
+      output_text: legacyOutputText,
+    }
+    Bus.publish(Event.CompactionMetrics, {
+      sessionID: input.sessionID,
+      metrics: legacyCompactionMetrics,
     })
 
     if (result === "continue" && input.auto) {
