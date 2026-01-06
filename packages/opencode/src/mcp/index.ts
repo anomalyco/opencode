@@ -141,8 +141,27 @@ export namespace MCP {
   }
 
   // Store transports for OAuth servers to allow finishing auth
+  // Each entry includes a timestamp for TTL-based cleanup
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
-  const pendingOAuthTransports = new Map<string, TransportWithAuth>()
+  type PendingOAuthEntry = {
+    transport: TransportWithAuth
+    createdAt: number
+  }
+  const pendingOAuthTransports = new Map<string, PendingOAuthEntry>()
+
+  /** TTL for pending OAuth transports (10 minutes) */
+  const OAUTH_TRANSPORT_TTL = 10 * 60 * 1000
+
+  /** Clean up expired OAuth transports */
+  function cleanupExpiredOAuthTransports() {
+    const now = Date.now()
+    for (const [key, entry] of pendingOAuthTransports) {
+      if (now - entry.createdAt > OAUTH_TRANSPORT_TTL) {
+        log.info("cleaning up expired oauth transport", { key, age: now - entry.createdAt })
+        pendingOAuthTransports.delete(key)
+      }
+    }
+  }
 
   // Prompt cache types
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
@@ -364,7 +383,8 @@ export namespace MCP {
               }).catch((e) => log.debug("failed to show toast", { error: e }))
             } else {
               // Store transport for later finishAuth call
-              pendingOAuthTransports.set(key, transport)
+              cleanupExpiredOAuthTransports()
+              pendingOAuthTransports.set(key, { transport, createdAt: Date.now() })
               status = { status: "needs_auth" as const }
               // Show toast for needs_auth
               Bus.publish(TuiEvent.ToastShow, {
@@ -739,7 +759,8 @@ export namespace MCP {
     } catch (error) {
       if (error instanceof UnauthorizedError && capturedUrl) {
         // Store transport for finishAuth
-        pendingOAuthTransports.set(mcpName, transport)
+        cleanupExpiredOAuthTransports()
+        pendingOAuthTransports.set(mcpName, { transport, createdAt: Date.now() })
         return { authorizationUrl: capturedUrl.toString() }
       }
       throw error
@@ -790,15 +811,15 @@ export namespace MCP {
    * Complete OAuth authentication with the authorization code.
    */
   export async function finishAuth(mcpName: string, authorizationCode: string): Promise<Status> {
-    const transport = pendingOAuthTransports.get(mcpName)
+    const entry = pendingOAuthTransports.get(mcpName)
 
-    if (!transport) {
+    if (!entry) {
       throw new Error(`No pending OAuth flow for MCP server: ${mcpName}`)
     }
 
     try {
       // Call finishAuth on the transport
-      await transport.finishAuth(authorizationCode)
+      await entry.transport.finishAuth(authorizationCode)
 
       // Clear the code verifier after successful auth
       await McpAuth.clearCodeVerifier(mcpName)

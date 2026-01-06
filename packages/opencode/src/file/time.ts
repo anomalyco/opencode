@@ -31,6 +31,27 @@ export namespace FileTime {
     return state().read[sessionID]?.[file]
   }
 
+  /**
+   * Clear all read timestamps for a session to free memory.
+   * Should be called when a session ends.
+   */
+  export function clearSession(sessionID: string): boolean {
+    const s = state()
+    if (sessionID in s.read) {
+      delete s.read[sessionID]
+      log.info("cleared session read times", { sessionID })
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Get the count of tracked sessions (useful for monitoring/debugging).
+   */
+  export function sessionCount(): number {
+    return Object.keys(state().read).length
+  }
+
   export async function withLock<T>(filepath: string, fn: () => Promise<T>): Promise<T> {
     const current = state()
     const currentLock = current.locks.get(filepath) ?? Promise.resolve()

@@ -98,4 +98,33 @@ export class ACPSessionManager {
     this.sessions.set(sessionId, session)
     return session
   }
+
+  /**
+   * Remove a session from the manager to free memory.
+   * Should be called when a session is terminated or the connection closes.
+   */
+  remove(sessionId: string): boolean {
+    const existed = this.sessions.has(sessionId)
+    if (existed) {
+      this.sessions.delete(sessionId)
+      log.info("removed_session", { sessionId })
+    }
+    return existed
+  }
+
+  /**
+   * Get the count of active sessions (useful for monitoring/debugging).
+   */
+  size(): number {
+    return this.sessions.size
+  }
+
+  /**
+   * Clear all sessions. Used during cleanup/dispose.
+   */
+  clear(): void {
+    const count = this.sessions.size
+    this.sessions.clear()
+    log.info("cleared_all_sessions", { count })
+  }
 }
