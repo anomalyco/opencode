@@ -1,0 +1,61 @@
+{
+  "benchmark_id": "benchmark_1767731271905_0ifh8v",
+  "task": "refactor",
+  "model": "openrouter/xiaomi/mimo-v2-flash:free",
+  "timestamp": 1767731272132,
+  "hybrid": {
+    "run_id": "run_hybrid_1767731272132_5laybw",
+    "task": "refactor",
+    "model": "xiaomi/mimo-v2-flash:free",
+    "started_at": 1767731271912,
+    "completed_at": 1767731272014,
+    "total_compactions": 1,
+    "compactions": [
+      {
+        "method": "hybrid",
+        "timestamp": 1767731271912,
+        "duration_ms": 102,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "total": 0
+        },
+        "original_context_tokens": 666,
+        "compacted_context_tokens": 0,
+        "compression_ratio": 0,
+        "output_text": "Error: unable to get local issuer certificate"
+      }
+    ],
+    "task_completed": true
+  },
+  "legacy": {
+    "run_id": "run_legacy_1767731272132_f5yd3w",
+    "task": "refactor",
+    "model": "xiaomi/mimo-v2-flash:free",
+    "started_at": 1767731272014,
+    "completed_at": 1767731272132,
+    "total_compactions": 1,
+    "compactions": [
+      {
+        "method": "legacy",
+        "timestamp": 1767731272014,
+        "duration_ms": 118,
+        "tokens": {
+          "input": 0,
+          "output": 0,
+          "total": 0
+        },
+        "original_context_tokens": 666,
+        "compacted_context_tokens": 0,
+        "compression_ratio": 0,
+        "output_text": "Error: unable to get local issuer certificate"
+      }
+    ],
+    "task_completed": true
+  },
+  "comparison": {
+    "token_savings_percent": 0,
+    "time_savings_percent": 13.56,
+    "winner": "hybrid"
+  }
+}

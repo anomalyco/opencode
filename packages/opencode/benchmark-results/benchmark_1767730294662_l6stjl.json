@@ -1,0 +1,89 @@
+{
+  "benchmark_id": "benchmark_1767730294662_l6stjl",
+  "task": "refactor",
+  "model": "openrouter/google/gemini-2.0-flash-exp:free",
+  "timestamp": 1767730294702,
+  "hybrid": {
+    "run_id": "hybrid_test",
+    "task": "refactor",
+    "model": "test",
+    "started_at": 1767730284702,
+    "completed_at": 1767730294702,
+    "total_compactions": 2,
+    "compactions": [
+      {
+        "method": "hybrid",
+        "timestamp": 1767730289702,
+        "duration_ms": 1500,
+        "tokens": {
+          "input": 500,
+          "output": 200,
+          "total": 700
+        },
+        "original_context_tokens": 10000,
+        "compacted_context_tokens": 800,
+        "compression_ratio": 0.92,
+        "output_text": "Hybrid compaction summary..."
+      },
+      {
+        "method": "hybrid",
+        "timestamp": 1767730292702,
+        "duration_ms": 1200,
+        "tokens": {
+          "input": 400,
+          "output": 150,
+          "total": 550
+        },
+        "original_context_tokens": 8000,
+        "compacted_context_tokens": 600,
+        "compression_ratio": 0.925,
+        "output_text": "Hybrid compaction summary 2..."
+      }
+    ],
+    "task_completed": true
+  },
+  "legacy": {
+    "run_id": "legacy_test",
+    "task": "refactor",
+    "model": "test",
+    "started_at": 1767730284702,
+    "completed_at": 1767730294702,
+    "total_compactions": 2,
+    "compactions": [
+      {
+        "method": "legacy",
+        "timestamp": 1767730289702,
+        "duration_ms": 2000,
+        "tokens": {
+          "input": 800,
+          "output": 400,
+          "total": 1200
+        },
+        "original_context_tokens": 10000,
+        "compacted_context_tokens": 1200,
+        "compression_ratio": 0.88,
+        "output_text": "Legacy compaction summary..."
+      },
+      {
+        "method": "legacy",
+        "timestamp": 1767730292702,
+        "duration_ms": 1800,
+        "tokens": {
+          "input": 700,
+          "output": 350,
+          "total": 1050
+        },
+        "original_context_tokens": 8000,
+        "compacted_context_tokens": 1000,
+        "compression_ratio": 0.875,
+        "output_text": "Legacy compaction summary 2..."
+      }
+    ],
+    "task_completed": true
+  },
+  "comparison": {
+    "token_savings_percent": 44.44,
+    "time_savings_percent": 28.95,
+    "winner": "hybrid"
+  }
+}
