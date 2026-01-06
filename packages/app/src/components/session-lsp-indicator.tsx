@@ -16,7 +16,9 @@ export function SessionLspIndicator() {
   const tooltipContent = createMemo(() => {
     const lsp = sync.data.lsp ?? []
     if (lsp.length === 0) return "No LSP servers"
-    return lsp.map((s) => s.name).join(", ")
+    const servers = lsp.map((s) => s.name).join(", ")
+    const diagStatus = sync.data.lsp_diagnostics ? "enabled" : "disabled"
+    return `${servers} • Diagnostics: ${diagStatus}`
   })
 
   return (

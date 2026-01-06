@@ -89,6 +89,7 @@ export namespace LSP {
           servers,
           clients,
           spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
+          diagnosticsEnabled: true,
         }
       }
 
@@ -136,6 +137,7 @@ export namespace LSP {
         servers,
         clients,
         spawning: new Map<string, Promise<LSPClient.Info | undefined>>(),
+        diagnosticsEnabled: true,
       }
     },
     async (state) => {
@@ -464,6 +466,25 @@ export namespace LSP {
     const clients = await getClients(file)
     const tasks = clients.map((x) => input(x))
     return Promise.all(tasks)
+  }
+
+  export const DiagnosticsStatus = z
+    .object({
+      enabled: z.boolean(),
+    })
+    .meta({ ref: "LSPDiagnosticsStatus" })
+  export type DiagnosticsStatus = z.infer<typeof DiagnosticsStatus>
+
+  export async function toggleDiagnostics(): Promise<boolean> {
+    const s = await state()
+    s.diagnosticsEnabled = !(s.diagnosticsEnabled ?? true)
+    log.info("toggled LSP diagnostics", { enabled: s.diagnosticsEnabled })
+    return s.diagnosticsEnabled
+  }
+
+  export async function diagnosticsStatus(): Promise<DiagnosticsStatus> {
+    const s = await state()
+    return { enabled: s.diagnosticsEnabled ?? true }
   }
 
   export namespace Diagnostic {

@@ -426,6 +426,11 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("mcp.list"),
       },
       {
+        display: "/diagnostics",
+        description: "toggle LSP Diagnostics",
+        onSelect: () => command.trigger("lsp.diagnostics.toggle"),
+      },
+      {
         display: "/theme",
         description: "toggle theme",
         onSelect: () => command.trigger("theme.switch"),

@@ -435,6 +435,22 @@ export default function Page() {
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
     },
     {
+      id: "lsp.diagnostics.toggle",
+      title: "Toggle LSP Diagnostics",
+      description: "Toggle LSP diagnostics to model",
+      category: "LSP",
+      slash: "lsp-diagnostics",
+      onSelect: async () => {
+        await sdk.client.lsp.diagnostics.toggle()
+        const status = await sdk.client.lsp.diagnostics.status()
+        sync.set("lsp_diagnostics", status.data?.enabled)
+        showToast({
+          title: "LSP Diagnostics",
+          description: `Diagnostics ${status.data?.enabled ? "enabled" : "disabled"}`,
+        })
+      },
+    },
+    {
       id: "agent.cycle",
       title: "Cycle agent",
       description: "Switch to the next agent",

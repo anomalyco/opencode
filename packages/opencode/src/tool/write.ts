@@ -53,7 +53,7 @@ export const WriteTool = Tool.define("write", {
 
     let output = ""
     await LSP.touchFile(filepath, true)
-    const diagnostics = await LSP.diagnostics()
+    const diagnostics = ((await LSP.diagnosticsStatus()).enabled) ? await LSP.diagnostics() : {}
     const normalizedFilepath = Filesystem.normalizePath(filepath)
     let projectDiagnosticsCount = 0
     for (const [file, issues] of Object.entries(diagnostics)) {

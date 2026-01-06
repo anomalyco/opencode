@@ -2404,6 +2404,49 @@ export namespace Server {
         },
       )
       .get(
+        "/lsp/diagnostics/status",
+        describeRoute({
+          summary: "Get LSP diagnostics toggle status",
+          description: "Returns the current state of LSP diagnostics toggle",
+          operationId: "lsp.diagnostics.status",
+          responses: {
+            200: {
+              description: "LSP diagnostics toggle status",
+              content: {
+                "application/json": {
+                  schema: resolver(LSP.DiagnosticsStatus),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          return c.json(await LSP.diagnosticsStatus())
+        },
+      )
+      .post(
+        "/lsp/diagnostics/toggle",
+        describeRoute({
+          summary: "Toggle LSP diagnostics",
+          description: "Toggle whether LSP diagnostics are sent to the model",
+          operationId: "lsp.diagnostics.toggle",
+          responses: {
+            200: {
+              description: "Updated diagnostics status",
+              content: {
+                "application/json": {
+                  schema: resolver(LSP.DiagnosticsStatus),
+                },
+              },
+            },
+          },
+        }),
+        async (c) => {
+          const enabled = await LSP.toggleDiagnostics()
+          return c.json({ enabled })
+        },
+      )
+      .get(
         "/formatter",
         describeRoute({
           summary: "Get formatter status",

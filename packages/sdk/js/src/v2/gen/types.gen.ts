@@ -1980,6 +1980,10 @@ export type LspStatus = {
   status: "connected" | "error"
 }
 
+export type LspDiagnosticsStatus = {
+  enabled: boolean
+}
+
 export type FormatterStatus = {
   name: string
   extensions: Array<string>
@@ -4233,6 +4237,42 @@ export type LspStatusResponses = {
 }
 
 export type LspStatusResponse = LspStatusResponses[keyof LspStatusResponses]
+
+export type LspDiagnosticsStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/lsp/diagnostics/status"
+}
+
+export type LspDiagnosticsStatusResponses = {
+  /**
+   * LSP diagnostics toggle status
+   */
+  200: LspDiagnosticsStatus
+}
+
+export type LspDiagnosticsStatusResponse = LspDiagnosticsStatusResponses[keyof LspDiagnosticsStatusResponses]
+
+export type LspDiagnosticsToggleData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/lsp/diagnostics/toggle"
+}
+
+export type LspDiagnosticsToggleResponses = {
+  /**
+   * Updated diagnostics status
+   */
+  200: LspDiagnosticsStatus
+}
+
+export type LspDiagnosticsToggleResponse = LspDiagnosticsToggleResponses[keyof LspDiagnosticsToggleResponses]
 
 export type FormatterStatusData = {
   body?: never
