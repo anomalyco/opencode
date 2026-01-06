@@ -1,6 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, mock } from "bun:test"
 import { CompactionSchema } from "../../src/session/compaction/schema"
 import { DeterministicExtractor } from "../../src/session/compaction/extractors"
+import { LLMExtractor } from "../../src/session/compaction/llm-extractor"
 import type { MessageV2 } from "../../src/session/message-v2"
 
 describe("compaction/schema", () => {
@@ -462,6 +463,228 @@ describe("compaction/extractors", () => {
       expect(condensed).toContain("Files modified: 1")
       expect(condensed).toContain("Files created: 1")
       expect(condensed).toContain("Errors: 1 (1 resolved)")
+    })
+  })
+})
+
+// =============================================================================
+// LLM EXTRACTOR TESTS
+// =============================================================================
+
+describe("compaction/llm-extractor", () => {
+  describe("buildPrompt", () => {
+    test("includes condensed context in prompt", () => {
+      const condensedContext = "# Session Summary\n- Files read: 5\n- Files modified: 2"
+      const recentMessages = "User: Help me fix this bug\nAssistant: Let me look at the code"
+
+      const prompt = LLMExtractor.buildPrompt(condensedContext, recentMessages)
+
+      expect(prompt).toContain(condensedContext)
+      expect(prompt).toContain(recentMessages)
+    })
+
+    test("includes extraction instructions", () => {
+      const prompt = LLMExtractor.buildPrompt("context", "messages")
+
+      expect(prompt).toContain("session_intent")
+      expect(prompt).toContain("current_state")
+      expect(prompt).toContain("decisions")
+      expect(prompt).toContain("pending_tasks")
+      expect(prompt).toContain("key_context")
+    })
+  })
+
+  describe("messagesToRecentContext", () => {
+    test("converts messages to text format", () => {
+      const messages: MessageV2.WithParts[] = [
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "session_test",
+            role: "user",
+            time: { created: Date.now() },
+            agent: "build",
+            model: { providerID: "test", modelID: "test" },
+          } as MessageV2.User,
+          parts: [
+            {
+              id: "part_1",
+              sessionID: "session_test",
+              messageID: "msg_1",
+              type: "text",
+              text: "Please help me fix this bug",
+            } as MessageV2.TextPart,
+          ],
+        },
+      ]
+
+      const result = LLMExtractor.messagesToRecentContext(messages)
+
+      expect(result).toContain("USER:")
+      expect(result).toContain("Please help me fix this bug")
+    })
+
+    test("limits to last N messages", () => {
+      const messages: MessageV2.WithParts[] = Array.from({ length: 20 }, (_, i) => ({
+        info: {
+          id: `msg_${i}`,
+          sessionID: "session_test",
+          role: "user" as const,
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: "test", modelID: "test" },
+        } as MessageV2.User,
+        parts: [
+          {
+            id: `part_${i}`,
+            sessionID: "session_test",
+            messageID: `msg_${i}`,
+            type: "text" as const,
+            text: `Message ${i}`,
+          } as MessageV2.TextPart,
+        ],
+      }))
+
+      const result = LLMExtractor.messagesToRecentContext(messages, 5)
+
+      // Should only include last 5 messages
+      expect(result).toContain("Message 15")
+      expect(result).toContain("Message 19")
+      expect(result).not.toContain("Message 0")
+    })
+
+    test("includes tool summaries", () => {
+      const messages: MessageV2.WithParts[] = [
+        {
+          info: {
+            id: "msg_1",
+            sessionID: "session_test",
+            role: "assistant",
+            time: { created: Date.now() },
+            parentID: "parent",
+            modelID: "test",
+            providerID: "test",
+            mode: "build",
+            agent: "build",
+            path: { cwd: "/test", root: "/test" },
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          } as MessageV2.Assistant,
+          parts: [
+            {
+              id: "part_1",
+              sessionID: "session_test",
+              messageID: "msg_1",
+              type: "tool",
+              callID: "call_1",
+              tool: "Read",
+              state: {
+                status: "completed",
+                input: { file_path: "/src/main.ts" },
+                output: "file content",
+                title: "Read",
+                metadata: {},
+                time: { start: Date.now(), end: Date.now() },
+              },
+            } as MessageV2.ToolPart,
+          ],
+        },
+      ]
+
+      const result = LLMExtractor.messagesToRecentContext(messages)
+
+      expect(result).toContain("[Tool: Read]")
+    })
+  })
+
+  describe("parseResponse", () => {
+    test("parses valid JSON response", () => {
+      const response = JSON.stringify({
+        session_intent: "Build a REST API",
+        current_state: "API routes implemented",
+        decisions: [{ decision: "Use Express", rationale: "Simple and well-known" }],
+        pending_tasks: ["Add authentication", "Write tests"],
+        key_context: "Node.js project with TypeScript",
+      })
+
+      const result = LLMExtractor.parseResponse(response)
+
+      expect(result.session_intent).toBe("Build a REST API")
+      expect(result.decisions).toHaveLength(1)
+      expect(result.pending_tasks).toContain("Add authentication")
+    })
+
+    test("handles JSON with markdown code fence", () => {
+      const response = `Here's the extraction:
+\`\`\`json
+{
+  "session_intent": "Fix a bug",
+  "current_state": "Debugging in progress",
+  "decisions": [],
+  "pending_tasks": ["Find root cause"],
+  "key_context": "React application"
+}
+\`\`\`
+`
+
+      const result = LLMExtractor.parseResponse(response)
+
+      expect(result.session_intent).toBe("Fix a bug")
+    })
+
+    test("returns default values for invalid JSON", () => {
+      const response = "This is not valid JSON at all"
+
+      const result = LLMExtractor.parseResponse(response)
+
+      expect(result.session_intent).toBe("")
+      expect(result.decisions).toEqual([])
+      expect(result.pending_tasks).toEqual([])
+    })
+
+    test("handles partial JSON with missing fields", () => {
+      const response = JSON.stringify({
+        session_intent: "Some intent",
+        // missing other fields
+      })
+
+      const result = LLMExtractor.parseResponse(response)
+
+      expect(result.session_intent).toBe("Some intent")
+      expect(result.current_state).toBe("")
+      expect(result.decisions).toEqual([])
+    })
+  })
+
+  describe("extractAgentContext", () => {
+    test("extracts agent context from agent info", () => {
+      const agentInfo = {
+        name: "build",
+        systemPrompt: "You are a helpful coding assistant. You must always use TypeScript. Never use any.",
+      }
+
+      const result = LLMExtractor.extractAgentContext(agentInfo)
+
+      expect(result.agent_name).toBe("build")
+      expect(result.agent_role).toBeDefined()
+      expect(result.constraints).toBeDefined()
+    })
+
+    test("extracts constraints from system prompt", () => {
+      const agentInfo = {
+        name: "test",
+        systemPrompt: "You must always validate input. You should never expose secrets. Only use approved libraries.",
+      }
+
+      const result = LLMExtractor.extractAgentContext(agentInfo)
+
+      expect(result.constraints?.length).toBeGreaterThan(0)
+    })
+
+    test("returns undefined for missing info", () => {
+      const result = LLMExtractor.extractAgentContext(undefined)
+
+      expect(result).toBeUndefined()
     })
   })
 })
