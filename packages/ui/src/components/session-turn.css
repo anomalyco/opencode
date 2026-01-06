@@ -59,6 +59,7 @@
 
   [data-slot="session-turn-message-content"] {
     margin-top: -18px;
+    max-width: 100%;
   }
 
   [data-slot="session-turn-message-title"] {
