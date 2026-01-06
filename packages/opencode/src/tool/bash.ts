@@ -156,6 +156,8 @@ export const BashTool = Tool.define("bash", async () => {
         cwd,
         env: {
           ...process.env,
+          OPENCODE_SESSION_ID: ctx.sessionID,
+          OPENCODE_MESSAGE_ID: ctx.messageID,
         },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
