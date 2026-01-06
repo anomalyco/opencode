@@ -6,6 +6,8 @@ import { Instance } from "../../src/project/instance"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 import { Session } from "../../src/session"
+import { MessageV2 } from "../../src/session/message-v2"
+import { Identifier } from "../../src/id/id"
 import type { Provider } from "../../src/provider/provider"
 
 Log.init({ print: false })
@@ -247,5 +249,150 @@ describe("session.getUsage", () => {
     })
 
     expect(result.cost).toBe(3 + 1.5)
+  })
+})
+
+describe("session.compaction.prune", () => {
+  test("clears output and attachments when pruning tool parts", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // Create a session
+        const session = await Session.create({})
+
+        // Create user messages with turns to get past the initial protection
+        const userMsg1 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() - 10000 },
+          agent: "coder",
+          model: { providerID: "test", modelID: "test-model" },
+        })
+
+        // Create an assistant message with a completed tool part containing large output
+        const assistantMsg1 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "assistant",
+          parentID: userMsg1.id,
+          sessionID: session.id,
+          mode: "normal",
+          agent: "coder",
+          path: { cwd: tmp.path, root: tmp.path },
+          cost: 0,
+          tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: "test-model",
+          providerID: "test",
+          time: { created: Date.now() - 9000 },
+        })
+
+        // Create large output to exceed PRUNE_PROTECT (40,000 tokens = 160,000 chars)
+        const largeOutput = "x".repeat(200_000)
+        const toolPart = await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: assistantMsg1.id,
+          sessionID: session.id,
+          type: "tool",
+          callID: "call-1",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { path: "/test/file.ts" },
+            output: largeOutput,
+            title: "Read file",
+            metadata: {},
+            time: { start: Date.now() - 8000, end: Date.now() - 7000 },
+            attachments: [
+              {
+                id: Identifier.ascending("part"),
+                messageID: assistantMsg1.id,
+                sessionID: session.id,
+                type: "file",
+                mime: "image/png",
+                filename: "screenshot.png",
+                url: "data:image/png;base64," + "A".repeat(50000),
+              },
+            ],
+          },
+        } as MessageV2.ToolPart)
+
+        // Create a second user message (turn 2)
+        const userMsg2 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() - 5000 },
+          agent: "coder",
+          model: { providerID: "test", modelID: "test-model" },
+        })
+
+        // Create a third user message (turn 3) to get past the turn protection
+        const userMsg3 = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() },
+          agent: "coder",
+          model: { providerID: "test", modelID: "test-model" },
+        })
+
+        // Verify initial state - output and attachments exist
+        const initialParts = await MessageV2.parts(assistantMsg1.id)
+        const initialToolPart = initialParts.find((p) => p.type === "tool") as MessageV2.ToolPart
+        expect(initialToolPart.state.status).toBe("completed")
+        if (initialToolPart.state.status === "completed") {
+          expect(initialToolPart.state.output.length).toBe(200_000)
+          expect(initialToolPart.state.attachments?.length).toBe(1)
+        }
+
+        // Run prune
+        await SessionCompaction.prune({ sessionID: session.id })
+
+        // Verify output and attachments are cleared
+        const prunedParts = await MessageV2.parts(assistantMsg1.id)
+        const prunedToolPart = prunedParts.find((p) => p.type === "tool") as MessageV2.ToolPart
+        expect(prunedToolPart.state.status).toBe("completed")
+        if (prunedToolPart.state.status === "completed") {
+          expect(prunedToolPart.state.output).toBe("")
+          expect(prunedToolPart.state.attachments).toBeUndefined()
+          expect(prunedToolPart.state.time.compacted).toBeDefined()
+        }
+
+        // Cleanup
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("does not prune when prune config is disabled", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ compaction: { prune: false } }))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        // Create minimal messages to run prune
+        const userMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: session.id,
+          time: { created: Date.now() },
+          agent: "coder",
+          model: { providerID: "test", modelID: "test-model" },
+        })
+
+        // Run prune - should return early due to config
+        await SessionCompaction.prune({ sessionID: session.id })
+
+        // Cleanup
+        await Session.remove(session.id)
+      },
+    })
   })
 })
