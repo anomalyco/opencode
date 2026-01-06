@@ -93,21 +93,31 @@ Use the gh command via the Bash tool for ALL GitHub-related tasks including work
 
 IMPORTANT: When the user asks you to create a pull request, follow these steps carefully:
 
-1. You can call multiple tools in a single response. When multiple independent pieces of information are requested and all commands are likely to succeed, run multiple tool calls in parallel for optimal performance. run the following bash commands in parallel using the Bash tool, in order to understand the current state of the branch since it diverged from the main branch:
+1. **Check for project-specific PR requirements** (use Glob tool to find files):
+   - Use Glob to find: `**/pull_request_template.md`, `**/PULL_REQUEST_TEMPLATE.md`
+   - Use Glob to find: `**/AGENTS.md`, `**/CONTRIBUTING.md`
+   - Read any found files to understand required PR structure
+   - If templates/guidelines exist, you MUST follow their structure exactly
+
+2. You can call multiple tools in a single response. When multiple independent pieces of information are requested and all commands are likely to succeed, run multiple tool calls in parallel for optimal performance. run the following bash commands in parallel using the Bash tool, in order to understand the current state of the branch since it diverged from the main branch:
    - Run a git status command to see all untracked files
    - Run a git diff command to see both staged and unstaged changes that will be committed
    - Check if the current branch tracks a remote branch and is up to date with the remote, so you know if you need to push to the remote
    - Run a git log command and `git diff [base-branch]...HEAD` to understand the full commit history for the current branch (from the time it diverged from the base branch)
-2. Analyze all changes that will be included in the pull request, making sure to look at all relevant commits (NOT just the latest commit, but ALL commits that will be included in the pull request!!!), and draft a pull request summary
-3. You can call multiple tools in a single response. When multiple independent pieces of information are requested and all commands are likely to succeed, run multiple tool calls in parallel for optimal performance. run the following commands in parallel:
+
+3. Analyze all changes that will be included in the pull request, making sure to look at all relevant commits (NOT just the latest commit, but ALL commits that will be included in the pull request!!!), and draft a pull request summary
+
+4. You can call multiple tools in a single response. When multiple independent pieces of information are requested and all commands are likely to succeed, run multiple tool calls in parallel for optimal performance. run the following commands in parallel:
    - Create new branch if needed
    - Push to remote with -u flag if needed
    - Create PR using gh pr create with the format below. Use a HEREDOC to pass the body to ensure correct formatting.
+
 <example>
 gh pr create --title "the pr title" --body "$(cat <<'EOF'
-## Summary
-<1-3 bullet points>
+<pull request template content, or summary if no template found>
 </example>
+
+**CRITICAL**: If a PR template was found in step 1, use its exact structure. Otherwise, provide a concise summary.
 
 Important:
 - DO NOT use the TodoWrite or Task tools
