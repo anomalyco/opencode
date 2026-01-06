@@ -124,6 +124,7 @@ export namespace ACP {
             }
             switch (event.type) {
               case "permission.asked":
+                if (this.disposed) break
                 try {
                   const permission = event.properties
                   const res = await this.connection
@@ -153,6 +154,7 @@ export namespace ACP {
                       return
                     })
                   if (!res) return
+                  if (this.disposed) return
                   if (res.outcome.outcome !== "selected") {
                     await this.config.sdk.permission.reply({
                       requestID: permission.id,
@@ -172,6 +174,7 @@ export namespace ACP {
                 break
 
               case "message.part.updated":
+                if (this.disposed) break
                 log.info("message part updated", { event: event.properties })
                 try {
                   const props = event.properties
@@ -193,6 +196,7 @@ export namespace ACP {
                     })
 
                   if (!message || message.info.role !== "assistant") return
+                  if (this.disposed) return
 
                   if (part.type === "tool") {
                     switch (part.state.status) {
