@@ -45,6 +45,19 @@
           text-decoration: line-through;
         }
       }
+
+      &[data-slot="payment-receipt"] {
+        span {
+          display: inline-block;
+          padding: var(--space-3) var(--space-4);
+          font-size: var(--font-size-sm);
+          line-height: 1.5;
+        }
+
+        button {
+          font-size: var(--font-size-sm);
+        }
+      }
     }
 
     tbody tr {
@@ -61,13 +74,17 @@
       }
 
       th {
-        &:nth-child(2) /* Payment ID */ {
+        &:nth-child(2)
+
+        /* Payment ID */ {
           display: none;
         }
       }
 
       td {
-        &:nth-child(2) /* Payment ID */ {
+        &:nth-child(2)
+
+        /* Payment ID */ {
           display: none;
         }
       }
