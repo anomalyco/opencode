@@ -10,6 +10,9 @@ import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
+import { useKeyboard } from "@opentui/solid"
+import { Clipboard } from "@tui/util/clipboard"
+import { useToast } from "../ui/toast"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -104,6 +107,17 @@ function AutoMethod(props: AutoMethodProps) {
   const sdk = useSDK()
   const dialog = useDialog()
   const sync = useSync()
+  const toast = useToast()
+
+  useKeyboard((evt) => {
+    if (evt.name === "c" && !evt.ctrl && !evt.meta) {
+      const code =
+        props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.instructions
+      Clipboard.copy(code)
+        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+        .catch(toast.error)
+    }
+  })
 
   onMount(async () => {
     const result = await sdk.client.provider.oauth.callback({
@@ -132,6 +146,9 @@ function AutoMethod(props: AutoMethodProps) {
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
       <text fg={theme.textMuted}>Waiting for authorization...</text>
+      <text fg={theme.text}>
+        c <span style={{ fg: theme.textMuted }}>copy</span>
+      </text>
     </box>
   )
 }
