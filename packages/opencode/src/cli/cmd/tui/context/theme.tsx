@@ -42,6 +42,7 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { useToast } from "../ui/toast"
 import { iife } from "@/util/iife"
+import { useSDK } from "./sdk"
 
 type ThemeColors = {
   primary: RGBA
@@ -305,14 +306,14 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       active: undefined as string | undefined,
     })
 
-    const [customLoad] = createResource(() =>
+    const [customLoad, { refetch: reloadCustom }] = createResource(() =>
       loadCustomThemes()
         .then((themes) => {
           setStore("themes", themes)
         })
     )
 
-    const [systemLoad] = createResource(() =>
+    const [systemLoad, { refetch: reloadSystem }] = createResource(() =>
       detectSystemColors()
         .then((colors) => {
           const theme = generateSystemTheme(colors)
@@ -418,6 +419,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       if (loadingStatus(store.active!) !== "errored") return
 
       toastWarning(store.active!)
+    })
+
+    const sdk = useSDK()
+    sdk.event.on("server.instance.disposed", () => {
+      reloadCustom()
+      reloadSystem()
     })
 
     const values = createMemo(() => {
