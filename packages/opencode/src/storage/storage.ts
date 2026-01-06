@@ -10,6 +10,7 @@ import z from "zod"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
+  const pathExists = async (p: string) => fs.stat(p).then(() => true).catch(() => false)
 
   type Migration = (dir: string) => Promise<void>
 
@@ -23,7 +24,7 @@ export namespace Storage {
   const MIGRATIONS: Migration[] = [
     async (dir) => {
       const project = path.resolve(dir, "../project")
-      if (!fs.exists(project)) return
+      if (!(await pathExists(project))) return
       for await (const projectDir of new Bun.Glob("*").scan({
         cwd: project,
         onlyFiles: false,
@@ -43,7 +44,7 @@ export namespace Storage {
             if (worktree) break
           }
           if (!worktree) continue
-          if (!(await fs.exists(worktree))) continue
+          if (!(await pathExists(worktree))) continue
           const [id] = await $`git rev-list --max-parents=0 --all`
             .quiet()
             .nothrow()
