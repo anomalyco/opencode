@@ -13,7 +13,11 @@ import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
-  const pathExists = async (p: string) => fs.stat(p).then(() => true).catch(() => false)
+  const pathExists = async (p: string) =>
+    fs
+      .stat(p)
+      .then(() => true)
+      .catch(() => false)
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
