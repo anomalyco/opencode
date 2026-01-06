@@ -17,10 +17,51 @@ const TRANSIENT_MESSAGES = [
   "socket hang up",
 ]
 
-function isTransientError(error: unknown): boolean {
+const RATE_LIMIT_MESSAGES = ["429", "rate limit", "too many requests"]
+
+const SERVER_ERROR_MESSAGES = [
+  "500",
+  "502",
+  "503",
+  "504",
+  "internal server error",
+  "bad gateway",
+  "service unavailable",
+]
+
+/**
+ * Check if an error is a transient network error
+ */
+export function isTransientError(error: unknown): boolean {
   if (!error) return false
   const message = String(error instanceof Error ? error.message : error).toLowerCase()
   return TRANSIENT_MESSAGES.some((m) => message.includes(m))
+}
+
+/**
+ * Check if an error is a rate limit error (HTTP 429)
+ */
+export function isRateLimitError(error: unknown): boolean {
+  if (!error) return false
+  const message = String(error instanceof Error ? error.message : error).toLowerCase()
+  return RATE_LIMIT_MESSAGES.some((m) => message.includes(m))
+}
+
+/**
+ * Check if an error is a server error (HTTP 5xx)
+ */
+export function isServerError(error: unknown): boolean {
+  if (!error) return false
+  const message = String(error instanceof Error ? error.message : error).toLowerCase()
+  return SERVER_ERROR_MESSAGES.some((m) => message.includes(m))
+}
+
+/**
+ * Check if an error is retryable (network issues, rate limits, or server errors)
+ * Use this for HTTP/fetch operations where you want to retry on transient failures
+ */
+export function isRetryableError(error: unknown): boolean {
+  return isTransientError(error) || isRateLimitError(error) || isServerError(error)
 }
 
 export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {

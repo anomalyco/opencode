@@ -1,6 +1,8 @@
 import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./websearch.txt"
+import { LRUCache } from "../util/cache"
+import { retry, isRetryableError } from "@opencode-ai/util/retry"
 
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
@@ -8,7 +10,16 @@ const API_CONFIG = {
     SEARCH: "/mcp",
   },
   DEFAULT_NUM_RESULTS: 8,
+  TIMEOUT_MS: 25000,
 } as const
+
+// Cache configuration: 1 hour TTL, 500 entries max
+const searchCache = new LRUCache<string>({
+  namespace: "websearch",
+  maxSize: 500,
+  ttl: 60 * 60 * 1000, // 1 hour
+  persist: true,
+})
 
 interface McpSearchRequest {
   jsonrpc: string
@@ -34,6 +45,25 @@ interface McpSearchResponse {
       text: string
     }>
   }
+}
+
+/**
+ * Generate a cache key from search parameters
+ */
+function getCacheKey(params: {
+  query: string
+  numResults?: number
+  livecrawl?: string
+  type?: string
+  contextMaxCharacters?: number
+}): string {
+  return JSON.stringify({
+    q: params.query.toLowerCase().trim(),
+    n: params.numResults ?? API_CONFIG.DEFAULT_NUM_RESULTS,
+    l: params.livecrawl ?? "fallback",
+    t: params.type ?? "auto",
+    c: params.contextMaxCharacters,
+  })
 }
 
 export const WebSearchTool = Tool.define("websearch", {
@@ -70,6 +100,19 @@ export const WebSearchTool = Tool.define("websearch", {
       },
     })
 
+    // Check cache first (only for non-preferred livecrawl)
+    if (params.livecrawl !== "preferred") {
+      const cacheKey = getCacheKey(params)
+      const cached = await searchCache.get(cacheKey)
+      if (cached) {
+        return {
+          output: cached,
+          title: `Web search: ${params.query} (cached)`,
+          metadata: { cached: true },
+        }
+      }
+    }
+
     const searchRequest: McpSearchRequest = {
       jsonrpc: "2.0",
       id: 1,
@@ -86,54 +129,76 @@ export const WebSearchTool = Tool.define("websearch", {
       },
     }
 
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 25000)
-
     try {
-      const headers: Record<string, string> = {
-        accept: "application/json, text/event-stream",
-        "content-type": "application/json",
-      }
+      const result = await retry(
+        async () => {
+          // Create fresh timeout for each retry attempt
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT_MS)
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(searchRequest),
-        signal: AbortSignal.any([controller.signal, ctx.abort]),
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Search error (${response.status}): ${errorText}`)
-      }
-
-      const responseText = await response.text()
-
-      // Parse SSE response
-      const lines = responseText.split("\n")
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data: McpSearchResponse = JSON.parse(line.substring(6))
-          if (data.result && data.result.content && data.result.content.length > 0) {
-            return {
-              output: data.result.content[0].text,
-              title: `Web search: ${params.query}`,
-              metadata: {},
+          try {
+            const headers: Record<string, string> = {
+              accept: "application/json, text/event-stream",
+              "content-type": "application/json",
             }
+
+            const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify(searchRequest),
+              signal: AbortSignal.any([controller.signal, ctx.abort]),
+            })
+
+            if (!response.ok) {
+              const errorText = await response.text()
+              throw new Error(`Search error (${response.status}): ${errorText}`)
+            }
+
+            const responseText = await response.text()
+
+            // Parse SSE response
+            const lines = responseText.split("\n")
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data: McpSearchResponse = JSON.parse(line.substring(6))
+                if (data.result && data.result.content && data.result.content.length > 0) {
+                  return data.result.content[0].text
+                }
+              }
+            }
+
+            return null
+          } finally {
+            clearTimeout(timeoutId)
           }
+        },
+        {
+          attempts: 3,
+          delay: 1000,
+          factor: 2,
+          maxDelay: 10000,
+          retryIf: isRetryableError,
+        },
+      )
+
+      if (result) {
+        // Cache successful results
+        const cacheKey = getCacheKey(params)
+        await searchCache.set(cacheKey, result)
+
+        return {
+          output: result,
+          title: `Web search: ${params.query}`,
+          metadata: { cached: false },
         }
       }
 
       return {
         output: "No search results found. Please try a different query.",
         title: `Web search: ${params.query}`,
-        metadata: {},
+        metadata: { cached: false },
       }
     } catch (error) {
-      clearTimeout(timeoutId)
-
       if (error instanceof Error && error.name === "AbortError") {
         throw new Error("Search request timed out")
       }
