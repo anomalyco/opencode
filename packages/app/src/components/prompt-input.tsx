@@ -291,7 +291,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
-    // Always prevent default first to avoid browser inserting raw data
     event.preventDefault()
     event.stopPropagation()
 
