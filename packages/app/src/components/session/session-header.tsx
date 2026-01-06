@@ -55,6 +55,9 @@ export function SessionHeader() {
     navigate(`/${params.dir}/session/${session.id}`)
   }
 
+  // Hide header in kiosk mode
+  if (layout.kiosk.enabled()) return null
+
   return (
     <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex">
       <button
