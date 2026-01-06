@@ -426,9 +426,9 @@ mode: subagent
 permission:
   edit: deny
   bash:
+    "*": ask
     "git diff": allow
     "git log*": allow
-    "*": ask
   webfetch: deny
 ---
 
@@ -470,7 +470,7 @@ This can take a glob pattern.
 ```
 
 And you can also use the `*` wildcard to manage permissions for all commands.
-Where the specific rule can override the `*` wildcard.
+Since the last matching rule takes precedence, put the `*` wildcard first and specific rules after.
 
 ```json title="opencode.json" {8}
 {
@@ -479,8 +479,8 @@ Where the specific rule can override the `*` wildcard.
     "build": {
       "permission": {
         "bash": {
-          "git status": "allow",
-          "*": "ask"
+          "*": "ask",
+          "git status": "allow"
         }
       }
     }
