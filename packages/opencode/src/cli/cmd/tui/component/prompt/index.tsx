@@ -30,6 +30,8 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import type { PromptExtension, PromptKeyEvent } from "../../lib/prompt-extension"
+import { createViBasicExtension } from "../../lib/vi-basic-extension"
 
 export type PromptProps = {
   sessionID?: string
@@ -72,6 +74,19 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+
+  // Prompt extensions - vi basic
+  const extensions: PromptExtension[] = []
+  const viBasicExtension = createViBasicExtension({
+    textarea: () => input,
+    onContentChange: () => {
+      const value = input.plainText
+      setStore("prompt", "input", value)
+      autocomplete.onInput(value)
+      syncExtmarksWithPromptParts()
+    },
+  })
+  extensions.push(viBasicExtension)
 
   function promptModelWarning() {
     toast.show({
@@ -196,11 +211,18 @@ export function Prompt(props: PromptProps) {
         title: "Interrupt session",
         value: "session.interrupt",
         keybind: "session_interrupt",
-        disabled: status().type === "idle",
+        disabled: status().type === "idle" || extensions.some((ext) => ext.blockInterrupt?.()),
         category: "Session",
         onSelect: (dialog) => {
           if (autocomplete.visible) return
           if (!input.focused) return
+          // Check if any extension handles escape
+          for (const ext of extensions) {
+            if (ext.handleEscape?.()) {
+              dialog.clear()
+              return
+            }
+          }
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
@@ -482,6 +504,19 @@ export function Prompt(props: PromptProps) {
         ))
       },
     },
+    // Extension commands
+    ...extensions.flatMap(
+      (ext) =>
+        ext.commands?.().map((cmd) => ({
+          title: cmd.title,
+          value: cmd.value,
+          category: cmd.category ?? "Extensions",
+          onSelect: (dialog: { clear: () => void }) => {
+            cmd.onSelect()
+            dialog.clear()
+          },
+        })) ?? [],
+    ),
   ])
 
   async function submit() {
@@ -778,6 +813,79 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+
+                // Vi mode handling
+                if (viBasicExtension.enabled() && !autocomplete.visible) {
+                  // History navigation: match standard mode behavior using cursor offset
+                  const viState = viBasicExtension.getState?.()
+                  const isUp = e.name === "up" || (viState === "normal" && e.name === "k")
+                  const isDown = e.name === "down" || (viState === "normal" && e.name === "j")
+                  const atStart = input.cursorOffset === 0
+                  const atEnd = input.cursorOffset === input.plainText.length
+
+                  if ((isUp && atStart) || (isDown && atEnd)) {
+                    const direction = isUp ? -1 : 1
+                    const item = history.move(direction, input.plainText)
+                    if (item) {
+                      input.setText(item.input)
+                      setStore("prompt", item)
+                      setStore("mode", item.mode ?? "normal")
+                      restoreExtmarksFromParts(item.parts)
+                      e.preventDefault()
+                      if (direction === -1) input.cursorOffset = 0
+                      if (direction === 1) input.cursorOffset = input.plainText.length
+                      return
+                    }
+                  }
+
+                  // Arrow keys and j/k in normal mode: match standard mode behavior
+                  // including "smart positioning" - jump to start/end at visual row boundaries
+                  if (viState === "normal" && (isUp || isDown)) {
+                    const atFirstRow = input.visualCursor.visualRow === 0
+                    const atLastRow = input.visualCursor.visualRow === input.height - 1
+
+                    if (isUp) {
+                      input.moveCursorUp()
+                      // Smart positioning: if at first row, jump to start
+                      if (atFirstRow) input.cursorOffset = 0
+                    } else {
+                      input.moveCursorDown()
+                      // Smart positioning: if at last row, jump to end
+                      if (atLastRow) input.cursorOffset = input.plainText.length
+                    }
+                    e.preventDefault()
+                    return
+                  }
+
+                  // Arrow keys in insert mode: let them fall through to standard handling
+                  // so they match standard mode behavior (cursor move, or history at boundaries)
+                  if (viState === "insert" && (e.name === "up" || e.name === "down")) {
+                    // Don't handle here - let it fall through to standard mode handling below
+                  }
+
+                  // "/" at position 0 opens command menu - pass through to autocomplete
+                  // "@" triggers file/agent autocomplete - pass through
+                  if (e.name === "/" && input.cursorOffset === 0) {
+                    // Let it fall through to autocomplete handling
+                  } else if (e.name === "@") {
+                    // Let it fall through to autocomplete handling
+                  } else {
+                    // Handle vi mode key
+                    const keyEvent: PromptKeyEvent = {
+                      name: e.name,
+                      ctrl: e.ctrl,
+                      meta: e.meta,
+                      shift: e.shift,
+                      sequence: e.sequence,
+                      preventDefault: () => e.preventDefault(),
+                      defaultPrevented: e.defaultPrevented,
+                    }
+                    if (viBasicExtension.handleKey?.(keyEvent, undefined as any)) {
+                      return
+                    }
+                  }
+                }
+
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and
@@ -805,10 +913,9 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
-                if (keybind.match("app_exit", e)) {
+                if (keybind.match("app_exit", e) && !e.defaultPrevented) {
                   if (store.prompt.input === "") {
                     await exit()
-                    // Don't preventDefault - let textarea potentially handle the event
                     e.preventDefault()
                     return
                   }
@@ -1074,6 +1181,8 @@ export function Prompt(props: PromptProps) {
                   </text>
                 </Match>
               </Switch>
+              {/* Extension status indicators */}
+              {extensions.map((ext) => ext.StatusIndicator?.())}
             </box>
           </Show>
         </box>
