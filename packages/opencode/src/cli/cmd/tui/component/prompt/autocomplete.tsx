@@ -1,15 +1,48 @@
-import type { BoxRenderable, TextareaRenderable, KeyEvent } from "@opentui/core"
+import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, For, Show } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import { useCommandDialog } from "@tui/component/dialog-command"
+import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
+
+function removeLineRange(input: string) {
+  const hashIndex = input.lastIndexOf("#")
+  return hashIndex !== -1 ? input.substring(0, hashIndex) : input
+}
+
+function extractLineRange(input: string) {
+  const hashIndex = input.lastIndexOf("#")
+  if (hashIndex === -1) {
+    return { baseQuery: input }
+  }
+
+  const baseName = input.substring(0, hashIndex)
+  const linePart = input.substring(hashIndex + 1)
+  const lineMatch = linePart.match(/^(\d+)(?:-(\d*))?$/)
+
+  if (!lineMatch) {
+    return { baseQuery: baseName }
+  }
+
+  const startLine = Number(lineMatch[1])
+  const endLine = lineMatch[2] && startLine < Number(lineMatch[2]) ? Number(lineMatch[2]) : undefined
+
+  return {
+    lineRange: {
+      baseName,
+      startLine,
+      endLine,
+    },
+    baseQuery: baseName,
+  }
+}
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -22,6 +55,7 @@ export type AutocompleteOption = {
   aliases?: string[]
   disabled?: boolean
   description?: string
+  isDirectory?: boolean
   onSelect?: () => void
 }
 
@@ -41,13 +75,47 @@ export function Autocomplete(props: {
   const sync = useSync()
   const command = useCommandDialog()
   const { theme } = useTheme()
+  const dimensions = useTerminalDimensions()
 
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
-    position: { x: 0, y: 0, width: 0 },
   })
+
+  const [positionTick, setPositionTick] = createSignal(0)
+
+  createEffect(() => {
+    if (store.visible) {
+      let lastPos = { x: 0, y: 0, width: 0 }
+      const interval = setInterval(() => {
+        const anchor = props.anchor()
+        if (anchor.x !== lastPos.x || anchor.y !== lastPos.y || anchor.width !== lastPos.width) {
+          lastPos = { x: anchor.x, y: anchor.y, width: anchor.width }
+          setPositionTick((t) => t + 1)
+        }
+      }, 50)
+
+      onCleanup(() => clearInterval(interval))
+    }
+  })
+
+  const position = createMemo(() => {
+    if (!store.visible) return { x: 0, y: 0, width: 0 }
+    const dims = dimensions()
+    positionTick()
+    const anchor = props.anchor()
+    const parent = anchor.parent
+    const parentX = parent?.x ?? 0
+    const parentY = parent?.y ?? 0
+
+    return {
+      x: anchor.x - parentX,
+      y: anchor.y - parentY,
+      width: anchor.width,
+    }
+  })
+
   const filter = createMemo(() => {
     if (!store.visible) return
     // Track props.value to make memo reactive to text changes
@@ -107,28 +175,42 @@ export function Autocomplete(props: {
     async (query) => {
       if (!store.visible || store.visible === "/") return []
 
+      const { lineRange, baseQuery } = extractLineRange(query ?? "")
+
       // Get files from SDK
       const result = await sdk.client.find.files({
-        query: {
-          query: query ?? "",
-        },
+        query: baseQuery,
       })
 
       const options: AutocompleteOption[] = []
 
       // Add file options
       if (!result.error && result.data) {
-        const width = store.position.width - 4
+        const width = props.anchor().width - 4
         options.push(
-          ...result.data.map(
-            (item): AutocompleteOption => ({
-              display: Locale.truncateMiddle(item, width),
+          ...result.data.map((item): AutocompleteOption => {
+            let url = `file://${process.cwd()}/${item}`
+            let filename = item
+            if (lineRange && !item.endsWith("/")) {
+              filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+              const urlObj = new URL(url)
+              urlObj.searchParams.set("start", String(lineRange.startLine))
+              if (lineRange.endLine !== undefined) {
+                urlObj.searchParams.set("end", String(lineRange.endLine))
+              }
+              url = urlObj.toString()
+            }
+
+            const isDir = item.endsWith("/")
+            return {
+              display: Locale.truncateMiddle(filename, width),
+              isDirectory: isDir,
               onSelect: () => {
-                insertPart(item, {
+                insertPart(filename, {
                   type: "file",
                   mime: "text/plain",
-                  filename: item,
-                  url: `file://${process.cwd()}/${item}`,
+                  filename,
+                  url,
                   source: {
                     type: "file",
                     text: {
@@ -140,8 +222,8 @@ export function Autocomplete(props: {
                   },
                 })
               },
-            }),
-          ),
+            }
+          }),
         )
       }
 
@@ -152,10 +234,44 @@ export function Autocomplete(props: {
     },
   )
 
+  const mcpResources = createMemo(() => {
+    if (!store.visible || store.visible === "/") return []
+
+    const options: AutocompleteOption[] = []
+    const width = props.anchor().width - 4
+
+    for (const res of Object.values(sync.data.mcp_resource)) {
+      options.push({
+        display: Locale.truncateMiddle(`${res.name} (${res.uri})`, width),
+        description: res.description,
+        onSelect: () => {
+          insertPart(res.name, {
+            type: "file",
+            mime: res.mimeType ?? "text/plain",
+            filename: res.name,
+            url: res.uri,
+            source: {
+              type: "resource",
+              text: {
+                start: 0,
+                end: 0,
+                value: "",
+              },
+              clientName: res.client,
+              uri: res.uri,
+            },
+          })
+        },
+      })
+    }
+
+    return options
+  })
+
   const agents = createMemo(() => {
     const agents = sync.data.agent
     return agents
-      .filter((agent) => !agent.builtIn && agent.mode !== "primary")
+      .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
@@ -180,7 +296,7 @@ export function Autocomplete(props: {
     const s = session()
     for (const command of sync.data.command) {
       results.push({
-        display: "/" + command.name,
+        display: "/" + command.name + (command.mcp ? " (MCP)" : ""),
         description: command.description,
         onSelect: () => {
           const newText = "/" + command.name + " "
@@ -238,8 +354,13 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.timeline"),
         },
         {
+          display: "/fork",
+          description: "fork from message",
+          onSelect: () => command.trigger("session.fork"),
+        },
+        {
           display: "/thinking",
-          description: "toggle thinking blocks",
+          description: "toggle thinking visibility",
           onSelect: () => command.trigger("session.toggle.thinking"),
         },
       )
@@ -278,9 +399,13 @@ export function Autocomplete(props: {
       },
       {
         display: "/status",
-        aliases: ["/mcp"],
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
+      },
+      {
+        display: "/mcp",
+        description: "toggle MCPs",
+        onSelect: () => command.trigger("mcp.list"),
       },
       {
         display: "/theme",
@@ -291,6 +416,11 @@ export function Autocomplete(props: {
         display: "/editor",
         description: "open editor",
         onSelect: () => command.trigger("prompt.editor", "prompt"),
+      },
+      {
+        display: "/connect",
+        description: "connect to a provider",
+        onSelect: () => command.trigger("provider.connect"),
       },
       {
         display: "/help",
@@ -317,16 +447,37 @@ export function Autocomplete(props: {
     }))
   })
 
-  const options = createMemo(() => {
+  const options = createMemo((prev: AutocompleteOption[] | undefined) => {
+    const filesValue = files()
+    const agentsValue = agents()
+    const commandsValue = commands()
+
     const mixed: AutocompleteOption[] = (
-      store.visible === "@" ? [...agents(), ...(files.loading ? files.latest || [] : files())] : [...commands()]
+      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
     ).filter((x) => x.disabled !== true)
+
     const currentFilter = filter()
-    if (!currentFilter) return mixed.slice(0, 10)
-    const result = fuzzysort.go(currentFilter, mixed, {
-      keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+
+    if (!currentFilter) {
+      return mixed
+    }
+
+    if (files.loading && prev && prev.length > 0) {
+      return prev
+    }
+
+    const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
+      keys: [(obj) => removeLineRange(obj.display.trimEnd()), "description", (obj) => obj.aliases?.join(" ") ?? ""],
       limit: 10,
+      scoreFn: (objResults) => {
+        const displayResult = objResults[0]
+        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+          return objResults.score * 2
+        }
+        return objResults.score
+      },
     })
+
     return result.map((arr) => arr.obj)
   })
 
@@ -341,14 +492,47 @@ export function Autocomplete(props: {
     let next = store.selected + direction
     if (next < 0) next = options().length - 1
     if (next >= options().length) next = 0
+    moveTo(next)
+  }
+
+  function moveTo(next: number) {
     setStore("selected", next)
+    if (!scroll) return
+    const viewportHeight = Math.min(height(), options().length)
+    const scrollBottom = scroll.scrollTop + viewportHeight
+    if (next < scroll.scrollTop) {
+      scroll.scrollBy(next - scroll.scrollTop)
+    } else if (next + 1 > scrollBottom) {
+      scroll.scrollBy(next + 1 - scrollBottom)
+    }
   }
 
   function select() {
     const selected = options()[store.selected]
     if (!selected) return
-    selected.onSelect?.()
     hide()
+    selected.onSelect?.()
+  }
+
+  function expandDirectory() {
+    const selected = options()[store.selected]
+    if (!selected) return
+
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const displayText = selected.display.trimEnd()
+    const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText("@" + path)
+
+    setStore("selected", 0)
   }
 
   function show(mode: "@" | "/") {
@@ -356,11 +540,6 @@ export function Autocomplete(props: {
     setStore({
       visible: mode,
       index: props.input().cursorOffset,
-      position: {
-        x: props.anchor().x,
-        y: props.anchor().y,
-        width: props.anchor().width,
-      },
     })
   }
 
@@ -369,6 +548,10 @@ export function Autocomplete(props: {
     if (store.visible === "/" && !text.endsWith(" ") && text.startsWith("/")) {
       const cursor = props.input().logicalCursor
       props.input().deleteRange(0, 0, cursor.row, cursor.col)
+      // Sync the prompt store immediately since onContentChange is async
+      props.setPrompt((draft) => {
+        draft.input = props.input().plainText
+      })
     }
     command.keybinds(true)
     setStore("visible", false)
@@ -416,8 +599,18 @@ export function Autocomplete(props: {
             e.preventDefault()
             return
           }
-          if (name === "return" || name === "tab") {
+          if (name === "return") {
             select()
+            e.preventDefault()
+            return
+          }
+          if (name === "tab") {
+            const selected = options()[store.selected]
+            if (selected?.isDirectory) {
+              expandDirectory()
+            } else {
+              select()
+            }
             e.preventDefault()
             return
           }
@@ -444,23 +637,30 @@ export function Autocomplete(props: {
     return 1
   })
 
+  let scroll: ScrollBoxRenderable
+
   return (
     <box
       visible={store.visible !== false}
       position="absolute"
-      top={store.position.y - height()}
-      left={store.position.x}
-      width={store.position.width}
+      top={position().y - height()}
+      left={position().x}
+      width={position().width}
       zIndex={100}
       {...SplitBorder}
       borderColor={theme.border}
     >
-      <box backgroundColor={theme.backgroundMenu} height={height()}>
+      <scrollbox
+        ref={(r: ScrollBoxRenderable) => (scroll = r)}
+        backgroundColor={theme.backgroundMenu}
+        height={height()}
+        scrollbarOptions={{ visible: false }}
+      >
         <For
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text>No matching items</text>
+              <text fg={theme.textMuted}>No matching items</text>
             </box>
           }
         >
@@ -482,7 +682,7 @@ export function Autocomplete(props: {
             </box>
           )}
         </For>
-      </box>
+      </scrollbox>
     </box>
   )
 }

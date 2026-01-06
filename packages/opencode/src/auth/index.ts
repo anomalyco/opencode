@@ -35,16 +35,22 @@ export namespace Auth {
   const filepath = path.join(Global.Path.data, "auth.json")
 
   export async function get(providerID: string) {
-    const file = Bun.file(filepath)
-    return file
-      .json()
-      .catch(() => ({}))
-      .then((x) => x[providerID] as Info | undefined)
+    const auth = await all()
+    return auth[providerID]
   }
 
   export async function all(): Promise<Record<string, Info>> {
     const file = Bun.file(filepath)
-    return file.json().catch(() => ({}))
+    const data = await file.json().catch(() => ({}) as Record<string, unknown>)
+    return Object.entries(data).reduce(
+      (acc, [key, value]) => {
+        const parsed = Info.safeParse(value)
+        if (!parsed.success) return acc
+        acc[key] = parsed.data
+        return acc
+      },
+      {} as Record<string, Info>,
+    )
   }
 
   export async function set(key: string, info: Info) {

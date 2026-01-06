@@ -6,7 +6,7 @@ Mention `/opencode` in your comment, and opencode will execute tasks within your
 
 ## Features
 
-#### Explain an issues
+#### Explain an issue
 
 Leave the following comment on a GitHub issue. `opencode` will read the entire thread, including all comments, and reply with a clear explanation.
 
@@ -14,7 +14,7 @@ Leave the following comment on a GitHub issue. `opencode` will read the entire t
 /opencode explain this issue
 ```
 
-#### Fix an issues
+#### Fix an issue
 
 Leave the following comment on a GitHub issue. opencode will create a new branch, implement the changes, and open a PR with the changes.
 
@@ -29,6 +29,24 @@ Leave the following comment on a GitHub PR. opencode will implement the requeste
 ```
 Delete the attachment from S3 when the note is removed /oc
 ```
+
+#### Review specific code lines
+
+Leave a comment directly on code lines in the PR's "Files" tab. opencode will automatically detect the file, line numbers, and diff context to provide precise responses.
+
+```
+[Comment on specific lines in Files tab]
+/oc add error handling here
+```
+
+When commenting on specific lines, opencode receives:
+
+- The exact file being reviewed
+- The specific lines of code
+- The surrounding diff context
+- Line number information
+
+This allows for more targeted requests without needing to specify file paths or line numbers manually.
 
 ## Installation
 
@@ -51,6 +69,8 @@ This will walk you through installing the GitHub app, creating the workflow, and
    on:
      issue_comment:
        types: [created]
+     pull_request_review_comment:
+       types: [created]
 
    jobs:
      opencode:
@@ -62,12 +82,12 @@ This will walk you through installing the GitHub app, creating the workflow, and
          id-token: write
        steps:
          - name: Checkout repository
-           uses: actions/checkout@v4
+           uses: actions/checkout@v6
            with:
              fetch-depth: 1
 
          - name: Run opencode
-           uses: sst/opencode/github@latest
+           uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -78,7 +98,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/sst/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/anomalyco/opencode/issues.
 
 ## Development
 
@@ -134,4 +154,10 @@ Replace the image URL `https://github.com/user-attachments/assets/xxxxxxxx` with
 
 ```
 MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4,"pull_request":{}},"comment":{"id":1,"body":"hey opencode, summarize thread"}}}'
+```
+
+### PR review comment event
+
+```
+MOCK_EVENT='{"eventName":"pull_request_review_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"pull_request":{"number":7},"comment":{"id":1,"body":"hey opencode, add error handling","path":"src/components/Button.tsx","diff_hunk":"@@ -45,8 +45,11 @@\n- const handleClick = () => {\n-   console.log('clicked')\n+ const handleClick = useCallback(() => {\n+   console.log('clicked')\n+   doSomething()\n+ }, [doSomething])","line":47,"original_line":45,"position":10,"commit_id":"abc123","original_commit_id":"def456"}}}'
 ```

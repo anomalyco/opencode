@@ -1,4 +1,4 @@
-import { children, For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
 
@@ -13,7 +13,9 @@ export type TriggerTitle = {
 }
 
 const isTriggerTitle = (val: any): val is TriggerTitle => {
-  return typeof val === "object" && val !== null && "title" in val && !(val instanceof Node)
+  return (
+    typeof val === "object" && val !== null && "title" in val && (typeof Node === "undefined" || !(val instanceof Node))
+  )
 }
 
 export interface BasicToolProps {
@@ -21,16 +23,24 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
   hideDetails?: boolean
+  defaultOpen?: boolean
+  forceOpen?: boolean
+  onSubtitleClick?: () => void
 }
 
 export function BasicTool(props: BasicToolProps) {
-  const resolved = children(() => props.children)
+  const [open, setOpen] = createSignal(props.defaultOpen ?? false)
+
+  createEffect(() => {
+    if (props.forceOpen) setOpen(true)
+  })
+
   return (
-    <Collapsible>
+    <Collapsible open={open()} onOpenChange={setOpen}>
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
-            <Icon name={props.icon} size="small" data-slot="basic-tool-tool-icon" />
+            <Icon name={props.icon} size="small" />
             <div data-slot="basic-tool-tool-info">
               <Switch>
                 <Match when={isTriggerTitle(props.trigger) && props.trigger}>
@@ -50,6 +60,13 @@ export function BasicTool(props: BasicToolProps) {
                             data-slot="basic-tool-tool-subtitle"
                             classList={{
                               [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
+                              clickable: !!props.onSubtitleClick,
+                            }}
+                            onClick={(e) => {
+                              if (props.onSubtitleClick) {
+                                e.stopPropagation()
+                                props.onSubtitleClick()
+                              }
                             }}
                           >
                             {trigger().subtitle}
@@ -78,13 +95,13 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={resolved() && !props.hideDetails}>
+          <Show when={props.children && !props.hideDetails}>
             <Collapsible.Arrow />
           </Show>
         </div>
       </Collapsible.Trigger>
-      <Show when={resolved() && !props.hideDetails}>
-        <Collapsible.Content>{resolved()}</Collapsible.Content>
+      <Show when={props.children && !props.hideDetails}>
+        <Collapsible.Content>{props.children}</Collapsible.Content>
       </Show>
     </Collapsible>
   )

@@ -2,15 +2,16 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
-import { Global } from "@/global"
+import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
-import { DialogModel } from "@tui/component/dialog-model"
+import { DialogModel, useConnected } from "@tui/component/dialog-model"
+import { DialogMcp } from "@tui/component/dialog-mcp"
 import { DialogStatus } from "@tui/component/dialog-status"
 import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
@@ -22,6 +23,7 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
+import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
@@ -30,6 +32,9 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import open from "open"
+import { writeHeapSnapshot } from "v8"
+import { PromptRefProvider, usePromptRef } from "./context/prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -91,7 +96,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
+export function tui(input: { url: string; args: Args; directory?: string; onExit?: () => Promise<void> }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
@@ -103,24 +108,30 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
     render(
       () => {
         return (
-          <ErrorBoundary fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} />}>
+          <ErrorBoundary
+            fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
+          >
             <ArgsProvider {...input.args}>
               <ExitProvider onExit={onExit}>
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url}>
+                      <SDKProvider url={input.url} directory={input.directory}>
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
                               <KeybindProvider>
-                                <DialogProvider>
-                                  <CommandProvider>
-                                    <PromptHistoryProvider>
-                                      <App />
-                                    </PromptHistoryProvider>
-                                  </CommandProvider>
-                                </DialogProvider>
+                                <PromptStashProvider>
+                                  <DialogProvider>
+                                    <CommandProvider>
+                                      <PromptHistoryProvider>
+                                        <PromptRefProvider>
+                                          <App />
+                                        </PromptRefProvider>
+                                      </PromptHistoryProvider>
+                                    </CommandProvider>
+                                  </DialogProvider>
+                                </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>
                           </ThemeProvider>
@@ -138,7 +149,15 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
         targetFps: 60,
         gatherStats: false,
         exitOnCtrlC: false,
-        useKittyKeyboard: true,
+        useKittyKeyboard: {},
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          },
+        },
       },
     )
   })
@@ -153,14 +172,53 @@ function App() {
   const local = useLocal()
   const kv = useKV()
   const command = useCommandDialog()
-  const { event } = useSDK()
+  const sdk = useSDK()
   const toast = useToast()
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
   const exit = useExit()
+  const promptRef = usePromptRef()
+
+  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
+  renderer.console.onCopySelection = async (text: string) => {
+    if (!text || text.length === 0) return
+
+    const base64 = Buffer.from(text).toString("base64")
+    const osc52 = `\x1b]52;c;${base64}\x07`
+    const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+    // @ts-expect-error writeOut is not in type definitions
+    renderer.writeOut(finalOsc52)
+    await Clipboard.copy(text)
+      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .catch(toast.error)
+    renderer.clearSelection()
+  }
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
+  })
+
+  // Update terminal window title based on current route and session
+  createEffect(() => {
+    if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
+
+    if (route.data.type === "home") {
+      renderer.setTerminalTitle("OpenCode")
+      return
+    }
+
+    if (route.data.type === "session") {
+      const session = sync.session.get(route.data.sessionID)
+      if (!session || SessionApi.isDefaultTitle(session.title)) {
+        renderer.setTerminalTitle("OpenCode")
+        return
+      }
+
+      // Truncate title to 40 chars max
+      const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
+      renderer.setTerminalTitle(`OC | ${title}`)
+    }
   })
 
   const args = useArgs()
@@ -186,37 +244,55 @@ function App() {
     })
   })
 
+  let continued = false
   createEffect(() => {
-    if (sync.status !== "complete") return
-    if (args.continue) {
-      const match = sync.data.session.at(0)?.id
-      if (match) {
-        route.navigate({
-          type: "session",
-          sessionID: match,
-        })
-      }
+    // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
+    if (continued || sync.status === "loading" || !args.continue) return
+    const match = sync.data.session
+      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .find((x) => x.parentID === undefined)?.id
+    if (match) {
+      continued = true
+      route.navigate({ type: "session", sessionID: match })
     }
   })
 
+  createEffect(
+    on(
+      () => sync.status === "complete" && sync.data.provider.length === 0,
+      (isEmpty, wasEmpty) => {
+        // only trigger when we transition into an empty-provider state
+        if (!isEmpty || wasEmpty) return
+        dialog.replace(() => <DialogProviderList />)
+      },
+    ),
+  )
+
+  const connected = useConnected()
   command.register(() => [
     {
       title: "Switch session",
       value: "session.list",
       keybind: "session_list",
       category: "Session",
+      suggested: sync.data.session.length > 0,
       onSelect: () => {
         dialog.replace(() => <DialogSessionList />)
       },
     },
     {
       title: "New session",
+      suggested: route.data.type === "session",
       value: "session.new",
       keybind: "session_new",
       category: "Session",
       onSelect: () => {
+        const current = promptRef.current
+        // Don't require focus - if there's any text, preserve it
+        const currentPrompt = current?.current?.input ? current.current : undefined
         route.navigate({
           type: "home",
+          initialPrompt: currentPrompt,
         })
         dialog.clear()
       },
@@ -225,6 +301,7 @@ function App() {
       title: "Switch model",
       value: "model.list",
       keybind: "model_list",
+      suggested: true,
       category: "Agent",
       onSelect: () => {
         dialog.replace(() => <DialogModel />)
@@ -232,6 +309,7 @@ function App() {
     },
     {
       title: "Model cycle",
+      disabled: true,
       value: "model.cycle_recent",
       keybind: "model_cycle_recent",
       category: "Agent",
@@ -241,11 +319,30 @@ function App() {
     },
     {
       title: "Model cycle reverse",
+      disabled: true,
       value: "model.cycle_recent_reverse",
       keybind: "model_cycle_recent_reverse",
       category: "Agent",
       onSelect: () => {
         local.model.cycle(-1)
+      },
+    },
+    {
+      title: "Favorite cycle",
+      value: "model.cycle_favorite",
+      keybind: "model_cycle_favorite",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(1)
+      },
+    },
+    {
+      title: "Favorite cycle reverse",
+      value: "model.cycle_favorite_reverse",
+      keybind: "model_cycle_favorite_reverse",
+      category: "Agent",
+      onSelect: () => {
+        local.model.cycleFavorite(-1)
       },
     },
     {
@@ -255,6 +352,14 @@ function App() {
       category: "Agent",
       onSelect: () => {
         dialog.replace(() => <DialogAgent />)
+      },
+    },
+    {
+      title: "Toggle MCPs",
+      value: "mcp.list",
+      category: "Agent",
+      onSelect: () => {
+        dialog.replace(() => <DialogMcp />)
       },
     },
     {
@@ -268,6 +373,15 @@ function App() {
       },
     },
     {
+      title: "Variant cycle",
+      value: "variant.cycle",
+      keybind: "variant_cycle",
+      category: "Agent",
+      onSelect: () => {
+        local.model.variant.cycle()
+      },
+    },
+    {
       title: "Agent cycle reverse",
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
@@ -276,6 +390,15 @@ function App() {
       onSelect: () => {
         local.agent.move(-1)
       },
+    },
+    {
+      title: "Connect provider",
+      value: "provider.connect",
+      suggested: !connected(),
+      onSelect: () => {
+        dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
     },
     {
       title: "View status",
@@ -289,24 +412,18 @@ function App() {
     {
       title: "Switch theme",
       value: "theme.switch",
+      keybind: "theme_list",
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
       category: "System",
     },
     {
-      title: "Connect provider",
-      value: "provider.connect",
-      onSelect: () => {
-        dialog.replace(() => <DialogProviderList />)
-      },
-      category: "System",
-    },
-    {
-      title: `Switch to ${mode() === "dark" ? "light" : "dark"} mode`,
+      title: "Toggle appearance",
       value: "theme.switch_mode",
-      onSelect: () => {
+      onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
       },
       category: "System",
     },
@@ -315,6 +432,24 @@ function App() {
       value: "help.show",
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
+      },
+      category: "System",
+    },
+    {
+      title: "Open docs",
+      value: "docs.open",
+      onSelect: () => {
+        open("https://opencode.ai/docs").catch(() => {})
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: "Open WebUI",
+      value: "webui.open",
+      onSelect: () => {
+        open(sdk.url).catch(() => {})
+        dialog.clear()
       },
       category: "System",
     },
@@ -336,9 +471,23 @@ function App() {
     {
       title: "Toggle console",
       category: "System",
-      value: "app.fps",
+      value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Write heap snapshot",
+      category: "System",
+      value: "app.heap_snapshot",
+      onSelect: (dialog) => {
+        const path = writeHeapSnapshot()
+        toast.show({
+          variant: "info",
+          message: `Heap snapshot written to ${path}`,
+          duration: 5000,
+        })
         dialog.clear()
       },
     },
@@ -357,11 +506,27 @@ function App() {
         process.kill(0, "SIGTSTP")
       },
     },
+    {
+      title: terminalTitleEnabled() ? "Disable terminal title" : "Enable terminal title",
+      value: "terminal.title.toggle",
+      keybind: "terminal_title_toggle",
+      category: "System",
+      onSelect: (dialog) => {
+        setTerminalTitleEnabled((prev) => {
+          const next = !prev
+          kv.set("terminal_title_enabled", next)
+          if (!next) renderer.setTerminalTitle("")
+          return next
+        })
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
-    const providerID = local.model.current().providerID
-    if (providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
+    const currentModel = local.model.current()
+    if (!currentModel) return
+    if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
       untrack(() => {
         DialogAlert.show(
           dialog,
@@ -372,11 +537,11 @@ function App() {
     }
   })
 
-  event.on(TuiEvent.CommandExecute.type, (evt) => {
+  sdk.event.on(TuiEvent.CommandExecute.type, (evt) => {
     command.trigger(evt.properties.command)
   })
 
-  event.on(TuiEvent.ToastShow.type, (evt) => {
+  sdk.event.on(TuiEvent.ToastShow.type, (evt) => {
     toast.show({
       title: evt.properties.title,
       message: evt.properties.message,
@@ -385,9 +550,15 @@ function App() {
     })
   })
 
-  event.on(SessionApi.Event.Deleted.type, (evt) => {
+  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+    route.navigate({
+      type: "session",
+      sessionID: evt.properties.sessionID,
+    })
+  })
+
+  sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      dialog.clear()
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
@@ -396,10 +567,11 @@ function App() {
     }
   })
 
-  event.on(SessionApi.Event.Error.type, (evt) => {
+  sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
+    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
-      if (!error) return "An error occured"
+      if (!error) return "An error occurred"
 
       if (typeof error === "object") {
         const data = error.data
@@ -417,7 +589,7 @@ function App() {
     })
   })
 
-  event.on(Installation.Event.Updated.type, (evt) => {
+  sdk.event.on(Installation.Event.Updated.type, (evt) => {
     toast.show({
       variant: "success",
       title: "Update Complete",
@@ -426,7 +598,7 @@ function App() {
     })
   })
 
-  event.on(Installation.Event.UpdateAvailable.type, (evt) => {
+  sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
       title: "Update Available",
@@ -441,6 +613,10 @@ function App() {
       height={dimensions().height}
       backgroundColor={theme.background}
       onMouseUp={async () => {
+        if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+          renderer.clearSelection()
+          return
+        }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
           const base64 = Buffer.from(text).toString("base64")
@@ -455,53 +631,24 @@ function App() {
         }
       }}
     >
-      <box flexDirection="column" flexGrow={1}>
-        <Switch>
-          <Match when={route.data.type === "home"}>
-            <Home />
-          </Match>
-          <Match when={route.data.type === "session"}>
-            <Session />
-          </Match>
-        </Switch>
-      </box>
-      <box
-        height={1}
-        backgroundColor={theme.backgroundPanel}
-        flexDirection="row"
-        justifyContent="space-between"
-        flexShrink={0}
-      >
-        <box flexDirection="row">
-          <box flexDirection="row" backgroundColor={theme.backgroundElement} paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>open</text>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              code{" "}
-            </text>
-            <text fg={theme.textMuted}>v{Installation.VERSION}</text>
-          </box>
-          <box paddingLeft={1} paddingRight={1}>
-            <text fg={theme.textMuted}>{process.cwd().replace(Global.Path.home, "~")}</text>
-          </box>
-        </box>
-        <Show when={false}>
-          <box flexDirection="row" flexShrink={0}>
-            <text fg={theme.textMuted} paddingRight={1}>
-              tab
-            </text>
-            <text fg={local.agent.color(local.agent.current().name)}>{""}</text>
-            <text bg={local.agent.color(local.agent.current().name)} fg={theme.background} wrapMode={undefined}>
-              <span style={{ bold: true }}> {local.agent.current().name.toUpperCase()}</span>
-              <span> AGENT </span>
-            </text>
-          </box>
-        </Show>
-      </box>
+      <Switch>
+        <Match when={route.data.type === "home"}>
+          <Home />
+        </Match>
+        <Match when={route.data.type === "session"}>
+          <Session />
+        </Match>
+      </Switch>
     </box>
   )
 }
 
-function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => Promise<void> }) {
+function ErrorComponent(props: {
+  error: Error
+  reset: () => void
+  onExit: () => Promise<void>
+  mode?: "dark" | "light"
+}) {
   const term = useTerminalDimensions()
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
@@ -510,7 +657,16 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
+
+  // Choose safe fallback colors per mode since theme context may not be available
+  const isLight = props.mode === "light"
+  const colors = {
+    bg: isLight ? "#ffffff" : "#0a0a0a",
+    text: isLight ? "#1a1a1a" : "#eeeeee",
+    muted: isLight ? "#8a8a8a" : "#808080",
+    primary: isLight ? "#3b7dd8" : "#fab283",
+  }
 
   if (props.error.message) {
     issueURL.searchParams.set("title", `opentui: fatal: ${props.error.message}`)
@@ -532,27 +688,31 @@ function ErrorComponent(props: { error: Error; reset: () => void; onExit: () => 
   }
 
   return (
-    <box flexDirection="column" gap={1}>
+    <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
       <box flexDirection="row" gap={1} alignItems="center">
-        <text attributes={TextAttributes.BOLD}>Please report an issue.</text>
-        <box onMouseUp={copyIssueURL} backgroundColor="#565f89" padding={1}>
-          <text attributes={TextAttributes.BOLD}>Copy issue URL (exception info pre-filled)</text>
+        <text attributes={TextAttributes.BOLD} fg={colors.text}>
+          Please report an issue.
+        </text>
+        <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
+          <text attributes={TextAttributes.BOLD} fg={colors.bg}>
+            Copy issue URL (exception info pre-filled)
+          </text>
         </box>
-        {copied() && <text>Successfully copied</text>}
+        {copied() && <text fg={colors.muted}>Successfully copied</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
-        <text>A fatal error occurred!</text>
-        <box onMouseUp={props.reset} backgroundColor="#565f89" padding={1}>
-          <text>Reset TUI</text>
+        <text fg={colors.text}>A fatal error occurred!</text>
+        <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
+          <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor="#565f89" padding={1}>
-          <text>Exit</text>
+        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+          <text fg={colors.bg}>Exit</text>
         </box>
       </box>
       <scrollbox height={Math.floor(term().height * 0.7)}>
-        <text>{props.error.stack}</text>
+        <text fg={colors.muted}>{props.error.stack}</text>
       </scrollbox>
-      <text>{props.error.message}</text>
+      <text fg={colors.text}>{props.error.message}</text>
     </box>
   )
 }

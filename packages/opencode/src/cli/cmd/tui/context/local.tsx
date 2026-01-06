@@ -10,12 +10,14 @@ import { createSimpleContext } from "./helper"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
+import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const sync = useSync()
+    const sdk = useSDK()
     const toast = useToast()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
@@ -31,26 +33,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     }
 
-    // Automatically update model when agent changes
-    createEffect(() => {
-      const value = agent.current()
-      if (value.model) {
-        if (isModelValid(value.model))
-          model.set({
-            providerID: value.model.providerID,
-            modelID: value.model.modelID,
-          })
-        else
-          toast.show({
-            variant: "warning",
-            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
-            duration: 3000,
-          })
-      }
-    })
-
     const agent = iife(() => {
-      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent"))
+      const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
@@ -114,18 +98,38 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           providerID: string
           modelID: string
         }[]
+        favorite: {
+          providerID: string
+          modelID: string
+        }[]
+        variant: Record<string, string | undefined>
       }>({
         ready: false,
         model: {},
         recent: [],
+        favorite: [],
+        variant: {},
       })
 
       const file = Bun.file(path.join(Global.Path.state, "model.json"))
 
+      function save() {
+        Bun.write(
+          file,
+          JSON.stringify({
+            recent: modelStore.recent,
+            favorite: modelStore.favorite,
+            variant: modelStore.variant,
+          }),
+        )
+      }
+
       file
         .json()
         .then((x) => {
-          setModelStore("recent", x.recent)
+          if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
+          if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
+          if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
         })
         .catch(() => {})
         .finally(() => {
@@ -159,8 +163,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             return item
           }
         }
+
         const provider = sync.data.provider[0]
-        const model = sync.data.provider_default[provider.id] ?? Object.values(provider.models)[0].id
+        if (!provider) return undefined
+        const defaultModel = sync.data.provider_default[provider.id]
+        const firstModel = Object.values(provider.models)[0]
+        const model = defaultModel ?? firstModel?.id
+        if (!model) return undefined
         return {
           providerID: provider.id,
           modelID: model,
@@ -169,11 +178,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
-        return getFirstValidModel(
-          () => modelStore.model[a.name],
-          () => a.model,
-          fallbackModel,
-        )!
+        return (
+          getFirstValidModel(
+            () => modelStore.model[a.name],
+            () => a.model,
+            fallbackModel,
+          ) ?? undefined
+        )
       })
 
       return {
@@ -184,13 +195,24 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         recent() {
           return modelStore.recent
         },
+        favorite() {
+          return modelStore.favorite
+        },
         parsed: createMemo(() => {
           const value = currentModel()
-          const provider = sync.data.provider.find((x) => x.id === value.providerID)!
-          const model = provider.models[value.modelID]
+          if (!value) {
+            return {
+              provider: "Connect a provider",
+              model: "No provider selected",
+              reasoning: false,
+            }
+          }
+          const provider = sync.data.provider.find((x) => x.id === value.providerID)
+          const info = provider?.models[value.modelID]
           return {
-            provider: provider.name ?? value.providerID,
-            model: model.name ?? value.modelID,
+            provider: provider?.name ?? value.providerID,
+            model: info?.name ?? value.modelID,
+            reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
         cycle(direction: 1 | -1) {
@@ -206,6 +228,39 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!val) return
           setModelStore("model", agent.current().name, { ...val })
         },
+        cycleFavorite(direction: 1 | -1) {
+          const favorites = modelStore.favorite.filter((item) => isModelValid(item))
+          if (!favorites.length) {
+            toast.show({
+              variant: "info",
+              message: "Add a favorite model to use this shortcut",
+              duration: 3000,
+            })
+            return
+          }
+          const current = currentModel()
+          let index = -1
+          if (current) {
+            index = favorites.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
+          }
+          if (index === -1) {
+            index = direction === 1 ? 0 : favorites.length - 1
+          } else {
+            index += direction
+            if (index < 0) index = favorites.length - 1
+            if (index >= favorites.length) index = 0
+          }
+          const next = favorites[index]
+          if (!next) return
+          setModelStore("model", agent.current().name, { ...next })
+          const uniq = uniqueBy([next, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
+          if (uniq.length > 10) uniq.pop()
+          setModelStore(
+            "recent",
+            uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+          )
+          save()
+        },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
             if (!isModelValid(model)) {
@@ -218,24 +273,119 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
             setModelStore("model", agent.current().name, model)
             if (options?.recent) {
-              const uniq = uniqueBy([model, ...modelStore.recent], (x) => x.providerID + x.modelID)
-              if (uniq.length > 5) uniq.pop()
-              setModelStore("recent", uniq)
-              Bun.write(
-                file,
-                JSON.stringify({
-                  recent: modelStore.recent,
-                }),
+              const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
+              if (uniq.length > 10) uniq.pop()
+              setModelStore(
+                "recent",
+                uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
               )
+              save()
             }
           })
         },
+        toggleFavorite(model: { providerID: string; modelID: string }) {
+          batch(() => {
+            if (!isModelValid(model)) {
+              toast.show({
+                message: `Model ${model.providerID}/${model.modelID} is not valid`,
+                variant: "warning",
+                duration: 3000,
+              })
+              return
+            }
+            const exists = modelStore.favorite.some(
+              (x) => x.providerID === model.providerID && x.modelID === model.modelID,
+            )
+            const next = exists
+              ? modelStore.favorite.filter((x) => x.providerID !== model.providerID || x.modelID !== model.modelID)
+              : [model, ...modelStore.favorite]
+            setModelStore(
+              "favorite",
+              next.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
+            )
+            save()
+          })
+        },
+        variant: {
+          current() {
+            const m = currentModel()
+            if (!m) return undefined
+            const key = `${m.providerID}/${m.modelID}`
+            return modelStore.variant[key]
+          },
+          list() {
+            const m = currentModel()
+            if (!m) return []
+            const provider = sync.data.provider.find((x) => x.id === m.providerID)
+            const info = provider?.models[m.modelID]
+            if (!info?.variants) return []
+            return Object.keys(info.variants)
+          },
+          set(value: string | undefined) {
+            const m = currentModel()
+            if (!m) return
+            const key = `${m.providerID}/${m.modelID}`
+            setModelStore("variant", key, value)
+            save()
+          },
+          cycle() {
+            const variants = this.list()
+            if (variants.length === 0) return
+            const current = this.current()
+            if (!current) {
+              this.set(variants[0])
+              return
+            }
+            const index = variants.indexOf(current)
+            if (index === -1 || index === variants.length - 1) {
+              this.set(undefined)
+              return
+            }
+            this.set(variants[index + 1])
+          },
+        },
+      }
+    })
+
+    const mcp = {
+      isEnabled(name: string) {
+        const status = sync.data.mcp[name]
+        return status?.status === "connected"
+      },
+      async toggle(name: string) {
+        const status = sync.data.mcp[name]
+        if (status?.status === "connected") {
+          // Disable: disconnect the MCP
+          await sdk.client.mcp.disconnect({ name })
+        } else {
+          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
+          await sdk.client.mcp.connect({ name })
+        }
+      },
+    }
+
+    // Automatically update model when agent changes
+    createEffect(() => {
+      const value = agent.current()
+      if (value.model) {
+        if (isModelValid(value.model))
+          model.set({
+            providerID: value.model.providerID,
+            modelID: value.model.modelID,
+          })
+        else
+          toast.show({
+            variant: "warning",
+            message: `Agent ${value.name}'s configured model ${value.model.providerID}/${value.model.modelID} is not valid`,
+            duration: 3000,
+          })
       }
     })
 
     const result = {
       model,
       agent,
+      mcp,
     }
     return result
   },
