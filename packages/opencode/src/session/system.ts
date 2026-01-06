@@ -15,6 +15,7 @@ import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import type { Provider } from "@/provider/provider"
+import { Flag } from "@/flag/flag"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -65,6 +66,10 @@ export namespace SystemPrompt {
     path.join(Global.Path.config, "AGENTS.md"),
     path.join(os.homedir(), ".claude", "CLAUDE.md"),
   ]
+
+  if (Flag.OPENCODE_CONFIG_DIR) {
+    GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  }
 
   export async function custom() {
     const config = await Config.get()
