@@ -266,13 +266,24 @@ export namespace Provider {
             }
             case "ap": {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+              const isTokyoRegion = region === "ap-northeast-1"
               if (
                 isAustraliaRegion &&
                 ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
               ) {
                 regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
+              } else if (isTokyoRegion) {
+                // Tokyo region uses jp. prefix for cross-region inference
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (modelRequiresPrefix) {
+                  regionPrefix = "jp"
+                  modelID = `${regionPrefix}.${modelID}`
+                }
               } else {
+                // Other APAC regions use apac. prefix
                 const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
                   modelID.includes(m),
                 )
