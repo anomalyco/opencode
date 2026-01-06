@@ -70,8 +70,7 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode includes two built-in agents you can switch between,
-you can switch between these using the `Tab` key.
+OpenCode includes two built-in agents you can switch between with the `Tab` key.
 
 - **build** - Default, full access agent for development work
 - **plan** - Read-only agent for analysis and code exploration
