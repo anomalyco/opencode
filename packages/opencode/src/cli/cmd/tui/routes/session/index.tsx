@@ -1436,7 +1436,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "edit"}>
           <Edit {...toolprops} />
         </Match>
-        <Match when={props.part.tool === "task"}>
+        <Match when={props.part.tool === "task" || toolprops.metadata.sessionId}>
           <Task {...toolprops} />
         </Match>
         <Match when={props.part.tool === "apply_patch"}>
