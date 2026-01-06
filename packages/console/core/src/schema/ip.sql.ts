@@ -10,3 +10,13 @@ export const IpTable = mysqlTable(
   },
   (table) => [primaryKey({ columns: [table.ip] })],
 )
+
+export const IpRateLimitTable = mysqlTable(
+  "ip_rate_limit",
+  {
+    ip: varchar("ip", { length: 45 }).notNull(),
+    interval: varchar("interval", { length: 10 }).notNull(),
+    count: int("count").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.ip, table.interval] })],
+)
