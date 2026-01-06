@@ -418,4 +418,79 @@ describe("Keybind.parse", () => {
       },
     ])
   })
+
+  test("should parse super+backspace for Cmd+Backspace", () => {
+    const result = Keybind.parse("super+backspace")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: true,
+        leader: false,
+        name: "backspace",
+      },
+    ])
+  })
+
+  test("should parse alt+backspace for Option+Backspace", () => {
+    const result = Keybind.parse("alt+backspace")
+    expect(result).toEqual([
+      {
+        ctrl: false,
+        meta: true,
+        shift: false,
+        leader: false,
+        name: "backspace",
+      },
+    ])
+  })
+
+  test("should parse delete-to-line-start keybind with super+backspace", () => {
+    const result = Keybind.parse("ctrl+u,super+backspace")
+    expect(result).toEqual([
+      {
+        ctrl: true,
+        meta: false,
+        shift: false,
+        leader: false,
+        name: "u",
+      },
+      {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: true,
+        leader: false,
+        name: "backspace",
+      },
+    ])
+  })
+
+  test("should parse delete-word-backward keybind with alt+backspace", () => {
+    const result = Keybind.parse("ctrl+w,ctrl+backspace,alt+backspace")
+    expect(result).toEqual([
+      {
+        ctrl: true,
+        meta: false,
+        shift: false,
+        leader: false,
+        name: "w",
+      },
+      {
+        ctrl: true,
+        meta: false,
+        shift: false,
+        leader: false,
+        name: "backspace",
+      },
+      {
+        ctrl: false,
+        meta: true,
+        shift: false,
+        leader: false,
+        name: "backspace",
+      },
+    ])
+  })
 })
