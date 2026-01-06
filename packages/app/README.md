@@ -1,8 +1,8 @@
 ## Usage
 
-Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
+Dependencies for these templates are managed with [pnpm](https://pnpm.io) using `pnpm up -Lri`.
 
-This is the reason you see a `pnpm-lock.yaml`. That being said, any package manager will work. This file can be safely be removed once you clone a template.
+This is the reason you see a `pnpm-lock.yaml`. That said, any package manager will work. This file can safely be removed once you clone a template.
 
 ```bash
 $ npm install # or pnpm install or yarn install
