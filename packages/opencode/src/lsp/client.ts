@@ -12,8 +12,11 @@ import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
 import { Filesystem } from "../util/filesystem"
+import { LRUMap } from "../util/lru-map"
 
 const DIAGNOSTICS_DEBOUNCE_MS = 150
+// Maximum number of files to track per LSP client to prevent unbounded memory growth
+const MAX_TRACKED_FILES = 1000
 
 export namespace LSPClient {
   const log = Log.create({ service: "lsp.client" })
@@ -48,7 +51,7 @@ export namespace LSPClient {
       new StreamMessageWriter(input.server.process.stdin as any),
     )
 
-    const diagnostics = new Map<string, Diagnostic[]>()
+    const diagnostics = new LRUMap<string, Diagnostic[]>(MAX_TRACKED_FILES)
     connection.onNotification("textDocument/publishDiagnostics", (params) => {
       const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
       l.info("textDocument/publishDiagnostics", {
@@ -132,9 +135,8 @@ export namespace LSPClient {
       })
     }
 
-    const files: {
-      [path: string]: number
-    } = {}
+    // Track file versions for LSP synchronization with LRU eviction
+    const files = new LRUMap<string, number>(MAX_TRACKED_FILES)
 
     const result = {
       root: input.root,
@@ -152,7 +154,7 @@ export namespace LSPClient {
           const extension = path.extname(input.path)
           const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
-          const version = files[input.path]
+          const version = files.get(input.path)
           if (version !== undefined) {
             log.info("workspace/didChangeWatchedFiles", input)
             await connection.sendNotification("workspace/didChangeWatchedFiles", {
@@ -165,7 +167,7 @@ export namespace LSPClient {
             })
 
             const next = version + 1
-            files[input.path] = next
+            files.set(input.path, next)
             log.info("textDocument/didChange", {
               path: input.path,
               version: next,
@@ -200,7 +202,7 @@ export namespace LSPClient {
               text,
             },
           })
-          files[input.path] = 0
+          files.set(input.path, 0)
           return
         },
       },
