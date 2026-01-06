@@ -257,6 +257,11 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
 
+        case "tui.mcp.refresh": {
+          sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!)))
+          break
+        }
+
         case "vcs.branch.updated": {
           setStore("vcs", { branch: event.properties.branch })
           break

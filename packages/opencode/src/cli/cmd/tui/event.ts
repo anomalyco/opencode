@@ -4,6 +4,7 @@ import z from "zod"
 
 export const TuiEvent = {
   PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  McpRefresh: BusEvent.define("tui.mcp.refresh", z.object({})),
   CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({

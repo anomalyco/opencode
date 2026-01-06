@@ -565,6 +565,13 @@ export type EventTuiPromptAppend = {
   }
 }
 
+export type EventTuiMcpRefresh = {
+  type: "tui.mcp.refresh"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
 export type EventTuiCommandExecute = {
   type: "tui.command.execute"
   properties: {
@@ -792,6 +799,7 @@ export type Event =
   | EventFileEdited
   | EventTodoUpdated
   | EventTuiPromptAppend
+  | EventTuiMcpRefresh
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
@@ -4441,7 +4449,7 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?: EventTuiPromptAppend | EventTuiMcpRefresh | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
   path?: never
   query?: {
     directory?: string
