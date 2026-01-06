@@ -8,6 +8,14 @@ import { transformerNotationDiff } from "@shikijs/transformers"
 import style from "./content-markdown.module.css"
 
 const markedWithShiki = marked.use(
+  {
+    renderer: {
+      link({ href, title, text }) {
+        const titleAttr = title ? ` title="${title}"` : ""
+        return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
+      },
+    },
+  },
   markedShiki({
     highlight(code, lang) {
       return codeToHtml(code, {
