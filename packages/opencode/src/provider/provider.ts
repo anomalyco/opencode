@@ -977,12 +977,36 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
 
-    const info = provider.models[modelID]
+    // For amazon-bedrock, strip cross-region inference profile prefixes before lookup
+    let lookupModelID = modelID
+    if (providerID === "amazon-bedrock") {
+      const crossRegionPrefixes = ["us.", "eu.", "apac.", "global.", "jp.", "au."]
+      for (const prefix of crossRegionPrefixes) {
+        if (modelID.startsWith(prefix)) {
+          lookupModelID = modelID.slice(prefix.length)
+          break
+        }
+      }
+    }
+
+    const info = provider.models[lookupModelID]
     if (!info) {
       const availableModels = Object.keys(provider.models)
-      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
+      const matches = fuzzysort.go(lookupModelID, availableModels, { limit: 3, threshold: -10000 })
       const suggestions = matches.map((m) => m.target)
-      throw new ModelNotFoundError({ providerID, modelID, suggestions })
+      throw new ModelNotFoundError({ providerID, modelID: lookupModelID, suggestions })
+    }
+
+    // If a cross-region prefix was used, return model info with the original prefixed modelID
+    if (lookupModelID !== modelID) {
+      return {
+        ...info,
+        id: modelID,
+        api: {
+          ...info.api,
+          id: modelID,
+        },
+      }
     }
     return info
   }
