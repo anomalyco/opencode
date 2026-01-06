@@ -2,6 +2,7 @@ import { describe, expect, test, mock } from "bun:test"
 import { CompactionSchema } from "../../src/session/compaction/schema"
 import { DeterministicExtractor } from "../../src/session/compaction/extractors"
 import { LLMExtractor } from "../../src/session/compaction/llm-extractor"
+import { QualityScorer } from "../../src/session/compaction/quality"
 import type { MessageV2 } from "../../src/session/message-v2"
 
 describe("compaction/schema", () => {
@@ -685,6 +686,219 @@ describe("compaction/llm-extractor", () => {
       const result = LLMExtractor.extractAgentContext(undefined)
 
       expect(result).toBeUndefined()
+    })
+  })
+})
+
+// =============================================================================
+// QUALITY SCORER TESTS
+// =============================================================================
+
+describe("compaction/quality", () => {
+  function createValidTemplate(): CompactionSchema.CompactionTemplate {
+    return {
+      version: "1.0",
+      timestamp: Date.now(),
+      artifacts: {
+        files_read: ["/src/main.ts"],
+        files_modified: [{ path: "/src/utils.ts", change_summary: "Added helper" }],
+        files_created: [],
+      },
+      tool_calls: [{ tool: "Read", summary: "3x (3/3 successful)", success: true }],
+      errors: [],
+      session_intent: "Implement user authentication feature",
+      current_state: "Login endpoint is complete, working on logout",
+      decisions: [{ decision: "Use JWT tokens", rationale: "Stateless auth" }],
+      pending_tasks: ["Add logout endpoint", "Write tests"],
+      key_context: "Express.js backend with PostgreSQL database",
+      metrics: {
+        original_tokens: 50000,
+        compacted_tokens: 2000,
+        compression_ratio: 0.96,
+      },
+    }
+  }
+
+  describe("scoreCompleteness", () => {
+    test("returns 1.0 for complete template", () => {
+      const template = createValidTemplate()
+
+      const score = QualityScorer.scoreCompleteness(template)
+
+      expect(score).toBe(1.0)
+    })
+
+    test("penalizes empty session_intent", () => {
+      const template = createValidTemplate()
+      template.session_intent = ""
+
+      const score = QualityScorer.scoreCompleteness(template)
+
+      expect(score).toBeLessThan(1.0)
+    })
+
+    test("penalizes empty current_state", () => {
+      const template = createValidTemplate()
+      template.current_state = ""
+
+      const score = QualityScorer.scoreCompleteness(template)
+
+      expect(score).toBeLessThan(1.0)
+    })
+
+    test("penalizes missing key_context", () => {
+      const template = createValidTemplate()
+      template.key_context = ""
+
+      const score = QualityScorer.scoreCompleteness(template)
+
+      expect(score).toBeLessThan(1.0)
+    })
+
+    test("returns 0 for completely empty template", () => {
+      const template: CompactionSchema.CompactionTemplate = {
+        version: "1.0",
+        timestamp: Date.now(),
+        artifacts: { files_read: [], files_modified: [], files_created: [] },
+        tool_calls: [],
+        errors: [],
+        session_intent: "",
+        current_state: "",
+        decisions: [],
+        pending_tasks: [],
+        key_context: "",
+        metrics: { original_tokens: 0, compacted_tokens: 0, compression_ratio: 0 },
+      }
+
+      const score = QualityScorer.scoreCompleteness(template)
+
+      expect(score).toBe(0)
+    })
+  })
+
+  describe("scoreInformationRetention", () => {
+    test("returns high score when file paths are preserved", () => {
+      const original = ["/src/main.ts", "/src/utils.ts", "/src/api.ts"]
+      const template = createValidTemplate()
+      template.artifacts.files_read = ["/src/main.ts"]
+      template.artifacts.files_modified = [{ path: "/src/utils.ts" }]
+      template.key_context = "Working on /src/api.ts"
+
+      const score = QualityScorer.scoreInformationRetention(original, template)
+
+      expect(score).toBeGreaterThan(0.5)
+    })
+
+    test("returns lower score when file paths are missing", () => {
+      const original = ["/src/main.ts", "/src/utils.ts", "/src/api.ts"]
+      const template = createValidTemplate()
+      template.artifacts.files_read = []
+      template.artifacts.files_modified = []
+      template.key_context = "Some generic context"
+
+      const score = QualityScorer.scoreInformationRetention(original, template)
+
+      expect(score).toBeLessThan(0.5)
+    })
+  })
+
+  describe("scoreCompaction", () => {
+    test("returns combined score with issues list", () => {
+      const template = createValidTemplate()
+
+      const result = QualityScorer.scoreCompaction(template, ["/src/main.ts"])
+
+      expect(result.score).toBeGreaterThan(0)
+      expect(result.score).toBeLessThanOrEqual(1)
+      expect(Array.isArray(result.issues)).toBe(true)
+    })
+
+    test("identifies issues when sections are empty", () => {
+      const template = createValidTemplate()
+      template.session_intent = ""
+      template.pending_tasks = []
+
+      const result = QualityScorer.scoreCompaction(template, [])
+
+      expect(result.issues.length).toBeGreaterThan(0)
+    })
+
+    test("passes quality check when above threshold", () => {
+      const template = createValidTemplate()
+
+      const result = QualityScorer.scoreCompaction(template, ["/src/main.ts"], {
+        threshold: 0.5,
+      })
+
+      expect(result.score).toBeGreaterThan(0.5)
+      expect(result.issues).not.toContain("Quality below threshold")
+    })
+
+    test("fails quality check when below threshold", () => {
+      const template: CompactionSchema.CompactionTemplate = {
+        version: "1.0",
+        timestamp: Date.now(),
+        artifacts: { files_read: [], files_modified: [], files_created: [] },
+        tool_calls: [],
+        errors: [],
+        session_intent: "",
+        current_state: "",
+        decisions: [],
+        pending_tasks: [],
+        key_context: "",
+        metrics: { original_tokens: 1000, compacted_tokens: 100, compression_ratio: 0.9 },
+      }
+
+      const result = QualityScorer.scoreCompaction(template, [], { threshold: 0.8 })
+
+      expect(result.score).toBeLessThan(0.8)
+      expect(result.issues).toContain("Quality below threshold")
+    })
+  })
+
+  describe("getIssues", () => {
+    test("identifies empty session_intent", () => {
+      const template = createValidTemplate()
+      template.session_intent = ""
+
+      const issues = QualityScorer.getIssues(template)
+
+      expect(issues).toContain("Missing session intent")
+    })
+
+    test("identifies empty current_state", () => {
+      const template = createValidTemplate()
+      template.current_state = ""
+
+      const issues = QualityScorer.getIssues(template)
+
+      expect(issues).toContain("Missing current state")
+    })
+
+    test("identifies empty key_context", () => {
+      const template = createValidTemplate()
+      template.key_context = ""
+
+      const issues = QualityScorer.getIssues(template)
+
+      expect(issues).toContain("Missing key context")
+    })
+
+    test("identifies unresolved errors", () => {
+      const template = createValidTemplate()
+      template.errors = [{ message: "Error", resolved: false }]
+
+      const issues = QualityScorer.getIssues(template)
+
+      expect(issues.some((i) => i.includes("unresolved error"))).toBe(true)
+    })
+
+    test("returns empty array for valid template", () => {
+      const template = createValidTemplate()
+
+      const issues = QualityScorer.getIssues(template)
+
+      expect(issues).toEqual([])
     })
   })
 })
