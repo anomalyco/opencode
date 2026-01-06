@@ -73,29 +73,11 @@ export const Terminal = (props: TerminalProps) => {
     setOption("theme", colors)
   })
 
-  const focusTerminal = () => term?.focus()
-  const copySelection = () => {
-    if (!term || !term.hasSelection()) return false
-    const selection = term.getSelection()
-    if (!selection) return false
-    if (document.body) {
-      const textarea = document.createElement("textarea")
-      textarea.value = selection
-      textarea.setAttribute("readonly", "")
-      textarea.style.position = "fixed"
-      textarea.style.opacity = "0"
-      document.body.appendChild(textarea)
-      textarea.select()
-      const copied = document.execCommand("copy")
-      document.body.removeChild(textarea)
-      if (copied) return true
-    }
-    const clipboard = navigator.clipboard
-    if (clipboard?.writeText) {
-      clipboard.writeText(selection).catch(() => {})
-      return true
-    }
-    return false
+  const focusTerminal = () => {
+    const t = term
+    if (!t) return
+    t.focus()
+    setTimeout(() => t.textarea?.focus(), 0)
   }
   const handlePointerDown = () => {
     const activeElement = document.activeElement
@@ -125,21 +107,52 @@ export const Terminal = (props: TerminalProps) => {
     })
     term = t
 
-    t.attachCustomKeyEventHandler((event) => {
-      const key = event.key.toLowerCase()
-      if (key === "c") {
-        const macCopy = event.metaKey && !event.ctrlKey && !event.altKey
-        const linuxCopy = event.ctrlKey && event.shiftKey && !event.metaKey
-        if ((macCopy || linuxCopy) && copySelection()) {
-          event.preventDefault()
-          return true
-        }
+    const copy = () => {
+      const selection = t.getSelection()
+      if (!selection) return false
+
+      const body = document.body
+      if (body) {
+        const textarea = document.createElement("textarea")
+        textarea.value = selection
+        textarea.setAttribute("readonly", "")
+        textarea.style.position = "fixed"
+        textarea.style.opacity = "0"
+        body.appendChild(textarea)
+        textarea.select()
+        const copied = document.execCommand("copy")
+        body.removeChild(textarea)
+        if (copied) return true
       }
-      // allow for ctrl-` to toggle terminal in parent
-      if (event.ctrlKey && key === "`") {
-        event.preventDefault()
+
+      const clipboard = navigator.clipboard
+      if (clipboard?.writeText) {
+        clipboard.writeText(selection).catch(() => {})
         return true
       }
+
+      return false
+    }
+
+    t.attachCustomKeyEventHandler((event) => {
+      const key = event.key.toLowerCase()
+
+      if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
+        copy()
+        return true
+      }
+
+      if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
+        if (!t.hasSelection()) return true
+        copy()
+        return true
+      }
+
+      // allow for ctrl-` to toggle terminal in parent
+      if (event.ctrlKey && key === "`") {
+        return true
+      }
+
       return false
     })
 
@@ -156,7 +169,6 @@ export const Terminal = (props: TerminalProps) => {
       if (local.pty.rows && local.pty.cols) {
         t.resize(local.pty.cols, local.pty.rows)
       }
-      t.reset()
       t.write(local.pty.buffer, () => {
         if (local.pty.scrollY) {
           t.scrollToLine(local.pty.scrollY)
