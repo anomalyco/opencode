@@ -10,56 +10,76 @@ import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
+  const subscriptions: (() => void)[] = []
 
   async function url() {
     return Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
   }
 
   export async function init() {
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.id, [
-        {
-          type: "session",
-          data: evt.properties.info,
-        },
-      ])
-    })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync(evt.properties.info.sessionID, [
-        {
-          type: "message",
-          data: evt.properties.info,
-        },
-      ])
-      if (evt.properties.info.role === "user") {
-        await sync(evt.properties.info.sessionID, [
+    subscriptions.push(
+      Bus.subscribe(Session.Event.Updated, async (evt) => {
+        await sync(evt.properties.info.id, [
           {
-            type: "model",
-            data: [
-              await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
-                (m) => m,
-              ),
-            ],
+            type: "session",
+            data: evt.properties.info,
           },
         ])
-      }
-    })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      await sync(evt.properties.part.sessionID, [
-        {
-          type: "part",
-          data: evt.properties.part,
-        },
-      ])
-    })
-    Bus.subscribe(Session.Event.Diff, async (evt) => {
-      await sync(evt.properties.sessionID, [
-        {
-          type: "session_diff",
-          data: evt.properties.diff,
-        },
-      ])
-    })
+      }),
+    )
+    subscriptions.push(
+      Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+        await sync(evt.properties.info.sessionID, [
+          {
+            type: "message",
+            data: evt.properties.info,
+          },
+        ])
+        if (evt.properties.info.role === "user") {
+          await sync(evt.properties.info.sessionID, [
+            {
+              type: "model",
+              data: [
+                await Provider.getModel(evt.properties.info.model.providerID, evt.properties.info.model.modelID).then(
+                  (m) => m,
+                ),
+              ],
+            },
+          ])
+        }
+      }),
+    )
+    subscriptions.push(
+      Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+        await sync(evt.properties.part.sessionID, [
+          {
+            type: "part",
+            data: evt.properties.part,
+          },
+        ])
+      }),
+    )
+    subscriptions.push(
+      Bus.subscribe(Session.Event.Diff, async (evt) => {
+        await sync(evt.properties.sessionID, [
+          {
+            type: "session_diff",
+            data: evt.properties.diff,
+          },
+        ])
+      }),
+    )
+  }
+
+  export function dispose() {
+    for (const unsub of subscriptions) {
+      unsub()
+    }
+    subscriptions.length = 0
+    for (const entry of queue.values()) {
+      clearTimeout(entry.timeout)
+    }
+    queue.clear()
   }
 
   export async function create(sessionID: string) {

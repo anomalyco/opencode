@@ -11,6 +11,7 @@ import { CodexAuthPlugin } from "./codex"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+  const subscriptions: (() => void)[] = []
 
   const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.8"]
 
@@ -109,13 +110,22 @@ export namespace Plugin {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
     }
-    Bus.subscribeAll(async (input) => {
-      const hooks = await state().then((x) => x.hooks)
-      for (const hook of hooks) {
-        hook["event"]?.({
-          event: input,
-        })
-      }
-    })
+    subscriptions.push(
+      Bus.subscribeAll(async (input) => {
+        const hooks = await state().then((x) => x.hooks)
+        for (const hook of hooks) {
+          hook["event"]?.({
+            event: input,
+          })
+        }
+      }),
+    )
+  }
+
+  export function dispose() {
+    for (const unsub of subscriptions) {
+      unsub()
+    }
+    subscriptions.length = 0
   }
 }

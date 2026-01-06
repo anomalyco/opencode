@@ -11,6 +11,7 @@ import { Instance } from "../project/instance"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
+  const subscriptions: (() => void)[] = []
 
   export const Status = z
     .object({
@@ -102,36 +103,45 @@ export namespace Format {
 
   export function init() {
     log.info("init")
-    Bus.subscribe(File.Event.Edited, async (payload) => {
-      const file = payload.properties.file
-      log.info("formatting", { file })
-      const ext = path.extname(file)
+    subscriptions.push(
+      Bus.subscribe(File.Event.Edited, async (payload) => {
+        const file = payload.properties.file
+        log.info("formatting", { file })
+        const ext = path.extname(file)
 
-      for (const item of await getFormatter(ext)) {
-        log.info("running", { command: item.command })
-        try {
-          const proc = Bun.spawn({
-            cmd: item.command.map((x) => x.replace("$FILE", file)),
-            cwd: Instance.directory,
-            env: { ...process.env, ...item.environment },
-            stdout: "ignore",
-            stderr: "ignore",
-          })
-          const exit = await proc.exited
-          if (exit !== 0)
-            log.error("failed", {
+        for (const item of await getFormatter(ext)) {
+          log.info("running", { command: item.command })
+          try {
+            const proc = Bun.spawn({
+              cmd: item.command.map((x) => x.replace("$FILE", file)),
+              cwd: Instance.directory,
+              env: { ...process.env, ...item.environment },
+              stdout: "ignore",
+              stderr: "ignore",
+            })
+            const exit = await proc.exited
+            if (exit !== 0)
+              log.error("failed", {
+                command: item.command,
+                ...item.environment,
+              })
+          } catch (error) {
+            log.error("failed to format file", {
+              error,
               command: item.command,
               ...item.environment,
+              file,
             })
-        } catch (error) {
-          log.error("failed to format file", {
-            error,
-            command: item.command,
-            ...item.environment,
-            file,
-          })
+          }
         }
-      }
-    })
+      }),
+    )
+  }
+
+  export function dispose() {
+    for (const unsub of subscriptions) {
+      unsub()
+    }
+    subscriptions.length = 0
   }
 }
