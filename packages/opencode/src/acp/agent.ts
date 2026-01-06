@@ -352,9 +352,16 @@ export namespace ACP {
             }
           }
         })
+        .catch((err) => {
+          log.error("error in event subscription", { sessionId, error: err })
+        })
         .finally(() => {
-          // Cleanup controller reference when stream ends
-          this.sessionAbortControllers.delete(sessionId)
+          // Cleanup controller reference when stream ends, but only if it's the same controller
+          // to prevent race condition with re-subscriptions
+          const current = this.sessionAbortControllers.get(sessionId)
+          if (current === controller) {
+            this.sessionAbortControllers.delete(sessionId)
+          }
         })
     }
 

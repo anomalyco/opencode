@@ -103,6 +103,8 @@ export namespace Format {
 
   export function init() {
     log.info("init")
+    // Clean up any existing subscriptions to prevent duplicates on re-init
+    dispose()
     subscriptions.push(
       Bus.subscribe(File.Event.Edited, async (payload) => {
         const file = payload.properties.file

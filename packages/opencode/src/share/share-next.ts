@@ -17,6 +17,8 @@ export namespace ShareNext {
   }
 
   export async function init() {
+    // Clean up any existing subscriptions to prevent duplicates on re-init
+    dispose()
     subscriptions.push(
       Bus.subscribe(Session.Event.Updated, async (evt) => {
         await sync(evt.properties.info.id, [

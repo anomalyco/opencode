@@ -118,6 +118,35 @@ describe("subscription cleanup", () => {
         },
       })
     })
+
+    test("multiple init calls should not accumulate subscriptions", async () => {
+      await Instance.provide({
+        directory: testDir,
+        fn: async () => {
+          const { ShareNext } = await import("../../src/share/share-next")
+
+          const baseline = Bus._getTotalSubscriptionCount()
+
+          // Call init multiple times without dispose - should not accumulate
+          // because init() now calls dispose() at the start
+          await ShareNext.init()
+          const afterFirstInit = Bus._getTotalSubscriptionCount()
+
+          await ShareNext.init()
+          const afterSecondInit = Bus._getTotalSubscriptionCount()
+
+          await ShareNext.init()
+          const afterThirdInit = Bus._getTotalSubscriptionCount()
+
+          // All counts should be the same - no accumulation
+          expect(afterSecondInit).toBe(afterFirstInit)
+          expect(afterThirdInit).toBe(afterFirstInit)
+
+          ShareNext.dispose()
+          expect(Bus._getTotalSubscriptionCount()).toBe(baseline)
+        },
+      })
+    })
   })
 
   describe("Format.dispose()", () => {

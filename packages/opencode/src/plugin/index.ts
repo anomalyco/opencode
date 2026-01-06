@@ -104,6 +104,8 @@ export namespace Plugin {
   }
 
   export async function init() {
+    // Clean up any existing subscriptions to prevent duplicates on re-init
+    dispose()
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
     for (const hook of hooks) {
