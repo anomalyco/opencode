@@ -4,6 +4,7 @@ import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import open from "open"
 import { networkInterfaces } from "os"
+import path from "path"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -29,9 +30,23 @@ function getNetworkIPs() {
 
 export const WebCommand = cmd({
   command: "web",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) =>
+    withNetworkOptions(yargs).option("cwd", {
+      describe: "working directory",
+      type: "string",
+    }),
   describe: "starts a headless opencode server",
   handler: async (args) => {
+    // Resolve working directory similar to TUI command
+    const baseCwd = process.env.PWD ?? process.cwd()
+    const cwd = args.cwd ? path.resolve(baseCwd, args.cwd) : process.cwd()
+    try {
+      process.chdir(cwd)
+    } catch (e) {
+      UI.error("Failed to change directory to " + cwd)
+      return
+    }
+
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
     UI.empty()
