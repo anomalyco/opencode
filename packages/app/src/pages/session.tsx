@@ -58,6 +58,7 @@ interface SessionReviewTabProps {
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
   onDiffStyleChange?: (style: DiffStyle) => void
+  onViewFile?: (file: string) => void
   classes?: {
     root?: string
     header?: string
@@ -137,6 +138,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       diffs={props.diffs()}
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
+      onViewFile={props.onViewFile}
     />
   )
 }
@@ -818,6 +820,11 @@ export default function Page() {
                           diffs={diffs}
                           view={view}
                           diffStyle="unified"
+                          onViewFile={(path) => {
+                            const value = file.tab(path)
+                            tabs().open(value)
+                            file.load(path)
+                          }}
                           classes={{
                             root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
                             header: "px-4",
@@ -993,6 +1000,7 @@ export default function Page() {
                           </Tooltip>
                         }
                         hideCloseButton
+                        onMiddleClick={() => tabs().close("context")}
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
@@ -1027,6 +1035,11 @@ export default function Page() {
                         view={view}
                         diffStyle={layout.review.diffStyle()}
                         onDiffStyleChange={layout.review.setDiffStyle}
+                        onViewFile={(path) => {
+                          const value = file.tab(path)
+                          tabs().open(value)
+                          file.load(path)
+                        }}
                       />
                     </div>
                   </Tabs.Content>
