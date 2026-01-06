@@ -115,6 +115,9 @@ describe("subscription cleanup", () => {
           expect(afterDisposeMessage).toBe(beforeMessage)
           expect(afterDisposePart).toBe(beforePart)
           expect(afterDisposeDiff).toBe(beforeDiff)
+
+          // Verify queue is cleared
+          expect(ShareNext._getQueueSize()).toBe(0)
         },
       })
     })

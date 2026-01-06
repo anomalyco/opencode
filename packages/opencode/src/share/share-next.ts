@@ -84,6 +84,11 @@ export namespace ShareNext {
     queue.clear()
   }
 
+  /** @internal Test helper to get queue size */
+  export function _getQueueSize() {
+    return queue.size
+  }
+
   export async function create(sessionID: string) {
     log.info("creating share", { sessionID })
     const result = await fetch(`${await url()}/api/share`, {
