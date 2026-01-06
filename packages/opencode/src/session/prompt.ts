@@ -306,7 +306,6 @@ export namespace SessionPrompt {
           session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
-          message: msgs.find((m) => m.info.role === "user")!,
           history: msgs,
         })
 
@@ -1565,22 +1564,39 @@ export namespace SessionPrompt {
 
   async function ensureTitle(input: {
     session: Session.Info
-    message: MessageV2.WithParts
     history: MessageV2.WithParts[]
     providerID: string
     modelID: string
   }) {
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
+
+    // Find first non-synthetic user message
+    const firstRealUserIdx = input.history.findIndex(
+      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+    )
+    if (firstRealUserIdx === -1) return
+
     const isFirst =
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
+
+    // Gather all messages up to and including the first real user message for context
+    // This includes any shell/subtask executions that preceded the user's first prompt
+    const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
+    const firstRealUser = contextMessages[firstRealUserIdx]
+
+    // For subtask-only messages (from command invocations), extract the prompt directly
+    // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
+    const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
+    const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
+
     const agent = await Agent.get("title")
     if (!agent) return
     const result = await LLM.stream({
       agent,
-      user: input.message.info as MessageV2.User,
+      user: firstRealUser.info as MessageV2.User,
       system: [],
       small: true,
       tools: {},
@@ -1598,24 +1614,9 @@ export namespace SessionPrompt {
           role: "user",
           content: "Generate a title for this conversation:\n",
         },
-        ...MessageV2.toModelMessage([
-          {
-            info: {
-              id: Identifier.ascending("message"),
-              role: "user",
-              sessionID: input.session.id,
-              time: {
-                created: Date.now(),
-              },
-              agent: input.message.info.role === "user" ? input.message.info.agent : await Agent.defaultAgent(),
-              model: {
-                providerID: input.providerID,
-                modelID: input.modelID,
-              },
-            },
-            parts: input.message.parts,
-          },
-        ]),
+        ...(hasOnlySubtaskParts
+          ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+          : MessageV2.toModelMessage(contextMessages)),
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
