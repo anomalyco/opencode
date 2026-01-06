@@ -14,6 +14,7 @@ import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
+import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
@@ -82,15 +83,17 @@ export function AppInterface(props: { defaultUrl?: string }) {
           <GlobalSyncProvider>
             <Router
               root={(props) => (
-                <PermissionProvider>
-                  <LayoutProvider>
-                    <NotificationProvider>
-                      <CommandProvider>
-                        <Layout>{props.children}</Layout>
-                      </CommandProvider>
-                    </NotificationProvider>
-                  </LayoutProvider>
-                </PermissionProvider>
+                <SettingsProvider>
+                  <PermissionProvider>
+                    <LayoutProvider>
+                      <NotificationProvider>
+                        <CommandProvider>
+                          <Layout>{props.children}</Layout>
+                        </CommandProvider>
+                      </NotificationProvider>
+                    </LayoutProvider>
+                  </PermissionProvider>
+                </SettingsProvider>
               )}
             >
               <Route
@@ -105,16 +108,18 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 <Route path="/" component={() => <Navigate href="session" />} />
                 <Route
                   path="/session/:id?"
-                  component={() => (
-                    <TerminalProvider>
-                      <FileProvider>
-                        <PromptProvider>
-                          <Suspense fallback={<Loading />}>
-                            <Session />
-                          </Suspense>
-                        </PromptProvider>
-                      </FileProvider>
-                    </TerminalProvider>
+                  component={(p) => (
+                    <Show when={p.params.id ?? "new"} keyed>
+                      <TerminalProvider>
+                        <FileProvider>
+                          <PromptProvider>
+                            <Suspense fallback={<Loading />}>
+                              <Session />
+                            </Suspense>
+                          </PromptProvider>
+                        </FileProvider>
+                      </TerminalProvider>
+                    </Show>
                   )}
                 />
               </Route>
