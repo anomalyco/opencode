@@ -50,6 +50,7 @@ function isMcpRemote(config: McpEntry): config is McpRemote {
 
 export const McpCommand = cmd({
   command: "mcp",
+  describe: "manage MCP (Model Context Protocol) servers",
   builder: (yargs) =>
     yargs
       .command(McpAddCommand)

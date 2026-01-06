@@ -80,7 +80,7 @@ export function Sidebar(props: { sessionID: string }) {
       >
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <box>
+            <box paddingRight={1}>
               <text fg={theme.text}>
                 <b>{session().title}</b>
               </text>

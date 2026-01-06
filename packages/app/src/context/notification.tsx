@@ -1,4 +1,5 @@
 import { createStore } from "solid-js/store"
+import { onCleanup } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSDK } from "./global-sdk"
 import { useGlobalSync } from "./global-sync"
@@ -54,7 +55,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       }),
     )
 
-    globalSDK.event.listen((e) => {
+    const unsub = globalSDK.event.listen((e) => {
       const directory = e.name
       const event = e.details
       const base = {
@@ -104,6 +105,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         }
       }
     })
+    onCleanup(unsub)
 
     return {
       ready,
