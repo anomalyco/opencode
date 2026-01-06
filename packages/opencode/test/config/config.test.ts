@@ -337,6 +337,113 @@ Create a new component`,
   })
 })
 
+// Claude Code allowed-tools translation tests
+// These tests document the expected behavior for translating Claude Code's
+// allowed-tools field to OpenCode's permission system.
+// See: https://github.com/anomalyco/opencode/pull/6990#discussion_r2663584226
+
+test("translates claude allowed-tools to opencode command permissions", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const claudeCommandsDir = path.join(dir, ".claude", "commands")
+      await fs.mkdir(claudeCommandsDir, { recursive: true })
+
+      // This is a real Claude Code command format from anthropics/claude-code repo
+      await Bun.write(
+        path.join(claudeCommandsDir, "commit-push.md"),
+        `---
+allowed-tools: Bash(git checkout:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*)
+description: Commit and push changes
+---
+Commit all changes and push to origin.`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const command = config.command?.["commit-push"] as Record<string, unknown> | undefined
+
+      expect(command).toBeDefined()
+      expect(command?.template).toBe("Commit all changes and push to origin.")
+      expect(command?.description).toBe("Commit and push changes")
+
+      // The allowed-tools should be translated to a permission field
+      // that restricts bash commands to the specified patterns
+      expect(command?.permission).toBeDefined()
+      expect((command?.permission as Record<string, unknown>)?.bash).toEqual(
+        expect.arrayContaining(["git checkout *", "git add *", "git commit *", "git push *"]),
+      )
+    },
+  })
+})
+
+test("translates claude allowed-tools with multiple tool types", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const claudeCommandsDir = path.join(dir, ".claude", "commands")
+      await fs.mkdir(claudeCommandsDir, { recursive: true })
+
+      await Bun.write(
+        path.join(claudeCommandsDir, "triage.md"),
+        `---
+allowed-tools: Bash(gh issue list:*), Bash(gh issue view:*), TodoWrite
+description: Triage GitHub issues
+---
+Triage open issues.`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const command = config.command?.["triage"] as Record<string, unknown> | undefined
+
+      expect(command).toBeDefined()
+      expect(command?.permission).toBeDefined()
+
+      const permission = command?.permission as Record<string, unknown>
+      // Bash patterns should be translated
+      expect(permission?.bash).toEqual(expect.arrayContaining(["gh issue list *", "gh issue view *"]))
+
+      // Non-Bash tools should be translated to allow
+      expect(permission?.todowrite).toBe("allow")
+    },
+  })
+})
+
+test("claude commands without allowed-tools have no permission field", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const claudeCommandsDir = path.join(dir, ".claude", "commands")
+      await fs.mkdir(claudeCommandsDir, { recursive: true })
+
+      await Bun.write(
+        path.join(claudeCommandsDir, "simple.md"),
+        `---
+description: A simple command without tool restrictions
+---
+Just a simple template.`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const command = config.command?.["simple"] as Record<string, unknown> | undefined
+
+      expect(command).toBeDefined()
+      expect(command?.template).toBe("Just a simple template.")
+      expect(command?.description).toBe("A simple command without tool restrictions")
+      // Commands without allowed-tools should NOT have a permission field
+      expect(command?.permission).toBeUndefined()
+    },
+  })
+})
+
 test("migrates autoshare to share field", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
