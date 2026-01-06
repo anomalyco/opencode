@@ -23,6 +23,16 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "OpenCode",
+      "properties": {
+        "opencode.autoDetectMcpServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect and enable vscode-mcp-server if installed"
+        }
+      }
+    },
     "commands": [
       {
         "command": "opencode.openTerminal",
