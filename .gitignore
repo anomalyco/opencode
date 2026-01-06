@@ -24,3 +24,9 @@ target
 # Local dev files
 opencode-dev
 logs/
+
+# MCP coordination files
+*mcp-coord*
+*mcp-coordination*
+.mcp-coord/
+.mcp-coordination/
