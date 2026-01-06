@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 
@@ -11,7 +13,7 @@ fn get_cli_install_path() -> Option<std::path::PathBuf> {
 
 pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     // Get binary with symlinks support
-    tauri::process::current_binary(app.env())
+    tauri::process::current_binary(&app.env())
         .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
