@@ -40,6 +40,10 @@
       border-color: var(--border-strong-base);
     }
 
+    &[data-clickable="true"] {
+      cursor: pointer;
+    }
+
     &[data-type="image"] {
       width: 48px;
       height: 48px;
@@ -72,16 +76,11 @@
   }
 
   [data-slot="user-message-text"] {
-    display: -webkit-box;
     white-space: pre-wrap;
-    line-clamp: 3;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
     overflow: hidden;
-    background: var(--surface-inset-base);
-    padding: 2px 6px;
+    background: var(--surface-base);
+    padding: 8px 12px;
     border-radius: 4px;
-    border: 0.5px solid var(--border-weak-base);
   }
 
   .text-text-strong {
@@ -141,6 +140,9 @@
 
   [data-slot="message-part-tool-error-message"] {
     color: var(--text-on-critical-weak);
+    max-height: 240px;
+    overflow-y: auto;
+    word-break: break-word;
   }
 }
 
@@ -246,6 +248,14 @@
 
 [data-component="edit-content"] {
   border-top: 1px solid var(--border-weaker-base);
+  max-height: 420px;
+  overflow-y: auto;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 [data-component="write-content"] {
@@ -363,5 +373,106 @@
     -webkit-line-clamp: 3;
     line-clamp: 3;
     overflow: hidden;
+  }
+}
+
+[data-component="user-message"] [data-slot="user-message-text"],
+[data-component="text-part"],
+[data-component="reasoning-part"],
+[data-component="tool-error"],
+[data-component="tool-output"],
+[data-component="edit-content"],
+[data-component="write-content"],
+[data-component="todos"],
+[data-component="diagnostics"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+[data-component="tool-part-wrapper"] {
+  width: 100%;
+
+  &[data-permission="true"] {
+    position: sticky;
+    top: calc(2px + var(--sticky-header-height, 40px));
+    bottom: 0px;
+    z-index: 20;
+    border-radius: 6px;
+    border: none;
+    box-shadow: var(--shadow-xs-border-base);
+    background-color: var(--surface-raised-base);
+    overflow: visible;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: -1.5px;
+      top: -5px;
+      border-radius: 7.5px;
+      border: 1.5px solid transparent;
+      background:
+        linear-gradient(var(--background-base) 0 0) padding-box,
+        conic-gradient(
+            from var(--border-angle),
+            transparent 0deg,
+            transparent 0deg,
+            var(--border-warning-strong, var(--border-warning-selected)) 300deg,
+            var(--border-warning-base) 360deg
+          )
+          border-box;
+      animation: chase-border 2.5s linear infinite;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    & > *:first-child {
+      border-top-left-radius: 6px;
+      border-top-right-radius: 6px;
+      overflow: hidden;
+    }
+
+    & > *:last-child {
+      border-bottom-left-radius: 6px;
+      border-bottom-right-radius: 6px;
+      overflow: hidden;
+    }
+
+    [data-component="collapsible"] {
+      border: none;
+    }
+
+    [data-component="card"] {
+      border: none;
+    }
+  }
+}
+
+@property --border-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes chase-border {
+  from {
+    --border-angle: 0deg;
+  }
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+[data-component="permission-prompt"] {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background-color: var(--surface-raised-strong);
+  border-radius: 0 0 6px 6px;
+
+  [data-slot="permission-actions"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
   }
 }

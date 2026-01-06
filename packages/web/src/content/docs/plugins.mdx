@@ -9,6 +9,61 @@ For examples, check out the [plugins](/docs/ecosystem#plugins) created by the co
 
 ---
 
+## Use a plugin
+
+There are two ways to load plugins.
+
+---
+
+### From local files
+
+Place JavaScript or TypeScript files in the plugin directory.
+
+- `.opencode/plugin/` - Project-level plugins
+- `~/.config/opencode/plugin/` - Global plugins
+
+Files in these directories are automatically loaded at startup.
+
+---
+
+### From npm
+
+Specify npm packages in your config file.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+}
+```
+
+Both regular and scoped npm packages are supported.
+
+Browse available plugins in the [ecosystem](/docs/ecosystem#plugins).
+
+---
+
+### How plugins are installed
+
+**npm plugins** are installed automatically using Bun at startup. Packages and their dependencies are cached in `~/.cache/opencode/node_modules/`.
+
+**Local plugins** are loaded directly from the plugin directory. To use external packages, you must create a `package.json` within your config directory (see [Dependencies](#dependencies)), or publish the plugin to npm and [add it to your config](/docs/config#plugins).
+
+---
+
+### Load order
+
+Plugins are loaded from all sources and all hooks run in sequence. The load order is:
+
+1. Global config (`~/.config/opencode/opencode.json`)
+2. Project config (`opencode.json`)
+3. Global plugin directory (`~/.config/opencode/plugin/`)
+4. Project plugin directory (`.opencode/plugin/`)
+
+Duplicate npm packages with the same name and version are loaded once. However, a local plugin and an npm plugin with similar names are both loaded separately.
+
+---
+
 ## Create a plugin
 
 A plugin is a **JavaScript/TypeScript module** that exports one or more plugin
@@ -16,12 +71,33 @@ functions. Each function receives a context object and returns a hooks object.
 
 ---
 
-### Location
+### Dependencies
 
-Plugins are loaded from:
+Local plugins and custom tools can use external npm packages. Add a `package.json` to your config directory with the dependencies you need.
 
-1. `.opencode/plugin` directory either in your project
-2. Or, globally in `~/.config/opencode/plugin`
+```json title=".opencode/package.json"
+{
+  "dependencies": {
+    "shescape": "^2.1.0"
+  }
+}
+```
+
+OpenCode runs `bun install` at startup to install these. Your plugins and tools can then import them.
+
+```ts title=".opencode/plugin/my-plugin.ts"
+import { escape } from "shescape"
+
+export const MyPlugin = async (ctx) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      if (input.tool === "bash") {
+        output.args.command = escape(output.args.command)
+      }
+    },
+  }
+}
+```
 
 ---
 
@@ -154,6 +230,10 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
 
+:::note
+If you’re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.
+:::
+
 ---
 
 ### .env protection
@@ -205,6 +285,25 @@ The `tool` helper creates a custom tool that opencode can call. It takes a Zod s
 - `execute`: Function that runs when the tool is called
 
 Your custom tools will be available to opencode alongside built-in tools.
+
+---
+
+### Logging
+
+Use `client.app.log()` instead of `console.log` for structured logging:
+
+```ts title=".opencode/plugin/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    service: "my-plugin",
+    level: "info",
+    message: "Plugin initialized",
+    extra: { foo: "bar" },
+  })
+}
+```
+
+Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://opencode.ai/docs/sdk) for details.
 
 ---
 

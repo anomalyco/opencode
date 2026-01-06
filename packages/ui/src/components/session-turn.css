@@ -26,7 +26,7 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 42px;
+    gap: 28px;
     overflow-anchor: none;
   }
 
@@ -114,6 +114,12 @@
     font-size: 13px; /* text-12-medium */
     font-weight: 500;
     color: var(--text-weak);
+  }
+
+  [data-slot="session-turn-markdown"],
+  [data-slot="session-turn-accordion"] [data-slot="accordion-content"] {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   [data-slot="session-turn-markdown"] {
@@ -343,6 +349,8 @@
 
   .error-card {
     color: var(--text-on-critical-base);
+    max-height: 240px;
+    overflow-y: auto;
   }
 
   [data-slot="session-turn-collapsible-content-inner"] {
@@ -356,5 +364,13 @@
     > :first-child > [data-component="markdown"]:first-child {
       margin-top: 0;
     }
+  }
+
+  [data-slot="session-turn-permission-parts"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 }
