@@ -157,6 +157,24 @@ export namespace Billing {
     })
   }
 
+  export const grantCredit = async (workspaceID: string, dollarAmount: number) => {
+    const amountInMicroCents = centsToMicroCents(dollarAmount * 100)
+    await Database.transaction(async (tx) => {
+      await tx
+        .update(BillingTable)
+        .set({
+          balance: sql`${BillingTable.balance} + ${amountInMicroCents}`,
+        })
+        .where(eq(BillingTable.workspaceID, workspaceID))
+      await tx.insert(PaymentTable).values({
+        workspaceID,
+        id: Identifier.create("payment"),
+        amount: amountInMicroCents,
+      })
+    })
+    return amountInMicroCents
+  }
+
   export const setMonthlyLimit = fn(z.number(), async (input) => {
     return await Database.use((tx) =>
       tx
