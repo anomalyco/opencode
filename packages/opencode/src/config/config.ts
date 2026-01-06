@@ -483,6 +483,7 @@ export namespace Config {
     .catchall(z.any())
     .transform((agent, ctx) => {
       const knownKeys = new Set([
+        "name",
         "model",
         "prompt",
         "description",
