@@ -110,7 +110,7 @@ export namespace ACP {
         { optionId: "reject", kind: "reject_once", name: "Reject" },
       ]
       this.config.sdk.event
-        .subscribe({ directory })
+        .subscribe({ directory }, { signal: controller.signal })
         .then(async (events) => {
           for await (const event of events.stream) {
             // Check if we should stop processing
