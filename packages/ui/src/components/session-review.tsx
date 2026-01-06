@@ -28,6 +28,7 @@ export interface SessionReviewProps {
   classes?: { root?: string; header?: string; container?: string }
   actions?: JSX.Element
   diffs: (FileDiff & { preloaded?: PreloadMultiFileDiffResult<any> })[]
+  onViewFile?: (file: string) => void
 }
 
 export const SessionReview = (props: SessionReviewProps) => {
@@ -107,6 +108,18 @@ export const SessionReview = (props: SessionReviewProps) => {
                             <span data-slot="session-review-directory">{getDirectory(diff.file)}&lrm;</span>
                           </Show>
                           <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
+                          <Show when={props.onViewFile}>
+                            <button
+                              data-slot="session-review-view-button"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                props.onViewFile?.(diff.file)
+                              }}
+                            >
+                              <Icon name="eye" size="small" />
+                            </button>
+                          </Show>
                         </div>
                       </div>
                       <div data-slot="session-review-trigger-actions">
