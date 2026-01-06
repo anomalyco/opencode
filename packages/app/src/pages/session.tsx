@@ -993,6 +993,7 @@ export default function Page() {
                           </Tooltip>
                         }
                         hideCloseButton
+                        onMiddleClick={() => tabs().close("context")}
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
