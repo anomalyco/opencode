@@ -1,6 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo } from "solid-js"
+import { createEffect, createMemo, createResource, untrack } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -40,6 +40,9 @@ import { useRenderer } from "@opentui/solid"
 import { createStore } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { useToast } from "../ui/toast"
+import { iife } from "@/util/iife"
+import { loadSessionResponseSchema } from "@agentclientprotocol/sdk"
 
 type ThemeColors = {
   primary: RGBA
@@ -188,10 +191,11 @@ function resolveTheme(theme: ThemeJson, systemTheme: SystemThemeJson | undefined
       case "transparent":
       case "none":
         return RGBA.fromInts(0, 0, 0, 0)
-      case "system":
+      case "system": {
         const newValue = systemTheme?.theme[systemKey]
         if (newValue === undefined) return RGBA.fromInts(0, 0, 0, 0)
         return resolveColor(newValue, systemKey)
+      }
     }
 
     if (value.startsWith("#")) return RGBA.fromHex(value)
@@ -286,60 +290,127 @@ function ansiToRgba(code: number): RGBA {
   return RGBA.fromInts(0, 0, 0)
 }
 
-const FALLBACK_THEME = "opencode"
-const SYSTEM_THEME = "system"
+const FALLBACK_KEY = "opencode"
+const SYSTEM_KEY = "system"
+
+type LoadResult = "pending" | "succeeded" | "errored"
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
   init: (props: { mode: "dark" | "light" }) => {
+    const toast = useToast()
     const sync = useSync()
     const kv = useKV()
+
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", FALLBACK_THEME)) as string,
-      ready: false,
+      active: undefined as string | undefined,
     })
 
-    createEffect(() => {
-      const theme = sync.data.config.theme
-      console.log("theme", theme)
-      if (theme) setStore("active", theme)
-    })
+    const [customLoad] = createResource(() =>
+      loadCustomThemes()
+        .then((themes) => {
+          setStore("themes", themes)
+        })
+    )
 
-    const getCustom = loadCustomThemes().then((themes) => {
-      setStore("themes", themes)
-      return themes
-    })
+    const [systemLoad] = createResource(() =>
+      detectSystemColors()
+        .then((colors) => {
+          const theme = generateSystemTheme(colors)
+          setStore("themes", { [SYSTEM_KEY]: theme })
+        })
+    )
 
-    const getSystem = detectSystemColors().then((colors) => {
-      const theme = generateSystemTheme(colors)
-      setStore("themes", { [SYSTEM_THEME]: theme })
-    })
+    const loadResult = (key: string): LoadResult => {
+      if (key in DEFAULT_THEMES) {
+        return "succeeded"
+      }
 
-    let getTheme
-    if (store.active in DEFAULT_THEMES) {
-      /**
-       * To safeguard against a broken experience, we need at least _some_
-       * default themes to not rely on system color detection. Here we're baking
-       * the assumption that _all_ default themes have this property.
-       */
-      getTheme = Promise.resolve()
-    } else if (store.active === SYSTEM_THEME) {
-      getTheme = getSystem
-    } else {
-      getTheme = getCustom.then((themes) => {
-        const theme = themes[store.active]
-        if (!theme) throw new Error("Missing custom theme")
-        if (referencesSystemTheme(theme)) return getSystem
+      const systemLoadResult = iife(() => {
+        switch (systemLoad.state) {
+          case "ready":
+            return "succeeded"
+          case "errored":
+            return "errored"
+          default:
+            return "pending"
+        }
       })
+
+      if (key === SYSTEM_KEY) {
+        return systemLoadResult
+      }
+
+      switch (customLoad.state) {
+        case "ready": {
+          const theme = store.themes[key]
+          if (!theme) return "errored"
+          if (referencesSystemTheme(theme))
+            return systemLoadResult
+
+          return "succeeded"
+        }
+        case "errored":
+          return "errored"
+        default:
+          return "pending"
+      }
     }
 
-    getTheme.catch(() => setStore("active", FALLBACK_THEME)).finally(() => setStore("ready", true))
+    const toastWarning =
+      (key: string) => toast.show({
+        message: `Theme ${key} is not available`,
+        variant: "warning", duration: 3000,
+      })
+
+    const updateTheme =
+      (key: string): boolean => {
+        switch (loadResult(key)) {
+          case "succeeded":
+            setStore("active", key)
+            return true
+          case "pending":
+          case "errored":
+            toastWarning(key)
+            return false
+        }
+      }
+
+    const initializeTheme =
+      (key: string): boolean => {
+        switch (loadResult(key)) {
+          case "succeeded":
+            setStore("active", key)
+            return true
+          case "pending":
+            return false
+          case "errored":
+            setStore("active", FALLBACK_KEY)
+            toastWarning(key)
+            return true
+        }
+      }
+
+    createEffect((initialized: boolean) => {
+      const key = sync.data.config.theme
+
+      if (initialized) {
+        if (key) updateTheme(key)
+      } else {
+        initialized = initializeTheme(key || untrack(() =>
+          kv.get("theme") as string | undefined)
+          || FALLBACK_KEY
+        )
+      }
+
+      return initialized
+    }, false)
 
     const values = createMemo(() => {
-      const theme = store.themes[store.active] ?? store.themes[FALLBACK_THEME]
-      const systemTheme = store.themes[SYSTEM_THEME] as SystemThemeJson
+      const theme = store.themes[store.active ?? FALLBACK_KEY] ?? store.themes[FALLBACK_KEY]
+      const systemTheme = store.themes[SYSTEM_KEY] as SystemThemeJson
       return resolveTheme(theme, systemTheme, store.mode)
     })
 
@@ -368,12 +439,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         setStore("mode", mode)
         kv.set("theme_mode", mode)
       },
-      set(theme: string) {
-        setStore("active", theme)
-        kv.set("theme", theme)
+      set(theme?: string) {
+        if (!theme) return
+        const success = updateTheme(theme)
+        if (success) kv.set("theme", theme)
       },
       get ready() {
-        return store.ready
+        return store.active !== undefined
       },
     }
   },
