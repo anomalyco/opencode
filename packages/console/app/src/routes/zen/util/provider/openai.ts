@@ -114,24 +114,25 @@ export function fromOpenaiRequest(body: any): CommonRequest {
 
     if ((m as any).role === "system" || (m as any).role === "developer") {
       const c = (m as any).content
-      if (typeof c === "string" && c.length > 0) msgs.push({ role: "system", content: c })
+      if (typeof c === "string" && c.trim().length > 0) msgs.push({ role: "system", content: c.trim() })
       if (Array.isArray(c)) {
         const t = c.find((p: any) => p && typeof p.text === "string")
-        if (t && typeof t.text === "string" && t.text.length > 0) msgs.push({ role: "system", content: t.text })
+        if (t && typeof t.text === "string" && t.text.trim().length > 0)
+          msgs.push({ role: "system", content: t.text.trim() })
       }
       continue
     }
 
     if ((m as any).role === "user") {
       const c = (m as any).content
-      if (typeof c === "string") {
-        msgs.push({ role: "user", content: c })
-      } else if (Array.isArray(c)) {
+      if (typeof c === "string" && c.trim().length > 0) msgs.push({ role: "user", content: c.trim() })
+      else if (Array.isArray(c)) {
         const parts: any[] = []
         for (const p of c) {
           if (!p || !(p as any).type) continue
-          if (((p as any).type === "text" || (p as any).type === "input_text") && typeof (p as any).text === "string")
-            parts.push({ type: "text", text: (p as any).text })
+          if (((p as any).type === "text" || (p as any).type === "input_text") && typeof (p as any).text === "string") {
+            if ((p as any).text.trim().length > 0) parts.push({ type: "text", text: (p as any).text.trim() })
+          }
           const ip = toImg(p)
           if (ip) parts.push(ip)
           if ((p as any).type === "tool_result") {
@@ -150,7 +151,7 @@ export function fromOpenaiRequest(body: any): CommonRequest {
     if ((m as any).role === "assistant") {
       const c = (m as any).content
       const out: any = { role: "assistant" }
-      if (typeof c === "string" && c.length > 0) out.content = c
+      if (typeof c === "string" && c.trim().length > 0) out.content = c.trim()
       if (Array.isArray((m as any).tool_calls)) out.tool_calls = (m as any).tool_calls
       msgs.push(out)
       continue
@@ -205,8 +206,11 @@ export function toOpenaiRequest(body: CommonRequest) {
 
   const toPart = (p: any) => {
     if (!p || typeof p !== "object") return undefined
-    if ((p as any).type === "text" && typeof (p as any).text === "string")
-      return { type: "input_text", text: (p as any).text }
+    if ((p as any).type === "text" && typeof (p as any).text === "string") {
+      const t = (p as any).text.trim()
+      if (t.length === 0) return undefined
+      return { type: "input_text", text: t }
+    }
     if ((p as any).type === "image_url" && (p as any).image_url)
       return { type: "input_image", image_url: (p as any).image_url }
     const s = (p as any).source
@@ -230,15 +234,17 @@ export function toOpenaiRequest(body: CommonRequest) {
 
     if ((m as any).role === "system") {
       const c = (m as any).content
-      if (typeof c === "string") input.push({ role: "system", content: c })
+      if (typeof c === "string" && c.trim().length > 0) input.push({ role: "system", content: c.trim() })
       continue
     }
 
     if ((m as any).role === "user") {
       const c = (m as any).content
-      if (typeof c === "string") {
-        input.push({ role: "user", content: [{ type: "input_text", text: c }] })
-      } else if (Array.isArray(c)) {
+      if (typeof c === "string" && c.trim().length > 0) {
+        input.push({ role: "user", content: [{ type: "input_text", text: c.trim() }] })
+        continue
+      }
+      if (Array.isArray(c)) {
         const parts: any[] = []
         for (const p of c) {
           const op = toPart(p)
@@ -251,8 +257,8 @@ export function toOpenaiRequest(body: CommonRequest) {
 
     if ((m as any).role === "assistant") {
       const c = (m as any).content
-      if (typeof c === "string" && c.length > 0) {
-        input.push({ role: "assistant", content: [{ type: "output_text", text: c }] })
+      if (typeof c === "string" && c.trim().length > 0) {
+        input.push({ role: "assistant", content: [{ type: "output_text", text: c.trim() }] })
       }
       if (Array.isArray((m as any).tool_calls)) {
         for (const tc of (m as any).tool_calls) {
@@ -416,13 +422,13 @@ export function toOpenaiResponse(resp: CommonResponse) {
 
   const outputItems: any[] = []
 
-  if (typeof msg.content === "string" && msg.content.length > 0) {
+  if (typeof msg.content === "string" && msg.content.trim().length > 0) {
     outputItems.push({
       id: `msg_${Math.random().toString(36).slice(2)}`,
       type: "message",
       status: "completed",
       role: "assistant",
-      content: [{ type: "output_text", text: msg.content, annotations: [], logprobs: [] }],
+      content: [{ type: "output_text", text: msg.content.trim(), annotations: [], logprobs: [] }],
     })
   }
 

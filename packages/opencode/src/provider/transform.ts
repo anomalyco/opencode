@@ -23,20 +23,33 @@ export namespace ProviderTransform {
       msgs = msgs
         .map((msg) => {
           if (typeof msg.content === "string") {
-            if (msg.content === "") return undefined
-            return msg
+            if (msg.content.trim().length === 0) return undefined
+            return { ...msg, content: msg.content.trim() }
           }
           if (!Array.isArray(msg.content)) return msg
-          const filtered = msg.content.filter((part) => {
-            if (part.type === "text" || part.type === "reasoning") {
-              return part.text !== ""
-            }
-            return true
-          })
+          const filtered = msg.content
+            .filter((part) => {
+              if (part.type === "text" || part.type === "reasoning") {
+                if (typeof (part as any).text === "string") return (part as any).text.trim().length > 0
+                return false
+              }
+              return true
+            })
+            .map((part) => {
+              if ((part.type === "text" || part.type === "reasoning") && typeof (part as any).text === "string") {
+                return { ...part, text: (part as any).text.trim() }
+              }
+              return part
+            })
           if (filtered.length === 0) return undefined
           return { ...msg, content: filtered }
         })
-        .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+        .filter((msg): msg is ModelMessage => {
+          if (msg === undefined) return false
+          if (typeof msg.content === "string") return msg.content.length > 0
+          if (Array.isArray(msg.content)) return msg.content.length > 0
+          return true
+        })
     }
 
     if (model.api.id.includes("claude")) {

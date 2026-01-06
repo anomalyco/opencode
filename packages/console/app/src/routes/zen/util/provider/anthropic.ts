@@ -85,8 +85,8 @@ export function fromAnthropicRequest(body: any): CommonRequest {
       if (!s) continue
       if ((s as any).type !== "text") continue
       if (typeof (s as any).text !== "string") continue
-      if ((s as any).text.length === 0) continue
-      msgs.push({ role: "system", content: (s as any).text })
+      if ((s as any).text.trim().length === 0) continue
+      msgs.push({ role: "system", content: (s as any).text.trim() })
     }
   }
 
@@ -115,8 +115,10 @@ export function fromAnthropicRequest(body: any): CommonRequest {
       const partsOut: any[] = []
       for (const p of partsIn) {
         if (!p || !(p as any).type) continue
-        if ((p as any).type === "text" && typeof (p as any).text === "string")
-          partsOut.push({ type: "text", text: (p as any).text })
+        if ((p as any).type === "text" && typeof (p as any).text === "string") {
+          const t = (p as any).text.trim()
+          if (t.length > 0) partsOut.push({ type: "text", text: t })
+        }
         if ((p as any).type === "image") {
           const ip = toImg((p as any).source)
           if (ip) partsOut.push(ip)
@@ -141,7 +143,10 @@ export function fromAnthropicRequest(body: any): CommonRequest {
       const tcs: any[] = []
       for (const p of partsIn) {
         if (!p || !(p as any).type) continue
-        if ((p as any).type === "text" && typeof (p as any).text === "string") texts.push((p as any).text)
+        if ((p as any).type === "text" && typeof (p as any).text === "string") {
+          const t = (p as any).text.trim()
+          if (t.length > 0) texts.push(t)
+        }
         if ((p as any).type === "tool_use") {
           const name = (p as any).name
           const id = (p as any).id
@@ -218,8 +223,8 @@ export function toAnthropicRequest(body: CommonRequest) {
     return ccCount <= 4 ? { cache_control: { type: "ephemeral" } } : {}
   }
   const system = sysIn
-    .filter((m: any) => typeof m.content === "string" && m.content.length > 0)
-    .map((m: any) => ({ type: "text", text: m.content, ...cc() }))
+    .filter((m: any) => typeof m.content === "string" && m.content.trim().length > 0)
+    .map((m: any) => ({ type: "text", text: m.content.trim(), ...cc() }))
 
   const msgsIn = Array.isArray(body.messages) ? body.messages : []
   const msgsOut: any[] = []
@@ -242,16 +247,21 @@ export function toAnthropicRequest(body: CommonRequest) {
 
     if ((m as any).role === "user") {
       if (typeof (m as any).content === "string") {
-        msgsOut.push({
-          role: "user",
-          content: [{ type: "text", text: (m as any).content, ...cc() }],
-        })
+        const text = (m as any).content.trim()
+        if (text.length > 0) {
+          msgsOut.push({
+            role: "user",
+            content: [{ type: "text", text, ...cc() }],
+          })
+        }
       } else if (Array.isArray((m as any).content)) {
         const parts: any[] = []
         for (const p of (m as any).content) {
           if (!p || !(p as any).type) continue
-          if ((p as any).type === "text" && typeof (p as any).text === "string")
-            parts.push({ type: "text", text: (p as any).text, ...cc() })
+          if ((p as any).type === "text" && typeof (p as any).text === "string") {
+            const t = (p as any).text.trim()
+            if (t.length > 0) parts.push({ type: "text", text: t, ...cc() })
+          }
           if ((p as any).type === "image_url") {
             const s = toSrc(p)
             if (s) parts.push({ type: "image", source: s, ...cc() })
@@ -264,8 +274,8 @@ export function toAnthropicRequest(body: CommonRequest) {
 
     if ((m as any).role === "assistant") {
       const out: any = { role: "assistant", content: [] as any[] }
-      if (typeof (m as any).content === "string" && (m as any).content.length > 0) {
-        ;(out.content as any[]).push({ type: "text", text: (m as any).content, ...cc() })
+      if (typeof (m as any).content === "string" && (m as any).content.trim().length > 0) {
+        ;(out.content as any[]).push({ type: "text", text: (m as any).content.trim(), ...cc() })
       }
       if (Array.isArray((m as any).tool_calls)) {
         for (const tc of (m as any).tool_calls) {
@@ -448,8 +458,8 @@ export function toAnthropicResponse(resp: CommonResponse) {
 
   const content: any[] = []
 
-  if (typeof message.content === "string" && message.content.length > 0)
-    content.push({ type: "text", text: message.content })
+  if (typeof message.content === "string" && message.content.trim().length > 0)
+    content.push({ type: "text", text: message.content.trim() })
 
   if (Array.isArray(message.tool_calls)) {
     for (const tc of message.tool_calls) {

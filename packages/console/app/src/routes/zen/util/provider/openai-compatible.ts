@@ -80,18 +80,22 @@ export function fromOaCompatibleRequest(body: any): CommonRequest {
     if (!m || !m.role) continue
 
     if (m.role === "system") {
-      if (typeof m.content === "string" && m.content.length > 0) msgsOut.push({ role: "system", content: m.content })
+      if (typeof m.content === "string" && m.content.trim().length > 0)
+        msgsOut.push({ role: "system", content: m.content.trim() })
       continue
     }
 
     if (m.role === "user") {
-      if (typeof m.content === "string") {
-        msgsOut.push({ role: "user", content: m.content })
+      if (typeof m.content === "string" && m.content.trim().length > 0) {
+        msgsOut.push({ role: "user", content: m.content.trim() })
       } else if (Array.isArray(m.content)) {
         const parts: any[] = []
         for (const p of m.content) {
           if (!p || !p.type) continue
-          if (p.type === "text" && typeof p.text === "string") parts.push({ type: "text", text: p.text })
+          if (p.type === "text" && typeof p.text === "string") {
+            const t = p.text.trim()
+            if (t.length > 0) parts.push({ type: "text", text: t })
+          }
           if (p.type === "image_url") parts.push({ type: "image_url", image_url: p.image_url })
         }
         if (parts.length === 1 && parts[0].type === "text") msgsOut.push({ role: "user", content: parts[0].text })
@@ -102,7 +106,7 @@ export function fromOaCompatibleRequest(body: any): CommonRequest {
 
     if (m.role === "assistant") {
       const out: any = { role: "assistant" }
-      if (typeof m.content === "string") out.content = m.content
+      if (typeof m.content === "string" && m.content.trim().length > 0) out.content = m.content.trim()
       if (Array.isArray(m.tool_calls)) out.tool_calls = m.tool_calls
       msgsOut.push(out)
       continue
@@ -148,20 +152,24 @@ export function toOaCompatibleRequest(body: CommonRequest) {
     if (!m || !m.role) continue
 
     if (m.role === "system") {
-      if (typeof m.content === "string" && m.content.length > 0) msgsOut.push({ role: "system", content: m.content })
+      if (typeof m.content === "string" && m.content.trim().length > 0)
+        msgsOut.push({ role: "system", content: m.content.trim() })
       continue
     }
 
     if (m.role === "user") {
-      if (typeof m.content === "string") {
-        msgsOut.push({ role: "user", content: m.content })
+      if (typeof m.content === "string" && m.content.trim().length > 0) {
+        msgsOut.push({ role: "user", content: m.content.trim() })
         continue
       }
       if (Array.isArray(m.content)) {
         const parts: any[] = []
         for (const p of m.content) {
           if (!p || !p.type) continue
-          if (p.type === "text" && typeof p.text === "string") parts.push({ type: "text", text: p.text })
+          if (p.type === "text" && typeof p.text === "string") {
+            const t = p.text.trim()
+            if (t.length > 0) parts.push({ type: "text", text: t })
+          }
           const ip = toImg(p)
           if (ip) parts.push(ip)
         }
@@ -173,7 +181,7 @@ export function toOaCompatibleRequest(body: CommonRequest) {
 
     if (m.role === "assistant") {
       const out: any = { role: "assistant" }
-      if (typeof m.content === "string") out.content = m.content
+      if (typeof m.content === "string" && m.content.trim().length > 0) out.content = m.content.trim()
       if (Array.isArray(m.tool_calls)) out.tool_calls = m.tool_calls
       msgsOut.push(out)
       continue
@@ -223,8 +231,8 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
 
   const content: any[] = []
 
-  if (typeof message.content === "string" && message.content.length > 0) {
-    content.push({ type: "text", text: message.content })
+  if (typeof message.content === "string" && message.content.trim().length > 0) {
+    content.push({ type: "text", text: message.content.trim() })
   }
 
   if (Array.isArray(message.tool_calls)) {
