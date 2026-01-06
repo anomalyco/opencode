@@ -10,9 +10,8 @@ fn get_cli_install_path() -> Option<std::path::PathBuf> {
 }
 
 pub fn get_sidecar_path() -> std::path::PathBuf {
-    // Get binary with symlinks support
-    tauri::process::current_binary()
-        .expect("Failed to get current binary")
+    tauri::utils::platform::current_exe()
+        .expect("Failed to get current exe")
         .parent()
         .expect("Failed to get parent dir")
         .join("opencode-cli")
