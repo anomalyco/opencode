@@ -90,8 +90,13 @@ export namespace SystemPrompt {
       }
     }
 
+    const urls: string[] = []
     if (config.instructions) {
       for (let instruction of config.instructions) {
+        if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
+          urls.push(instruction)
+          continue
+        }
         if (instruction.startsWith("~/")) {
           instruction = path.join(os.homedir(), instruction.slice(2))
         }
@@ -111,12 +116,18 @@ export namespace SystemPrompt {
       }
     }
 
-    const found = Array.from(paths).map((p) =>
+    const foundFiles = Array.from(paths).map((p) =>
       Bun.file(p)
         .text()
         .catch(() => "")
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
-    return Promise.all(found).then((result) => result.filter(Boolean))
+    const foundUrls = urls.map((url) =>
+      fetch(url)
+        .then((res) => (res.ok ? res.text() : ""))
+        .catch(() => "")
+        .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
+    )
+    return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
   }
 }
