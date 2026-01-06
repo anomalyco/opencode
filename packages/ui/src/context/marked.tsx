@@ -379,6 +379,14 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
   name: "Marked",
   init: () => {
     return marked.use(
+      {
+        renderer: {
+          link({ href, title, text }) {
+            const titleAttr = title ? ` title="${title}"` : ""
+            return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`
+          },
+        },
+      },
       markedKatex({
         throwOnError: false,
       }),
