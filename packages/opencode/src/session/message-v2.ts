@@ -548,7 +548,14 @@ export namespace MessageV2 {
       }
     }
 
-    return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
+    return convertToModelMessages(
+      result
+        .filter((msg) => msg.parts.some((part) => part.type !== "step-start"))
+        .map((msg) => ({
+          ...msg,
+          parts: msg.parts.filter((part) => part.type !== "reasoning"),
+        })),
+    )
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
