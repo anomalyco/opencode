@@ -3,6 +3,7 @@ import { CompactionSchema } from "../../src/session/compaction/schema"
 import { DeterministicExtractor } from "../../src/session/compaction/extractors"
 import { LLMExtractor } from "../../src/session/compaction/llm-extractor"
 import { QualityScorer } from "../../src/session/compaction/quality"
+import { HybridCompactionPipeline } from "../../src/session/compaction/pipeline"
 import type { MessageV2 } from "../../src/session/message-v2"
 
 describe("compaction/schema", () => {
@@ -899,6 +900,240 @@ describe("compaction/quality", () => {
       const issues = QualityScorer.getIssues(template)
 
       expect(issues).toEqual([])
+    })
+  })
+})
+
+// =============================================================================
+// PIPELINE TESTS
+// =============================================================================
+
+describe("compaction/pipeline", () => {
+  // Create mock messages for pipeline tests
+  function createMockMessages(): MessageV2.WithParts[] {
+    return [
+      {
+        info: {
+          id: "msg_1",
+          sessionID: "session_test",
+          role: "user",
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: "test", modelID: "test" },
+        } as MessageV2.User,
+        parts: [
+          {
+            id: "part_1",
+            sessionID: "session_test",
+            messageID: "msg_1",
+            type: "text",
+            text: "Help me implement user authentication",
+          } as MessageV2.TextPart,
+        ],
+      },
+      {
+        info: {
+          id: "msg_2",
+          sessionID: "session_test",
+          role: "assistant",
+          time: { created: Date.now() },
+          parentID: "msg_1",
+          modelID: "test",
+          providerID: "test",
+          mode: "build",
+          agent: "build",
+          path: { cwd: "/test", root: "/test" },
+          cost: 0,
+          tokens: { input: 100, output: 50, reasoning: 0, cache: { read: 0, write: 0 } },
+        } as MessageV2.Assistant,
+        parts: [
+          {
+            id: "part_2",
+            sessionID: "session_test",
+            messageID: "msg_2",
+            type: "tool",
+            callID: "call_1",
+            tool: "Read",
+            state: {
+              status: "completed",
+              input: { file_path: "/src/auth.ts" },
+              output: "export function login() {}",
+              title: "Read",
+              metadata: {},
+              time: { start: Date.now(), end: Date.now() },
+            },
+          } as MessageV2.ToolPart,
+          {
+            id: "part_3",
+            sessionID: "session_test",
+            messageID: "msg_2",
+            type: "text",
+            text: "I can help with authentication. Let me create the login function.",
+          } as MessageV2.TextPart,
+        ],
+      },
+    ]
+  }
+
+  describe("templateToText", () => {
+    test("converts template to readable text format", () => {
+      const template: CompactionSchema.CompactionTemplate = {
+        version: "1.0",
+        timestamp: Date.now(),
+        artifacts: {
+          files_read: ["/src/main.ts"],
+          files_modified: [{ path: "/src/auth.ts", change_summary: "Added login" }],
+          files_created: ["/src/logout.ts"],
+        },
+        tool_calls: [{ tool: "Read", summary: "3x (3/3 successful)", success: true }],
+        errors: [{ message: "Type error", resolved: true }],
+        session_intent: "Implement authentication",
+        current_state: "Login complete, working on logout",
+        decisions: [{ decision: "Use JWT", rationale: "Stateless auth" }],
+        pending_tasks: ["Add tests", "Document API"],
+        key_context: "Express.js with PostgreSQL",
+        metrics: { original_tokens: 5000, compacted_tokens: 500, compression_ratio: 0.9 },
+      }
+
+      const text = HybridCompactionPipeline.templateToText(template)
+
+      expect(text).toContain("Session Intent")
+      expect(text).toContain("Implement authentication")
+      expect(text).toContain("Files Read")
+      expect(text).toContain("/src/main.ts")
+      expect(text).toContain("Files Modified")
+      expect(text).toContain("/src/auth.ts")
+      expect(text).toContain("Pending Tasks")
+      expect(text).toContain("Add tests")
+    })
+
+    test("includes agent context when present", () => {
+      const template: CompactionSchema.CompactionTemplate = {
+        version: "1.0",
+        timestamp: Date.now(),
+        artifacts: { files_read: [], files_modified: [], files_created: [] },
+        tool_calls: [],
+        errors: [],
+        session_intent: "Test",
+        current_state: "Testing",
+        decisions: [],
+        pending_tasks: [],
+        key_context: "Test context",
+        agent_context: {
+          agent_name: "build",
+          agent_role: "Primary development agent",
+          constraints: ["No external APIs"],
+        },
+        metrics: { original_tokens: 1000, compacted_tokens: 100, compression_ratio: 0.9 },
+      }
+
+      const text = HybridCompactionPipeline.templateToText(template)
+
+      expect(text).toContain("Agent Context")
+      expect(text).toContain("build")
+    })
+  })
+
+  describe("estimateTokens", () => {
+    test("estimates tokens from messages", () => {
+      const messages = createMockMessages()
+
+      const tokens = HybridCompactionPipeline.estimateTokens(messages)
+
+      expect(tokens).toBeGreaterThan(0)
+    })
+
+    test("returns 0 for empty messages", () => {
+      const tokens = HybridCompactionPipeline.estimateTokens([])
+
+      expect(tokens).toBe(0)
+    })
+  })
+
+  describe("runDeterministicPhase", () => {
+    test("extracts artifacts, errors, and tool calls", () => {
+      const messages = createMockMessages()
+
+      const result = HybridCompactionPipeline.runDeterministicPhase(messages)
+
+      expect(result.artifacts).toBeDefined()
+      expect(result.errors).toBeDefined()
+      expect(result.toolCalls).toBeDefined()
+      expect(result.condensedContext).toBeDefined()
+    })
+
+    test("extracts file paths from tool calls", () => {
+      const messages = createMockMessages()
+
+      const result = HybridCompactionPipeline.runDeterministicPhase(messages)
+
+      expect(result.artifacts.files_read).toContain("/src/auth.ts")
+    })
+  })
+
+  describe("assembleTemplate", () => {
+    test("combines deterministic and LLM results into template", () => {
+      const deterministicResult = {
+        artifacts: {
+          files_read: ["/src/main.ts"],
+          files_modified: [],
+          files_created: [],
+        },
+        errors: [],
+        toolCalls: [{ tool: "Read", summary: "1x (1/1 successful)", success: true }],
+        condensedContext: "Test context",
+      }
+
+      const llmResult = {
+        session_intent: "Build a feature",
+        current_state: "In progress",
+        decisions: [],
+        pending_tasks: ["Complete it"],
+        key_context: "Some context",
+      }
+
+      const template = HybridCompactionPipeline.assembleTemplate(
+        deterministicResult,
+        llmResult,
+        { originalTokens: 1000 }
+      )
+
+      expect(template.version).toBe("1.0")
+      expect(template.artifacts.files_read).toContain("/src/main.ts")
+      expect(template.session_intent).toBe("Build a feature")
+      expect(template.metrics.original_tokens).toBe(1000)
+    })
+
+    test("includes agent context when provided", () => {
+      const deterministicResult = {
+        artifacts: { files_read: [], files_modified: [], files_created: [] },
+        errors: [],
+        toolCalls: [],
+        condensedContext: "",
+      }
+
+      const llmResult = {
+        session_intent: "Test",
+        current_state: "Testing",
+        decisions: [],
+        pending_tasks: [],
+        key_context: "Context",
+      }
+
+      const template = HybridCompactionPipeline.assembleTemplate(
+        deterministicResult,
+        llmResult,
+        {
+          originalTokens: 1000,
+          agentContext: {
+            agent_name: "build",
+            agent_role: "Developer agent",
+          },
+        }
+      )
+
+      expect(template.agent_context).toBeDefined()
+      expect(template.agent_context?.agent_name).toBe("build")
     })
   })
 })
