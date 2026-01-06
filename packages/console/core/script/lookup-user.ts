@@ -14,7 +14,7 @@ if (!identifier) {
 if (identifier.startsWith("wrk_")) {
   await printWorkspace(identifier)
 } else {
-  const authData = await printTable("Email", (tx) =>
+  const authData = await Database.use(async (tx) =>
     tx.select().from(AuthTable).where(eq(AuthTable.subject, identifier)),
   )
   if (authData.length === 0) {
@@ -25,7 +25,7 @@ if (identifier.startsWith("wrk_")) {
 
   // Get all auth records for email
   const accountID = authData[0].accountID
-  await printTable("Auth Records", (tx) => tx.select().from(AuthTable).where(eq(AuthTable.accountID, accountID)))
+  await printTable("Auth", (tx) => tx.select().from(AuthTable).where(eq(AuthTable.accountID, accountID)))
 
   // Get all workspaces for this account
   const users = await printTable("Workspaces", (tx) =>
@@ -60,6 +60,7 @@ async function printWorkspace(workspaceID: string) {
     tx
       .select({
         balance: BillingTable.balance,
+        customerID: BillingTable.customerID,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
@@ -113,7 +114,7 @@ async function printWorkspace(workspaceID: string) {
       .from(UsageTable)
       .where(eq(UsageTable.workspaceID, workspace.id))
       .orderBy(sql`${UsageTable.timeCreated} DESC`)
-      .limit(1000)
+      .limit(10)
       .then((rows) =>
         rows.map((row) => ({
           ...row,
