@@ -58,6 +58,20 @@ export namespace Clipboard {
     }
   }
 
+  // OSC 52: terminal escape sequence for clipboard access (works over SSH/tmux with iTerm2, etc.)
+  // Format: ESC ] 52 ; c ; <base64> BEL  |  Tmux needs passthrough: ESC P tmux ; ESC <seq> ESC \
+  function copyViaOSC52(text: string): void {
+    const base64 = Buffer.from(text).toString("base64")
+    const sequence = `\x1b]52;c;${base64}\x07`
+
+    if (process.env["TMUX"]) {
+      const tmuxSequence = `\x1bPtmux;\x1b${sequence}\x1b\\`
+      process.stdout.write(tmuxSequence)
+    } else {
+      process.stdout.write(sequence)
+    }
+  }
+
   const getCopyMethod = lazy(() => {
     const os = platform()
 
@@ -115,9 +129,15 @@ export namespace Clipboard {
       }
     }
 
-    console.log("clipboard: no native support")
+    console.log("clipboard: using clipboardy with OSC 52 fallback")
     return async (text: string) => {
-      await clipboardy.write(text).catch(() => {})
+      const success = await clipboardy
+        .write(text)
+        .then(() => true)
+        .catch(() => false)
+      if (!success) {
+        copyViaOSC52(text)
+      }
     }
   })
 
