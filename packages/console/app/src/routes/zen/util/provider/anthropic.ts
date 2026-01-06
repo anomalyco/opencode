@@ -247,11 +247,11 @@ export function toAnthropicRequest(body: CommonRequest) {
 
     if ((m as any).role === "user") {
       if (typeof (m as any).content === "string") {
-        const text = (m as any).content.trim()
-        if (text.length > 0) {
+        const c = (m as any).content.trim()
+        if (c.length > 0) {
           msgsOut.push({
             role: "user",
-            content: [{ type: "text", text, ...cc() }],
+            content: [{ type: "text", text: c, ...cc() }],
           })
         }
       } else if (Array.isArray((m as any).content)) {
