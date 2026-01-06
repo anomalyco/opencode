@@ -293,7 +293,7 @@ function ansiToRgba(code: number): RGBA {
 const FALLBACK_KEY = "opencode"
 const SYSTEM_KEY = "system"
 
-type LoadResult = "pending" | "succeeded" | "errored"
+type LoadingStatus = "pending" | "succeeded" | "errored"
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
@@ -323,12 +323,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     )
 
-    const loadResult = (key: string): LoadResult => {
+    const loadingStatus = (key: string): LoadingStatus => {
       if (key in DEFAULT_THEMES) {
         return "succeeded"
       }
 
-      const systemLoadResult = iife(() => {
+      const systemLoadingStatus = iife(() => {
         switch (systemLoad.state) {
           case "ready":
             return "succeeded"
@@ -340,7 +340,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       })
 
       if (key === SYSTEM_KEY) {
-        return systemLoadResult
+        return systemLoadingStatus
       }
 
       switch (customLoad.state) {
@@ -348,7 +348,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           const theme = store.themes[key]
           if (!theme) return "errored"
           if (referencesSystemTheme(theme))
-            return systemLoadResult
+            return systemLoadingStatus
 
           return "succeeded"
         }
@@ -359,50 +359,42 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
     }
 
-    const toastWarning =
-      (key: string) => toast.show({
-        message: `Theme ${key} is not available`,
-        variant: "warning", duration: 3000,
-      })
+    const setTheme = (
+      key: string,
+      { fallback }: { fallback: boolean }
+    ): boolean => {
+      switch (loadingStatus(key)) {
+        case "succeeded":
+          setStore("active", key)
+          return true
+        case "pending":
+          return false
+        case "errored":
+          toast.show({
+            message: `Theme ${key} could not resolve correctly`,
+            variant: "warning", duration: 3000,
+          })
 
-    const updateTheme =
-      (key: string): boolean => {
-        switch (loadResult(key)) {
-          case "succeeded":
-            setStore("active", key)
-            return true
-          case "pending":
-          case "errored":
-            toastWarning(key)
-            return false
-        }
-      }
-
-    const initializeTheme =
-      (key: string): boolean => {
-        switch (loadResult(key)) {
-          case "succeeded":
-            setStore("active", key)
-            return true
-          case "pending":
-            return false
-          case "errored":
+          if (fallback) {
             setStore("active", FALLBACK_KEY)
-            toastWarning(key)
             return true
-        }
+          }
+
+          return false
       }
+    }
 
     createEffect((initialized: boolean) => {
-      const key = sync.data.config.theme
+      let key = sync.data.config.theme
+      if (!initialized) {
+        key ||= untrack(() => kv.get("theme") as string | undefined)
+        key ||= FALLBACK_KEY
+      }
 
-      if (initialized) {
-        if (key) updateTheme(key)
-      } else {
-        initialized = initializeTheme(key || untrack(() =>
-          kv.get("theme") as string | undefined)
-          || FALLBACK_KEY
-        )
+      if (key) {
+        initialized ||= setTheme(key, {
+          fallback: !initialized
+        })
       }
 
       return initialized
@@ -441,8 +433,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       },
       set(theme?: string) {
         if (!theme) return
-        const success = updateTheme(theme)
-        if (success) kv.set("theme", theme)
+
+        const success = setTheme(theme, {
+          fallback: false
+        })
+
+        if (success)
+          kv.set("theme", theme)
       },
       get ready() {
         return store.active !== undefined
