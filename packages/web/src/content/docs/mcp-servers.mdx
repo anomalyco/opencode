@@ -9,6 +9,19 @@ Once added, MCP tools are automatically available to the LLM alongside built-in 
 
 ---
 
+## Protocol
+
+OpenCode implements MCP protocol version **2025-06-18**.
+
+Supported transports:
+
+- **Local servers**: stdio
+- **Remote servers**: Streamable HTTP (with SSE fallback)
+
+For details, see the [MCP specification](https://spec.modelcontextprotocol.io/).
+
+---
+
 #### Caveats
 
 When you use an MCP server, it adds to the context. This can quickly add up if you have a lot of tools. So we recommend being careful with which MCP servers you use.
