@@ -123,7 +123,7 @@ export namespace SystemPrompt {
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
     const foundUrls = urls.map((url) =>
-      fetch(url)
+      fetch(url, { signal: AbortSignal.timeout(5000) })
         .then((res) => (res.ok ? res.text() : ""))
         .catch(() => "")
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
