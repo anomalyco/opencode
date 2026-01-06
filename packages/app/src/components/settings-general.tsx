@@ -3,6 +3,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { useSettings } from "@/context/settings"
+import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
@@ -20,10 +21,19 @@ export const SettingsGeneral: Component = () => {
 
   const fontOptions = [
     { value: "ibm-plex-mono", label: "IBM Plex Mono" },
+    { value: "cascadia-code", label: "Cascadia Code" },
     { value: "fira-code", label: "Fira Code" },
+    { value: "hack", label: "Hack" },
+    { value: "inconsolata", label: "Inconsolata" },
+    { value: "intel-one-mono", label: "Intel One Mono" },
     { value: "jetbrains-mono", label: "JetBrains Mono" },
+    { value: "meslo-lgs", label: "Meslo LGS" },
+    { value: "roboto-mono", label: "Roboto Mono" },
     { value: "source-code-pro", label: "Source Code Pro" },
+    { value: "ubuntu-mono", label: "Ubuntu Mono" },
   ]
+
+  const soundOptions = [...SOUND_OPTIONS]
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
@@ -107,6 +117,59 @@ export const SettingsGeneral: Component = () => {
             <Switch
               checked={settings.notifications.errors()}
               onChange={(checked) => settings.notifications.setErrors(checked)}
+            />
+          </SettingsRow>
+        </div>
+
+        {/* Sound effects Section */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">Sound effects</h3>
+
+          <SettingsRow title="Agent" description="Play sound when the agent is complete or needs attention">
+            <Select
+              options={soundOptions}
+              current={soundOptions.find((o) => o.id === settings.sounds.agent())}
+              value={(o) => o.id}
+              label={(o) => o.label}
+              onSelect={(option) => {
+                if (!option) return
+                settings.sounds.setAgent(option.id)
+                playSound(option.src)
+              }}
+              variant="secondary"
+              size="small"
+            />
+          </SettingsRow>
+
+          <SettingsRow title="Permissions" description="Play sound when a permission is required">
+            <Select
+              options={soundOptions}
+              current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
+              value={(o) => o.id}
+              label={(o) => o.label}
+              onSelect={(option) => {
+                if (!option) return
+                settings.sounds.setPermissions(option.id)
+                playSound(option.src)
+              }}
+              variant="secondary"
+              size="small"
+            />
+          </SettingsRow>
+
+          <SettingsRow title="Errors" description="Play sound when an error occurs">
+            <Select
+              options={soundOptions}
+              current={soundOptions.find((o) => o.id === settings.sounds.errors())}
+              value={(o) => o.id}
+              label={(o) => o.label}
+              onSelect={(option) => {
+                if (!option) return
+                settings.sounds.setErrors(option.id)
+                playSound(option.src)
+              }}
+              variant="secondary"
+              size="small"
             />
           </SettingsRow>
         </div>

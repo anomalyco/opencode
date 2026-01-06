@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
 
@@ -7,6 +7,12 @@ export interface NotificationSettings {
   agent: boolean
   permissions: boolean
   errors: boolean
+}
+
+export interface SoundSettings {
+  agent: string
+  permissions: string
+  errors: string
 }
 
 export interface Settings {
@@ -22,6 +28,7 @@ export interface Settings {
     autoApprove: boolean
   }
   notifications: NotificationSettings
+  sounds: SoundSettings
 }
 
 const defaultSettings: Settings = {
@@ -37,16 +44,47 @@ const defaultSettings: Settings = {
     autoApprove: false,
   },
   notifications: {
-    agent: false,
-    permissions: false,
+    agent: true,
+    permissions: true,
     errors: false,
   },
+  sounds: {
+    agent: "staplebops-01",
+    permissions: "staplebops-02",
+    errors: "nope-03",
+  },
+}
+
+const monoFallback =
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+
+const monoFonts: Record<string, string> = {
+  "ibm-plex-mono": `"IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "cascadia-code": `"Cascadia Code Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "fira-code": `"Fira Code Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  hack: `"Hack Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  inconsolata: `"Inconsolata Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "intel-one-mono": `"Intel One Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "jetbrains-mono": `"JetBrains Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "meslo-lgs": `"Meslo LGS Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "roboto-mono": `"Roboto Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "source-code-pro": `"Source Code Pro Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "ubuntu-mono": `"Ubuntu Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+}
+
+export function monoFontFamily(font: string | undefined) {
+  return monoFonts[font ?? defaultSettings.appearance.font] ?? monoFonts[defaultSettings.appearance.font]
 }
 
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   init: () => {
-    const [store, setStore, _, ready] = persisted("settings.v1", createStore<Settings>(defaultSettings))
+    const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
+
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
+    })
 
     return {
       ready,
@@ -96,6 +134,20 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         errors: createMemo(() => store.notifications?.errors ?? defaultSettings.notifications.errors),
         setErrors(value: boolean) {
           setStore("notifications", "errors", value)
+        },
+      },
+      sounds: {
+        agent: createMemo(() => store.sounds?.agent ?? defaultSettings.sounds.agent),
+        setAgent(value: string) {
+          setStore("sounds", "agent", value)
+        },
+        permissions: createMemo(() => store.sounds?.permissions ?? defaultSettings.sounds.permissions),
+        setPermissions(value: string) {
+          setStore("sounds", "permissions", value)
+        },
+        errors: createMemo(() => store.sounds?.errors ?? defaultSettings.sounds.errors),
+        setErrors(value: string) {
+          setStore("sounds", "errors", value)
         },
       },
     }

@@ -37,6 +37,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { getFilename } from "@opencode-ai/util/path"
 import { Session, type Message, type TextPart } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
 import {
   DragDropProvider,
@@ -54,6 +55,7 @@ import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
+import { playSound, soundSrc } from "@/utils/sound"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -98,6 +100,7 @@ export default function Layout(props: ParentProps) {
   const layout = useLayout()
   const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
+  const settings = useSettings()
   const server = useServer()
   const notification = useNotification()
   const permission = usePermission()
@@ -329,7 +332,18 @@ export default function Layout(props: ParentProps) {
       if (now - lastAlerted < cooldownMs) return
       alertedAtBySession.set(sessionKey, now)
 
-      void platform.notify(config.title, description, href)
+      if (e.details.type === "permission.asked") {
+        playSound(soundSrc(settings.sounds.permissions()))
+        if (settings.notifications.permissions()) {
+          void platform.notify(config.title, description, href)
+        }
+      }
+
+      if (e.details.type === "question.asked") {
+        if (settings.notifications.agent()) {
+          void platform.notify(config.title, description, href)
+        }
+      }
 
       const currentDir = params.dir ? base64Decode(params.dir) : undefined
       const currentSession = params.id
