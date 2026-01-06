@@ -19,6 +19,8 @@ export function Diff<T>(props: DiffProps<T>) {
     const opts = options()
     const workerPool = getWorkerPool(props.diffStyle)
     const annotations = local.annotations
+    const beforeContents = typeof local.before?.contents === "string" ? local.before.contents : ""
+    const afterContents = typeof local.after?.contents === "string" ? local.after.contents : ""
 
     instance?.cleanUp()
     instance = new FileDiff<T>(opts, workerPool)
@@ -27,11 +29,13 @@ export function Diff<T>(props: DiffProps<T>) {
     instance.render({
       oldFile: {
         ...local.before,
-        cacheKey: checksum(local.before.contents),
+        contents: beforeContents,
+        cacheKey: checksum(beforeContents),
       },
       newFile: {
         ...local.after,
-        cacheKey: checksum(local.after.contents),
+        contents: afterContents,
+        cacheKey: checksum(afterContents),
       },
       lineAnnotations: annotations,
       containerWrapper: container,
