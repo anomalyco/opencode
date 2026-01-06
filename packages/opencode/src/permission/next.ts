@@ -134,17 +134,20 @@ export namespace PermissionNext {
           }
 
           // Allow plugins to intercept permission requests (fixes #7006)
-          const hookStatus = await Plugin.trigger("permission.ask", info, { status: "ask" as const }).then((x) => x.status)
-          if (hookStatus === "allow") {
-            log.info("plugin auto-approved", { permission: request.permission, pattern })
-            continue // Auto-approve
-          }
-          if (hookStatus === "deny") {
-            log.info("plugin auto-denied", { permission: request.permission, pattern })
-            throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
+          switch (
+            await Plugin.trigger("permission.ask", info, {
+              status: "ask",
+            }).then((x) => x.status)
+          ) {
+            case "allow":
+              log.info("plugin auto-approved", { permission: request.permission, pattern })
+              continue // Auto-approve
+            case "deny":
+              log.info("plugin auto-denied", { permission: request.permission, pattern })
+              throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
           }
 
-          // If hook returns "ask" or nothing, proceed with UI prompt
+          // If hook returns "ask" or unchanged, proceed with UI prompt
           return new Promise<void>((resolve, reject) => {
             s.pending[id] = {
               info,
