@@ -53,9 +53,25 @@ function textPartValue(parts: Part[]) {
  * Extract prompt content from message parts for restoring into the prompt input.
  * This is used by undo to restore the original user prompt.
  */
-export function extractPromptFromParts(parts: Part[]): Prompt {
+export function extractPromptFromParts(parts: Part[], opts?: { directory?: string }): Prompt {
   const textPart = textPartValue(parts)
   const text = textPart?.text ?? ""
+  const directory = opts?.directory
+
+  const toRelative = (path: string) => {
+    if (!directory) return path
+
+    const prefix = directory.endsWith("/") ? directory : directory + "/"
+    if (path.startsWith(prefix)) return path.slice(prefix.length)
+
+    if (path.startsWith(directory)) {
+      const next = path.slice(directory.length)
+      if (next.startsWith("/")) return next.slice(1)
+      return next
+    }
+
+    return path
+  }
 
   const inline: Inline[] = []
   const images: ImageAttachmentPart[] = []
@@ -78,7 +94,7 @@ export function extractPromptFromParts(parts: Part[]): Prompt {
           start,
           end,
           value,
-          path,
+          path: toRelative(path),
           selection: selectionFromFileUrl(filePart.url),
         })
         continue
@@ -158,20 +174,21 @@ export function extractPromptFromParts(parts: Part[]): Prompt {
 
   for (const item of inline) {
     if (item.start < 0 || item.end < item.start) continue
-    if (item.end > text.length) continue
-    if (item.start < cursor) continue
 
-    pushText(text.slice(cursor, item.start))
+    const expected = item.value
+    if (!expected) continue
 
-    if (item.type === "file") {
-      pushFile(item)
-    }
+    const mismatch = item.end > text.length || item.start < cursor || text.slice(item.start, item.end) !== expected
+    const start = mismatch ? text.indexOf(expected, cursor) : item.start
+    if (start === -1) continue
+    const end = mismatch ? start + expected.length : item.end
 
-    if (item.type === "agent") {
-      pushAgent(item)
-    }
+    pushText(text.slice(cursor, start))
 
-    cursor = item.end
+    if (item.type === "file") pushFile(item)
+    if (item.type === "agent") pushAgent(item)
+
+    cursor = end
   }
 
   pushText(text.slice(cursor))
