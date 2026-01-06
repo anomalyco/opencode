@@ -15,6 +15,7 @@ export function Markdown(
     async (markdown) => {
       return marked.parse(markdown)
     },
+    { initialValue: "" },
   )
   return (
     <div
@@ -23,7 +24,7 @@ export function Markdown(
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
       }}
-      innerHTML={html()}
+      innerHTML={html.latest}
       {...others}
     />
   )

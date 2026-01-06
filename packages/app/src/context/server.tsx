@@ -1,6 +1,6 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { persisted } from "@/utils/persist"
@@ -91,27 +91,49 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const isReady = createMemo(() => ready() && !!active())
 
-    const [healthy, { refetch }] = createResource(
-      () => active() || undefined,
-      async (url) => {
-        if (!url) return
+    const [healthy, setHealthy] = createSignal<boolean | undefined>(undefined)
 
-        const sdk = createOpencodeClient({
-          baseUrl: url,
-          fetch: platform.fetch,
-          signal: AbortSignal.timeout(3000),
-        })
-        return sdk.global
-          .health()
-          .then((x) => x.data?.healthy === true)
-          .catch(() => false)
-      },
-    )
+    const check = (url: string) => {
+      const sdk = createOpencodeClient({
+        baseUrl: url,
+        fetch: platform.fetch,
+        signal: AbortSignal.timeout(3000),
+      })
+      return sdk.global
+        .health()
+        .then((x) => x.data?.healthy === true)
+        .catch(() => false)
+    }
 
     createEffect(() => {
-      if (!active()) return
-      const interval = setInterval(() => refetch(), 10_000)
-      onCleanup(() => clearInterval(interval))
+      const url = active()
+      if (!url) return
+
+      setHealthy(undefined)
+
+      let alive = true
+      let busy = false
+
+      const run = () => {
+        if (busy) return
+        busy = true
+        void check(url)
+          .then((next) => {
+            if (!alive) return
+            setHealthy(next)
+          })
+          .finally(() => {
+            busy = false
+          })
+      }
+
+      run()
+      const interval = setInterval(run, 10_000)
+
+      onCleanup(() => {
+        alive = false
+        clearInterval(interval)
+      })
     })
 
     const origin = createMemo(() => projectsKey(active()))

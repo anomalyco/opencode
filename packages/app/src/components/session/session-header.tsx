@@ -244,8 +244,13 @@ export function SessionHeader() {
                     }
                     return shareURL
                   },
+                  { initialValue: "" },
                 )
-                return <Show when={url()}>{(url) => <TextField value={url()} readOnly copyable class="w-72" />}</Show>
+                return (
+                  <Show when={url.latest}>
+                    {(shareUrl) => <TextField value={shareUrl()} readOnly copyable class="w-72" />}
+                  </Show>
+                )
               })}
             </Popover>
           </Show>

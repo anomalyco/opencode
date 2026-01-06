@@ -18,6 +18,9 @@ export interface FilteredListProps<T> {
 export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
 
+  type Group = { category: string; items: [T, ...T[]] }
+  const empty: Group[] = []
+
   const [grouped, { refetch }] = createResource(
     () => ({
       filter: store.filter,
@@ -42,11 +45,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       )
       return result
     },
+    { initialValue: empty },
   )
 
   const flat = createMemo(() => {
     return pipe(
-      grouped() || [],
+      grouped.latest || [],
       flatMap((x) => x.items),
     )
   })

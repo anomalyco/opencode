@@ -1,4 +1,4 @@
-import { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
+import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
@@ -106,14 +106,15 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   onMount(async () => {
-    ghostty = await Ghostty.load()
+    const mod = await import("ghostty-web")
+    ghostty = await mod.Ghostty.load()
 
     const socket = new WebSocket(
       sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`,
     )
     ws = socket
 
-    const t = new Term({
+    const t = new mod.Terminal({
       cursorBlink: true,
       fontSize: 14,
       fontFamily: "IBM Plex Mono, monospace",
@@ -142,7 +143,7 @@ export const Terminal = (props: TerminalProps) => {
       return false
     })
 
-    fitAddon = new FitAddon()
+    fitAddon = new mod.FitAddon()
     serializeAddon = new SerializeAddon()
     t.loadAddon(serializeAddon)
     t.loadAddon(fitAddon)
