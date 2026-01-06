@@ -564,11 +564,30 @@ function generateSystemTheme(colors: TerminalColors): SystemThemeJson {
     greenBright: col(10),
   }
 
-  const diffAlpha = isDark ? 0.22 : 0.14
-  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
-  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
-  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
-  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
+  const diffAlpha = {
+    dark: 0.22,
+    light: 0.14,
+  }
+
+  const diffAddedBg = {
+    dark: tint(bg, ansiColors.green, diffAlpha.dark),
+    light: tint(bg, ansiColors.green, diffAlpha.light),
+  }
+
+  const diffRemovedBg = {
+    dark: tint(bg, ansiColors.red, diffAlpha.dark),
+    light: tint(bg, ansiColors.red, diffAlpha.light),
+  }
+
+  const diffAddedLineNumberBg = {
+    dark: tint(grays[3].dark, ansiColors.green, diffAlpha.dark),
+    light: tint(grays[3].light, ansiColors.green, diffAlpha.light),
+  }
+
+  const diffRemovedLineNumberBg = {
+    dark: tint(grays[3].dark, ansiColors.red, diffAlpha.dark),
+    light: tint(grays[3].light, ansiColors.red, diffAlpha.light),
+  }
 
   return {
     theme: {
