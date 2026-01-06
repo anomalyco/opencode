@@ -52,10 +52,14 @@ export const AcpCommand = cmd({
       })
 
       const stream = ndJsonStream(input, output)
-      const agent = await ACP.init({ sdk })
+      const acpFactory = await ACP.init({ sdk })
+
+      // Track the agent instance so we can dispose it when connection ends
+      let agentInstance: ReturnType<typeof acpFactory.create> | undefined
 
       new AgentSideConnection((conn) => {
-        return agent.create(conn, { sdk })
+        agentInstance = acpFactory.create(conn, { sdk })
+        return agentInstance
       }, stream)
 
       log.info("setup connection")
@@ -64,6 +68,12 @@ export const AcpCommand = cmd({
         process.stdin.on("end", resolve)
         process.stdin.on("error", reject)
       })
+
+      // Clean up agent resources when connection ends
+      if (agentInstance) {
+        log.info("disposing agent on connection end")
+        agentInstance.dispose()
+      }
     })
   },
 })
