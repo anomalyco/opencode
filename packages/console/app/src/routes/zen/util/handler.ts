@@ -69,7 +69,7 @@ export async function handler(
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
     const isTrial = await trialLimiter?.isTrial()
-    const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
+    const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider ?? false, sessionId)
     const stickyProvider = await stickyTracker?.get()
