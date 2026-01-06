@@ -3,6 +3,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
+import { Plugin } from "@/plugin"
 import { Storage } from "@/storage/storage"
 import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
@@ -127,11 +128,24 @@ export namespace PermissionNext {
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
           const id = input.id ?? Identifier.ascending("permission")
+          const info: Request = {
+            id,
+            ...request,
+          }
+
+          // Allow plugins to intercept permission requests (fixes #7006)
+          const hookStatus = await Plugin.trigger("permission.ask", info, { status: "ask" as const }).then((x) => x.status)
+          if (hookStatus === "allow") {
+            log.info("plugin auto-approved", { permission: request.permission, pattern })
+            continue // Auto-approve
+          }
+          if (hookStatus === "deny") {
+            log.info("plugin auto-denied", { permission: request.permission, pattern })
+            throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
+          }
+
+          // If hook returns "ask" or nothing, proceed with UI prompt
           return new Promise<void>((resolve, reject) => {
-            const info: Request = {
-              id,
-              ...request,
-            }
             s.pending[id] = {
               info,
               resolve,
