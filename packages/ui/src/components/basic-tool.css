@@ -68,6 +68,16 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-weak);
+
+    &.clickable {
+      cursor: pointer;
+      text-decoration: underline;
+      transition: color 0.15s ease;
+
+      &:hover {
+        color: var(--text-base);
+      }
+    }
   }
 
   [data-slot="basic-tool-tool-arg"] {
