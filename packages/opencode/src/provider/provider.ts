@@ -266,13 +266,24 @@ export namespace Provider {
             }
             case "ap": {
               const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+              const isTokyoRegion = region === "ap-northeast-1"
               if (
                 isAustraliaRegion &&
                 ["anthropic.claude-sonnet-4-5", "anthropic.claude-haiku"].some((m) => modelID.includes(m))
               ) {
                 regionPrefix = "au"
                 modelID = `${regionPrefix}.${modelID}`
+              } else if (isTokyoRegion) {
+                // Tokyo region uses jp. prefix for cross-region inference
+                const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
+                  modelID.includes(m),
+                )
+                if (modelRequiresPrefix) {
+                  regionPrefix = "jp"
+                  modelID = `${regionPrefix}.${modelID}`
+                }
               } else {
+                // Other APAC regions use apac. prefix
                 const modelRequiresPrefix = ["claude", "nova-lite", "nova-micro", "nova-pro"].some((m) =>
                   modelID.includes(m),
                 )
@@ -977,36 +988,12 @@ export namespace Provider {
       throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
 
-    // For amazon-bedrock, strip cross-region inference profile prefixes before lookup
-    let lookupModelID = modelID
-    if (providerID === "amazon-bedrock") {
-      const crossRegionPrefixes = ["us.", "eu.", "apac.", "global.", "jp.", "au."]
-      for (const prefix of crossRegionPrefixes) {
-        if (modelID.startsWith(prefix)) {
-          lookupModelID = modelID.slice(prefix.length)
-          break
-        }
-      }
-    }
-
-    const info = provider.models[lookupModelID]
+    const info = provider.models[modelID]
     if (!info) {
       const availableModels = Object.keys(provider.models)
-      const matches = fuzzysort.go(lookupModelID, availableModels, { limit: 3, threshold: -10000 })
+      const matches = fuzzysort.go(modelID, availableModels, { limit: 3, threshold: -10000 })
       const suggestions = matches.map((m) => m.target)
-      throw new ModelNotFoundError({ providerID, modelID: lookupModelID, suggestions })
-    }
-
-    // If a cross-region prefix was used, return model info with the original prefixed modelID
-    if (lookupModelID !== modelID) {
-      return {
-        ...info,
-        id: modelID,
-        api: {
-          ...info.api,
-          id: modelID,
-        },
-      }
+      throw new ModelNotFoundError({ providerID, modelID, suggestions })
     }
     return info
   }
