@@ -110,6 +110,51 @@ describe("LRUMap", () => {
     expect(map.size).toBe(1)
   })
 
+  test("handles falsy but valid values (0, false, empty string)", () => {
+    // Test with 0
+    const numMap = new LRUMap<string, number>(3)
+    numMap.set("a", 0)
+    numMap.set("b", 1)
+    numMap.set("c", 2)
+    expect(numMap.get("a")).toBe(0)
+
+    // After accessing "a", it should be most recently used
+    // Adding "d" should evict "b" (not "a")
+    numMap.set("d", 3)
+    expect(numMap.has("a")).toBe(true)
+    expect(numMap.has("b")).toBe(false)
+
+    // Test with false
+    const boolMap = new LRUMap<string, boolean>(3)
+    boolMap.set("a", false)
+    boolMap.set("b", true)
+    boolMap.set("c", true)
+    expect(boolMap.get("a")).toBe(false)
+
+    boolMap.set("d", true)
+    expect(boolMap.has("a")).toBe(true)
+    expect(boolMap.has("b")).toBe(false)
+
+    // Test with empty string
+    const strMap = new LRUMap<string, string>(3)
+    strMap.set("a", "")
+    strMap.set("b", "x")
+    strMap.set("c", "y")
+    expect(strMap.get("a")).toBe("")
+
+    strMap.set("d", "z")
+    expect(strMap.has("a")).toBe(true)
+    expect(strMap.has("b")).toBe(false)
+  })
+
+  test("throws on invalid capacity values", () => {
+    expect(() => new LRUMap<string, number>(0)).toThrow(RangeError)
+    expect(() => new LRUMap<string, number>(-1)).toThrow(RangeError)
+    expect(() => new LRUMap<string, number>(1.5)).toThrow(RangeError)
+    expect(() => new LRUMap<string, number>(NaN)).toThrow(RangeError)
+    expect(() => new LRUMap<string, number>(Infinity)).toThrow(RangeError)
+  })
+
   test("handles large number of entries", () => {
     const capacity = 100
     const map = new LRUMap<number, number>(capacity)
