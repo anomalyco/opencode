@@ -1,5 +1,5 @@
 import "@/index.css"
-import { ErrorBoundary, Show, type ParentProps } from "solid-js"
+import { ErrorBoundary, Show, Suspense, lazy, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
@@ -21,11 +21,13 @@ import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import Layout from "@/pages/layout"
-import Home from "@/pages/home"
 import DirectoryLayout from "@/pages/directory-layout"
-import Session from "@/pages/session"
 import { ErrorPage } from "./pages/error"
 import { iife } from "@opencode-ai/util/iife"
+
+const Home = lazy(() => import("@/pages/home"))
+const Session = lazy(() => import("@/pages/session"))
+const Loading = () => <div class="size-full flex items-center justify-center text-text-weak">Loading...</div>
 
 declare global {
   interface Window {
@@ -81,7 +83,14 @@ export function App() {
                               </PermissionProvider>
                             )}
                           >
-                            <Route path="/" component={Home} />
+                            <Route
+                              path="/"
+                              component={() => (
+                                <Suspense fallback={<Loading />}>
+                                  <Home />
+                                </Suspense>
+                              )}
+                            />
                             <Route path="/:dir" component={DirectoryLayout}>
                               <Route path="/" component={() => <Navigate href="session" />} />
                               <Route
@@ -91,7 +100,9 @@ export function App() {
                                     <TerminalProvider>
                                       <FileProvider>
                                         <PromptProvider>
-                                          <Session />
+                                          <Suspense fallback={<Loading />}>
+                                            <Session />
+                                          </Suspense>
                                         </PromptProvider>
                                       </FileProvider>
                                     </TerminalProvider>
