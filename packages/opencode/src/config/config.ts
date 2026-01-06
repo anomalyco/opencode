@@ -922,6 +922,25 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          hybrid: z
+            .object({
+              enabled: z
+                .boolean()
+                .optional()
+                .describe("Enable hybrid compaction pipeline (default: true)"),
+              preserve_agent_context: z
+                .boolean()
+                .optional()
+                .describe("Preserve agent context across compaction (default: true)"),
+              quality_threshold: z
+                .number()
+                .min(0)
+                .max(1)
+                .optional()
+                .describe("Quality threshold for compaction validation (0-1, optional)"),
+            })
+            .optional()
+            .describe("Hybrid compaction pipeline configuration"),
         })
         .optional(),
       experimental: z

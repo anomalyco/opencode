@@ -14,6 +14,11 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import {
+  HybridCompactionPipeline,
+  LLMExtractor,
+  QualityScorer,
+} from "./compaction/index"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -96,6 +101,7 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
+    const config = await Config.get()
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
     const model = agent.model
@@ -132,6 +138,127 @@ export namespace SessionCompaction {
       model,
       abort: input.abort,
     })
+
+    // Check if hybrid compaction is enabled (default: true)
+    const hybridEnabled = config.compaction?.hybrid?.enabled !== false
+
+    if (hybridEnabled) {
+      // Run hybrid compaction pipeline
+      log.info("running hybrid compaction pipeline")
+
+      // Phase 1: Deterministic extraction
+      const deterministicResult = HybridCompactionPipeline.runDeterministicPhase(input.messages)
+      log.info("deterministic extraction complete", {
+        filesRead: deterministicResult.artifacts.files_read.length,
+        filesModified: deterministicResult.artifacts.files_modified.length,
+        errors: deterministicResult.errors.length,
+        toolCalls: deterministicResult.toolCalls.length,
+      })
+
+      // Phase 2: Build LLM prompt with condensed context
+      const llmPrompt = HybridCompactionPipeline.buildLLMPrompt(
+        deterministicResult.condensedContext,
+        input.messages,
+      )
+
+      // Phase 3: Run LLM extraction via processor
+      const result = await processor.process({
+        user: userMessage,
+        agent,
+        abort: input.abort,
+        sessionID: input.sessionID,
+        tools: {},
+        system: [],
+        messages: [
+          // Include condensed context instead of full messages
+          {
+            role: "user",
+            content: [{ type: "text", text: llmPrompt }],
+          },
+        ],
+        model,
+      })
+
+      // Phase 4: Post-process LLM response and validate quality
+      if (config.compaction?.hybrid?.quality_threshold !== undefined) {
+        // Get the output text from processor for quality validation
+        const outputParts = processor.message.parts.filter((p) => p.type === "text")
+        if (outputParts.length > 0) {
+          const outputText = (outputParts[0] as MessageV2.TextPart).text || ""
+          const llmResult = LLMExtractor.parseResponse(outputText)
+
+          // Extract agent context if enabled
+          const agentContext =
+            config.compaction?.hybrid?.preserve_agent_context !== false
+              ? LLMExtractor.extractAgentContext({
+                  name: userMessage.agent,
+                  systemPrompt: agent.prompt,
+                })
+              : undefined
+
+          // Assemble template for quality scoring
+          const originalTokens = HybridCompactionPipeline.estimateTokens(input.messages)
+          const template = HybridCompactionPipeline.assembleTemplate(
+            deterministicResult,
+            llmResult,
+            { originalTokens, agentContext },
+          )
+
+          // Validate quality
+          const quality = QualityScorer.scoreCompaction(
+            template,
+            deterministicResult.artifacts.files_read,
+            { threshold: config.compaction.hybrid.quality_threshold },
+          )
+
+          log.info("compaction quality", {
+            score: quality.score,
+            issues: quality.issues,
+            threshold: config.compaction.hybrid.quality_threshold,
+          })
+
+          if (quality.score < config.compaction.hybrid.quality_threshold) {
+            log.warn("compaction quality below threshold", {
+              score: quality.score,
+              threshold: config.compaction.hybrid.quality_threshold,
+              issues: quality.issues,
+            })
+          }
+        }
+      }
+
+      if (result === "continue" && input.auto) {
+        const continueMsg = await Session.updateMessage({
+          id: Identifier.ascending("message"),
+          role: "user",
+          sessionID: input.sessionID,
+          time: {
+            created: Date.now(),
+          },
+          agent: userMessage.agent,
+          model: userMessage.model,
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: continueMsg.id,
+          sessionID: input.sessionID,
+          type: "text",
+          synthetic: true,
+          text: "Continue if you have next steps",
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        })
+      }
+      if (processor.message.error) return "stop"
+      Bus.publish(Event.Compacted, { sessionID: input.sessionID })
+      return "continue"
+    }
+
+    // Fallback to legacy compaction if hybrid is disabled
+    log.info("running legacy compaction")
+
     // Allow plugins to inject context or replace compaction prompt
     const compacting = await Plugin.trigger(
       "experimental.session.compacting",
