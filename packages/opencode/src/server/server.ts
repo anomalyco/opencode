@@ -684,46 +684,69 @@ export namespace Server {
           })
         },
       )
-      .get(
-        "/session",
-        describeRoute({
-          summary: "List sessions",
-          description: "Get a list of all OpenCode sessions, sorted by most recently updated.",
-          operationId: "session.list",
-          responses: {
-            200: {
-              description: "List of sessions",
-              content: {
-                "application/json": {
-                  schema: resolver(Session.Info.array()),
-                },
-              },
-            },
+.get(
+  "/session",
+  describeRoute({
+    summary: "List sessions",
+    description: "Get a list of all OpenCode sessions, sorted by most recently updated.",
+    operationId: "session.list",
+    responses: {
+      200: {
+        description: "List of sessions",
+        content: {
+          "application/json": {
+            schema: resolver(Session.Info.array()),
           },
-        }),
-        validator(
-          "query",
-          z.object({
-            archived: z.coerce.boolean().optional(),
-          }),
-        ),
-        async (c) => {
-          const { archived } = c.req.valid("query")
-          const sessions = await Array.fromAsync(Session.list())
-          const filtered = pipe(
-            sessions,
-            filter((s) =>
-              archived === true
-                ? s.time.archived !== undefined
-                : archived === false
-                  ? s.time.archived === undefined
-                  : s.time.archived === undefined,
-            ),
-            sortBy((s) => s.time.updated),
-          )
-          return c.json(filtered)
         },
-      )
+      },
+    },
+  }),
+  validator(
+    "query",
+    z.object({
+      archived: z.coerce.boolean().optional(),
+      start: z.coerce
+        .number()
+        .optional()
+        .meta({
+          description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)",
+        }),
+      search: z.string().optional().meta({
+        description: "Filter sessions by title (case-insensitive)",
+      }),
+      limit: z.coerce.number().optional().meta({
+        description: "Maximum number of sessions to return",
+      }),
+    }),
+  ),
+  async (c) => {
+    const query = c.req.valid("query")
+    const term = query.search?.toLowerCase()
+    const sessions: Session.Info[] = []
+
+    for await (const session of Session.list()) {
+      // archived filtering
+      if (query.archived === true && session.time.archived === undefined) continue
+      if (query.archived === false && session.time.archived !== undefined) continue
+      if (query.archived === undefined && session.time.archived !== undefined) continue
+
+      // updated timestamp filter
+      if (query.start !== undefined && session.time.updated < query.start) continue
+
+      // title search
+      if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
+
+      sessions.push(session)
+
+      if (query.limit !== undefined && sessions.length >= query.limit) break
+    }
+
+    sessions.sort((a, b) => b.time.updated - a.time.updated)
+
+    return c.json(sessions)
+  },
+)
+
       .get(
         "/session/status",
         describeRoute({
