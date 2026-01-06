@@ -33,6 +33,15 @@ await Promise.all([
   fs.mkdir(Global.Path.bin, { recursive: true }),
 ])
 
+// Create package.json in bin directory to prevent bun from walking up
+// the directory tree and using a parent package.json
+const binPackageJson = path.join(Global.Path.bin, "package.json")
+if (!(await Bun.file(binPackageJson).exists())) {
+  await Bun.file(binPackageJson)
+    .write("{}")
+    .catch(() => {})
+}
+
 const CACHE_VERSION = "14"
 
 const version = await Bun.file(path.join(Global.Path.cache, "version"))

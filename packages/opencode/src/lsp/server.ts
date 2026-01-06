@@ -128,15 +128,15 @@ export namespace LSPServer {
         )
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "@vue/language-server"], {
+          await Bun.spawn([BunProc.which(), "add", "@vue/language-server"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
@@ -508,12 +508,15 @@ export namespace LSPServer {
         const js = path.join(Global.Path.bin, "node_modules", "pyright", "dist", "pyright-langserver.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "pyright"], {
+          await Bun.spawn([BunProc.which(), "add", "pyright"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
@@ -1042,15 +1045,15 @@ export namespace LSPServer {
         const js = path.join(Global.Path.bin, "node_modules", "svelte-language-server", "bin", "server.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "svelte-language-server"], {
+          await Bun.spawn([BunProc.which(), "add", "svelte-language-server"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
@@ -1089,15 +1092,15 @@ export namespace LSPServer {
         const js = path.join(Global.Path.bin, "node_modules", "@astrojs", "language-server", "bin", "nodeServer.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "@astrojs/language-server"], {
+          await Bun.spawn([BunProc.which(), "add", "@astrojs/language-server"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
@@ -1320,15 +1323,15 @@ export namespace LSPServer {
         const exists = await Bun.file(js).exists()
         if (!exists) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "yaml-language-server"], {
+          await Bun.spawn([BunProc.which(), "add", "yaml-language-server"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
@@ -1499,15 +1502,15 @@ export namespace LSPServer {
         const js = path.join(Global.Path.bin, "node_modules", "intelephense", "lib", "intelephense.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "intelephense"], {
+          await Bun.spawn([BunProc.which(), "add", "intelephense"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
@@ -1592,15 +1595,15 @@ export namespace LSPServer {
         const js = path.join(Global.Path.bin, "node_modules", "bash-language-server", "out", "cli.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "bash-language-server"], {
+          await Bun.spawn([BunProc.which(), "add", "bash-language-server"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
@@ -1811,15 +1814,15 @@ export namespace LSPServer {
         const js = path.join(Global.Path.bin, "node_modules", "dockerfile-language-server-nodejs", "lib", "server.js")
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
-          await Bun.spawn([BunProc.which(), "install", "dockerfile-language-server-nodejs"], {
+          await Bun.spawn([BunProc.which(), "add", "dockerfile-language-server-nodejs"], {
             cwd: Global.Path.bin,
             env: {
               ...process.env,
               BUN_BE_BUN: "1",
             },
-            stdout: "pipe",
-            stderr: "pipe",
-            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
           }).exited
         }
         binary = BunProc.which()
