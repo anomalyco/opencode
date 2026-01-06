@@ -35,6 +35,32 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  test("injects session context into subprocess environment", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const testSessionID = "ses_test123"
+        const testMessageID = "msg_test456"
+        const testCtx = {
+          ...ctx,
+          sessionID: testSessionID,
+          messageID: testMessageID,
+        }
+        const result = await bash.execute(
+          {
+            command: "echo $OPENCODE_SESSION_ID,$OPENCODE_MESSAGE_ID",
+            description: "Echo session context environment variables",
+          },
+          testCtx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain(testSessionID)
+        expect(result.metadata.output).toContain(testMessageID)
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {
