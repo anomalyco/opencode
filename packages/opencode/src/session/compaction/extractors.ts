@@ -7,11 +7,17 @@ import type { CompactionSchema } from "./schema"
  */
 export namespace DeterministicExtractor {
   // Error patterns to match in tool outputs
+  // Order matters: specific patterns first, then general ones
   const ERROR_PATTERNS = [
-    /(?:Error|Exception|Failed|Failure):\s*(.+?)(?:\n|$)/gi,
-    /(?:TypeError|ReferenceError|SyntaxError|RangeError):\s*(.+?)(?:\n|$)/gi,
+    // Specific JS/TS error types - capture the full error including type
+    /((?:TypeError|ReferenceError|SyntaxError|RangeError|EvalError|URIError):\s*.+?)(?:\n|$)/gi,
+    // General Error/Exception pattern (avoid matching specific types above)
+    /(?<![A-Za-z])((?:Error|Exception|Failed|Failure):\s*.+?)(?:\n|$)/gi,
+    // Python tracebacks
     /Traceback \(most recent call last\):[\s\S]+?(?=\n\n|\Z)/gi,
+    // Test failures
     /(?:FAILED|ERROR)\s+(.+?)(?:\n|$)/gi,
+    // Rust errors
     /error\[E\d+\]:\s*(.+?)(?:\n|$)/gi,
   ]
 
