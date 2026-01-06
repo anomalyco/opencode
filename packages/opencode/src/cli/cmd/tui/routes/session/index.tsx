@@ -1803,11 +1803,16 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const current = createMemo(() => props.metadata.summary?.findLast((x) => x.state.status !== "pending"))
   const color = createMemo(() => local.agent.color(props.input.subagent_type ?? "unknown"))
 
+  const agentName = createMemo(() => {
+    const input = props.input as Record<string, unknown>
+    return (input.subagent_type ?? input.agent ?? input.category ?? props.tool ?? "unknown") as string
+  })
+
   return (
     <Switch>
-      <Match when={props.input.description || props.input.subagent_type}>
+      <Match when={props.metadata.sessionId || props.input.description || props.input.subagent_type}>
         <BlockTool
-          title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
+          title={"# " + Locale.titlecase(agentName()) + " Task"}
           onClick={
             props.metadata.sessionId
               ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
@@ -1817,7 +1822,8 @@ function Task(props: ToolProps<typeof TaskTool>) {
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({props.metadata.summary?.length ?? 0} toolcalls)
+              {props.input.description}
+              <Show when={props.metadata.summary?.length}> ({props.metadata.summary?.length} toolcalls)</Show>
             </text>
             <Show when={current()}>
               <text style={{ fg: current()!.state.status === "error" ? theme.error : theme.textMuted }}>
@@ -1835,8 +1841,13 @@ function Task(props: ToolProps<typeof TaskTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="#" pending="Delegating..." complete={props.input.subagent_type} part={props.part}>
-          {props.input.subagent_type} Task {props.input.description}
+        <InlineTool
+          icon="◉"
+          pending="Delegating..."
+          complete={agentName() ?? props.input.description}
+          part={props.part}
+        >
+          {Locale.titlecase(agentName())} Task "{props.input.description}"
         </InlineTool>
       </Match>
     </Switch>
