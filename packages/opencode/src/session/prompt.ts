@@ -1530,6 +1530,7 @@ export namespace SessionPrompt {
     }
 
     const templateParts = await resolvePromptParts(template)
+    const agentInfo = await Agent.get(agentName)
     const parts =
       (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
         ? [
@@ -1538,8 +1539,8 @@ export namespace SessionPrompt {
               agent: agent.name,
               description: command.description ?? "",
               command: input.command,
-              // TODO: how can we make task tool accept a more complex input?
-              prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+              // If agent already has a prompt defined, don't duplicate it in the user message
+              prompt: agentInfo?.prompt ? "" : (templateParts.find((y) => y.type === "text")?.text ?? ""),
             },
           ]
         : [...templateParts, ...(input.parts ?? [])]
