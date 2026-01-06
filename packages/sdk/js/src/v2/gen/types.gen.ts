@@ -32,7 +32,7 @@ export type Project = {
     updated: number
     initialized?: number
   }
-  sandboxes?: Array<string>
+  sandboxes: Array<string>
 }
 
 export type EventProjectUpdated = {
@@ -252,7 +252,14 @@ export type SymbolSource = {
   kind: number
 }
 
-export type FilePartSource = FileSource | SymbolSource
+export type ResourceSource = {
+  text: FilePartSourceText
+  type: "resource"
+  clientName: string
+  uri: string
+}
+
+export type FilePartSource = FileSource | SymbolSource | ResourceSource
 
 export type FilePart = {
   id: string
@@ -1215,6 +1222,7 @@ export type PermissionRuleConfig = PermissionActionConfig | PermissionObjectConf
 
 export type PermissionConfig =
   | {
+      __originalKeys?: Array<string>
       read?: PermissionRuleConfig
       edit?: PermissionRuleConfig
       glob?: PermissionRuleConfig
@@ -1230,7 +1238,7 @@ export type PermissionConfig =
       codesearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
-      [key: string]: PermissionRuleConfig | PermissionActionConfig | undefined
+      [key: string]: PermissionRuleConfig | Array<string> | PermissionActionConfig | undefined
     }
   | PermissionActionConfig
 
@@ -1566,7 +1574,12 @@ export type Config = {
    * MCP (Model Context Protocol) server configurations
    */
   mcp?: {
-    [key: string]: McpLocalConfig | McpRemoteConfig
+    [key: string]:
+      | McpLocalConfig
+      | McpRemoteConfig
+      | {
+          enabled: boolean
+        }
   }
   formatter?:
     | false
@@ -1947,6 +1960,14 @@ export type McpStatus =
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+
+export type McpResource = {
+  name: string
+  uri: string
+  description?: string
+  mimeType?: string
+  client: string
+}
 
 export type LspStatus = {
   id: string
@@ -2488,6 +2509,18 @@ export type SessionListData = {
   path?: never
   query?: {
     directory?: string
+    /**
+     * Filter sessions updated on or after this timestamp (milliseconds since epoch)
+     */
+    start?: number
+    /**
+     * Filter sessions by title (case-insensitive)
+     */
+    search?: string
+    /**
+     * Maximum number of sessions to return
+     */
+    limit?: number
   }
   url: "/session"
 }
@@ -3260,6 +3293,14 @@ export type SessionCommandData = {
     arguments: string
     command: string
     variant?: string
+    parts?: Array<{
+      id?: string
+      type: "file"
+      mime: string
+      filename?: string
+      url: string
+      source?: FilePartSource
+    }>
   }
   path: {
     /**
@@ -3449,6 +3490,7 @@ export type PermissionRespondResponse = PermissionRespondResponses[keyof Permiss
 export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"
+    message?: string
   }
   path: {
     requestID: string
@@ -4148,6 +4190,27 @@ export type McpDisconnectResponses = {
 }
 
 export type McpDisconnectResponse = McpDisconnectResponses[keyof McpDisconnectResponses]
+
+export type ExperimentalResourceListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/resource"
+}
+
+export type ExperimentalResourceListResponses = {
+  /**
+   * MCP resources
+   */
+  200: {
+    [key: string]: McpResource
+  }
+}
+
+export type ExperimentalResourceListResponse =
+  ExperimentalResourceListResponses[keyof ExperimentalResourceListResponses]
 
 export type LspStatusData = {
   body?: never

@@ -13,6 +13,11 @@ import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
+  const pathExists = async (p: string) =>
+    fs
+      .stat(p)
+      .then(() => true)
+      .catch(() => false)
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -1145,7 +1150,7 @@ export namespace LSPServer {
       }
       const distPath = path.join(Global.Path.bin, "jdtls")
       const launcherDir = path.join(distPath, "plugins")
-      const installed = await fs.exists(launcherDir)
+      const installed = await pathExists(launcherDir)
       if (!installed) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("Downloading JDTLS LSP server.")
@@ -1163,7 +1168,7 @@ export namespace LSPServer {
         .nothrow()
         .then(({ stdout }) => stdout.toString().trim())
       const launcherJar = path.join(launcherDir, jarFileName)
-      if (!(await fs.exists(launcherJar))) {
+      if (!(await pathExists(launcherJar))) {
         log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
         return
       }
@@ -1212,7 +1217,19 @@ export namespace LSPServer {
   export const KotlinLS: Info = {
     id: "kotlin-ls",
     extensions: [".kt", ".kts"],
-    root: NearestRoot(["build.gradle", "build.gradle.kts", "settings.gradle.kts", "pom.xml"]),
+    root: async (file) => {
+      // 1) Nearest Gradle root (multi-project or included build)
+      const settingsRoot = await NearestRoot(["settings.gradle.kts", "settings.gradle"])(file)
+      if (settingsRoot) return settingsRoot
+      // 2) Gradle wrapper (strong root signal)
+      const wrapperRoot = await NearestRoot(["gradlew", "gradlew.bat"])(file)
+      if (wrapperRoot) return wrapperRoot
+      // 3) Single-project or module-level build
+      const buildRoot = await NearestRoot(["build.gradle.kts", "build.gradle"])(file)
+      if (buildRoot) return buildRoot
+      // 4) Maven fallback
+      return NearestRoot(["pom.xml"])(file)
+    },
     async spawn(root) {
       const distPath = path.join(Global.Path.bin, "kotlin-ls")
       const launcherScript =

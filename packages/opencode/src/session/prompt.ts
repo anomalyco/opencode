@@ -306,7 +306,6 @@ export namespace SessionPrompt {
           session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
-          message: msgs.find((m) => m.info.role === "user")!,
           history: msgs,
         })
 
@@ -675,7 +674,7 @@ export namespace SessionPrompt {
       },
     })
 
-    for (const item of await ToolRegistry.tools(input.model.providerID)) {
+    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent)) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
@@ -811,6 +810,78 @@ export namespace SessionPrompt {
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
         if (part.type === "file") {
+          // before checking the protocol we check if this is an mcp resource because it needs special handling
+          if (part.source?.type === "resource") {
+            const { clientName, uri } = part.source
+            log.info("mcp resource", { clientName, uri, mime: part.mime })
+
+            const pieces: MessageV2.Part[] = [
+              {
+                id: Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `Reading MCP resource: ${part.filename} (${uri})`,
+              },
+            ]
+
+            try {
+              const resourceContent = await MCP.readResource(clientName, uri)
+              if (!resourceContent) {
+                throw new Error(`Resource not found: ${clientName}/${uri}`)
+              }
+
+              // Handle different content types
+              const contents = Array.isArray(resourceContent.contents)
+                ? resourceContent.contents
+                : [resourceContent.contents]
+
+              for (const content of contents) {
+                if ("text" in content && content.text) {
+                  pieces.push({
+                    id: Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: content.text as string,
+                  })
+                } else if ("blob" in content && content.blob) {
+                  // Handle binary content if needed
+                  const mimeType = "mimeType" in content ? content.mimeType : part.mime
+                  pieces.push({
+                    id: Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `[Binary content: ${mimeType}]`,
+                  })
+                }
+              }
+
+              pieces.push({
+                ...part,
+                id: part.id ?? Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+              })
+            } catch (error: unknown) {
+              log.error("failed to read MCP resource", { error, clientName, uri })
+              const message = error instanceof Error ? error.message : String(error)
+              pieces.push({
+                id: Identifier.ascending("part"),
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `Failed to read MCP resource ${part.filename}: ${message}`,
+              })
+            }
+
+            return pieces
+          }
           const url = new URL(part.url)
           switch (url.protocol) {
             case "data:":
@@ -1064,6 +1135,7 @@ export namespace SessionPrompt {
         agent: input.agent,
         model: input.model,
         messageID: input.messageID,
+        variant: input.variant,
       },
       {
         message: info,
@@ -1349,10 +1421,23 @@ export namespace SessionPrompt {
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    parts: z
+      .array(
+        z.discriminatedUnion("type", [
+          MessageV2.FilePart.omit({
+            messageID: true,
+            sessionID: true,
+          }).partial({
+            id: true,
+          }),
+        ]),
+      )
+      .optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
-  const argsRegex = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g
+  // Match [Image N] as single token, quoted strings, or non-space sequences
+  const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
   /**
@@ -1443,6 +1528,7 @@ export namespace SessionPrompt {
       throw error
     }
 
+    const templateParts = await resolvePromptParts(template)
     const parts =
       (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
         ? [
@@ -1452,10 +1538,10 @@ export namespace SessionPrompt {
               description: command.description ?? "",
               command: input.command,
               // TODO: how can we make task tool accept a more complex input?
-              prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
+              prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : await resolvePromptParts(template)
+        : [...templateParts, ...(input.parts ?? [])]
 
     const result = (await prompt({
       sessionID: input.sessionID,
@@ -1478,22 +1564,39 @@ export namespace SessionPrompt {
 
   async function ensureTitle(input: {
     session: Session.Info
-    message: MessageV2.WithParts
     history: MessageV2.WithParts[]
     providerID: string
     modelID: string
   }) {
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
+
+    // Find first non-synthetic user message
+    const firstRealUserIdx = input.history.findIndex(
+      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+    )
+    if (firstRealUserIdx === -1) return
+
     const isFirst =
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
+
+    // Gather all messages up to and including the first real user message for context
+    // This includes any shell/subtask executions that preceded the user's first prompt
+    const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
+    const firstRealUser = contextMessages[firstRealUserIdx]
+
+    // For subtask-only messages (from command invocations), extract the prompt directly
+    // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
+    const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
+    const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
+
     const agent = await Agent.get("title")
     if (!agent) return
     const result = await LLM.stream({
       agent,
-      user: input.message.info as MessageV2.User,
+      user: firstRealUser.info as MessageV2.User,
       system: [],
       small: true,
       tools: {},
@@ -1511,24 +1614,9 @@ export namespace SessionPrompt {
           role: "user",
           content: "Generate a title for this conversation:\n",
         },
-        ...MessageV2.toModelMessage([
-          {
-            info: {
-              id: Identifier.ascending("message"),
-              role: "user",
-              sessionID: input.session.id,
-              time: {
-                created: Date.now(),
-              },
-              agent: input.message.info.role === "user" ? input.message.info.agent : await Agent.defaultAgent(),
-              model: {
-                providerID: input.providerID,
-                modelID: input.modelID,
-              },
-            },
-            parts: input.message.parts,
-          },
-        ]),
+        ...(hasOnlySubtaskParts
+          ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+          : MessageV2.toModelMessage(contextMessages)),
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))

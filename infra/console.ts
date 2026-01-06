@@ -97,6 +97,19 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
   ],
 })
 
+const zenProduct = new stripe.Product("ZenBlack", {
+  name: "OpenCode Black",
+})
+const zenPrice = new stripe.Price("ZenBlackPrice", {
+  product: zenProduct.id,
+  unitAmount: 20000,
+  currency: "usd",
+  recurring: {
+    interval: "month",
+    intervalCount: 1,
+  },
+})
+
 const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS1"),
   new sst.Secret("ZEN_MODELS2"),
@@ -104,6 +117,7 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS4"),
   new sst.Secret("ZEN_MODELS5"),
   new sst.Secret("ZEN_MODELS6"),
+  new sst.Secret("ZEN_MODELS7"),
 ]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
