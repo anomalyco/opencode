@@ -114,8 +114,12 @@ export namespace ACP {
         .then(async (events) => {
           for await (const event of events.stream) {
             // Check if we should stop processing
-            if (controller.signal.aborted) {
-              log.info("event subscription aborted", { sessionId })
+            if (controller.signal.aborted || this.disposed) {
+              log.info("event subscription stopped", {
+                sessionId,
+                aborted: controller.signal.aborted,
+                disposed: this.disposed,
+              })
               break
             }
             switch (event.type) {
@@ -164,9 +168,8 @@ export namespace ACP {
                   })
                 } catch (err) {
                   log.error("unexpected error when handling permission", { error: err })
-                } finally {
-                  break
                 }
+                break
 
               case "message.part.updated":
                 log.info("message part updated", { event: event.properties })
@@ -368,9 +371,10 @@ export namespace ACP {
                         })
                     }
                   }
-                } finally {
-                  break
+                } catch (err) {
+                  log.error("unexpected error when handling message part update", { error: err })
                 }
+                break
             }
           }
         })
