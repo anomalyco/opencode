@@ -37,10 +37,14 @@ export const SettingsGeneral: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div class="flex flex-col gap-8 p-8 max-w-[720px]">
-        {/* Header */}
-        <h2 class="text-16-medium text-text-strong">General</h2>
+      <div class="sticky top-0 z-10 bg-background-base border-b border-border-weak-base">
+        <div class="flex flex-col gap-1 p-8 max-w-[720px]">
+          <h2 class="text-16-medium text-text-strong">General</h2>
+          <p class="text-14-regular text-text-weak">Appearance, notifications, and sound preferences.</p>
+        </div>
+      </div>
 
+      <div class="flex flex-col gap-8 p-8 pt-6 max-w-[720px]">
         {/* Appearance Section */}
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">Appearance</h3>

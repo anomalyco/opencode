@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
@@ -114,6 +114,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
         reset(action: string) {
           setStore("keybinds", action, undefined!)
+        },
+        resetAll() {
+          setStore("keybinds", reconcile({}))
         },
       },
       permissions: {
