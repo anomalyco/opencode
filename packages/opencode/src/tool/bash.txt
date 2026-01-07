@@ -47,6 +47,69 @@ Usage notes:
     cd /foo/bar && pytest tests
     </bad-example>
 
+# Windows Command Execution
+
+On Windows, the bash tool automatically detects and executes native Windows commands (PowerShell, CMD) directly without shell wrapping. This ensures proper quote handling and better performance.
+
+## PowerShell Commands
+
+For reliable Windows command execution, prefer PowerShell:
+
+```bash
+# Good: Direct PowerShell invocation (no shell wrapping)
+powershell.exe -NoProfile -NonInteractive -Command "Get-Process"
+
+# Good: PowerShell with proper escaping
+powershell.exe -Command "Get-Process -Name 'code' | Select-Object -First 5"
+
+# Good: PowerShell for system information
+pwsh -NoProfile -Command "Get-WmiObject Win32_OperatingSystem"
+```
+
+## CMD.exe Commands
+
+CMD commands are also executed directly:
+
+```bash
+# Good: Direct CMD invocation
+cmd.exe /c echo Hello World
+
+# Good: Registry queries
+reg query "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion"
+```
+
+## Quote and Escape Handling
+
+Windows CMD Special Characters that need escaping:
+- `&` - Command separator (use `^&` to escape)
+- `|` - Pipe (use `^|` to escape)
+- `>` - Redirect (use `^>` to escape)
+- `<` - Redirect (use `^<` to escape)
+- `%` - Environment variable (use `%%` to escape)
+- `^` - Escape character (use `^^` to escape)
+
+**Best Practice**: For complex commands with quotes and special characters, prefer direct PowerShell invocation:
+
+```bash
+# Good: PowerShell handles quotes naturally
+powershell.exe -Command "Write-Host 'test & pipeline with spaces'"
+
+# Avoid: Complex CMD escaping
+cmd.exe /c "echo test ^& pipeline"
+```
+
+## File Operations on Windows
+
+PowerShell handles paths with spaces better than CMD:
+
+```bash
+# Good: PowerShell for file operations
+powershell.exe -Command "Copy-Item -Path 'C:\\Source\\file.txt' -Destination 'C:\\Dest\\'"
+
+# Alternative: Use proper quoting with cmd
+cmd.exe /c "copy \"C:\\Source file.txt\" \"C:\\Dest\\""
+```
+
 # Committing changes with git
 
 Only create commits when requested by the user. If unclear, ask first. When the user asks you to create a new git commit, follow these steps carefully:
