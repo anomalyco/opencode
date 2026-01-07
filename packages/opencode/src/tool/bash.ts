@@ -1,5 +1,4 @@
 import z from "zod"
-import { spawn } from "child_process"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -13,6 +12,7 @@ import { Filesystem } from "@/util/filesystem"
 import { fileURLToPath } from "url"
 import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
+import { buildGitEnv } from "./git-env"
 
 import { BashArity } from "@/permission/arity"
 
@@ -151,12 +151,10 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      const proc = spawn(params.command, {
+      const proc = Bun.spawn([params.command], {
         shell,
         cwd,
-        env: {
-          ...process.env,
-        },
+        env: buildGitEnv(),
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
       })
