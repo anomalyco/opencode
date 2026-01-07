@@ -172,7 +172,7 @@ jobs:
       - name: Install tauri-cli from portable appimage branch
         if: contains(matrix.settings.host, 'ubuntu')
         run: |
-          cargo install tauri-cli --git https://github.com/tauri-apps/tauri --branch feat/truly-portable-appimage --force
+          cargo install tauri-cli --git https://github.com/brendonovich/tauri --branch appimage-sidecar-binaries --force
           echo "Installed tauri-cli version:"
           cargo tauri --version
 
