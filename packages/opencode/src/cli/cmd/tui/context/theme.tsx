@@ -288,11 +288,11 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     createEffect(() => {
       const theme = sync.data.config.theme
-      console.log("theme", theme)
       if (theme) setStore("active", theme)
     })
 
-    createEffect(() => {
+    function init() {
+      resolveSystemTheme()
       getCustomThemes()
         .then((custom) => {
           setStore(
@@ -309,7 +309,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             setStore("ready", true)
           }
         })
-    })
+    }
+
+    onMount(init)
 
     function resolveSystemTheme() {
       console.log("resolveSystemTheme")
@@ -318,6 +320,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           size: 16,
         })
         .then((colors) => {
+          console.log(colors.palette)
           if (!colors.palette[0]) {
             if (store.active === "system") {
               setStore(
@@ -341,11 +344,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     const renderer = useRenderer()
-    resolveSystemTheme()
-
-    process.on("SIGUSR2", () => {
+    process.on("SIGUSR2", async () => {
       renderer.clearPaletteCache()
-      resolveSystemTheme()
+      init()
     })
 
     const values = createMemo(() => {
