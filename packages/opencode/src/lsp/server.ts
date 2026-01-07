@@ -1,8 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
 import path from "path"
 import os from "os"
-import { Global } from "../global"
-import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { $, readableStreamToText } from "bun"
 import fs from "fs/promises"
@@ -10,6 +7,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
+import { Log } from "../util/log"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -20,7 +18,7 @@ export namespace LSPServer {
       .catch(() => false)
 
   export interface Handle {
-    process: ChildProcessWithoutNullStreams
+    process: ReturnType<typeof Bun.spawn>
     initialization?: Record<string, any>
   }
 
@@ -79,7 +77,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(deno, ["lsp"], {
+        process: Bun.spawn([deno, "lsp"], {
           cwd: root,
         }),
       }
@@ -97,7 +95,8 @@ export namespace LSPServer {
       const tsserver = await Bun.resolve("typescript/lib/tsserver.js", Instance.directory).catch(() => {})
       log.info("typescript server", { tsserver })
       if (!tsserver) return
-      const proc = spawn(BunProc.which(), ["x", "typescript-language-server", "--stdio"], {
+      const proc = Bun.spawn({
+        cmd: [BunProc.which(), "x", "typescript-language-server", "--stdio"],
         cwd: root,
         env: {
           ...process.env,
@@ -148,7 +147,8 @@ export namespace LSPServer {
         args.push("run", js)
       }
       args.push("--stdio")
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -208,7 +208,8 @@ export namespace LSPServer {
         log.info("installed VS Code ESLint server", { serverPath })
       }
 
-      const proc = spawn(BunProc.which(), [serverPath, "--stdio"], {
+      const proc = Bun.spawn({
+        cmd: [BunProc.which(), serverPath, "--stdio"],
         cwd: root,
         env: {
           ...process.env,
@@ -268,7 +269,7 @@ export namespace LSPServer {
         const help = await readableStreamToText(proc.stdout)
         if (help.includes("--lsp")) {
           return {
-            process: spawn(lintBin, ["--lsp"], {
+            process: Bun.spawn([lintBin, "--lsp"], {
               cwd: root,
             }),
           }
@@ -282,7 +283,7 @@ export namespace LSPServer {
       }
       if (serverBin) {
         return {
-          process: spawn(serverBin, [], {
+          process: Bun.spawn([serverBin], {
             cwd: root,
           }),
         }
@@ -341,7 +342,8 @@ export namespace LSPServer {
         args = ["x", "biome", "lsp-proxy", "--stdio"]
       }
 
-      const proc = spawn(bin, args, {
+      const proc = Bun.spawn({
+        cmd: [bin, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -390,7 +392,7 @@ export namespace LSPServer {
         })
       }
       return {
-        process: spawn(bin!, {
+        process: Bun.spawn([bin!], {
           cwd: root,
         }),
       }
@@ -431,7 +433,7 @@ export namespace LSPServer {
         })
       }
       return {
-        process: spawn(bin!, ["--lsp"], {
+        process: Bun.spawn([bin!, "--lsp"], {
           cwd: root,
         }),
       }
@@ -491,7 +493,7 @@ export namespace LSPServer {
         return
       }
 
-      const proc = spawn(binary, ["server"], {
+      const proc = Bun.spawn([binary, "server"], {
         cwd: root,
       })
 
@@ -542,7 +544,8 @@ export namespace LSPServer {
         }
       }
 
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -611,7 +614,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(binary, {
+        process: Bun.spawn([binary], {
           cwd: root,
         }),
       }
@@ -723,7 +726,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin], {
           cwd: root,
         }),
       }
@@ -763,7 +766,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin], {
           cwd: root,
         }),
       }
@@ -803,7 +806,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin], {
           cwd: root,
         }),
       }
@@ -820,7 +823,7 @@ export namespace LSPServer {
       const sourcekit = Bun.which("sourcekit-lsp")
       if (sourcekit) {
         return {
-          process: spawn(sourcekit, {
+          process: Bun.spawn([sourcekit], {
             cwd: root,
           }),
         }
@@ -837,7 +840,7 @@ export namespace LSPServer {
       const bin = lspLoc.text().trim()
 
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin.trim()], {
           cwd: root,
         }),
       }
@@ -883,7 +886,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin], {
           cwd: root,
         }),
       }
@@ -899,7 +902,7 @@ export namespace LSPServer {
       const fromPath = Bun.which("clangd")
       if (fromPath) {
         return {
-          process: spawn(fromPath, args, {
+          process: Bun.spawn([fromPath, ...args], {
             cwd: root,
           }),
         }
@@ -909,7 +912,7 @@ export namespace LSPServer {
       const direct = path.join(Global.Path.bin, "clangd" + ext)
       if (await Bun.file(direct).exists()) {
         return {
-          process: spawn(direct, args, {
+          process: Bun.spawn([direct, ...args], {
             cwd: root,
           }),
         }
@@ -922,7 +925,7 @@ export namespace LSPServer {
         const candidate = path.join(Global.Path.bin, entry.name, "bin", "clangd" + ext)
         if (await Bun.file(candidate).exists()) {
           return {
-            process: spawn(candidate, args, {
+            process: Bun.spawn([candidate, ...args], {
               cwd: root,
             }),
           }
@@ -1029,7 +1032,7 @@ export namespace LSPServer {
       log.info(`installed clangd`, { bin })
 
       return {
-        process: spawn(bin, args, {
+        process: Bun.spawn([bin, ...args], {
           cwd: root,
         }),
       }
@@ -1062,7 +1065,8 @@ export namespace LSPServer {
         args.push("run", js)
       }
       args.push("--stdio")
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -1109,7 +1113,8 @@ export namespace LSPServer {
         args.push("run", js)
       }
       args.push("--stdio")
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -1189,9 +1194,9 @@ export namespace LSPServer {
       )
       const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
       return {
-        process: spawn(
-          java,
-          [
+        process: Bun.spawn({
+          cmd: [
+            java,
             "-jar",
             launcherJar,
             "-configuration",
@@ -1206,10 +1211,8 @@ export namespace LSPServer {
             "--add-opens java.base/java.util=ALL-UNNAMED",
             "--add-opens java.base/java.lang=ALL-UNNAMED",
           ],
-          {
-            cwd: root,
-          },
-        ),
+          cwd: root,
+        }),
       }
     },
   }
@@ -1298,7 +1301,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(launcherScript, ["--stdio"], {
+        process: Bun.spawn([launcherScript, "--stdio"], {
           cwd: root,
         }),
       }
@@ -1340,7 +1343,8 @@ export namespace LSPServer {
         args.push("run", js)
       }
       args.push("--stdio")
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -1486,7 +1490,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin], {
           cwd: root,
         }),
       }
@@ -1519,7 +1523,8 @@ export namespace LSPServer {
         args.push("run", js)
       }
       args.push("--stdio")
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -1544,7 +1549,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(prisma, ["language-server"], {
+        process: Bun.spawn([prisma, "language-server"], {
           cwd: root,
         }),
       }
@@ -1562,7 +1567,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(dart, ["language-server", "--lsp"], {
+        process: Bun.spawn([dart, "language-server", "--lsp"], {
           cwd: root,
         }),
       }
@@ -1580,7 +1585,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin], {
           cwd: root,
         }),
       }
@@ -1612,7 +1617,8 @@ export namespace LSPServer {
         args.push("run", js)
       }
       args.push("start")
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -1702,7 +1708,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, ["serve"], {
+        process: Bun.spawn([bin, "serve"], {
           cwd: root,
         }),
         initialization: {
@@ -1798,7 +1804,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, {
+        process: Bun.spawn([bin], {
           cwd: root,
         }),
       }
@@ -1831,7 +1837,8 @@ export namespace LSPServer {
         args.push("run", js)
       }
       args.push("--stdio")
-      const proc = spawn(binary, args, {
+      const proc = Bun.spawn({
+        cmd: [binary, ...args],
         cwd: root,
         env: {
           ...process.env,
@@ -1855,7 +1862,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(gleam, ["lsp"], {
+        process: Bun.spawn([gleam, "lsp"], {
           cwd: root,
         }),
       }
@@ -1876,7 +1883,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(bin, ["listen"], {
+        process: Bun.spawn([bin, "listen"], {
           cwd: root,
         }),
       }
@@ -1904,7 +1911,8 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(nixd, [], {
+        process: Bun.spawn({
+          cmd: [nixd],
           cwd: root,
           env: {
             ...process.env,
@@ -2003,7 +2011,7 @@ export namespace LSPServer {
       }
 
       return {
-        process: spawn(bin, { cwd: root }),
+        process: Bun.spawn([bin], { cwd: root }),
       }
     },
   }
@@ -2019,7 +2027,7 @@ export namespace LSPServer {
         return
       }
       return {
-        process: spawn(bin, ["--lsp"], {
+        process: Bun.spawn([bin, "--lsp"], {
           cwd: root,
         }),
       }

@@ -7,7 +7,6 @@ import { pathToFileURL } from "url"
 import { LSPServer } from "./server"
 import z from "zod"
 import { Config } from "../config/config"
-import { spawn } from "child_process"
 import { Instance } from "../project/instance"
 import { Flag } from "@/flag/flag"
 
@@ -112,7 +111,8 @@ export namespace LSP {
           extensions: item.extensions ?? existing?.extensions ?? [],
           spawn: async (root) => {
             return {
-              process: spawn(item.command[0], item.command.slice(1), {
+              process: Bun.spawn({
+                cmd: [item.command[0], ...item.command.slice(1)],
                 cwd: root,
                 env: {
                   ...process.env,
