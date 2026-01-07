@@ -98,6 +98,10 @@ declare module "sst" {
       "type": "sst.cloudflare.StaticSite"
       "url": string
     }
+    "ZEN_BLACK": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZEN_MODELS1": {
       "type": "sst.sst.Secret"
       "value": string

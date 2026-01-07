@@ -76,6 +76,7 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
     "checkout.session.completed",
     "checkout.session.expired",
     "charge.refunded",
+    "invoice.payment_succeeded",
     "customer.created",
     "customer.deleted",
     "customer.updated",
@@ -119,6 +120,7 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS6"),
   new sst.Secret("ZEN_MODELS7"),
 ]
+const ZEN_BLACK = new sst.Secret("ZEN_BLACK")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
@@ -160,6 +162,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
+    ZEN_BLACK,
     ...ZEN_MODELS,
     ...($dev
       ? [
