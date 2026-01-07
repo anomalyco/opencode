@@ -1,20 +1,22 @@
 // @refresh reload
 import { render } from "solid-js/web"
-import { App, PlatformProvider, Platform } from "@opencode-ai/app"
+import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
-import { AsyncStorage } from "@solid-primitives/storage"
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
-import { Store } from "@tauri-apps/plugin-store"
-
-import { UPDATER_ENABLED } from "./updater"
-import { createMenu } from "./menu"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
+import { AsyncStorage } from "@solid-primitives/storage"
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
+import { Store } from "@tauri-apps/plugin-store"
+import { Logo } from "@opencode-ai/ui/logo"
+import { Suspense, createResource, ParentProps } from "solid-js"
+
+import { UPDATER_ENABLED } from "./updater"
+import { createMenu } from "./menu"
 import pkg from "../package.json"
 
 const root = document.getElementById("root")
@@ -269,7 +271,34 @@ render(() => {
       {ostype() === "macos" && (
         <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
       )}
-      <App />
+      <AppBaseProviders>
+        <ServerGate>
+          <AppInterface />
+        </ServerGate>
+      </AppBaseProviders>
     </PlatformProvider>
   )
 }, root!)
+
+// Gate component that waits for the server to be ready
+function ServerGate(props: ParentProps) {
+  const [status] = createResource(async () => {
+    if (window.__OPENCODE__?.serverReady) return
+    return await invoke("ensure_server_started")
+  })
+
+  return (
+    <Suspense
+      fallback={
+        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+          <Logo class="w-xl opacity-12 animate-pulse" />
+          <div class="mt-8 text-14-regular text-text-weak">Starting server...</div>
+        </div>
+      }
+    >
+      {/* Triggers suspense/error boundaries without rendering the returned value */}
+      {(status(), null)}
+      <Suspense>{props.children}</Suspense>
+    </Suspense>
+  )
+}
