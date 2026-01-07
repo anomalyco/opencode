@@ -41,9 +41,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
 
-      const userInvokedAgents = (ctx.extra?.userInvokedAgents ?? []) as string[]
-      // Skip permission check when invoked from a command subtask (user already approved by invoking the command)
-      if (!ctx.extra?.bypassAgentCheck && !userInvokedAgents.includes(params.subagent_type)) {
+      // Skip permission check when user explicitly invoked via @ or command subtask
+      if (!ctx.extra?.bypassAgentCheck) {
         await ctx.ask({
           permission: "task",
           patterns: [params.subagent_type],
