@@ -14,10 +14,14 @@ export namespace Plugin {
   const BUILTIN = ["opencode-copilot-auth@0.0.9", "opencode-anthropic-auth@0.0.5"]
 
   const state = Instance.state(async () => {
-    const localFetch: typeof fetch = async (input, init) => {
-      const request = input instanceof Request ? input : new Request(input, init)
-      return Server.App().fetch(request)
-    }
+    const localFetch = Object.assign(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        return Server.App().fetch(request)
+      },
+      // Bun's fetch includes a preconnect helper; mirror it to satisfy the expected type.
+      { preconnect: fetch.preconnect?.bind(fetch) },
+    ) as typeof fetch
 
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
