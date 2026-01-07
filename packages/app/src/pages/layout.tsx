@@ -170,7 +170,7 @@ export default function Layout(props: ParentProps) {
       if (e.details?.type !== "permission.asked") return
       const directory = e.name
       const perm = e.details.properties
-      if (permission.autoResponds(perm)) return
+      if (permission.autoResponds(perm, directory)) return
 
       const [store] = globalSync.child(directory)
       const session = store.session.find((s) => s.id === perm.sessionID)
