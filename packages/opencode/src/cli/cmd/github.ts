@@ -427,8 +427,12 @@ export const GithubRunCommand = cmd({
       const isMock = args.token || args.event
 
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
+      if (!context.eventName) {
+        core.setFailed("No GitHub event context found.")
+        process.exit(1)
+      }
       if (!SUPPORTED_EVENTS.includes(context.eventName as (typeof SUPPORTED_EVENTS)[number])) {
-        core.setFailed(`Unsupported event type: ${context.eventName}`)
+        core.setFailed(`Unsupported event type: ${context.eventName}. Supported events: ${SUPPORTED_EVENTS.join(", ")}`)
         process.exit(1)
       }
 
