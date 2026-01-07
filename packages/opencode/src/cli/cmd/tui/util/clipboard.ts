@@ -5,6 +5,8 @@ import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 
+export const escapePowerShellValue = (text: string) => text.replace(/`/g, "``").replace(/"/g, '""')
+
 export namespace Clipboard {
   export interface Content {
     data: string
@@ -110,8 +112,7 @@ export namespace Clipboard {
     if (os === "win32") {
       console.log("clipboard: using powershell")
       return async (text: string) => {
-        // need to escape backticks because powershell uses them as escape code
-        const escaped = text.replace(/"/g, '""').replace(/`/g, "``")
+        const escaped = escapePowerShellValue(text)
         await $`powershell -NonInteractive -NoProfile -Command "Set-Clipboard -Value \"${escaped}\""`.nothrow().quiet()
       }
     }
