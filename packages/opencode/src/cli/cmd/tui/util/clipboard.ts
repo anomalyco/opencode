@@ -111,7 +111,7 @@ export namespace Clipboard {
       console.log("clipboard: using powershell")
       return async (text: string) => {
         // need to escape backticks because powershell uses them as escape code
-        const escaped = text.replace(/"/g, '""').replace(/`/g, '``')
+        const escaped = text.replace(/"/g, '""').replace(/`/g, "``")
         await $`powershell -NonInteractive -NoProfile -Command "Set-Clipboard -Value \"${escaped}\""`.nothrow().quiet()
       }
     }
