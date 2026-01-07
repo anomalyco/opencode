@@ -163,3 +163,11 @@ export DISPLAY=:99.0
 ```
 
 opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+
+**For TMUX over SSH (3.3+):**
+
+Add to your `~/.tmux.conf` or `~/.config/tmux/tmux.conf`:
+
+```bash
+set -g allow-passthrough on
+```
