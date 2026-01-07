@@ -8,11 +8,20 @@ import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
+import { BlackData } from "@opencode-ai/console-core/black.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
-import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError, RateLimitError } from "./error"
+import {
+  AuthError,
+  CreditsError,
+  MonthlyLimitError,
+  SubscriptionError,
+  UserLimitError,
+  ModelError,
+  RateLimitError,
+} from "./error"
 import { createBodyConverter, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
@@ -73,9 +82,9 @@ export async function handler(
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider ?? false, sessionId)
     const stickyProvider = await stickyTracker?.get()
+    const authInfo = await authenticate(modelInfo)
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
-      const authInfo = await authenticate(modelInfo)
       const providerInfo = selectProvider(
         zenData,
         authInfo,
@@ -135,10 +144,10 @@ export async function handler(
         })
       }
 
-      return { providerInfo, authInfo, reqBody, res, startTimestamp }
+      return { providerInfo, reqBody, res, startTimestamp }
     }
 
-    const { providerInfo, authInfo, reqBody, res, startTimestamp } = await retriableRequest()
+    const { providerInfo, reqBody, res, startTimestamp } = await retriableRequest()
 
     // Store model request
     dataDumper?.provideModel(providerInfo.storeModel)
@@ -279,14 +288,19 @@ export async function handler(
         { status: 401 },
       )
 
-    if (error instanceof RateLimitError)
+    if (error instanceof RateLimitError || error instanceof SubscriptionError) {
+      const headers = new Headers()
+      if (error instanceof SubscriptionError && error.retryAfter) {
+        headers.set("retry-after", String(error.retryAfter))
+      }
       return new Response(
         JSON.stringify({
           type: "error",
           error: { type: error.constructor.name, message: error.message },
         }),
-        { status: 429 },
+        { status: 429, headers },
       )
+    }
 
     return new Response(
       JSON.stringify({
@@ -400,6 +414,13 @@ export async function handler(
             monthlyUsage: UserTable.monthlyUsage,
             timeMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
           },
+          subscription: {
+            timeSubscribed: UserTable.timeSubscribed,
+            subIntervalUsage: UserTable.subIntervalUsage,
+            subMonthlyUsage: UserTable.subMonthlyUsage,
+            timeSubIntervalUsageUpdated: UserTable.timeSubIntervalUsageUpdated,
+            timeSubMonthlyUsageUpdated: UserTable.timeSubMonthlyUsageUpdated,
+          },
           provider: {
             credentials: ProviderTable.credentials,
           },
@@ -427,6 +448,7 @@ export async function handler(
     logger.metric({
       api_key: data.apiKey,
       workspace: data.workspaceID,
+      isSubscription: data.subscription.timeSubscribed ? true : false,
     })
 
     return {
@@ -434,6 +456,7 @@ export async function handler(
       workspaceID: data.workspaceID,
       billing: data.billing,
       user: data.user,
+      subscription: data.subscription.timeSubscribed ? data.subscription : undefined,
       provider: data.provider,
       isFree: FREE_WORKSPACES.includes(data.workspaceID),
       isDisabled: !!data.timeDisabled,
@@ -446,6 +469,45 @@ export async function handler(
     if (authInfo.isFree) return
     if (modelInfo.allowAnonymous) return
 
+    // Validate subscription billing
+    if (authInfo.subscription) {
+      const black = BlackData.get()
+      const sub = authInfo.subscription
+      const now = new Date()
+
+      // Check monthly limit
+      if (
+        sub.subMonthlyUsage &&
+        sub.timeSubMonthlyUsageUpdated &&
+        sub.subMonthlyUsage >= centsToMicroCents(black.monthlyLimit * 100) &&
+        now.getUTCFullYear() === sub.timeSubMonthlyUsageUpdated.getUTCFullYear() &&
+        now.getUTCMonth() === sub.timeSubMonthlyUsageUpdated.getUTCMonth()
+      ) {
+        const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+        throw new SubscriptionError(
+          `Rate limit exceeded. Please try again later.`,
+          Math.ceil((nextMonth.getTime() - now.getTime()) / 1000),
+        )
+      }
+
+      // Check interval limit
+      const intervalMs = black.intervalLength * 86400 * 1000
+      if (sub.subIntervalUsage && sub.timeSubIntervalUsageUpdated) {
+        const currentInterval = Math.floor(now.getTime() / intervalMs)
+        const usageInterval = Math.floor(sub.timeSubIntervalUsageUpdated.getTime() / intervalMs)
+        if (currentInterval === usageInterval && sub.subIntervalUsage >= centsToMicroCents(black.intervalLimit * 100)) {
+          const nextInterval = (currentInterval + 1) * intervalMs
+          throw new SubscriptionError(
+            `Rate limit exceeded. Please try again later.`,
+            Math.ceil((nextInterval - now.getTime()) / 1000),
+          )
+        }
+      }
+
+      return
+    }
+
+    // Validate pay as you go billing
     const billing = authInfo.billing
     if (!billing.paymentMethodID)
       throw new CreditsError(
@@ -463,29 +525,25 @@ export async function handler(
       billing.monthlyLimit &&
       billing.monthlyUsage &&
       billing.timeMonthlyUsageUpdated &&
-      billing.monthlyUsage >= centsToMicroCents(billing.monthlyLimit * 100)
-    ) {
-      const dateYear = billing.timeMonthlyUsageUpdated.getUTCFullYear()
-      const dateMonth = billing.timeMonthlyUsageUpdated.getUTCMonth()
-      if (currentYear === dateYear && currentMonth === dateMonth)
-        throw new MonthlyLimitError(
-          `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
-        )
-    }
+      billing.monthlyUsage >= centsToMicroCents(billing.monthlyLimit * 100) &&
+      currentYear === billing.timeMonthlyUsageUpdated.getUTCFullYear() &&
+      currentMonth === billing.timeMonthlyUsageUpdated.getUTCMonth()
+    )
+      throw new MonthlyLimitError(
+        `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
+      )
 
     if (
       authInfo.user.monthlyLimit &&
       authInfo.user.monthlyUsage &&
       authInfo.user.timeMonthlyUsageUpdated &&
-      authInfo.user.monthlyUsage >= centsToMicroCents(authInfo.user.monthlyLimit * 100)
-    ) {
-      const dateYear = authInfo.user.timeMonthlyUsageUpdated.getUTCFullYear()
-      const dateMonth = authInfo.user.timeMonthlyUsageUpdated.getUTCMonth()
-      if (currentYear === dateYear && currentMonth === dateMonth)
-        throw new UserLimitError(
-          `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/members`,
-        )
-    }
+      authInfo.user.monthlyUsage >= centsToMicroCents(authInfo.user.monthlyLimit * 100) &&
+      currentYear === authInfo.user.timeMonthlyUsageUpdated.getUTCFullYear() &&
+      currentMonth === authInfo.user.timeMonthlyUsageUpdated.getUTCMonth()
+    )
+      throw new UserLimitError(
+        `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/members`,
+      )
   }
 
   function validateModelSettings(authInfo: AuthInfo) {
@@ -560,7 +618,7 @@ export async function handler(
 
     if (!authInfo) return
 
-    const cost = authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
+    const cost = authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
     await Database.use((db) =>
       Promise.all([
         db.insert(UsageTable).values({
@@ -576,36 +634,63 @@ export async function handler(
           cacheWrite1hTokens,
           cost,
           keyID: authInfo.apiKeyId,
+          enrichment: authInfo.subscription ? { plan: "sub" } : undefined,
         }),
         db
-          .update(BillingTable)
-          .set({
-            balance: sql`${BillingTable.balance} - ${cost}`,
-            monthlyUsage: sql`
+          .update(KeyTable)
+          .set({ timeUsed: sql`now()` })
+          .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
+        ...(authInfo.subscription
+          ? [
+              db
+                .update(UserTable)
+                .set({
+                  subMonthlyUsage: sql`
+              CASE
+                WHEN MONTH(${UserTable.timeSubMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeSubMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.subMonthlyUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+                  timeSubMonthlyUsageUpdated: sql`now()`,
+                  subIntervalUsage: sql`
+              CASE
+                WHEN FLOOR(UNIX_TIMESTAMP(${UserTable.timeSubIntervalUsageUpdated}) / (${BlackData.get().intervalLength} * 86400)) = FLOOR(UNIX_TIMESTAMP(now()) / (${BlackData.get().intervalLength} * 86400)) THEN ${UserTable.subIntervalUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+                  timeSubIntervalUsageUpdated: sql`now()`,
+                })
+                .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+            ]
+          : [
+              db
+                .update(BillingTable)
+                .set({
+                  balance: authInfo.isFree
+                    ? sql`${BillingTable.balance} - ${0}`
+                    : sql`${BillingTable.balance} - ${cost}`,
+                  monthlyUsage: sql`
               CASE
                 WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-            timeMonthlyUsageUpdated: sql`now()`,
-          })
-          .where(eq(BillingTable.workspaceID, authInfo.workspaceID)),
-        db
-          .update(UserTable)
-          .set({
-            monthlyUsage: sql`
+                  timeMonthlyUsageUpdated: sql`now()`,
+                })
+                .where(eq(BillingTable.workspaceID, authInfo.workspaceID)),
+              db
+                .update(UserTable)
+                .set({
+                  monthlyUsage: sql`
               CASE
                 WHEN MONTH(${UserTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-            timeMonthlyUsageUpdated: sql`now()`,
-          })
-          .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
-        db
-          .update(KeyTable)
-          .set({ timeUsed: sql`now()` })
-          .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
+                  timeMonthlyUsageUpdated: sql`now()`,
+                })
+                .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+            ]),
       ]),
     )
 
@@ -616,6 +701,7 @@ export async function handler(
     if (!authInfo) return
     if (authInfo.isFree) return
     if (authInfo.provider?.credentials) return
+    if (authInfo.subscription) return
 
     if (!costInfo) return
 

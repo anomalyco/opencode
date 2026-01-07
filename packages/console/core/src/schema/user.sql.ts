@@ -20,9 +20,9 @@ export const UserTable = mysqlTable(
     timeMonthlyUsageUpdated: utc("time_monthly_usage_updated"),
     // subscription
     timeSubscribed: utc("time_subscribed"),
-    subRecentUsage: bigint("sub_recent_usage", { mode: "number" }),
+    subIntervalUsage: bigint("sub_interval_usage", { mode: "number" }),
     subMonthlyUsage: bigint("sub_monthly_usage", { mode: "number" }),
-    timeSubRecentUsageUpdated: utc("sub_time_recent_usage_updated"),
+    timeSubIntervalUsageUpdated: utc("sub_time_interval_usage_updated"),
     timeSubMonthlyUsageUpdated: utc("sub_time_monthly_usage_updated"),
   },
   (table) => [

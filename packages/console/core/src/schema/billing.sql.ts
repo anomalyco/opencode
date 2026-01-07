@@ -55,7 +55,7 @@ export const UsageTable = mysqlTable(
     cacheWrite1hTokens: int("cache_write_1h_tokens"),
     cost: bigint("cost", { mode: "number" }).notNull(),
     keyID: ulid("key_id"),
-    enrichment: json("data").$type<{
+    enrichment: json("enrichment").$type<{
       plan: "sub"
     }>(),
   },
