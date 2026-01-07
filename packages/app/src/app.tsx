@@ -46,6 +46,25 @@ const defaultServerUrl = iife(() => {
   return window.location.origin
 })
 
+export function AppBaseProviders(props: ParentProps) {
+  return (
+    <MetaProvider>
+      <Font />
+      <ThemeProvider>
+        <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+          <DialogProvider>
+            <MarkedProvider>
+              <DiffComponentProvider component={Diff}>
+                <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
+              </DiffComponentProvider>
+            </MarkedProvider>
+          </DialogProvider>
+        </ErrorBoundary>
+      </ThemeProvider>
+    </MetaProvider>
+  )
+}
+
 function ServerKey(props: ParentProps) {
   const server = useServer()
   return (
@@ -55,108 +74,47 @@ function ServerKey(props: ParentProps) {
   )
 }
 
-// Loading screen shown while desktop server is starting
-function LoadingScreen() {
+export function AppInterface() {
   return (
-    <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-      <Logo class="w-xl opacity-12 animate-pulse" />
-      <div class="mt-8 text-14-regular text-text-weak">Starting server...</div>
-    </div>
-  )
-}
-
-// Gate component that waits for the desktop server to be ready
-function DesktopServerGate(props: ParentProps) {
-  // Check if we're running in desktop mode with serverReady flag
-  const isDesktop = typeof window.__OPENCODE__ !== "undefined" && "serverReady" in (window.__OPENCODE__ ?? {})
-  const [ready, setReady] = createSignal(window.__OPENCODE__?.serverReady ?? true)
-
-  onMount(() => {
-    if (!isDesktop) return
-
-    // If already ready, no need to wait
-    if (window.__OPENCODE__?.serverReady) {
-      setReady(true)
-      return
-    }
-
-    // Listen for the server-ready event
-    const handler = () => setReady(true)
-    window.addEventListener("opencode:server-ready", handler)
-    
-    // Check again after adding listener to handle race condition
-    if (window.__OPENCODE__?.serverReady) {
-      setReady(true)
-    }
-    
-    onCleanup(() => window.removeEventListener("opencode:server-ready", handler))
-  })
-
-  return (
-    <Show when={ready()} fallback={<LoadingScreen />}>
-      {props.children}
-    </Show>
-  )
-}
-
-export function App() {
-  return (
-    <MetaProvider>
-      <Font />
-      <ThemeProvider>
-        <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-          <DialogProvider>
-            <MarkedProvider>
-              <DiffComponentProvider component={Diff}>
-                <CodeComponentProvider component={Code}>
-                  <DesktopServerGate>
-                    <ServerProvider defaultUrl={defaultServerUrl}>
-                      <ServerKey>
-                        <GlobalSDKProvider>
-                          <GlobalSyncProvider>
-                            <Router
-                              root={(props) => (
-                                <PermissionProvider>
-                                  <LayoutProvider>
-                                    <NotificationProvider>
-                                      <CommandProvider>
-                                        <Layout>{props.children}</Layout>
-                                      </CommandProvider>
-                                    </NotificationProvider>
-                                  </LayoutProvider>
-                                </PermissionProvider>
-                              )}
-                            >
-                              <Route path="/" component={Home} />
-                              <Route path="/:dir" component={DirectoryLayout}>
-                                <Route path="/" component={() => <Navigate href="session" />} />
-                                <Route
-                                  path="/session/:id?"
-                                  component={(p) => (
-                                    <Show when={p.params.id ?? "new"} keyed>
-                                      <TerminalProvider>
-                                        <FileProvider>
-                                          <PromptProvider>
-                                            <Session />
-                                          </PromptProvider>
-                                        </FileProvider>
-                                      </TerminalProvider>
-                                    </Show>
-                                  )}
-                                />
-                              </Route>
-                            </Router>
-                          </GlobalSyncProvider>
-                        </GlobalSDKProvider>
-                      </ServerKey>
-                    </ServerProvider>
-                  </DesktopServerGate>
-                </CodeComponentProvider>
-              </DiffComponentProvider>
-            </MarkedProvider>
-          </DialogProvider>
-        </ErrorBoundary>
-      </ThemeProvider>
-    </MetaProvider>
+    <ServerProvider defaultUrl={defaultServerUrl}>
+      <ServerKey>
+        <GlobalSDKProvider>
+          <GlobalSyncProvider>
+            <Router
+              root={(props) => (
+                <PermissionProvider>
+                  <LayoutProvider>
+                    <NotificationProvider>
+                      <CommandProvider>
+                        <Layout>{props.children}</Layout>
+                      </CommandProvider>
+                    </NotificationProvider>
+                  </LayoutProvider>
+                </PermissionProvider>
+              )}
+            >
+              <Route path="/" component={Home} />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route path="/" component={() => <Navigate href="session" />} />
+                <Route
+                  path="/session/:id?"
+                  component={(p) => (
+                    <Show when={p.params.id ?? "new"} keyed>
+                      <TerminalProvider>
+                        <FileProvider>
+                          <PromptProvider>
+                            <Session />
+                          </PromptProvider>
+                        </FileProvider>
+                      </TerminalProvider>
+                    </Show>
+                  )}
+                />
+              </Route>
+            </Router>
+          </GlobalSyncProvider>
+        </GlobalSDKProvider>
+      </ServerKey>
+    </ServerProvider>
   )
 }
