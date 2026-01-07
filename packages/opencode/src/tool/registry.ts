@@ -65,11 +65,18 @@ export namespace ToolRegistry {
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
-          const out = Truncate.output(result)
+          const out = await Truncate.outputWithPersistence(result, {
+            sessionID: ctx.sessionID,
+            toolName: id,
+            callID: ctx.callID,
+          })
           return {
             title: "",
-            output: out.truncated ? out.content : result,
-            metadata: { truncated: out.truncated },
+            output: out.content,
+            metadata: {
+              truncated: out.truncated,
+              ...(out.filePath && { truncatedFilePath: out.filePath }),
+            },
           }
         },
       }),

@@ -66,13 +66,18 @@ export namespace Tool {
             )
           }
           const result = await execute(args, ctx)
-          const truncated = Truncate.output(result.output)
+          const truncated = await Truncate.outputWithPersistence(result.output, {
+            sessionID: ctx.sessionID,
+            toolName: id,
+            callID: ctx.callID,
+          })
           return {
             ...result,
             output: truncated.content,
             metadata: {
               ...result.metadata,
               truncated: truncated.truncated,
+              ...(truncated.filePath && { truncatedFilePath: truncated.filePath }),
             },
           }
         }
