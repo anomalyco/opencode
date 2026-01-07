@@ -18,6 +18,7 @@ import { Suspense, createResource, ParentProps } from "solid-js"
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
 import pkg from "../package.json"
+import { Show } from "solid-js";
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -288,7 +289,9 @@ function ServerGate(props: ParentProps) {
   })
 
   return (
-    <Suspense
+    // Not using suspense as not all components are compatible with it (undefined refs)
+    <Show
+      when={status.state !== "pending"}
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
           <Logo class="w-xl opacity-12 animate-pulse" />
@@ -296,9 +299,9 @@ function ServerGate(props: ParentProps) {
         </div>
       }
     >
-      {/* Triggers suspense/error boundaries without rendering the returned value */}
+      {/* Trigger error boundary without rendering the returned value */}
       {(status(), null)}
-      <Suspense>{props.children}</Suspense>
-    </Suspense>
+      {props.children}
+    </Show>
   )
 }
