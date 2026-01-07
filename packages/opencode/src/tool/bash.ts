@@ -49,9 +49,65 @@ const parser = lazy(async () => {
   return p
 })
 
+// Shell built-ins that require shell wrapper
+const SHELL_BUILTINS = new Set([
+  // Bash built-ins
+  "echo", "pwd", "ls", "cd", "type", "which", "where",
+  "ver", "time", "set", "chcp", "exit", "history", "alias",
+  "bg", "bind", "break", "builtin", "caller", "case", "command",
+  "compgen", "complete", "continue", "declare", "dirs", "disown",
+  "do", "done", "elif", "else", "esac", "eval", "exec", "export",
+  "fc", "fg", "fi", "for", "function", "getopts", "hash", "help",
+  "if", "in", "jobs", "kill", "let", "local", "logout", "mapfile",
+  "popd", "pushd", "read", "readarray", "readonly", "return",
+  "select", "shift", "suspend", "test", "then", "times", "trap",
+  "true", "typeset", "ulimit", "umask", "unalias", "unset", "until",
+  "wait", "while",
+  // Windows-specific patterns
+  "%[^%]+%",  // Environment variable expansion
+])
+
+// Commands that look like shell built-ins (start with special characters)
+const SHELL_PATTERN = /^%\\w+%|\\$\\w+|\\\\$\\{\\w+\\}/
+
+function needsShellExecution(command: string): boolean {
+  // Extract first word (handle quotes)
+  const firstWord = command.trim().match(/^([\"']?)(\\S+)\\1/)?.[2]?.toLowerCase() ?? ""
+
+  // Check if it's a known shell built-in
+  if (SHELL_BUILTINS.has(firstWord)) {
+    return true
+  }
+
+  // Check if command contains shell-specific syntax
+  if (SHELL_PATTERN.test(command)) {
+    return true
+  }
+
+  // Check for shell operators
+  if (/[;&|]/.test(command) && !command.startsWith("git") && !command.startsWith("npm")) {
+    return true
+  }
+
+  return false
+}
+
+function resolveWindowsCommand(command: string, shell: string): { cmd: string[]; useShell: boolean } {
+  const trimmed = command.trim()
+  const shellName = path.basename(shell).toLowerCase()
+
+  // Always use shell execution for now - this is safer and handles all cases
+  // The shell will properly handle both built-ins and external commands
+
+  // Use appropriate flag for different shells
+  const flag = shellName.includes('cmd') ? '/c' : '-c'
+  return { cmd: [shell, flag, trimmed], useShell: true }
+}
+
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
-  const shell = Shell.acceptable()
+  // Temporarily force cmd.exe on Windows for testing
+  const shell = process.platform === "win32" ? "cmd.exe" : Shell.acceptable()
   log.info("bash tool using shell", { shell })
 
   return {
@@ -151,8 +207,11 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      const proc = Bun.spawn([params.command], {
-        shell,
+      // Resolve command for Windows compatibility
+      const { cmd, useShell } = resolveWindowsCommand(params.command, shell)
+
+      const proc = Bun.spawn(cmd, {
+        shell: useShell ? undefined : shell,
         cwd,
         env: buildGitEnv(),
         stdio: ["ignore", "pipe", "pipe"],
@@ -169,9 +228,12 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
-      const append = (chunk: Buffer) => {
+      const append = (chunk: Buffer | Uint8Array | string) => {
+        const text = chunk instanceof Buffer || chunk instanceof Uint8Array
+          ? new TextDecoder().decode(chunk)
+          : chunk
         if (output.length <= MAX_OUTPUT_LENGTH) {
-          output += chunk.toString()
+          output += text
           ctx.metadata({
             metadata: {
               output,
@@ -181,8 +243,27 @@ export const BashTool = Tool.define("bash", async () => {
         }
       }
 
-      proc.stdout?.on("data", append)
-      proc.stderr?.on("data", append)
+      // Stream reader approach for cross-platform compatibility
+      const stdoutReader = proc.stdout?.getReader()
+      const stderrReader = proc.stderr?.getReader()
+
+      const readOutput = async (reader: ReadableStreamDefaultReader | undefined): Promise<void> => {
+        if (!reader) return
+        try {
+          while (true) {
+            const { done, value } = await Promise.race([
+              reader.read(),
+              new Promise<{ done: true }>((_, reject) => {
+                ctx.abort.addEventListener("abort", () => reject(new Error("Aborted")), { once: true })
+              })
+            ])
+            if (done) break
+            append(value)
+          }
+        } catch (_e) {
+          // Stream reading ended or was aborted
+        }
+      }
 
       let timedOut = false
       let aborted = false
@@ -207,24 +288,18 @@ export const BashTool = Tool.define("bash", async () => {
         void kill()
       }, timeout + 100)
 
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-          clearTimeout(timeoutTimer)
-          ctx.abort.removeEventListener("abort", abortHandler)
-        }
+      // Concurrent stream reading and process monitoring
+      await Promise.race([
+        proc.exited,
+        Promise.all([
+          readOutput(stdoutReader),
+          readOutput(stderrReader),
+        ]).then(() => proc.exited),
+      ])
 
-        proc.once("exit", () => {
-          exited = true
-          cleanup()
-          resolve()
-        })
-
-        proc.once("error", (error) => {
-          exited = true
-          cleanup()
-          reject(error)
-        })
-      })
+      // Cleanup
+      clearTimeout(timeoutTimer)
+      ctx.abort.removeEventListener("abort", abortHandler)
 
       let resultMetadata: String[] = ["<bash_metadata>"]
 
