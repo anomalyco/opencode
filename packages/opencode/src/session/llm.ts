@@ -82,16 +82,12 @@ export namespace LLM {
     }
 
     const provider = await Provider.getProvider(input.model.providerID)
-    const small = input.small ? ProviderTransform.smallOptions(input.model) : {}
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
-    const options = pipe(
-      ProviderTransform.options(input.model, input.sessionID, provider.options),
-      mergeDeep(small),
-      mergeDeep(input.model.options),
-      mergeDeep(input.agent.options),
-      mergeDeep(variant),
-    )
+    const base = input.small
+      ? ProviderTransform.smallOptions(input.model)
+      : ProviderTransform.options(input.model, input.sessionID, provider.options)
+    const options = pipe(base, mergeDeep(input.model.options), mergeDeep(input.agent.options), mergeDeep(variant))
 
     const params = await Plugin.trigger(
       "chat.params",
