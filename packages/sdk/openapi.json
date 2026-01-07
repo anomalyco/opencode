@@ -8353,6 +8353,10 @@
             "type": "string",
             "enum": ["subagent", "primary", "all"]
           },
+          "hidden": {
+            "description": "Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)",
+            "type": "boolean"
+          },
           "options": {
             "type": "object",
             "propertyNames": {
