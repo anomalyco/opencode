@@ -29,7 +29,6 @@ import { ListTool } from "../tool/ls"
 import { FileTime } from "../file/time"
 import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
-import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
@@ -44,6 +43,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { buildGitEnv } from "../tool/git-env"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1329,44 +1329,51 @@ export namespace SessionPrompt {
     const matchingInvocation = invocations[shellName] ?? invocations[""]
     const args = matchingInvocation?.args
 
-    const proc = spawn(shell, args, {
+    const proc = Bun.spawn([shell, ...args], {
       cwd: Instance.directory,
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       env: {
-        ...process.env,
+        ...buildGitEnv(),
         TERM: "dumb",
       },
     })
 
     let output = ""
 
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
-      }
-    })
+    // Read stdout and stderr using Bun's subprocess output
+    const stdoutReader = proc.stdout?.getReader()
+    const stderrReader = proc.stderr?.getReader()
 
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
+    const readOutput = async (reader: ReadableStreamDefaultReader | undefined) => {
+      if (!reader) return
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const text = new TextDecoder().decode(value)
+          output += text
+          if (part.state.status === "running") {
+            part.state.metadata = {
+              output,
+              description: "",
+            }
+            Session.updatePart(part)
+          }
         }
-        Session.updatePart(part)
+      } catch (_e) {
+        // Stream reading ended
       }
-    })
+    }
+
+    // Start reading stdout and stderr concurrently
+    const stdoutPromise = readOutput(stdoutReader)
+    const stderrPromise = readOutput(stderrReader)
 
     let aborted = false
     let exited = false
 
-    const kill = () => Shell.killTree(proc, { exited: () => exited })
+    const kill = () => Shell.killTree(proc as any, { exited: () => exited })
 
     if (abort.aborted) {
       aborted = true
@@ -1380,13 +1387,10 @@ export namespace SessionPrompt {
 
     abort.addEventListener("abort", abortHandler, { once: true })
 
-    await new Promise<void>((resolve) => {
-      proc.on("close", () => {
-        exited = true
-        abort.removeEventListener("abort", abortHandler)
-        resolve()
-      })
-    })
+    // Wait for process to exit using Bun's exited Promise
+    await proc.exited
+    exited = true
+    abort.removeEventListener("abort", abortHandler)
 
     if (aborted) {
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")

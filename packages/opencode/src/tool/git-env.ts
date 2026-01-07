@@ -67,9 +67,22 @@ export function buildGitEnv(inputEnv?: Record<string, string>): NodeJS.ProcessEn
 
     // Ensure PATH includes Git binaries on Windows
     const gitPaths = [
+      // Git bin directories (already exists - keep)
       path.join(process.env.PROGRAMFILES ?? "C:\\Program Files", "Git", "bin"),
       path.join(process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "Git", "bin"),
       path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Git", "bin"),
+      // NEW: Git cmd directories (for git.exe wrapper)
+      path.join(process.env.PROGRAMFILES ?? "C:\\Program Files", "Git", "cmd"),
+      path.join(process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "Git", "cmd"),
+      path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Git", "cmd"),
+      // NEW: MinGW bin directories - CRITICAL for basic Unix commands
+      path.join(process.env.PROGRAMFILES ?? "C:\\Program Files", "Git", "mingw64", "bin"),
+      path.join(process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "Git", "mingw64", "bin"),
+      path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Git", "mingw64", "bin"),
+      // NEW: MinGW usr/bin directories - for shell tools
+      path.join(process.env.PROGRAMFILES ?? "C:\\Program Files", "Git", "usr", "bin"),
+      path.join(process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "Git", "usr", "bin"),
+      path.join(process.env.LOCALAPPDATA ?? "", "Programs", "Git", "usr", "bin"),
     ]
 
     const existingPath = result.PATH ?? ""
