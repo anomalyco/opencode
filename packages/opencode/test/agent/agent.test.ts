@@ -82,7 +82,7 @@ test("general agent denies todo tools", async () => {
       const general = await Agent.get("general")
       expect(general).toBeDefined()
       expect(general?.mode).toBe("subagent")
-      expect(general?.hidden).toBe(true)
+      expect(general?.hidden).toBeUndefined()
       expect(evalPerm(general, "todoread")).toBe("deny")
       expect(evalPerm(general, "todowrite")).toBe("deny")
     },
