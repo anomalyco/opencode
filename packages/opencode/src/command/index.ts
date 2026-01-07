@@ -53,6 +53,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    CD: "cd",
   } as const
 
   const state = Instance.state(async () => {
@@ -75,6 +76,14 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      },
+      [Default.CD]: {
+        name: Default.CD,
+        description: "change working directory to <path>",
+        get template() {
+          return "$1"
+        },
+        hints: ["$1"],
       },
     }
 

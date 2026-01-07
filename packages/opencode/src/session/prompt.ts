@@ -1196,6 +1196,12 @@ export namespace SessionPrompt {
   })
   export type ShellInput = z.infer<typeof ShellInput>
   export async function shell(input: ShellInput) {
+    // Handle `cd` command specially - change the Instance directory
+    const trimmed = input.command.trim()
+    if (trimmed === "cd" || trimmed.startsWith("cd ") || trimmed.startsWith("cd\t")) {
+      return handleShellCd(input)
+    }
+
     const abort = start(input.sessionID)
     if (!abort) {
       throw new Session.BusyError(input.sessionID)
@@ -1449,6 +1455,12 @@ export namespace SessionPrompt {
 
   export async function command(input: CommandInput) {
     log.info("command", input)
+
+    // Handle /cd command specially - it doesn't go through the LLM
+    if (input.command === Command.Default.CD) {
+      return handleCdCommand(input)
+    }
+
     const command = await Command.get(input.command)
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
@@ -1561,6 +1573,203 @@ export namespace SessionPrompt {
     })
 
     return result
+  }
+
+  async function handleCdCommand(input: CommandInput): Promise<MessageV2.WithParts> {
+    const targetPath = input.arguments.trim()
+
+    if (!targetPath) {
+      throw new Error("Usage: /cd <path>")
+    }
+
+    // Change directory using Instance.setDirectory
+    const result = await Instance.setDirectory(targetPath)
+
+    // Update the session's directory field
+    await Session.update(input.sessionID, (draft) => {
+      draft.directory = result.directory
+    })
+
+    // Create a user message recording the command
+    const userMessageID = input.messageID ?? Identifier.ascending("message")
+    const agentName = input.agent ?? "system"
+    const userMsg: MessageV2.User = {
+      id: userMessageID,
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      role: "user",
+      agent: agentName,
+      model: {
+        providerID: "system",
+        modelID: "cd",
+      },
+    }
+    await Session.updateMessage(userMsg)
+    const userPart: MessageV2.Part = {
+      type: "text",
+      id: Identifier.ascending("part"),
+      messageID: userMessageID,
+      sessionID: input.sessionID,
+      text: `/cd ${targetPath}`,
+    }
+    await Session.updatePart(userPart)
+
+    // Create an assistant message with the result
+    const assistantMsg: MessageV2.Assistant = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      parentID: userMessageID,
+      mode: agentName,
+      agent: agentName,
+      cost: 0,
+      path: {
+        cwd: result.directory,
+        root: result.worktree,
+      },
+      time: {
+        created: Date.now(),
+      },
+      role: "assistant",
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: "cd",
+      providerID: "system",
+    }
+    await Session.updateMessage(assistantMsg)
+    const textPart: MessageV2.Part = {
+      type: "text",
+      id: Identifier.ascending("part"),
+      messageID: assistantMsg.id,
+      sessionID: input.sessionID,
+      text: `Changed working directory to: ${result.directory}`,
+    }
+    await Session.updatePart(textPart)
+
+    log.info("cd command completed", {
+      sessionID: input.sessionID,
+      directory: result.directory,
+      worktree: result.worktree,
+      projectID: result.project.id,
+    })
+
+    Bus.publish(Command.Event.Executed, {
+      name: Command.Default.CD,
+      sessionID: input.sessionID,
+      arguments: targetPath,
+      messageID: assistantMsg.id,
+    })
+
+    return {
+      info: assistantMsg,
+      parts: [textPart],
+    }
+  }
+
+  async function handleShellCd(input: ShellInput): Promise<MessageV2.Assistant> {
+    const trimmed = input.command.trim()
+    // Parse the target path: "cd", "cd ~", "cd /path", "cd ../path", etc.
+    const targetPath = trimmed === "cd" ? os.homedir() : trimmed.slice(3).trim()
+
+    // Expand ~ to home directory
+    const expanded = targetPath.startsWith("~") ? path.join(os.homedir(), targetPath.slice(1)) : targetPath
+
+    // Change directory using Instance.setDirectory
+    const result = await Instance.setDirectory(expanded)
+
+    // Update the session's directory field
+    await Session.update(input.sessionID, (draft) => {
+      draft.directory = result.directory
+    })
+
+    // Create a user message recording the shell command
+    const userMsg: MessageV2.User = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      role: "user",
+      agent: input.agent,
+      model: {
+        providerID: "system",
+        modelID: "cd",
+      },
+    }
+    await Session.updateMessage(userMsg)
+    const userPart: MessageV2.Part = {
+      type: "text",
+      id: Identifier.ascending("part"),
+      messageID: userMsg.id,
+      sessionID: input.sessionID,
+      text: input.command,
+      synthetic: true,
+    }
+    await Session.updatePart(userPart)
+
+    // Create an assistant message with the result (mimics shell output)
+    const msg: MessageV2.Assistant = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      parentID: userMsg.id,
+      mode: input.agent,
+      agent: input.agent,
+      cost: 0,
+      path: {
+        cwd: result.directory,
+        root: result.worktree,
+      },
+      time: {
+        created: Date.now(),
+      },
+      role: "assistant",
+      tokens: {
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cache: { read: 0, write: 0 },
+      },
+      modelID: "cd",
+      providerID: "system",
+    }
+    await Session.updateMessage(msg)
+
+    const part: MessageV2.Part = {
+      type: "tool",
+      id: Identifier.ascending("part"),
+      messageID: msg.id,
+      sessionID: input.sessionID,
+      tool: "bash",
+      callID: crypto.randomUUID(),
+      state: {
+        status: "completed",
+        time: {
+          start: Date.now(),
+          end: Date.now(),
+        },
+        input: {
+          command: input.command,
+        },
+        output: result.directory,
+        title: `cd ${targetPath}`,
+        metadata: {},
+      },
+    }
+    await Session.updatePart(part)
+
+    log.info("shell cd completed", {
+      sessionID: input.sessionID,
+      directory: result.directory,
+      worktree: result.worktree,
+      projectID: result.project.id,
+    })
+
+    return msg
   }
 
   async function ensureTitle(input: {

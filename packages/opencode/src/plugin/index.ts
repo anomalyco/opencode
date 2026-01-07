@@ -7,6 +7,7 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { Session } from "../session"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -28,6 +29,19 @@ export namespace Plugin {
       directory: Instance.directory,
       serverUrl: Server.url(),
       $: Bun.$,
+      setDirectory: async (path: string, sessionID?: string) => {
+        const result = await Instance.setDirectory(path)
+        if (sessionID) {
+          await Session.update(sessionID, (draft) => {
+            draft.directory = result.directory
+          })
+        }
+        return {
+          directory: result.directory,
+          worktree: result.worktree,
+          projectID: result.project.id,
+        }
+      },
     }
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {

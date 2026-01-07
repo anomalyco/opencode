@@ -52,7 +52,8 @@ export function SessionHeader() {
     if (!session) return
     // Only navigate if we're actually changing to a different session
     if (session.id === params.id) return
-    navigate(`/${params.dir}/session/${session.id}`)
+    // Use session.directory to ensure we navigate to the correct directory context
+    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
   return (

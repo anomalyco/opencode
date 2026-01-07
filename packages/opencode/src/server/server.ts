@@ -614,6 +614,60 @@ export namespace Server {
         },
       )
       .post(
+        "/cd",
+        describeRoute({
+          summary: "Change directory",
+          description:
+            "Change the working directory for the current instance. Optionally update a session's directory.",
+          operationId: "instance.cd",
+          responses: {
+            200: {
+              description: "Directory changed",
+              content: {
+                "application/json": {
+                  schema: resolver(
+                    z.object({
+                      directory: z.string(),
+                      worktree: z.string(),
+                      projectID: z.string(),
+                      previousDirectory: z.string(),
+                    }),
+                  ),
+                },
+              },
+            },
+            ...errors(400, 404),
+          },
+        }),
+        validator(
+          "json",
+          z.object({
+            path: z.string().describe("Target directory path (absolute or relative to current directory)"),
+            sessionID: z.string().optional().describe("Session ID to update with the new directory"),
+          }),
+        ),
+        async (c) => {
+          const { path: targetPath, sessionID } = c.req.valid("json")
+          const previousDirectory = Instance.directory
+
+          const result = await Instance.setDirectory(targetPath)
+
+          // Update session if provided
+          if (sessionID) {
+            await Session.update(sessionID, (draft) => {
+              draft.directory = result.directory
+            })
+          }
+
+          return c.json({
+            directory: result.directory,
+            worktree: result.worktree,
+            projectID: result.project.id,
+            previousDirectory,
+          })
+        },
+      )
+      .post(
         "/experimental/worktree",
         describeRoute({
           summary: "Create worktree",
@@ -2816,6 +2870,7 @@ export namespace Server {
   )
 
   export async function openapi() {
+    // @ts-expect-error TS2589: Type instantiation depth limit reached with many Hono routes
     const result = await generateSpecs(App(), {
       documentation: {
         info: {

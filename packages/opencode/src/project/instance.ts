@@ -4,6 +4,10 @@ import { Project } from "./project"
 import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
+import { BusEvent } from "@/bus/bus-event"
+import fs from "fs/promises"
+import path from "path"
+import z from "zod"
 
 interface Context {
   directory: string
@@ -12,6 +16,18 @@ interface Context {
 }
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
+
+export namespace InstanceEvent {
+  export const DirectoryChanged = BusEvent.define(
+    "instance.directory.changed",
+    z.object({
+      directory: z.string(),
+      worktree: z.string(),
+      projectID: z.string(),
+      previousDirectory: z.string(),
+    }),
+  )
+}
 
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
@@ -74,5 +90,60 @@ export const Instance = {
       }
     }
     cache.clear()
+  },
+  async setDirectory(targetPath: string) {
+    const ctx = context.use()
+    const oldDirectory = ctx.directory
+
+    // Resolve path (relative to current directory or absolute)
+    const resolved = path.isAbsolute(targetPath) ? targetPath : path.resolve(ctx.directory, targetPath)
+
+    // Validate directory exists
+    const stat = await fs.stat(resolved).catch(() => null)
+    if (!stat?.isDirectory()) {
+      throw new Error(`Directory not found: ${resolved}`)
+    }
+
+    // Get project info for the new directory
+    const { project, sandbox } = await Project.fromDirectory(resolved)
+
+    Log.Default.info("changing directory", {
+      from: oldDirectory,
+      to: resolved,
+      worktree: sandbox,
+      projectID: project.id,
+    })
+
+    // Dispose old state for the old directory to force re-initialization
+    await State.dispose(oldDirectory)
+    cache.delete(oldDirectory)
+
+    // Update the context in place
+    ctx.directory = resolved
+    ctx.worktree = sandbox
+    ctx.project = project
+
+    // Cache the new context
+    cache.set(resolved, Promise.resolve(ctx))
+
+    // Emit event for UI/plugins
+    GlobalBus.emit("event", {
+      directory: resolved,
+      payload: {
+        type: InstanceEvent.DirectoryChanged.type,
+        properties: {
+          directory: resolved,
+          worktree: sandbox,
+          projectID: project.id,
+          previousDirectory: oldDirectory,
+        },
+      },
+    })
+
+    return {
+      directory: resolved,
+      worktree: sandbox,
+      project,
+    }
   },
 }

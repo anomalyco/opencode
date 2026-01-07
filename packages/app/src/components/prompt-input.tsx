@@ -1097,6 +1097,39 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const customCommand = sync.data.command.find((c) => c.name === commandName)
       if (customCommand) {
         clearInput()
+
+        // Special handling for /cd command - navigate to new directory after success
+        if (commandName === "cd") {
+          client.session
+            .command({
+              sessionID: session.id,
+              command: commandName,
+              arguments: args.join(" "),
+              agent,
+              model: `${model.providerID}/${model.modelID}`,
+              variant,
+              parts: [],
+            })
+            .then(async () => {
+              // After /cd succeeds, fetch the updated session to get the new directory
+              const updatedSession = await client.session.get({ sessionID: session.id }).then((x) => x.data)
+              if (updatedSession?.directory && updatedSession.directory !== sessionDirectory) {
+                // Initialize sync for the new directory
+                globalSync.child(updatedSession.directory)
+                // Navigate to the new directory context
+                navigate(`/${base64Encode(updatedSession.directory)}/session/${session.id}`)
+              }
+            })
+            .catch((err) => {
+              showToast({
+                title: "Failed to change directory",
+                description: errorMessage(err),
+              })
+              restoreInput()
+            })
+          return
+        }
+
         client.session
           .command({
             sessionID: session.id,

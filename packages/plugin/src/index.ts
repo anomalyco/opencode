@@ -30,6 +30,18 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  /**
+   * Change the working directory for the current instance.
+   * This updates Instance.directory and optionally a session's directory.
+   */
+  setDirectory: (
+    path: string,
+    sessionID?: string,
+  ) => Promise<{
+    directory: string
+    worktree: string
+    projectID: string
+  }>
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
