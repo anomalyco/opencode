@@ -128,12 +128,20 @@ export namespace ToolRegistry {
           
           // Filter based on agent permissions if provided
           if (agent?.permission) {
-            const rule = PermissionNext.evaluate(t.id, "*", agent.permission)
-            // Only deny if permission is explicitly "deny"
-            // Allow "ask" and "allow" - ask is handled at execution time
-            if (rule.action === "deny") {
+            const toolPermission = (agent.permission as unknown as Record<string, unknown>)[t.id]
+            
+            // If permission is an object (has command-level rules), allow the tool
+            // Command restrictions are enforced at execution time
+            if (toolPermission !== null && typeof toolPermission === "object") {
+              return true
+            }
+            
+            // If permission is explicitly "deny" string, filter out the tool
+            if (toolPermission === "deny") {
               return false
             }
+            
+            // "allow", "ask", or undefined → allow the tool
           }
           
           return true
