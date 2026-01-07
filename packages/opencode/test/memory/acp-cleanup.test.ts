@@ -94,19 +94,28 @@ describe("ACP.Agent session cleanup", () => {
   test("setupEventSubscriptions replaces existing subscription for same session", () => {
     const mockConnection = {}
     const subscribeCallCount = { count: 0 }
+    // Track active generators so we can verify they terminate
+    const activeGenerators = new Set<AbortController>()
     const mockConfig = {
       sdk: {
         event: {
           subscribe: async () => {
             subscribeCallCount.count++
+            // Create a signal to control this generator's lifecycle
+            const genController = new AbortController()
+            activeGenerators.add(genController)
             return {
               stream: (async function* () {
-                // Simulate a long-running stream that checks abort
-                while (true) {
+                // Use finite loop with abort check to prevent background runaway
+                for (let i = 0; i < 100 && !genController.signal.aborted; i++) {
                   await new Promise((r) => setTimeout(r, 100))
+                  if (genController.signal.aborted) break
                   yield { type: "test" }
                 }
+                activeGenerators.delete(genController)
               })(),
+              // Expose abort to allow cleanup
+              abort: () => genController.abort(),
             }
           },
         },

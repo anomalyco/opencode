@@ -83,6 +83,7 @@ export namespace Share {
     }
     subscriptions.length = 0
     pending.clear()
+    queue = Promise.resolve()
     log.info("disposed share subscriptions")
   }
 
