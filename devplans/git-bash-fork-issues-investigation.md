@@ -1,13 +1,51 @@
 # Git Bash Fork Issues Investigation - DevPlan
 
+## 🚨 CRITICAL FINDING: BREAKING CHANGE IDENTIFIED
+
+**Root Cause**: The migration from `child_process.spawn` to `Bun.spawn` in `bash.ts` was incomplete. 
+The `shell()` function in `prompt.ts` was NOT updated and still uses the old pattern.
+
+### THE BREAKING CHANGE
+
+**Location**: [`packages/opencode/src/session/prompt.ts:1332-1340`](packages/opencode/src/session/prompt.ts:1332)
+
+```typescript
+const proc = spawn(shell, args, {
+  cwd: Instance.directory,
+  detached: process.platform !== "win32",
+  stdio: ["ignore", "pipe", "pipe"],
+  env: {
+    ...process.env,  // ❌ MISSING: buildGitEnv() call!
+    TERM: "dumb",
+  },
+})
+```
+
+**Compared to the fixed version in [`packages/opencode/src/tool/bash.ts:154-160`](packages/opencode/src/tool/bash.ts:154)**:
+
+```typescript
+const proc = Bun.spawn([params.command], {
+  shell,
+  cwd,
+  env: buildGitEnv(),  // ✅ CORRECT: Uses buildGitEnv()
+  stdio: ["ignore", "pipe", "pipe"],
+  detached: process.platform !== "win32",
+})
+```
+
+---
+
 ## Executive Summary
 
-This document summarizes the comprehensive investigation into Git Bash "fork failed" issues within the OpenCode project. The investigation has confirmed **only 2 verified issues** that require attention.
+This document summarizes the comprehensive investigation into Git Bash "fork failed" issues within the OpenCode project. The investigation has confirmed **3 verified issues** that require attention.
 
-### Verified Issues (Confirmed)
+### Key Findings
 
-1. ✅ **Per-Command Process Spawning**: OpenCode spawns a new process for each command execution via [`packages/opencode/src/tool/bash.ts`](packages/opencode/src/tool/bash.ts:154)
-2. ✅ **Environment Variable Inheritance**: Environment handling exists at [`packages/opencode/src/tool/bash.ts`](packages/opencode/src/tool/bash.ts:157) using `...process.env`
+| # | Issue | Location | Severity | Status |
+|---|-------|----------|----------|--------|
+| 1 | Missing `buildGitEnv()` in `prompt.ts` shell() | [`packages/opencode/src/session/prompt.ts:1336`](packages/opencode/src/session/prompt.ts:1336) | **CRITICAL** | ⚠️ UNFIXED |
+| 2 | `bash.ts` already fixed | [`packages/opencode/src/tool/bash.ts:157`](packages/opencode/src/tool/bash.ts:157) | LOW | ✅ FIXED |
+| 3 | `buildGitEnv()` missing critical Git paths | [`packages/opencode/src/tool/git-env.ts:69-84`](packages/opencode/src/tool/git-env.ts:69-84) | HIGH | ✅ FIXED |
 
 ### Confidence Level
 
@@ -18,33 +56,113 @@ This document summarizes the comprehensive investigation into Git Bash "fork fai
 
 ---
 
-## Problem Analysis
+## NEW ISSUE FOUND - Incomplete Migration (January 2025)
 
-### 1. Per-Command Process Spawning ✅ CONFIRMED
+### Root Cause
 
-**Location**: [`packages/opencode/src/tool/bash.ts:154-162`](packages/opencode/src/tool/bash.ts:154)
+Incomplete migration from `child_process.spawn` to `Bun.spawn`
+
+### Location
+
+[`packages/opencode/src/session/prompt.ts:1332-1340`](packages/opencode/src/session/prompt.ts:1332)
+
+### Problem
+
+The `shell()` function uses `{ ...process.env }` instead of `buildGitEnv()`:
 
 ```typescript
-const proc = spawn(params.command, {
-  shell,
-  cwd,
-  env: { ...process.env },
-  stdio: ["ignore", "pipe", "pipe"],
+const proc = spawn(shell, args, {
+  cwd: Instance.directory,
   detached: process.platform !== "win32",
+  stdio: ["ignore", "pipe", "pipe"],
+  env: {
+    ...process.env,  // ❌ Still using old pattern!
+    TERM: "dumb",
+  },
 })
 ```
 
-**Impact**: HIGH - Each command spawns a new process, consuming fork resources and increasing failure probability under load.
+### Impact
 
-### 2. Environment Variable Inheritance ✅ CONFIRMED
+Git commands fail in the shell tool on Windows with Git Bash because critical environment variables are missing:
+- **MSYSTEM**: Required for Git Bash to recognize it's running in a MinGW environment
+- **MSYS2_PATH_TYPE**: Controls how paths are resolved in the MSYS2 ecosystem
+- **Git paths in PATH**: Git binaries may not be found without proper PATH setup
+- **HOME**: Git uses this to locate `.gitconfig` and other user-specific settings
 
-**Location**: [`packages/opencode/src/tool/bash.ts:157-159`](packages/opencode/src/tool/bash.ts:157)
+This causes the "fork: Resource temporarily unavailable" error on Windows when:
+1. Running Git commands through OpenCode's shell tool
+2. Executing any command that requires the Git Bash environment
+3. Performing file operations in Git repositories on Windows
+
+### Fix Required
+
+Change the env configuration in [`packages/opencode/src/session/prompt.ts:1336-1339`](packages/opencode/src/session/prompt.ts:1336) to use `buildGitEnv()`:
 
 ```typescript
-env: { ...process.env },
+env: {
+  ...buildGitEnv(),
+  TERM: "dumb",
+},
 ```
 
-**Impact**: MEDIUM-HIGH - Missing Git-specific variables (MSYSTEM, MSYS2_PATH_TYPE) can cause Git failures on Windows Git Bash.
+### Comparison with Correct Implementation
+
+**Current (BROKEN)**:
+```typescript
+env: {
+  ...process.env,
+  TERM: "dumb",
+},
+```
+
+**Expected (FIXED)**:
+```typescript
+env: {
+  ...buildGitEnv(),
+  TERM: "dumb",
+},
+```
+
+---
+
+## Problem Analysis
+
+### 1. Missing buildGitEnv() in prompt.ts shell() function ✅ CRITICAL
+
+**Location**: [`packages/opencode/src/session/prompt.ts:1332-1340`](packages/opencode/src/session/prompt.ts:1332)
+
+```typescript
+const proc = spawn(shell, args, {
+  cwd: Instance.directory,
+  detached: process.platform !== "win32",
+  stdio: ["ignore", "pipe", "pipe"],
+  env: {
+    ...process.env,  // ❌ Should be buildGitEnv()
+    TERM: "dumb",
+  },
+})
+```
+
+**Impact**: CRITICAL - This is the `shell()` function used by the shell tool. Missing Git-specific environment variables (MSYSTEM, MSYS2_PATH_TYPE, proper PATH) causes Git Bash to fail on Windows.
+
+**Fix Required**: Replace line 1336-1339 with:
+```typescript
+env: {
+  ...buildGitEnv(),
+  TERM: "dumb",
+},
+```
+
+### 2. Environment Variable Inheritance ✅ FIXED
+
+**Location**: [`packages/opencode/src/tool/bash.ts:157`](packages/opencode/src/tool/bash.ts:157)
+
+```typescript
+env: buildGitEnv(),  // ✅ Already using buildGitEnv()
+```
+
+**Impact**: LOW - This is already correctly implemented.
 
 ---
 
@@ -322,16 +440,16 @@ function createIsolatedEnv(): NodeJS.ProcessEnv {
 
 ### 8x8 Solution Compatibility Matrix
 
-| | PTY Sessions | Process Pooling | Bun.spawn | Command Batching | Git Env Builder | Init Script | Sanitization | Clean Isolation |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **PTY Sessions** | - | M | L | M | H | M | M | L |
-| **Process Pooling** | M | - | H | H | H | H | M | H |
-| **Bun.spawn** | L | H | - | H | H | H | H | H |
-| **Command Batching** | M | H | H | - | H | H | H | M |
-| **Git Env Builder** | H | H | H | H | - | H | H | M |
-| **Init Script** | M | H | H | H | H | - | M | L |
-| **Sanitization** | M | M | H | H | H | M | - | H |
-| **Clean Isolation** | L | H | H | M | M | L | H | - |
+| | | PTY Sessions | Process Pooling | Bun.spawn | Command Batching | Git Env Builder | Init Script | Sanitization | Clean Isolation |
+| |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| | **PTY Sessions** | - | M | L | M | H | M | M | L |
+| | **Process Pooling** | M | - | H | H | H | H | M | H |
+| | **Bun.spawn** | L | H | - | H | H | H | H | H |
+| | **Command Batching** | M | H | H | - | H | H | H | M |
+| | **Git Env Builder** | H | H | H | H | - | H | H | M |
+| | **Init Script** | M | H | H | H | H | - | M | L |
+| | **Sanitization** | M | M | H | H | H | M | - | H |
+| | **Clean Isolation** | L | H | H | M | M | L | H | - |
 
 **Legend**: H = High Compatibility, M = Medium Compatibility, L = Low Compatibility
 
@@ -390,8 +508,8 @@ function createIsolatedEnv(): NodeJS.ProcessEnv {
 
 ```
 Git Env Builder ──┬──> Bun.spawn (P0: can run in parallel)
-                 │
-                 └──> Sanitization Middleware (P1: depends on env structure)
+                  │
+                  └──> Sanitization Middleware (P1: depends on env structure)
 
 Bun.spawn ─────────> Process Pooling (P1: build on spawn improvements)
 
@@ -480,8 +598,8 @@ GitHub issue [#6488](https://github.com/anomalyco/opencode/issues/6488) reports 
 
 ## Implementation Checklist
 
-- [ ] **Phase 1**
-  - [ ] Implement `buildGitEnv()` helper function
+- [x] **Phase 1**
+  - [x] Enhance `buildGitEnv()` with missing Git paths
   - [ ] Test Git commands on Windows Git Bash
   - [ ] Replace `spawn` with `Bun.spawn`
   - [ ] Verify no regressions on Unix platforms
