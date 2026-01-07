@@ -150,6 +150,34 @@ describe("subscription cleanup", () => {
         },
       })
     })
+
+    test("dispose should clear pending queue items and their timeouts", async () => {
+      await Instance.provide({
+        directory: testDir,
+        fn: async () => {
+          const { ShareNext } = await import("../../src/share/share-next")
+
+          await ShareNext.init()
+
+          // Verify queue starts empty
+          expect(ShareNext._getQueueSize()).toBe(0)
+
+          // Add items to the queue using the test helper
+          ShareNext._addToQueueForTesting("session-1")
+          ShareNext._addToQueueForTesting("session-2")
+          ShareNext._addToQueueForTesting("session-3")
+
+          // Verify items were added
+          expect(ShareNext._getQueueSize()).toBe(3)
+
+          // dispose() should clear all queue items and their timeouts
+          ShareNext.dispose()
+
+          // Verify queue is cleared
+          expect(ShareNext._getQueueSize()).toBe(0)
+        },
+      })
+    })
   })
 
   describe("Format.dispose()", () => {

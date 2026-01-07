@@ -89,6 +89,12 @@ export namespace ShareNext {
     return queue.size
   }
 
+  /** @internal Test helper to add items to queue for testing dispose cleanup */
+  export function _addToQueueForTesting(sessionID: string) {
+    const timeout = setTimeout(() => {}, 10000)
+    queue.set(sessionID, { timeout, data: new Map() })
+  }
+
   export async function create(sessionID: string) {
     log.info("creating share", { sessionID })
     const result = await fetch(`${await url()}/api/share`, {
