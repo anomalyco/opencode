@@ -165,7 +165,7 @@ export const RunCommand = cmd({
       if (args.quiet && process.stdout.isTTY) {
         await Bun.sleep(10) // clack apparently needs a moment to settle before the spinner can initialize properly
         quietSpinner = prompts.spinner()
-        quietSpinner.start("Thinking...")
+        quietSpinner.start("Working...")
       }
 
       const eventProcessor = (async () => {
