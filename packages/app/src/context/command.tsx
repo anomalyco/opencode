@@ -1,8 +1,25 @@
 import { createMemo, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useSettings } from "@/context/settings"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
+
+const PALETTE_ID = "command.palette"
+const DEFAULT_PALETTE_KEYBIND = "mod+shift+p"
+const SUGGESTED_PREFIX = "suggested."
+
+function actionId(id: string) {
+  if (!id.startsWith(SUGGESTED_PREFIX)) return id
+  return id.slice(SUGGESTED_PREFIX.length)
+}
+
+function normalizeKey(key: string) {
+  if (key === ",") return "comma"
+  if (key === "+") return "plus"
+  if (key === " ") return "space"
+  return key.toLowerCase()
+}
 
 export type KeybindConfig = string
 
@@ -73,7 +90,7 @@ export function parseKeybind(config: string): Keybind[] {
 }
 
 export function matchKeybind(keybinds: Keybind[], event: KeyboardEvent): boolean {
-  const eventKey = event.key.toLowerCase()
+  const eventKey = normalizeKey(event.key)
 
   for (const kb of keybinds) {
     const keyMatch = kb.key === eventKey
@@ -105,15 +122,18 @@ export function formatKeybind(config: string): string {
   if (kb.meta) parts.push(IS_MAC ? "⌘" : "Meta")
 
   if (kb.key) {
-    const arrows: Record<string, string> = {
+    const keys: Record<string, string> = {
       arrowup: "↑",
       arrowdown: "↓",
       arrowleft: "←",
       arrowright: "→",
+      comma: ",",
+      plus: "+",
+      space: "Space",
     }
+    const key = kb.key.toLowerCase()
     const displayKey =
-      arrows[kb.key.toLowerCase()] ??
-      (kb.key.length === 1 ? kb.key.toUpperCase() : kb.key.charAt(0).toUpperCase() + kb.key.slice(1))
+      keys[key] ?? (key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1))
     parts.push(displayKey)
   }
 
@@ -124,8 +144,16 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
   name: "Command",
   init: () => {
     const dialog = useDialog()
+    const settings = useSettings()
     const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
     const [suspendCount, setSuspendCount] = createSignal(0)
+
+    const bind = (id: string, def: KeybindConfig | undefined) => {
+      const custom = settings.keybinds.get(actionId(id))
+      const config = custom ?? def
+      if (!config || config === "none") return
+      return config
+    }
 
     const options = createMemo(() => {
       const seen = new Set<string>()
@@ -139,15 +167,20 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         }
       }
 
-      const suggested = all.filter((x) => x.suggested && !x.disabled)
+      const resolved = all.map((opt) => ({
+        ...opt,
+        keybind: bind(opt.id, opt.keybind),
+      }))
+
+      const suggested = resolved.filter((x) => x.suggested && !x.disabled)
 
       return [
         ...suggested.map((x) => ({
           ...x,
-          id: "suggested." + x.id,
+          id: SUGGESTED_PREFIX + x.id,
           category: "Suggested",
         })),
-        ...all,
+        ...resolved,
       ]
     })
 
@@ -169,7 +202,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
 
-      const paletteKeybinds = parseKeybind("mod+shift+p")
+      const paletteKeybinds = parseKeybind(settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND)
       if (matchKeybind(paletteKeybinds, event)) {
         event.preventDefault()
         showPalette()
@@ -209,7 +242,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         run(id, source)
       },
       keybind(id: string) {
-        const option = options().find((x) => x.id === id || x.id === "suggested." + id)
+        if (id === PALETTE_ID) {
+          return formatKeybind(settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND)
+        }
+
+        const option = options().find((x) => x.id === id || x.id === SUGGESTED_PREFIX + id)
         if (!option?.keybind) return ""
         return formatKeybind(option.keybind)
       },
