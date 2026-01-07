@@ -170,7 +170,7 @@ export default function Layout(props: ParentProps) {
       if (e.details?.type !== "permission.asked") return
       const directory = e.name
       const perm = e.details.properties
-      if (permission.autoResponds(perm)) return
+      if (permission.autoResponds(perm, directory)) return
 
       const [store] = globalSync.child(directory)
       const session = store.session.find((s) => s.id === perm.sessionID)
@@ -266,24 +266,30 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  function projectSessions(directory: string) {
-    if (!directory) return []
-    const sessions = globalSync.child(directory)[0].session.toSorted(sortSessions)
-    return (sessions ?? []).filter((s) => !s.parentID)
+  const currentProject = createMemo(() => {
+    const directory = params.dir ? base64Decode(params.dir) : undefined
+    if (!directory) return
+    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+  })
+
+  function projectSessions(project: LocalProject | undefined) {
+    if (!project) return []
+    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+    const stores = dirs.map((dir) => globalSync.child(dir)[0])
+    const sessions = stores
+      .flatMap((store) => store.session.filter((session) => session.directory === store.path.directory))
+      .toSorted(sortSessions)
+    return sessions.filter((s) => !s.parentID)
   }
 
-  const currentSessions = createMemo(() => {
-    if (!params.dir) return []
-    const directory = base64Decode(params.dir)
-    return projectSessions(directory)
-  })
+  const currentSessions = createMemo(() => projectSessions(currentProject()))
 
   function navigateSessionByOffset(offset: number) {
     const projects = layout.projects.list()
     if (projects.length === 0) return
 
-    const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
-    const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
+    const project = currentProject()
+    const projectIndex = project ? projects.findIndex((p) => p.worktree === project.worktree) : -1
 
     if (projectIndex === -1) {
       const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
@@ -312,14 +318,14 @@ export default function Layout(props: ParentProps) {
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
-    const nextProjectSessions = projectSessions(nextProject.worktree)
+    const nextProjectSessions = projectSessions(nextProject)
     if (nextProjectSessions.length === 0) {
       navigateToProject(nextProject.worktree)
       return
     }
 
     const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
-    navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+    navigateToSession(targetSession)
     queueMicrotask(() => scrollToSession(targetSession.id))
   }
 
@@ -465,7 +471,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
-    navigate(`/${params.dir}/session/${session?.id}`)
+    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
     layout.mobileSidebar.hide()
   }
 
@@ -514,7 +520,8 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    untrack(() => layout.projects.expand(directory))
+    const project = currentProject()
+    untrack(() => layout.projects.expand(project?.worktree ?? directory))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
@@ -644,13 +651,13 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const [sessionStore] = globalSync.child(props.session.directory)
     const hasPermissions = createMemo(() => {
-      const store = globalSync.child(props.project.worktree)[0]
-      const permissions = store.permission?.[props.session.id] ?? []
+      const permissions = sessionStore.permission?.[props.session.id] ?? []
       if (permissions.length > 0) return true
-      const childSessions = store.session.filter((s) => s.parentID === props.session.id)
+      const childSessions = sessionStore.session.filter((s) => s.parentID === props.session.id)
       for (const child of childSessions) {
-        const childPermissions = store.permission?.[child.id] ?? []
+        const childPermissions = sessionStore.permission?.[child.id] ?? []
         if (childPermissions.length > 0) return true
       }
       return false
@@ -658,7 +665,7 @@ export default function Layout(props: ParentProps) {
     const isWorking = createMemo(() => {
       if (props.session.id === params.id) return false
       if (hasPermissions()) return false
-      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
     return (
@@ -759,6 +766,10 @@ export default function Layout(props: ParentProps) {
     const isExpanded = createMemo(() =>
       props.mobile ? mobileProjects.expanded(props.project.worktree) : props.project.expanded,
     )
+    const isActive = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return props.project.worktree === current || props.project.sandboxes?.includes(current)
+    })
     const handleOpenChange = (open: boolean) => {
       if (props.mobile) {
         if (open) mobileProjects.expand(props.project.worktree)
@@ -777,7 +788,10 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg"
+                classList={{
+                  "group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg": true,
+                  "bg-surface-raised-base-hover": isActive() && !isExpanded(),
+                }}
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <ProjectAvatar
