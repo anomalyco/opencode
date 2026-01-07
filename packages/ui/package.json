@@ -44,6 +44,7 @@
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",
+    "@solid-primitives/media": "2.3.3",
     "@solid-primitives/resize-observer": "2.1.3",
     "@solidjs/meta": "catalog:",
     "@typescript/native-preview": "catalog:",
