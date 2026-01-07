@@ -2,6 +2,11 @@
  * A Map with LRU (Least Recently Used) eviction policy.
  * Uses the fact that JavaScript Maps maintain insertion order.
  * When capacity is exceeded, the oldest (first) entries are evicted.
+ *
+ * Calling {@link get} on an existing key moves that entry to the most recently
+ * used position and therefore affects the eviction order. In contrast,
+ * {@link has} only checks for the presence of a key and does not change the
+ * recency or eviction order of entries.
  */
 export class LRUMap<K, V> {
   private map = new Map<K, V>()
@@ -31,8 +36,8 @@ export class LRUMap<K, V> {
     this.map.set(key, value)
     // Evict oldest entries if over capacity
     while (this.map.size > this.capacity) {
-      const oldest = this.map.keys().next().value
-      if (oldest !== undefined) this.map.delete(oldest)
+      const oldest = this.map.keys().next().value as K
+      this.map.delete(oldest)
     }
     return this
   }
