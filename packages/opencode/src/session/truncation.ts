@@ -191,8 +191,9 @@ export namespace Truncate {
     const wasCapped = totalBytes > MAX_PERSIST_BYTES
 
     let instructions = `\n\n<truncation_notice>
+WARNING: Output was truncated. The preview above is INCOMPLETE and may be missing critical data.
 Full output (${totalBytes.toLocaleString()} bytes, ${lines.length.toLocaleString()} lines) saved to: ${filePath}${wasCapped ? `\nNote: Output was capped at ${MAX_PERSIST_BYTES.toLocaleString()} bytes due to size limits.` : ""}
-To explore: use Read tool with offset/limit parameters, or Grep to search for specific content.${isJson ? "\nThis appears to be JSON - you can use bash with jq for structured queries." : ""}
+You MUST read the file to get complete/accurate results. Use Read tool with offset/limit, Grep to search, or bash with jq for JSON.
 </truncation_notice>`
 
     return {

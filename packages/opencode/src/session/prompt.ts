@@ -7,6 +7,7 @@ import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
 import { SessionRevert } from "./revert"
 import { Session } from "."
+import { Truncate } from "./truncation"
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
@@ -781,10 +782,21 @@ export namespace SessionPrompt {
           // Add support for other types if needed
         }
 
+        const rawOutput = textParts.join("\n\n")
+        const truncated = await Truncate.outputWithPersistence(rawOutput, {
+          sessionID: ctx.sessionID,
+          toolName: key,
+          callID: opts.toolCallId,
+        })
+
         return {
           title: "",
-          metadata: result.metadata ?? {},
-          output: textParts.join("\n\n"),
+          metadata: {
+            ...result.metadata,
+            truncated: truncated.truncated,
+            ...(truncated.filePath && { truncatedFilePath: truncated.filePath }),
+          },
+          output: truncated.content,
           attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
