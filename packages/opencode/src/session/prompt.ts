@@ -45,6 +45,73 @@ import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { buildGitEnv } from "../tool/git-env"
 
+/**
+ * Detects the shell type from a command string
+ * Returns: 'powershell' | 'pwsh' | 'cmd' | 'bash' | 'other'
+ */
+function detectCommandShell(command: string): 'powershell' | 'pwsh' | 'cmd' | 'bash' | 'other' {
+  const trimmed = command.trim().toLowerCase()
+
+  // PowerShell detection
+  if (trimmed.startsWith('powershell.exe') || trimmed.startsWith('powershell') || trimmed.startsWith('pwsh')) {
+    return trimmed.startsWith('pwsh') ? 'pwsh' : 'powershell'
+  }
+
+  // CMD detection
+  if (trimmed.startsWith('cmd.exe') || trimmed.startsWith('cmd ')) {
+    return 'cmd'
+  }
+
+  // Bash detection
+  if (trimmed.startsWith('bash') || trimmed.startsWith('sh') || trimmed.startsWith('/bin/bash') || trimmed.startsWith('/bin/sh')) {
+    return 'bash'
+  }
+
+  return 'other'
+}
+
+/**
+ * Parses command to extract executable and arguments
+ * Returns: { executable: string, args: string[], shouldBypassShell: boolean }
+ */
+function parseCommand(command: string): { executable: string; args: string[]; shouldBypassShell: boolean } {
+  const trimmed = command.trim()
+  const shellType = detectCommandShell(trimmed)
+
+  // PowerShell commands: MUST use shell wrapper for proper argument parsing
+  // Issue #27 fix: PowerShell -Command "..." requires cmd.exe to parse correctly
+  // Without shell wrapping, arguments are split incorrectly and commands fail
+  if (shellType === 'powershell' || shellType === 'pwsh') {
+    const parts = trimmed.split(/\s+/)
+    const executable = shellType === 'pwsh' ? 'pwsh' : 'powershell.exe'
+    const args = parts.slice(1)
+
+    return {
+      executable,
+      args,
+      shouldBypassShell: false // Use shell wrapper for proper parsing
+    }
+  }
+
+  // CMD commands: extract cmd.exe and arguments
+  if (shellType === 'cmd') {
+    const parts = trimmed.split(/\s+/)
+    if (parts.length > 0 && (parts[0] === 'cmd.exe' || parts[0] === 'cmd')) {
+      return {
+        executable: parts[0],
+        args: parts.slice(1),
+        shouldBypassShell: true // Direct execution, no shell wrapping
+      }
+    }
+  }
+
+  return {
+    executable: command, // Use entire command as executable
+    args: [],
+    shouldBypassShell: false // Use default shell wrapping
+  }
+}
+
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
@@ -1329,15 +1396,39 @@ export namespace SessionPrompt {
     const matchingInvocation = invocations[shellName] ?? invocations[""]
     const args = matchingInvocation?.args
 
-    const proc = Bun.spawn([shell, ...args], {
-      cwd: Instance.directory,
-      detached: process.platform !== "win32",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...buildGitEnv(),
-        TERM: "dumb",
-      },
-    })
+    // Shell bypass for native Windows commands (PowerShell, CMD)
+    // This prevents double-wrapping when the shell is cmd.exe and command is powershell/cmd
+    const parsed = parseCommand(input.command)
+    let proc: Bun.ChildProcess
+
+    if (parsed.shouldBypassShell && process.platform === "win32") {
+      // Direct execution for PowerShell and CMD commands
+      log.info("Direct shell execution", {
+        command: input.command,
+        executable: parsed.executable,
+        args: parsed.args
+      })
+      proc = Bun.spawn([parsed.executable, ...parsed.args], {
+        cwd: Instance.directory,
+        detached: process.platform !== "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...buildGitEnv(),
+          TERM: "dumb",
+        },
+      })
+    } else {
+      // Use shell wrapper for other commands
+      proc = Bun.spawn([shell, ...args], {
+        cwd: Instance.directory,
+        detached: process.platform !== "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...buildGitEnv(),
+          TERM: "dumb",
+        },
+      })
+    }
 
     let output = ""
 
