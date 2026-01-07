@@ -33,20 +33,22 @@ describe("shell detection", () => {
 })
 
 describe("command parsing", () => {
-  test("parseCommand bypasses shell for PowerShell", () => {
+  // Issue #27 fix: PowerShell now uses shell wrapper for proper argument parsing
+  test("parseCommand uses shell wrapper for PowerShell", () => {
     const result = parseCommand("powershell.exe -Command Get-Process")
-    expect(result.shouldBypassShell).toBe(true)
+    expect(result.shouldBypassShell).toBe(false)  // Fixed: was true
     expect(result.executable).toBe("powershell.exe")
     expect(result.args).toEqual(["-Command", "Get-Process"])
   })
 
-  test("parseCommand bypasses shell for pwsh", () => {
+  test("parseCommand uses shell wrapper for pwsh", () => {
     const result = parseCommand("pwsh -NoProfile -Command Get-Process")
-    expect(result.shouldBypassShell).toBe(true)
+    expect(result.shouldBypassShell).toBe(false)  // Fixed: was true
     expect(result.executable).toBe("pwsh")
     expect(result.args).toEqual(["-NoProfile", "-Command", "Get-Process"])
   })
 
+  // CMD still uses direct execution (works correctly)
   test("parseCommand bypasses shell for cmd.exe", () => {
     const result = parseCommand("cmd.exe /c echo hello")
     expect(result.shouldBypassShell).toBe(true)
