@@ -1088,10 +1088,6 @@ function UserMessage(props: {
   const ctx = use()
   const local = useLocal()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
-  const command = createMemo(
-    () =>
-      props.parts.find((x) => x.type === "command") as { type: "command"; command: string; prompt: string } | undefined,
-  )
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
@@ -1100,11 +1096,10 @@ function UserMessage(props: {
   const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
-  const displayText = createMemo(() => text()?.text ?? command()?.command)
 
   return (
     <>
-      <Show when={displayText()}>
+      <Show when={text()}>
         <box
           id={props.message.id}
           border={["left"]}
@@ -1126,7 +1121,7 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{displayText()}</text>
+            <text fg={theme.text}>{text()?.text}</text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
