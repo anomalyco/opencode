@@ -201,6 +201,12 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
+    if (input.user.tools?.["*"] === false) {
+      for (const key of Object.keys(input.tools)) {
+        if (key !== "invalid") delete input.tools[key]
+      }
+      return input.tools
+    }
     const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
     for (const tool of Object.keys(input.tools)) {
       if (input.user.tools?.[tool] === false || disabled.has(tool)) {

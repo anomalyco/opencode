@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { Todo } from "./todo"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -229,6 +230,49 @@ export namespace SessionPrompt {
     return parts
   }
 
+  const FINAL_FALLBACK_METADATA = "finalFallback"
+  const TODO_CONTINUE_RE =
+    /\b(continue|resume|proceed|keep going|next step)\b|(?:\u043f\u0440\u043e\u0434\u043e\u043b\u0436|\u0434\u0430\u043b\u044c\u0448\u0435)/i
+  const TODO_PAUSE_SYSTEM =
+    "There is a pending todo list from earlier. Do not continue it unless the user explicitly asks to continue. Ask a brief clarification if needed."
+
+  function hasVisibleText(parts: MessageV2.Part[]) {
+    return parts.some(
+      (part) =>
+        part.type === "text" && !part.synthetic && !part.ignored && part.text.trim().length > 0,
+    )
+  }
+
+  function hasReasoningOrTool(parts: MessageV2.Part[]) {
+    return parts.some((part) => part.type === "reasoning" || part.type === "tool")
+  }
+
+  function isFinalFallbackRequest(msg?: MessageV2.WithParts) {
+    return (
+      msg?.parts.some(
+        (part) => part.type === "text" && part.metadata && part.metadata[FINAL_FALLBACK_METADATA],
+      ) ?? false
+    )
+  }
+
+  function getUserText(msg?: MessageV2.WithParts) {
+    if (!msg) return ""
+    return msg.parts
+      .filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
+      .map((part) => (part as MessageV2.TextPart).text)
+      .join("\n")
+      .trim()
+  }
+
+  function wantsTodoContinuation(text: string) {
+    if (!text) return false
+    return TODO_CONTINUE_RE.test(text)
+  }
+
+  function hasPendingTodos(todos: Todo.Info[]) {
+    return todos.some((todo) => todo.status !== "completed" && todo.status !== "cancelled")
+  }
+
   function start(sessionID: string) {
     const s = state()
     if (s[sessionID]) return
@@ -273,14 +317,22 @@ export namespace SessionPrompt {
       if (abort.aborted) break
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
+      let lastUserMsg: MessageV2.WithParts | undefined
+      let lastAssistantMsg: MessageV2.WithParts | undefined
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
       let lastFinished: MessageV2.Assistant | undefined
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
-        if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
-        if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
+      if (!lastUserMsg && msg.info.role === "user") {
+        lastUserMsg = msg
+        lastUser = msg.info as MessageV2.User
+      }
+        if (!lastAssistantMsg && msg.info.role === "assistant") {
+          lastAssistantMsg = msg
+          lastAssistant = msg.info as MessageV2.Assistant
+        }
         if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
           lastFinished = msg.info as MessageV2.Assistant
         if (lastUser && lastFinished) break
@@ -289,13 +341,30 @@ export namespace SessionPrompt {
           tasks.push(...task)
         }
       }
+      if (lastUserMsg && !lastUser) lastUser = lastUserMsg.info as MessageV2.User
+      if (lastAssistantMsg && !lastAssistant) lastAssistant = lastAssistantMsg.info as MessageV2.Assistant
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+
+      const todos = await Todo.get(sessionID)
+      const pendingTodos = hasPendingTodos(todos)
+      const userText = getUserText(lastUserMsg)
+      const wantsContinuation = pendingTodos && wantsTodoContinuation(userText)
+      const todoState = pendingTodos ? await Todo.getState(sessionID) : { paused: false }
+      if (pendingTodos && !wantsContinuation && !todoState.paused) {
+        await Todo.updateState(sessionID, { paused: true, pausedAt: Date.now() })
+      }
+      if (pendingTodos && wantsContinuation && todoState.paused) {
+        await Todo.updateState(sessionID, { paused: false })
+      }
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        if (await maybeQueueFinalResponse({ sessionID, lastUserMsg, lastAssistantMsg })) {
+          continue
+        }
         log.info("exiting loop", { sessionID })
         break
       }
@@ -590,12 +659,13 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      const todoGuard = pendingTodos && !wantsContinuation ? [TODO_PAUSE_SYSTEM] : []
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom()), ...todoGuard],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
@@ -818,6 +888,18 @@ export namespace SessionPrompt {
         tools.task = {
           ...tools.task,
           description,
+        }
+      }
+    }
+
+    if (input.tools) {
+      if (input.tools["*"] === false) {
+        for (const key of Object.keys(tools)) {
+          if (key !== "invalid") delete tools[key]
+        }
+      } else {
+        for (const [key, enabled] of Object.entries(input.tools)) {
+          if (enabled === false) delete tools[key]
         }
       }
     }
@@ -1192,6 +1274,63 @@ export namespace SessionPrompt {
       info,
       parts,
     }
+  }
+
+  async function enqueueFinalResponse(input: { sessionID: string; user: MessageV2.User; reason: string }) {
+    const userMsg: MessageV2.User = {
+      id: Identifier.ascending("message"),
+      sessionID: input.sessionID,
+      role: "user",
+      time: {
+        created: Date.now(),
+      },
+      agent: "final",
+      model: input.user.model,
+      system: input.user.system,
+      variant: input.user.variant,
+      tools: {
+        "*": false,
+      },
+    }
+    await Session.updateMessage(userMsg)
+    await Session.updatePart({
+      id: Identifier.ascending("part"),
+      messageID: userMsg.id,
+      sessionID: input.sessionID,
+      type: "text",
+      synthetic: true,
+      metadata: {
+        [FINAL_FALLBACK_METADATA]: true,
+        reason: input.reason,
+      },
+      text: "Provide the final response in plain text without tool calls.",
+    } satisfies MessageV2.TextPart)
+  }
+
+  async function maybeQueueFinalResponse(input: {
+    sessionID: string
+    lastUserMsg?: MessageV2.WithParts
+    lastAssistantMsg?: MessageV2.WithParts
+  }) {
+    if (!input.lastUserMsg || !input.lastAssistantMsg) return false
+    if (isFinalFallbackRequest(input.lastUserMsg)) return false
+    const assistant = input.lastAssistantMsg.info as MessageV2.Assistant
+    if (assistant.error) return false
+    if (hasVisibleText(input.lastAssistantMsg.parts)) return false
+    if (!hasReasoningOrTool(input.lastAssistantMsg.parts)) return false
+
+    const hasReasoning = input.lastAssistantMsg.parts.some((part) => part.type === "reasoning")
+    const hasTool = input.lastAssistantMsg.parts.some((part) => part.type === "tool")
+    const reason = hasTool ? (hasReasoning ? "reasoning_tool_only" : "tool_only") : "reasoning_only"
+    const user = input.lastUserMsg.info as MessageV2.User
+    log.warn("final response fallback", {
+      sessionID: input.sessionID,
+      reason,
+      userMessageID: user.id,
+      assistantMessageID: assistant.id,
+    })
+    await enqueueFinalResponse({ sessionID: input.sessionID, user, reason })
+    return true
   }
 
   function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {

@@ -1,0 +1,8 @@
+Provide the final user-facing response to the last request.
+
+Rules:
+- Output plain text only.
+- Do not call tools or mention tool execution.
+- Do not include reasoning or internal thoughts.
+- Keep the response concise and in the user's language.
+- If a brief clarification is required, ask one short question.

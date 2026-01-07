@@ -19,6 +19,7 @@ export const TodoWriteTool = Tool.define("todowrite", {
     await Todo.update({
       sessionID: ctx.sessionID,
       todos: params.todos,
+      messageID: ctx.messageID,
     })
     return {
       title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
