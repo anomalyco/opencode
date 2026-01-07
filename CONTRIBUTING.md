@@ -83,11 +83,29 @@ This starts a local dev server at http://localhost:5173 (or similar port shown i
 
 ### Running the Desktop App
 
-The desktop app is a native Tauri application that wraps the web UI. To run it:
+The desktop app is a native Tauri application that wraps the web UI.
+
+To run the native desktop app:
+
+```bash
+bun run --cwd packages/desktop tauri dev
+```
+
+This starts the web dev server on http://localhost:1420 and opens the native window.
+
+If you only want the web dev server (no native shell):
 
 ```bash
 bun run --cwd packages/desktop dev
 ```
+
+To create a production `dist/` and build the native app bundle:
+
+```bash
+bun run --cwd packages/desktop tauri build
+```
+
+This runs `bun run --cwd packages/desktop build` automatically via Tauri’s `beforeBuildCommand`.
 
 > [!NOTE]
 > Running the desktop app requires additional Tauri dependencies (Rust toolchain, platform-specific libraries). See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for setup instructions.

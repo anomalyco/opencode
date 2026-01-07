@@ -15,6 +15,7 @@ import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import type { Provider } from "@/provider/provider"
+import { Flag } from "@/flag/flag"
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -66,6 +67,10 @@ export namespace SystemPrompt {
     path.join(os.homedir(), ".claude", "CLAUDE.md"),
   ]
 
+  if (Flag.OPENCODE_CONFIG_DIR) {
+    GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  }
+
   export async function custom() {
     const config = await Config.get()
     const paths = new Set<string>()
@@ -85,8 +90,13 @@ export namespace SystemPrompt {
       }
     }
 
+    const urls: string[] = []
     if (config.instructions) {
       for (let instruction of config.instructions) {
+        if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
+          urls.push(instruction)
+          continue
+        }
         if (instruction.startsWith("~/")) {
           instruction = path.join(os.homedir(), instruction.slice(2))
         }
@@ -106,12 +116,18 @@ export namespace SystemPrompt {
       }
     }
 
-    const found = Array.from(paths).map((p) =>
+    const foundFiles = Array.from(paths).map((p) =>
       Bun.file(p)
         .text()
         .catch(() => "")
         .then((x) => "Instructions from: " + p + "\n" + x),
     )
-    return Promise.all(found).then((result) => result.filter(Boolean))
+    const foundUrls = urls.map((url) =>
+      fetch(url, { signal: AbortSignal.timeout(5000) })
+        .then((res) => (res.ok ? res.text() : ""))
+        .catch(() => "")
+        .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
+    )
+    return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
   }
 }
