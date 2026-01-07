@@ -1492,6 +1492,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Time format for session view
+     */
+    time_format?: "12h" | "24h"
   }
   server?: ServerConfig
   /**

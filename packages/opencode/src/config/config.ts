@@ -696,6 +696,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    time_format: z.enum(["12h", "24h"]).optional().describe("Time format for timestamps in TUI"),
   })
 
   export const Server = z

@@ -3,28 +3,28 @@ export namespace Locale {
     return str.replace(/\b\w/g, (c) => c.toUpperCase())
   }
 
-  export function time(input: number): string {
+  export function time(input: number, format: "12h" | "24h" = "12h"): string {
     const date = new Date(input)
-    return date.toLocaleTimeString(undefined, { timeStyle: "short" })
+    return date.toLocaleTimeString(undefined, { timeStyle: "short", hour12: format === "12h" })
   }
 
-  export function datetime(input: number): string {
+  export function datetime(input: number, format: "12h" | "24h" = "12h"): string {
     const date = new Date(input)
-    const localTime = time(input)
+    const localTime = time(input, format)
     const localDate = date.toLocaleDateString()
     return `${localTime} · ${localDate}`
   }
 
-  export function todayTimeOrDateTime(input: number): string {
+  export function todayTimeOrDateTime(input: number, format: "12h" | "24h" = "12h"): string {
     const date = new Date(input)
     const now = new Date()
     const isToday =
       date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
 
     if (isToday) {
-      return time(input)
+      return time(input, format)
     } else {
-      return datetime(input)
+      return datetime(input, format)
     }
   }
 

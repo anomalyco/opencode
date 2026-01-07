@@ -21,6 +21,7 @@ export function DialogTimeline(props: {
 
   const options = createMemo((): DialogSelectOption<string>[] => {
     const messages = sync.data.message[props.sessionID] ?? []
+    const timeFormat = sync.data.config.tui?.time_format ?? "12h"
     const result = [] as DialogSelectOption<string>[]
     for (const message of messages) {
       if (message.role !== "user") continue
@@ -31,7 +32,7 @@ export function DialogTimeline(props: {
       result.push({
         title: part.text.replace(/\n/g, " "),
         value: message.id,
-        footer: Locale.time(message.time.created),
+        footer: Locale.time(message.time.created, timeFormat),
         onSelect: (dialog) => {
           dialog.replace(() => (
             <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />
