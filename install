@@ -427,7 +427,7 @@ fi
 if [[ "$no_modify_path" != "true" ]] && [[ -n $config_file ]] && [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo -e ""
     echo -e "${ORANGE}To use opencode, reload your shell configuration:${NC}"
-    echo -e "  source $config_file"
+    echo -e "$ source $config_file"
     echo -e ""
 fi
 
