@@ -1,7 +1,7 @@
 import { Flag } from "@/flag/flag"
 import { lazy } from "@/util/lazy"
 import path from "path"
-import { spawn, type ChildProcess } from "child_process"
+import type { ChildProcess } from "child_process"
 
 const SIGKILL_TIMEOUT_MS = 200
 
@@ -11,11 +11,13 @@ export namespace Shell {
     if (!pid || opts?.exited?.()) return
 
     if (process.platform === "win32") {
-      await new Promise<void>((resolve) => {
-        const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { stdio: "ignore" })
-        killer.once("exit", () => resolve())
-        killer.once("error", () => resolve())
+      const killer = Bun.spawn(["taskkill", "/pid", String(pid), "/f", "/t"], {
+        stdio: ["ignore", "ignore", "ignore"],
       })
+      await Promise.race([
+        killer.exited,
+        Bun.sleep(SIGKILL_TIMEOUT_MS).then(() => killer.terminate()),
+      ])
       return
     }
 
