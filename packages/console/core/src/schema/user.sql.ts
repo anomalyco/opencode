@@ -18,6 +18,12 @@ export const UserTable = mysqlTable(
     monthlyLimit: int("monthly_limit"),
     monthlyUsage: bigint("monthly_usage", { mode: "number" }),
     timeMonthlyUsageUpdated: utc("time_monthly_usage_updated"),
+    // subscription
+    timeSubscribed: utc("time_subscribed"),
+    subRecentUsage: bigint("sub_recent_usage", { mode: "number" }),
+    subMonthlyUsage: bigint("sub_monthly_usage", { mode: "number" }),
+    timeSubRecentUsageUpdated: utc("sub_time_recent_usage_updated"),
+    timeSubMonthlyUsageUpdated: utc("sub_time_monthly_usage_updated"),
   },
   (table) => [
     ...workspaceIndexes(table),
