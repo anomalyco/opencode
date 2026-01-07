@@ -1,5 +1,5 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, For, Match, onMount, Show, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -21,6 +21,15 @@ export default function Home() {
   const navigate = useNavigate()
   const server = useServer()
   const homedir = createMemo(() => sync.data.path.home)
+
+  // Auto-redirect to session in kiosk mode with dir parameter
+  onMount(() => {
+    if (layout.kiosk.enabled() && layout.kiosk.dir()) {
+      const dir = layout.kiosk.dir()!
+      layout.projects.open(dir)
+      navigate(`/${base64Encode(dir)}/session`)
+    }
+  })
 
   function openProject(directory: string) {
     layout.projects.open(directory)
