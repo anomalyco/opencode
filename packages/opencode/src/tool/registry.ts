@@ -129,6 +129,8 @@ export namespace ToolRegistry {
           // Filter based on agent permissions if provided
           if (agent?.permission) {
             const rule = PermissionNext.evaluate(t.id, "*", agent.permission)
+            // Only deny if permission is explicitly "deny"
+            // Allow "ask" and "allow" - ask is handled at execution time
             if (rule.action === "deny") {
               return false
             }
