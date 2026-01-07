@@ -357,3 +357,12 @@ export const cargofmt: Info = {
     return found.length > 0
   },
 }
+
+export const swiftformat: Info = {
+  name: "swift-format",
+  command: ["swift-format", "format", "-i", "$FILE"],
+  extensions: [".swift"],
+  async enabled() {
+    return Bun.which("swift-format") !== null
+  },
+}
