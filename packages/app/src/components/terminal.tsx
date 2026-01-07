@@ -3,7 +3,7 @@ import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitPr
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
-import { resolveThemeVariant, useTheme } from "@opencode-ai/ui/theme"
+import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -16,6 +16,7 @@ type TerminalColors = {
   background: string
   foreground: string
   cursor: string
+  selectionBackground: string
 }
 
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
@@ -23,11 +24,13 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
     background: "#fcfcfc",
     foreground: "#211e1e",
     cursor: "#211e1e",
+    selectionBackground: withAlpha("#211e1e", 0.2),
   },
   dark: {
     background: "#191515",
     foreground: "#d4d4d4",
     cursor: "#d4d4d4",
+    selectionBackground: withAlpha("#d4d4d4", 0.25),
   },
 }
 
@@ -55,10 +58,14 @@ export const Terminal = (props: TerminalProps) => {
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
     const background = resolved["background-stronger"] ?? fallback.background
+    const alpha = mode === "dark" ? 0.25 : 0.2
+    const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
+    const selectionBackground = withAlpha(base, alpha)
     return {
       background,
       foreground: text,
       cursor: text,
+      selectionBackground,
     }
   }
 
