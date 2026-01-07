@@ -37,7 +37,7 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { TaskTool, filterSubagents, TASK_DESCRIPTION } from "@/tool/task"
+import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
@@ -798,28 +798,6 @@ export namespace SessionPrompt {
         }
       }
       tools[key] = item
-    }
-
-    // Regenerate task tool description with filtered subagents
-    if (tools.task) {
-      const all = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
-      const filtered = filterSubagents(all, input.agent.permission)
-
-      // If no subagents are permitted, remove the task tool entirely
-      if (filtered.length === 0) {
-        delete tools.task
-      } else {
-        const description = TASK_DESCRIPTION.replace(
-          "{agents}",
-          filtered
-            .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
-            .join("\n"),
-        )
-        tools.task = {
-          ...tools.task,
-          description,
-        }
-      }
     }
 
     return tools

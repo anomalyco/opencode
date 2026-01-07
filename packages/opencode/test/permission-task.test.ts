@@ -1,10 +1,14 @@
 import { describe, test, expect } from "bun:test"
 import type { Agent } from "../src/agent/agent"
-import { filterSubagents } from "../src/tool/task"
 import { PermissionNext } from "../src/permission/next"
 import { Config } from "../src/config/config"
 import { Instance } from "../src/project/instance"
 import { tmpdir } from "./fixture/fixture"
+
+// Helper function for tests - mirrors the filtering logic in task.ts
+function filterSubagents(agents: Agent.Info[], ruleset: PermissionNext.Ruleset) {
+  return agents.filter((a: Agent.Info) => PermissionNext.evaluate("task", a.name, ruleset).action !== "deny")
+}
 
 describe("filterSubagents - permission.task filtering", () => {
   const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): PermissionNext.Ruleset =>
