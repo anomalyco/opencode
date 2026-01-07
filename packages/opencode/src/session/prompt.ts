@@ -382,6 +382,7 @@ export namespace SessionPrompt {
           messageID: assistantMessage.id,
           sessionID: sessionID,
           abort,
+          extra: { bypassAgentCheck: true },
           async metadata(input) {
             await Session.updatePart({
               ...part,

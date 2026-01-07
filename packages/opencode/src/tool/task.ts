@@ -30,15 +30,18 @@ export const TaskTool = Tool.define("task", async () => {
     }),
     async execute(params, ctx) {
       const config = await Config.get()
-      await ctx.ask({
-        permission: "task",
-        patterns: [params.subagent_type],
-        always: ["*"],
-        metadata: {
-          description: params.description,
-          subagent_type: params.subagent_type,
-        },
-      })
+      // Skip permission check when invoked from a command subtask (user already approved by invoking the command)
+      if (!ctx.extra?.bypassAgentCheck) {
+        await ctx.ask({
+          permission: "task",
+          patterns: [params.subagent_type],
+          always: ["*"],
+          metadata: {
+            description: params.description,
+            subagent_type: params.subagent_type,
+          },
+        })
+      }
 
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
