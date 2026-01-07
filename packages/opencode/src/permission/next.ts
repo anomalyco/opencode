@@ -12,24 +12,38 @@ import z from "zod"
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
 
-  const subscriptions: Array<() => void> = []
-
-  export function dispose() {
-    for (const unsubscribe of subscriptions) {
-      unsubscribe()
-    }
-    subscriptions.length = 0
+  type StateWithSubscriptions = Awaited<ReturnType<typeof state>> & {
+    subscriptions?: Array<() => void>
   }
 
-  export function init() {
-    dispose()
-    subscriptions.push(
-      Bus.subscribeAll(async (evt) => {
-        if (evt.type === "session.deleted") {
-          await clearSession(evt.properties.info.id)
-        }
-      }),
-    )
+  async function withSubscriptions(fn: (subscriptions: Array<() => void>) => void | Promise<void>): Promise<void> {
+    const s = (await state()) as StateWithSubscriptions
+    if (!s.subscriptions) {
+      s.subscriptions = []
+    }
+    await fn(s.subscriptions)
+  }
+
+  export async function dispose() {
+    await withSubscriptions((subscriptions) => {
+      for (const unsubscribe of subscriptions) {
+        unsubscribe()
+      }
+      subscriptions.length = 0
+    })
+  }
+
+  export async function init() {
+    await dispose()
+    await withSubscriptions((subscriptions) => {
+      subscriptions.push(
+        Bus.subscribeAll(async (evt) => {
+          if (evt.type === "session.deleted") {
+            await clearSession(evt.properties.info.id)
+          }
+        }),
+      )
+    })
   }
 
   export async function clearSession(sessionID: string) {
@@ -37,6 +51,11 @@ export namespace PermissionNext {
     for (const [id, pending] of Object.entries(s.pending)) {
       if (pending.info.sessionID === sessionID) {
         delete s.pending[id]
+        Bus.publish(Event.Replied, {
+          sessionID: pending.info.sessionID,
+          requestID: pending.info.id,
+          reply: "reject",
+        })
         pending.reject(new RejectedError())
       }
     }

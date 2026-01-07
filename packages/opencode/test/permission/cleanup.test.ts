@@ -9,7 +9,7 @@ test("clearSession - rejects pending permissions for session", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      PermissionNext.init()
+      await PermissionNext.init()
       try {
         // Create a pending permission by asking with "ask" action
         const askPromise = PermissionNext.ask({
@@ -38,7 +38,7 @@ test("clearSession - rejects pending permissions for session", async () => {
         expect(error).toBeInstanceOf(PermissionNext.RejectedError)
         expect((await PermissionNext.list()).length).toBe(0)
       } finally {
-        PermissionNext.dispose()
+        await PermissionNext.dispose()
       }
     },
   })
@@ -49,7 +49,7 @@ test("clearSession - does not affect other sessions", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      PermissionNext.init()
+      await PermissionNext.init()
       try {
         // Create pending permissions for two sessions
         const askPromise1 = PermissionNext.ask({
@@ -97,7 +97,7 @@ test("clearSession - does not affect other sessions", async () => {
         })
         await result1
       } finally {
-        PermissionNext.dispose()
+        await PermissionNext.dispose()
       }
     },
   })
@@ -108,7 +108,7 @@ test("init - subscribes to session.deleted and clears session", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      PermissionNext.init()
+      await PermissionNext.init()
       try {
         // Create a pending permission
         const askPromise = PermissionNext.ask({
@@ -128,7 +128,7 @@ test("init - subscribes to session.deleted and clears session", async () => {
         expect((await PermissionNext.list()).length).toBe(1)
 
         // Simulate session deletion by publishing the event
-        // Using the Session.Event.Deleted format
+        // Bus.publish returns a Promise that resolves when all handlers complete
         await Bus.publish(
           { type: "session.deleted", properties: {} as any },
           {
@@ -146,14 +146,11 @@ test("init - subscribes to session.deleted and clears session", async () => {
           },
         )
 
-        // Give event handler time to process
-        await new Promise((resolve) => setTimeout(resolve, 50))
-
         // Verify pending was cleared
         expect((await PermissionNext.list()).length).toBe(0)
         expect(await result).toBeInstanceOf(PermissionNext.RejectedError)
       } finally {
-        PermissionNext.dispose()
+        await PermissionNext.dispose()
       }
     },
   })
@@ -164,7 +161,7 @@ test("dispose - unsubscribes from events", async () => {
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
-      PermissionNext.init()
+      await PermissionNext.init()
 
       // Create a pending permission
       const askPromise = PermissionNext.ask({
@@ -178,7 +175,7 @@ test("dispose - unsubscribes from events", async () => {
       })
 
       // Dispose the subscription
-      PermissionNext.dispose()
+      await PermissionNext.dispose()
 
       // Verify pending still exists
       expect((await PermissionNext.list()).length).toBe(1)
@@ -201,9 +198,6 @@ test("dispose - unsubscribes from events", async () => {
         },
       )
 
-      // Give event handler time to process (if it were still subscribed)
-      await new Promise((resolve) => setTimeout(resolve, 50))
-
       // Pending should still exist because we disposed
       expect((await PermissionNext.list()).length).toBe(1)
 
@@ -220,9 +214,9 @@ test("init - calling init twice does not duplicate subscriptions", async () => {
     directory: tmp.path,
     fn: async () => {
       // Call init multiple times (it calls dispose first internally)
-      PermissionNext.init()
-      PermissionNext.init()
-      PermissionNext.init()
+      await PermissionNext.init()
+      await PermissionNext.init()
+      await PermissionNext.init()
 
       try {
         // Create a pending permission
@@ -256,13 +250,11 @@ test("init - calling init twice does not duplicate subscriptions", async () => {
           },
         )
 
-        await new Promise((resolve) => setTimeout(resolve, 50))
-
         // Should be cleared exactly once (no duplicate handlers)
         expect((await PermissionNext.list()).length).toBe(0)
         expect(await result).toBeInstanceOf(PermissionNext.RejectedError)
       } finally {
-        PermissionNext.dispose()
+        await PermissionNext.dispose()
       }
     },
   })
