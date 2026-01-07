@@ -229,7 +229,30 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          let url: string
+          try {
+            url = new URL(args.url).origin
+          } catch {
+            prompts.log.error(`Invalid URL: ${args.url}`)
+            prompts.outro("Done")
+            return
+          }
+
+          let wellknown: any
+          try {
+            const response = await fetch(`${url}/.well-known/opencode`)
+            if (!response.ok) {
+              prompts.log.error(`Failed to fetch the config: received a ${response.status} from ${url}`)
+              prompts.outro("Done")
+              return
+            }
+            wellknown = await response.json()
+          } catch {
+            prompts.log.error(`Failed to fetch the config from ${url}`)
+            prompts.outro("Done")
+            return
+          }
+
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
             cmd: wellknown.auth.command,
@@ -242,12 +265,12 @@ export const AuthLoginCommand = cmd({
             return
           }
           const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.set(url, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success("Logged into " + url)
           prompts.outro("Done")
           return
         }
