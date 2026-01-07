@@ -243,6 +243,7 @@ export namespace MessageV2 {
       status: z.literal("completed"),
       input: z.record(z.string(), z.any()),
       output: z.string(),
+      summary: z.string().optional(),
       title: z.string(),
       metadata: z.record(z.string(), z.any()),
       time: z.object({
@@ -520,7 +521,9 @@ export namespace MessageV2 {
                 state: "output-available",
                 toolCallId: part.callID,
                 input: part.state.input,
-                output: part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output,
+                output: part.state.time.compacted
+                  ? (part.state.summary ?? "[Old tool result content cleared]")
+                  : part.state.output,
                 callProviderMetadata: part.metadata,
               })
             }

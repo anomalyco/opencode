@@ -493,6 +493,43 @@ You can control context compaction behavior through the `compaction` option.
 
 ---
 
+### Pruning
+
+You can configure smart pruning behavior through the `pruning` option. This system manages context by intelligently summarizing and compressing tool outputs based on their importance.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "pruning": {
+    "enabled": true,
+    "budgets": {
+      "content": 60000,
+      "navigation": 15000
+    },
+    "summarization": {
+      "enabled": true,
+      "model": "openai/gpt-4o-mini"
+    },
+    "contentTools": ["read", "webfetch"],
+    "navigationTools": ["grep", "ls"],
+    "protectedTools": ["edit", "write"]
+  }
+}
+```
+
+- `enabled` - Enable smart pruning (default: `true`).
+- `budgets` - Token budgets for different tool tiers.
+  - `content` - Budget for content tools like `read` (default: `60000`).
+  - `navigation` - Budget for navigation tools like `ls`, `grep` (default: `15000`).
+- `summarization` - Configuration for LLM-based summarization of pruned content.
+  - `enabled` - Enable summarization (default: `true`).
+  - `model` - Model to use for summarization (default: `openai/gpt-4o-mini`).
+- `contentTools` - List of additional tools to treat as content (high priority).
+- `navigationTools` - List of additional tools to treat as navigation (low priority).
+- `protectedTools` - List of tools that should never be pruned.
+
+---
+
 ### Watcher
 
 You can configure file watcher ignore patterns through the `watcher` option.

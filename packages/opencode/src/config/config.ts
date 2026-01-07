@@ -1004,6 +1004,42 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      pruning: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable smart pruning (default: true)"),
+          budgets: z
+            .object({
+              content: z
+                .number()
+                .optional()
+                .describe("Token budget for content tools like read/webfetch (default: 60000)"),
+              navigation: z
+                .number()
+                .optional()
+                .describe("Token budget for navigation tools like grep/glob (default: 15000)"),
+            })
+            .optional(),
+          summarization: z
+            .object({
+              enabled: z.boolean().optional().describe("Enable LLM summarization for content tools (default: true)"),
+              model: z
+                .string()
+                .optional()
+                .describe("Model to use for summarization (default: uses small_model or provider's small model)"),
+            })
+            .optional(),
+          contentTools: z
+            .array(z.string())
+            .optional()
+            .describe("Additional tools to treat as content tools (high priority)"),
+          navigationTools: z
+            .array(z.string())
+            .optional()
+            .describe("Additional tools to treat as navigation tools (low priority)"),
+          protectedTools: z.array(z.string()).optional().describe("Tools that should never be pruned"),
+        })
+        .optional()
+        .describe("Smart pruning configuration for tiered tool output management"),
       experimental: z
         .object({
           hook: z
