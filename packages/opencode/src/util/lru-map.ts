@@ -34,8 +34,8 @@ export class LRUMap<K, V> {
     // Delete first to ensure it goes to end if it exists
     this.map.delete(key)
     this.map.set(key, value)
-    // Evict oldest entries if over capacity
-    while (this.map.size > this.capacity) {
+    // Evict oldest entry if over capacity (can only exceed by 1 since we add one at a time)
+    if (this.map.size > this.capacity) {
       const oldest = this.map.keys().next().value as K
       this.map.delete(oldest)
     }
