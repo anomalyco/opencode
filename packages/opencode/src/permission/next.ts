@@ -50,13 +50,15 @@ export namespace PermissionNext {
     const s = await state()
     for (const [id, pending] of Object.entries(s.pending)) {
       if (pending.info.sessionID === sessionID) {
-        delete s.pending[id]
+        // Order: reject promise, publish event, then delete from map
+        // This ensures handlers can safely access pending state
+        pending.reject(new RejectedError())
         Bus.publish(Event.Replied, {
           sessionID: pending.info.sessionID,
           requestID: pending.info.id,
           reply: "reject",
         })
-        pending.reject(new RejectedError())
+        delete s.pending[id]
       }
     }
   }
@@ -204,29 +206,37 @@ export namespace PermissionNext {
       const s = await state()
       const existing = s.pending[input.requestID]
       if (!existing) return
+      // Order: reject/resolve promise, publish event, then delete from map
+      // This ensures handlers can safely access pending state
+      if (input.reply === "reject") {
+        existing.reject(input.message ? new CorrectedError(input.message) : new RejectedError())
+        Bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
+        delete s.pending[input.requestID]
+        // Reject all other pending permissions for this session
+        const sessionID = existing.info.sessionID
+        for (const [id, pending] of Object.entries(s.pending)) {
+          if (pending.info.sessionID === sessionID) {
+            pending.reject(new RejectedError())
+            Bus.publish(Event.Replied, {
+              sessionID: pending.info.sessionID,
+              requestID: pending.info.id,
+              reply: "reject",
+            })
+            delete s.pending[id]
+          }
+        }
+        return
+      }
       delete s.pending[input.requestID]
       Bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         reply: input.reply,
       })
-      if (input.reply === "reject") {
-        existing.reject(input.message ? new CorrectedError(input.message) : new RejectedError())
-        // Reject all other pending permissions for this session
-        const sessionID = existing.info.sessionID
-        for (const [id, pending] of Object.entries(s.pending)) {
-          if (pending.info.sessionID === sessionID) {
-            delete s.pending[id]
-            Bus.publish(Event.Replied, {
-              sessionID: pending.info.sessionID,
-              requestID: pending.info.id,
-              reply: "reject",
-            })
-            pending.reject(new RejectedError())
-          }
-        }
-        return
-      }
       if (input.reply === "once") {
         existing.resolve()
         return
