@@ -1,4 +1,5 @@
 import {
+  batch,
   createEffect,
   createMemo,
   createSignal,
@@ -31,7 +32,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -47,6 +48,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
+import { retry } from "@opencode-ai/util/retry"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -285,6 +287,146 @@ export default function Layout(props: ParentProps) {
 
   const currentSessions = createMemo(() => projectSessions(currentProject()))
 
+  type PrefetchQueue = {
+    inflight: Set<string>
+    pending: string[]
+    pendingSet: Set<string>
+    running: number
+  }
+
+  const prefetchChunk = 200
+  const prefetchConcurrency = 1
+  const prefetchPendingLimit = 6
+  const prefetchToken = { value: 0 }
+  const prefetchQueues = new Map<string, PrefetchQueue>()
+
+  createEffect(() => {
+    params.dir
+    globalSDK.url
+
+    prefetchToken.value += 1
+    for (const q of prefetchQueues.values()) {
+      q.pending.length = 0
+      q.pendingSet.clear()
+    }
+  })
+
+  const queueFor = (directory: string) => {
+    const existing = prefetchQueues.get(directory)
+    if (existing) return existing
+
+    const created: PrefetchQueue = {
+      inflight: new Set(),
+      pending: [],
+      pendingSet: new Set(),
+      running: 0,
+    }
+    prefetchQueues.set(directory, created)
+    return created
+  }
+
+  const prefetchMessages = (directory: string, sessionID: string, token: number) => {
+    const [, setStore] = globalSync.child(directory)
+
+    return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
+      .then((messages) => {
+        if (prefetchToken.value !== token) return
+
+        const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+        const next = items
+          .map((x) => x.info)
+          .filter((m) => !!m?.id)
+          .slice()
+          .sort((a, b) => a.id.localeCompare(b.id))
+
+        batch(() => {
+          setStore("message", sessionID, reconcile(next, { key: "id" }))
+
+          for (const message of items) {
+            setStore(
+              "part",
+              message.info.id,
+              reconcile(
+                message.parts
+                  .filter((p) => !!p?.id)
+                  .slice()
+                  .sort((a, b) => a.id.localeCompare(b.id)),
+                { key: "id" },
+              ),
+            )
+          }
+        })
+      })
+      .catch(() => undefined)
+  }
+
+  const pumpPrefetch = (directory: string) => {
+    const q = queueFor(directory)
+    if (q.running >= prefetchConcurrency) return
+
+    const sessionID = q.pending.shift()
+    if (!sessionID) return
+
+    q.pendingSet.delete(sessionID)
+    q.inflight.add(sessionID)
+    q.running += 1
+
+    const token = prefetchToken.value
+
+    void prefetchMessages(directory, sessionID, token).finally(() => {
+      q.running -= 1
+      q.inflight.delete(sessionID)
+      pumpPrefetch(directory)
+    })
+  }
+
+  const prefetchSession = (session: Session, priority: "high" | "low" = "low") => {
+    const directory = session.directory
+    if (!directory) return
+
+    const [store] = globalSync.child(directory)
+    if (store.message[session.id] !== undefined) return
+
+    const q = queueFor(directory)
+    if (q.inflight.has(session.id)) return
+    if (q.pendingSet.has(session.id)) return
+
+    if (priority === "high") q.pending.unshift(session.id)
+    if (priority !== "high") q.pending.push(session.id)
+    q.pendingSet.add(session.id)
+
+    while (q.pending.length > prefetchPendingLimit) {
+      const dropped = q.pending.pop()
+      if (!dropped) continue
+      q.pendingSet.delete(dropped)
+    }
+
+    pumpPrefetch(directory)
+  }
+
+  createEffect(() => {
+    const sessions = currentSessions()
+    const id = params.id
+
+    if (!id) {
+      const first = sessions[0]
+      if (first) prefetchSession(first)
+
+      const second = sessions[1]
+      if (second) prefetchSession(second)
+      return
+    }
+
+    const index = sessions.findIndex((s) => s.id === id)
+    if (index === -1) return
+
+    const next = sessions[index + 1]
+    if (next) prefetchSession(next)
+
+    const prev = sessions[index - 1]
+    if (prev) prefetchSession(prev)
+  })
+
   function navigateSessionByOffset(offset: number) {
     const projects = layout.projects.list()
     if (projects.length === 0) return
@@ -310,6 +452,19 @@ export default function Layout(props: ParentProps) {
 
     if (targetIndex >= 0 && targetIndex < sessions.length) {
       const session = sessions[targetIndex]
+      const next = sessions[targetIndex + 1]
+      const prev = sessions[targetIndex - 1]
+
+      if (offset > 0) {
+        if (next) prefetchSession(next, "high")
+        if (prev) prefetchSession(prev)
+      }
+
+      if (offset < 0) {
+        if (prev) prefetchSession(prev, "high")
+        if (next) prefetchSession(next)
+      }
+
       if (import.meta.env.DEV) {
         navStart({
           dir: base64Encode(session.directory),
@@ -333,7 +488,19 @@ export default function Layout(props: ParentProps) {
       return
     }
 
-    const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
+    const index = offset > 0 ? 0 : nextProjectSessions.length - 1
+    const targetSession = nextProjectSessions[index]
+    const nextSession = nextProjectSessions[index + 1]
+    const prevSession = nextProjectSessions[index - 1]
+
+    if (offset > 0) {
+      if (nextSession) prefetchSession(nextSession, "high")
+    }
+
+    if (offset < 0) {
+      if (prevSession) prefetchSession(prevSession, "high")
+    }
+
     if (import.meta.env.DEV) {
       navStart({
         dir: base64Encode(targetSession.directory),
@@ -696,6 +863,8 @@ export default function Layout(props: ParentProps) {
             <A
               href={`${props.slug}/session/${props.session.id}`}
               class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
+              onMouseEnter={() => prefetchSession(props.session, "high")}
+              onFocus={() => prefetchSession(props.session, "high")}
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
                 <span
