@@ -5,6 +5,16 @@ export type ToolContext = {
   messageID: string
   agent: string
   abort: AbortSignal
+  /**
+   * Request user permission for an action. Throws if user denies.
+   * @param input Permission request details
+   */
+  askPermission?: (input: {
+    type: string
+    title: string
+    pattern?: string | string[]
+    metadata: Record<string, any>
+  }) => Promise<void>
 }
 
 export function tool<Args extends z.ZodRawShape>(input: {
