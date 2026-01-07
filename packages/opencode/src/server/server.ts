@@ -72,26 +72,26 @@ export namespace Server {
   }
 
   const app = new Hono()
-  export const App: () => Hono = lazy(
-    () =>
-      app
-        .onError((err, c) => {
-          log.error("failed", {
-            error: err,
-          })
-          if (err instanceof NamedError) {
-            let status: ContentfulStatusCode
-            if (err instanceof Storage.NotFoundError) status = 404
-            else if (err instanceof Provider.ModelNotFoundError) status = 400
-            else if (err.name.startsWith("Worktree")) status = 400
-            else status = 500
-            return c.json(err.toObject(), { status })
-          }
-          const message = err instanceof Error && err.stack ? err.stack : err.toString()
-          return c.json(new NamedError.Unknown({ message }).toObject(), {
-            status: 500,
-          })
+  export const App = lazy(() =>
+    // @ts-expect-error Type instantiation is excessively deep - known TypeScript limitation with Hono
+    app
+      .onError((err, c) => {
+        log.error("failed", {
+          error: err,
         })
+        if (err instanceof NamedError) {
+          let status: ContentfulStatusCode
+          if (err instanceof Storage.NotFoundError) status = 404
+          else if (err instanceof Provider.ModelNotFoundError) status = 400
+          else if (err.name.startsWith("Worktree")) status = 400
+          else status = 500
+          return c.json(err.toObject(), { status })
+        }
+        const message = err instanceof Error && err.stack ? err.stack : err.toString()
+        return c.json(new NamedError.Unknown({ message }).toObject(), {
+          status: 500,
+        })
+      })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
           if (!skipLogging) {
@@ -2922,8 +2922,8 @@ export namespace Server {
   )
 
   export async function openapi() {
-    // Cast to break excessive type recursion from long route chains
-    const result = await generateSpecs(App() as Hono, {
+    // @ts-expect-error Type instantiation is excessively deep - known TypeScript limitation with Hono
+    const result = await generateSpecs(App(), {
       documentation: {
         info: {
           title: "opencode",
