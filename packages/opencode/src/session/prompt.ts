@@ -37,7 +37,7 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
-import { TaskTool, filterSubagents, TASK_DESCRIPTION } from "@/tool/task"
+import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
@@ -383,7 +383,7 @@ export namespace SessionPrompt {
           sessionID: sessionID,
           abort,
           callID: part.callID,
-          extra: { userInvokedAgents: [task.agent] },
+          extra: { bypassAgentCheck: true },
           async metadata(input) {
             await Session.updatePart({
               ...part,
@@ -545,11 +545,9 @@ export namespace SessionPrompt {
         abort,
       })
 
-      // Track agents explicitly invoked by user via @ autocomplete
-      const userInvokedAgents = msgs
-        .filter((m) => m.info.role === "user")
-        .flatMap((m) => m.parts.filter((p) => p.type === "agent") as MessageV2.AgentPart[])
-        .map((p) => p.name)
+      // Check if user explicitly invoked an agent via @ in this turn
+      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+      const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
       const tools = await resolveTools({
         agent,
@@ -557,7 +555,7 @@ export namespace SessionPrompt {
         model,
         tools: lastUser.tools,
         processor,
-        userInvokedAgents,
+        bypassAgentCheck,
       })
 
       if (step === 1) {
@@ -646,7 +644,7 @@ export namespace SessionPrompt {
     session: Session.Info
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
-    userInvokedAgents: string[]
+    bypassAgentCheck: boolean
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -656,7 +654,7 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
-      extra: { model: input.model, userInvokedAgents: input.userInvokedAgents },
+      extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
@@ -798,28 +796,6 @@ export namespace SessionPrompt {
         }
       }
       tools[key] = item
-    }
-
-    // Regenerate task tool description with filtered subagents
-    if (tools.task) {
-      const all = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
-      const filtered = filterSubagents(all, input.agent.permission)
-
-      // If no subagents are permitted, remove the task tool entirely
-      if (filtered.length === 0) {
-        delete tools.task
-      } else {
-        const description = TASK_DESCRIPTION.replace(
-          "{agents}",
-          filtered
-            .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
-            .join("\n"),
-        )
-        tools.task = {
-          ...tools.task,
-          description,
-        }
-      }
     }
 
     return tools
