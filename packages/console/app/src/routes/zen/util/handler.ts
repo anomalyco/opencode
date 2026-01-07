@@ -475,31 +475,50 @@ export async function handler(
       const sub = authInfo.subscription
       const now = new Date()
 
-      // Check monthly limit
+      const formatRetryTime = (seconds: number) => {
+        const days = Math.floor(seconds / 86400)
+        if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
+        const hours = Math.floor(seconds / 3600)
+        const minutes = Math.ceil((seconds % 3600) / 60)
+        if (hours >= 1) return `${hours}hr ${minutes}min`
+        return `${minutes}min`
+      }
+
+      // Check monthly limit (based on subscription billing cycle)
       if (
         sub.subMonthlyUsage &&
         sub.timeSubMonthlyUsageUpdated &&
-        sub.subMonthlyUsage >= centsToMicroCents(black.monthlyLimit * 100) &&
-        now.getUTCFullYear() === sub.timeSubMonthlyUsageUpdated.getUTCFullYear() &&
-        now.getUTCMonth() === sub.timeSubMonthlyUsageUpdated.getUTCMonth()
+        sub.subMonthlyUsage >= centsToMicroCents(black.monthlyLimit * 100)
       ) {
-        const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
-        throw new SubscriptionError(
-          `Rate limit exceeded. Please try again later.`,
-          Math.ceil((nextMonth.getTime() - now.getTime()) / 1000),
+        const subscribeDay = sub.timeSubscribed!.getUTCDate()
+        const cycleStart = new Date(
+          Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCDate() >= subscribeDay ? now.getUTCMonth() : now.getUTCMonth() - 1,
+            subscribeDay,
+          ),
         )
+        const cycleEnd = new Date(Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, subscribeDay))
+        if (sub.timeSubMonthlyUsageUpdated >= cycleStart && sub.timeSubMonthlyUsageUpdated < cycleEnd) {
+          const retryAfter = Math.ceil((cycleEnd.getTime() - now.getTime()) / 1000)
+          throw new SubscriptionError(
+            `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
+            retryAfter,
+          )
+        }
       }
 
       // Check interval limit
-      const intervalMs = black.intervalLength * 86400 * 1000
+      const intervalMs = black.intervalLength * 3600 * 1000
       if (sub.subIntervalUsage && sub.timeSubIntervalUsageUpdated) {
         const currentInterval = Math.floor(now.getTime() / intervalMs)
         const usageInterval = Math.floor(sub.timeSubIntervalUsageUpdated.getTime() / intervalMs)
         if (currentInterval === usageInterval && sub.subIntervalUsage >= centsToMicroCents(black.intervalLimit * 100)) {
           const nextInterval = (currentInterval + 1) * intervalMs
+          const retryAfter = Math.ceil((nextInterval - now.getTime()) / 1000)
           throw new SubscriptionError(
-            `Rate limit exceeded. Please try again later.`,
-            Math.ceil((nextInterval - now.getTime()) / 1000),
+            `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
+            retryAfter,
           )
         }
       }
@@ -641,27 +660,41 @@ export async function handler(
           .set({ timeUsed: sql`now()` })
           .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
         ...(authInfo.subscription
-          ? [
-              db
-                .update(UserTable)
-                .set({
-                  subMonthlyUsage: sql`
+          ? (() => {
+              const now = new Date()
+              const subscribeDay = authInfo.subscription.timeSubscribed!.getUTCDate()
+              const cycleStart = new Date(
+                Date.UTC(
+                  now.getUTCFullYear(),
+                  now.getUTCDate() >= subscribeDay ? now.getUTCMonth() : now.getUTCMonth() - 1,
+                  subscribeDay,
+                ),
+              )
+              const cycleEnd = new Date(
+                Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, subscribeDay),
+              )
+              return [
+                db
+                  .update(UserTable)
+                  .set({
+                    subMonthlyUsage: sql`
               CASE
-                WHEN MONTH(${UserTable.timeSubMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeSubMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.subMonthlyUsage} + ${cost}
+                WHEN ${UserTable.timeSubMonthlyUsageUpdated} >= ${cycleStart} AND ${UserTable.timeSubMonthlyUsageUpdated} < ${cycleEnd} THEN ${UserTable.subMonthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                  timeSubMonthlyUsageUpdated: sql`now()`,
-                  subIntervalUsage: sql`
+                    timeSubMonthlyUsageUpdated: sql`now()`,
+                    subIntervalUsage: sql`
               CASE
-                WHEN FLOOR(UNIX_TIMESTAMP(${UserTable.timeSubIntervalUsageUpdated}) / (${BlackData.get().intervalLength} * 86400)) = FLOOR(UNIX_TIMESTAMP(now()) / (${BlackData.get().intervalLength} * 86400)) THEN ${UserTable.subIntervalUsage} + ${cost}
+                WHEN FLOOR(UNIX_TIMESTAMP(${UserTable.timeSubIntervalUsageUpdated}) / (${BlackData.get().intervalLength} * 3600)) = FLOOR(UNIX_TIMESTAMP(now()) / (${BlackData.get().intervalLength} * 3600)) THEN ${UserTable.subIntervalUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                  timeSubIntervalUsageUpdated: sql`now()`,
-                })
-                .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
-            ]
+                    timeSubIntervalUsageUpdated: sql`now()`,
+                  })
+                  .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+              ]
+            })()
           : [
               db
                 .update(BillingTable)
