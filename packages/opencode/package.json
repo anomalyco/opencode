@@ -72,7 +72,7 @@
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
-    "@modelcontextprotocol/sdk": "1.15.1",
+    "@modelcontextprotocol/sdk": "1.25.2",
     "@octokit/graphql": "9.0.2",
     "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
