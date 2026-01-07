@@ -25,6 +25,13 @@ export function Sidebar(props: { sessionID: string }) {
     diff: true,
     todo: true,
     lsp: true,
+    tasks: true,
+  })
+
+  const backgroundTasks = createMemo(() => {
+    return sync.data.session
+      .filter((s) => s.parentID === props.sessionID)
+      .toSorted((a, b) => a.time.created - b.time.created)
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -216,6 +223,53 @@ export function Sidebar(props: { sessionID: string }) {
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
                   <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={backgroundTasks().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => backgroundTasks().length > 2 && setExpanded("tasks", !expanded.tasks)}
+                >
+                  <Show when={backgroundTasks().length > 2}>
+                    <text fg={theme.text}>{expanded.tasks ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Background Tasks</b>
+                    <Show when={!expanded.tasks}>
+                      <span style={{ fg: theme.textMuted }}> ({backgroundTasks().length})</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={backgroundTasks().length <= 2 || expanded.tasks}>
+                  <For each={backgroundTasks()}>
+                    {(task) => {
+                      const status = createMemo(() => sync.data.session_status[task.id])
+                      const statusType = createMemo(() => status()?.type ?? "idle")
+                      const statusColor = createMemo(() => {
+                        if (statusType() === "busy") return theme.warning
+                        if (statusType() === "retry") return theme.error
+                        return theme.success
+                      })
+                      const statusLabel = createMemo(() => {
+                        if (statusType() === "busy") return "running"
+                        if (statusType() === "retry") return "retrying"
+                        return "completed"
+                      })
+                      return (
+                        <box flexDirection="row" gap={1}>
+                          <text flexShrink={0} style={{ fg: statusColor() }}>
+                            •
+                          </text>
+                          <text fg={theme.text} wrapMode="word">
+                            {task.title} <span style={{ fg: theme.textMuted }}>{statusLabel()}</span>
+                          </text>
+                        </box>
+                      )
+                    }}
+                  </For>
                 </Show>
               </box>
             </Show>

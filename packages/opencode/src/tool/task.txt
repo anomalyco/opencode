@@ -1,9 +1,21 @@
-Launch a new agent to handle complex, multistep tasks autonomously.
+Launch a subagent (Task tool = subagent) to handle complex, multistep tasks autonomously. Supports two modes: blocking (default) and async/background/parallel (set async=true).
 
 Available agent types and the tools they have access to:
 {agents}
 
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
+
+- MUST use the Task tool when work should be delegated to a subagent.
+- SHOULD use it for research, exploration, or multi-step work in parallel.
+- MUST NOT use it for simple file reads or quick lookups better served by Read/Glob/Grep.
+
+Async mode (async=true):
+- MUST use async when the subagent work can run concurrently while you continue with other tasks
+- MUST use async for non-conflicting parallel work (e.g., multiple independent research tasks, testing different components simultaneously)
+- MUST use async for long-running tasks where you don't need to wait for the result
+- SHOULD use async to maximize performance by launching multiple tasks in a single message
+- MUST NOT use async when the result is required before the next step (omit for blocking execution)
+- Background task completion will notify you automatically with the results
 
 When to use the Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
@@ -16,12 +28,13 @@ When NOT to use the Task tool:
 
 
 Usage notes:
-1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
+1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses. For concurrent parallel work that doesn't block your progress, use async=true for each task.
 2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
 3. Each agent invocation is stateless unless you provide a session_id. Your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
 4. The agent's outputs should generally be trusted
 5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
 6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+7. Background task status: You will be automatically notified when async tasks complete. The system tracks all running background tasks and their completion status.
 
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 

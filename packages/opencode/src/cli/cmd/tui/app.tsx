@@ -290,6 +290,21 @@ function App() {
       keybind: "session_new",
       category: "Session",
       onSelect: () => {
+        if (route.data.type === "session") {
+          const currentSessionID = route.data.sessionID
+          const children = sync.data.session.filter((s) => s.parentID === currentSessionID)
+          for (const child of children) {
+            const status = sync.data.session_status[child.id]
+            if (status?.type === "busy" || status?.type === "retry") {
+              toast.show({
+                variant: "warning",
+                message: `Cannot start new session: background task "${child.title}" is still running`,
+              })
+              return
+            }
+          }
+        }
+
         const current = promptRef.current
         // Don't require focus - if there's any text, preserve it
         const currentPrompt = current?.current?.input ? current.current : undefined
@@ -562,7 +577,11 @@ function App() {
 
   sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
-      route.navigate({ type: "home" })
+      if (evt.properties.info.parentID) {
+        route.navigate({ type: "session", sessionID: evt.properties.info.parentID })
+      } else {
+        route.navigate({ type: "home" })
+      }
       toast.show({
         variant: "info",
         message: "The current session was deleted",

@@ -138,9 +138,21 @@ export namespace SessionCompaction {
       { sessionID: input.sessionID },
       { context: [], prompt: undefined },
     )
+
+    const running = await Session.runningChildren(input.sessionID)
+    let runningTasksInfo = ""
+    if (running.length > 0) {
+      runningTasksInfo = "\n\nIMPORTANT: The following background tasks are still running:\n"
+      for (const child of running) {
+        runningTasksInfo += `- Task: "${child.title}" (Session: ${child.id})\n`
+      }
+      runningTasksInfo +=
+        "\nInclude these session IDs in your summary so the conversation can track their completion.\n"
+    }
+
     const defaultPrompt =
       "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
-    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const promptText = (compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")) + runningTasksInfo
     const result = await processor.process({
       user: userMessage,
       agent,

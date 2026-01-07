@@ -218,21 +218,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
-          const parts = store.part[event.properties.part.messageID]
+          const part = event.properties.part
+          const parts = store.part[part.messageID]
           if (!parts) {
-            setStore("part", event.properties.part.messageID, [event.properties.part])
+            setStore("part", part.messageID, [part])
             break
           }
-          const result = Binary.search(parts, event.properties.part.id, (p) => p.id)
+          const result = Binary.search(parts, part.id, (p) => p.id)
           if (result.found) {
-            setStore("part", event.properties.part.messageID, result.index, reconcile(event.properties.part))
+            setStore("part", part.messageID, result.index, reconcile(part))
             break
           }
           setStore(
             "part",
-            event.properties.part.messageID,
+            part.messageID,
             produce((draft) => {
-              draft.splice(result.index, 0, event.properties.part)
+              draft.splice(result.index, 0, part)
             }),
           )
           break

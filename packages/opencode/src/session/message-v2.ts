@@ -169,6 +169,10 @@ export namespace MessageV2 {
     description: z.string(),
     agent: z.string(),
     command: z.string().optional(),
+    subagentSessionID: z.string().optional(),
+    status: z.enum(["completed", "error"]).optional(),
+    error: z.string().optional(),
+    summary: z.string().optional(),
   })
   export type SubtaskPart = z.infer<typeof SubtaskPart>
 
@@ -426,11 +430,65 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
+  function buildSubtaskSystemText(part: MessageV2.SubtaskPart): string | undefined {
+    const description = part.description
+    const sessionId = part.subagentSessionID ?? ""
+
+    if (part.status === "completed") {
+      return [
+        `Background task completed: ${description}`,
+        "",
+        "Summary:",
+        part.summary ?? "No summary provided.",
+        "",
+        "Instruction:",
+        "- MUST treat the summary as authoritative and complete.",
+        "- MUST NOT check status or call tools to verify completion.",
+        "- MUST briefly acknowledge completion to the user.",
+        "- MUST incorporate the summary into your next actions when relevant.",
+      ].join("\n")
+    }
+
+    if (part.status === "error") {
+      return [
+        `Background task failed: ${description}`,
+        "",
+        "Error:",
+        part.error ?? "Unknown error",
+        "",
+        "Instruction:",
+        "- MUST briefly acknowledge the failure to the user.",
+        "- MUST attempt recovery by calling the task tool with the same session_id and prompt 'continue' (async=true).",
+        sessionId ? `session_id: ${sessionId}` : "",
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n")
+    }
+
+    return
+  }
+
   export function toModelMessage(input: WithParts[]): ModelMessage[] {
     const result: UIMessage[] = []
 
     for (const msg of input) {
       if (msg.parts.length === 0) continue
+
+      const completionPart = msg.parts.find(
+        (p): p is MessageV2.SubtaskPart => p.type === "subtask" && (p.status === "completed" || p.status === "error"),
+      )
+
+      if (completionPart) {
+        const text = buildSubtaskSystemText(completionPart)
+        if (text) {
+          result.push({
+            id: msg.info.id,
+            role: "assistant",
+            parts: [{ type: "text", text }],
+          })
+          continue
+        }
+      }
 
       if (msg.info.role === "user") {
         const userMessage: UIMessage = {

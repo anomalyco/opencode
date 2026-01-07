@@ -71,6 +71,7 @@ import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { Identifier } from "@/id/id"
 
 addDefaultParsers(parsers.parsers)
 
@@ -181,6 +182,27 @@ export function Session() {
 
   const toast = useToast()
   const sdk = useSDK()
+
+  const childSessions = createMemo(() => sync.data.session.filter((s) => s.parentID === route.sessionID))
+  const prevChildStatuses = new Map<string, string>()
+
+  createEffect(() => {
+    for (const child of childSessions()) {
+      const status = sync.data.session_status[child.id]
+      const currentType = status?.type ?? "idle"
+      const prevType = prevChildStatuses.get(child.id)
+
+      if (prevType && (prevType === "busy" || prevType === "retry") && currentType === "idle") {
+        toast.show({
+          message: `${child.title} completed`,
+          variant: "success",
+          duration: 5000,
+        })
+      }
+
+      prevChildStatuses.set(child.id, currentType)
+    }
+  })
 
   // Handle initial prompt from fork
   createEffect(() => {
@@ -1004,6 +1026,12 @@ export function Session() {
                     <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
                       <></>
                     </Match>
+                    <Match when={message.role === "user" && isSubtaskReminder(sync.data.part[message.id] ?? [])}>
+                      <SubtaskReminderMessage
+                        message={message as UserMessage}
+                        parts={sync.data.part[message.id] ?? []}
+                      />
+                    </Match>
                     <Match when={message.role === "user"}>
                       <UserMessage
                         index={index()}
@@ -1074,6 +1102,116 @@ const MIME_BADGE: Record<string, string> = {
   "application/x-directory": "dir",
 }
 
+type TaskSummaryItem = {
+  id: string
+  tool: string
+  state: {
+    status: string
+    title?: string
+  }
+}
+
+type SubtaskPart = Extract<Part, { type: "subtask" }> & {
+  status?: "completed" | "error"
+  subagentSessionID?: string
+}
+
+function isSubtaskReminder(parts: Part[]): boolean {
+  if (parts.length === 0) return false
+  return parts.every((part) => {
+    if (part.type !== "subtask") return false
+    const subtask = part as SubtaskPart
+    return subtask.status === "completed" || subtask.status === "error"
+  })
+}
+
+function isTaskSummaryItem(value: unknown): value is TaskSummaryItem {
+  if (!value || typeof value !== "object") return false
+  const record = value as Record<string, unknown>
+  if (typeof record["id"] !== "string") return false
+  if (typeof record["tool"] !== "string") return false
+  const state = record["state"]
+  if (!state || typeof state !== "object") return false
+  const stateRecord = state as Record<string, unknown>
+  if (typeof stateRecord["status"] !== "string") return false
+  const title = stateRecord["title"]
+  if (title !== undefined && typeof title !== "string") return false
+  return true
+}
+
+function readTaskSummary(meta: unknown): TaskSummaryItem[] {
+  if (!meta || typeof meta !== "object") return []
+  const record = meta as Record<string, unknown>
+  const summary = record["summary"]
+  if (!Array.isArray(summary)) return []
+  return summary.filter(isTaskSummaryItem)
+}
+
+function readTaskInput(input: unknown): { description?: string; subagentType?: string } {
+  if (!input || typeof input !== "object") return {}
+  const record = input as Record<string, unknown>
+  const description = record["description"]
+  const subagentType = record["subagent_type"]
+  return {
+    description: typeof description === "string" ? description : undefined,
+    subagentType: typeof subagentType === "string" ? subagentType : undefined,
+  }
+}
+
+function readToolMetadata(state: ToolPart["state"]): unknown {
+  if (!("metadata" in state)) return
+  return state.metadata
+}
+
+function readTaskSessionId(meta: unknown): string | undefined {
+  if (!meta || typeof meta !== "object") return
+  const record = meta as Record<string, unknown>
+  const sessionId = record["sessionId"]
+  if (typeof sessionId !== "string") return
+  return sessionId
+}
+
+function findTaskPart(
+  sync: ReturnType<typeof useSync>,
+  sessionID: string,
+  subagentSessionID?: string,
+): ToolPart | undefined {
+  if (!subagentSessionID) return
+  const messages = sync.data.message[sessionID] ?? []
+  for (const message of messages) {
+    const parts = sync.data.part[message.id] ?? []
+    const match = parts.find(
+      (part): part is ToolPart =>
+        part.type === "tool" &&
+        part.tool === "task" &&
+        readTaskSessionId(readToolMetadata(part.state)) === subagentSessionID,
+    )
+    if (match) return match
+  }
+}
+
+function useSubagentNavigation(subagentSessionID?: string) {
+  const { navigate } = useRoute()
+  const sync = useSync()
+  const toast = useToast()
+
+  return () => {
+    if (!subagentSessionID) return
+
+    const exists = sync.session.get(subagentSessionID)
+    if (!exists) {
+      toast.show({
+        variant: "info",
+        message: "Session was wiped",
+        duration: 3000,
+      })
+      return
+    }
+
+    navigate({ type: "session", sessionID: subagentSessionID })
+  }
+}
+
 function UserMessage(props: {
   message: UserMessage
   parts: Part[]
@@ -1093,9 +1231,15 @@ function UserMessage(props: {
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
+  const hasContent = createMemo(() => props.parts.some((p) => p.type !== "compaction"))
+  const renderSubtask = (part: Part) => {
+    if (part.type !== "subtask") return
+    return <SubtaskPartComp last={false} part={part} indented={false} />
+  }
+
   return (
     <>
-      <Show when={text()}>
+      <Show when={hasContent()}>
         <box
           id={props.message.id}
           border={["left"]}
@@ -1117,7 +1261,10 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()?.text}</text>
+            <Show when={text()}>
+              <text fg={theme.text}>{text()?.text}</text>
+            </Show>
+            <For each={props.parts}>{renderSubtask}</For>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={1} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1170,6 +1317,58 @@ function UserMessage(props: {
   )
 }
 
+function SubtaskReminderMessage(props: { message: UserMessage; parts: Part[] }) {
+  const subtasks = createMemo(() =>
+    props.parts.flatMap((part) => (part.type === "subtask" ? [part as SubtaskPart] : [])),
+  )
+  return <For each={subtasks()}>{(part) => <SubtaskReminderPart part={part} />}</For>
+}
+
+function SubtaskReminderPart(props: { part: SubtaskPart }) {
+  const ctx = use()
+  const { theme } = useTheme()
+  const keybind = useKeybind()
+  const sync = useSync()
+  const navigateToSubagent = useSubagentNavigation(props.part.subagentSessionID)
+
+  const taskPart = createMemo(() => findTaskPart(sync, ctx.sessionID, props.part.subagentSessionID))
+  const taskInput = createMemo(() => readTaskInput(taskPart()?.state.input))
+  const taskMeta = createMemo(() => {
+    const part = taskPart()
+    if (!part) return
+    return readToolMetadata(part.state)
+  })
+  const summary = createMemo(() => readTaskSummary(taskMeta()))
+
+  const status = createMemo(() => (props.part.status === "error" ? "Failed" : "Completed"))
+  const statusColor = createMemo(() => (props.part.status === "error" ? theme.error : theme.textMuted))
+  const description = createMemo(() => taskInput().description ?? props.part.description)
+  const title = createMemo(() => Locale.titlecase(taskInput().subagentType ?? props.part.agent ?? "unknown"))
+
+  return (
+    <BlockTool title={`# ${title()} Task`} onClick={props.part.subagentSessionID ? navigateToSubagent : undefined}>
+      <box>
+        <text style={{ fg: statusColor() }}>
+          {status()}: {description()} ({summary().length} toolcalls)
+        </text>
+        <For each={summary().slice(-3)}>
+          {(item) => (
+            <text style={{ fg: item.state.status === "error" ? theme.error : theme.textMuted }}>
+              └ {Locale.titlecase(item.tool)} {item.state.status === "completed" ? item.state.title : ""}
+            </text>
+          )}
+        </For>
+      </box>
+      <Show when={props.part.subagentSessionID}>
+        <text fg={theme.text}>
+          {keybind.print("session_child_cycle")}
+          <span style={{ fg: theme.textMuted }}> view subagents</span>
+        </text>
+      </Show>
+    </BlockTool>
+  )
+}
+
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
@@ -1199,7 +1398,8 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
                 last={index() === props.parts.length - 1}
                 component={component()}
                 part={part as any}
-                message={props.message}
+                message={component() === SubtaskPartComp ? undefined : props.message}
+                indented={component() === SubtaskPartComp ? true : undefined}
               />
             </Show>
           )
@@ -1253,6 +1453,33 @@ const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
   reasoning: ReasoningPart,
+  subtask: SubtaskPartComp,
+}
+
+function SubtaskPartComp(props: { last: boolean; part: SubtaskPart; indented?: boolean }) {
+  const { theme } = useTheme()
+  const navigateToSubagent = useSubagentNavigation(props.part.subagentSessionID)
+
+  const complete = createMemo(() => {
+    if (props.part.status === "completed") return true
+    if (props.part.status === "error") return "Failed"
+    return false
+  })
+
+  return (
+    <box
+      paddingLeft={props.indented ? 3 : 0}
+      marginTop={1}
+      onMouseUp={() => props.part.subagentSessionID && navigateToSubagent()}
+    >
+      <InlineTool icon="" pending="Running subtask..." complete={complete()} part={props.part}>
+        <span style={{ fg: theme.textMuted }}>
+          {props.part.status === "error" ? "Failed: " : "Completed: "}
+          {props.part.description}
+        </span>
+      </InlineTool>
+    </box>
+  )
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
@@ -1417,7 +1644,7 @@ function InlineTool(props: {
   complete: any
   pending: string
   children: JSX.Element
-  part: ToolPart
+  part: ToolPart | SubtaskPart
 }) {
   const [margin, setMargin] = createSignal(0)
   const { theme } = useTheme()
@@ -1425,6 +1652,7 @@ function InlineTool(props: {
   const sync = useSync()
 
   const permission = createMemo(() => {
+    if (!("callID" in props.part)) return false
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
     if (!callID) return false
     return callID === props.part.callID
@@ -1436,7 +1664,12 @@ function InlineTool(props: {
     return theme.text
   })
 
-  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
+  const error = createMemo(() => {
+    if ("state" in props.part) {
+      return props.part.state.status === "error" ? props.part.state.error : undefined
+    }
+    return undefined
+  })
 
   const denied = createMemo(() => error()?.includes("rejected permission") || error()?.includes("specified a rule"))
 
@@ -1651,34 +1884,31 @@ function WebSearch(props: ToolProps<any>) {
 function Task(props: ToolProps<typeof TaskTool>) {
   const { theme } = useTheme()
   const keybind = useKeybind()
-  const { navigate } = useRoute()
   const local = useLocal()
+  const navigateToSubagent = useSubagentNavigation(props.metadata.sessionId)
 
   const current = createMemo(() => props.metadata.summary?.findLast((x) => x.state.status !== "pending"))
   const color = createMemo(() => local.agent.color(props.input.subagent_type ?? "unknown"))
 
   return (
     <Switch>
-      <Match when={props.metadata.summary?.length}>
+      <Match when={props.metadata.async || props.metadata.summary?.length}>
         <BlockTool
           title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
-          onClick={
-            props.metadata.sessionId
-              ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
-              : undefined
-          }
+          onClick={props.metadata.sessionId ? navigateToSubagent : undefined}
           part={props.part}
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({props.metadata.summary?.length} toolcalls)
+              {props.input.description} ({props.metadata.summary?.length ?? 0} toolcalls)
             </text>
-            <Show when={current()}>
-              <text style={{ fg: current()!.state.status === "error" ? theme.error : theme.textMuted }}>
-                └ {Locale.titlecase(current()!.tool)}{" "}
-                {current()!.state.status === "completed" ? current()!.state.title : ""}
-              </text>
-            </Show>
+            <For each={props.metadata.summary?.slice(-3) ?? []}>
+              {(item) => (
+                <text style={{ fg: item.state.status === "error" ? theme.error : theme.textMuted }}>
+                  └ {Locale.titlecase(item.tool)} {item.state.status === "completed" ? item.state.title : ""}
+                </text>
+              )}
+            </For>
           </box>
           <text fg={theme.text}>
             {keybind.print("session_child_cycle")}

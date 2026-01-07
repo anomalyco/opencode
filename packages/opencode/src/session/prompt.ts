@@ -314,7 +314,7 @@ export namespace SessionPrompt {
 
       // pending subtask
       // TODO: centralize "invoke tool" logic
-      if (task?.type === "subtask") {
+      if (task?.type === "subtask" && task.status !== "completed" && task.status !== "error") {
         const taskTool = await TaskTool.init()
         const assistantMessage = (await Session.updateMessage({
           id: Identifier.ascending("message"),
@@ -590,12 +590,19 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      const taskAgents = taskToolAgentsSystem(sessionMessages)
+      const system = [
+        ...(await SystemPrompt.environment()),
+        ...(await SystemPrompt.custom()),
+        ...(taskAgents ? [taskAgents] : []),
+      ]
+
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system,
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
@@ -1192,6 +1199,105 @@ export namespace SessionPrompt {
       info,
       parts,
     }
+  }
+
+  type TaskToolAgentStatus = "running" | "completed" | "error"
+
+  type TaskToolAgentInfo = {
+    description?: string
+    agent?: string
+  }
+
+  function taskToolAgentsSystem(messages: MessageV2.WithParts[]) {
+    const asyncSessions = new Set<string>()
+    const done = new Map<string, TaskToolAgentStatus>()
+    const details = new Map<string, TaskToolAgentInfo>()
+
+    for (const msg of messages) {
+      for (const part of msg.parts) {
+        if (part.type === "subtask") {
+          const sessionId = part.subagentSessionID
+          if (!sessionId) continue
+          asyncSessions.add(sessionId)
+          details.set(sessionId, {
+            description: part.description,
+            agent: part.agent,
+          })
+          if (part.status === "completed" || part.status === "error") {
+            done.set(sessionId, part.status)
+          }
+          continue
+        }
+        if (part.type !== "tool") continue
+        if (part.tool !== "task") continue
+        const metadata = "metadata" in part.state ? part.state.metadata : undefined
+        const sessionId = asyncSessionIdFromMetadata(metadata)
+        if (!sessionId) continue
+        asyncSessions.add(sessionId)
+        const info = taskToolAgentInfoFromInput(part.state.input)
+        if (info) {
+          details.set(sessionId, info)
+        }
+      }
+    }
+
+    if (asyncSessions.size === 0) return
+
+    const rows = Array.from(asyncSessions)
+      .map((sessionId) => {
+        const status = done.get(sessionId)
+        if (status) return { sessionId, status, info: details.get(sessionId) }
+        const current = SessionStatus.get(sessionId)
+        const fallback: TaskToolAgentStatus =
+          current.type === "busy" || current.type === "retry" ? "running" : "completed"
+        return { sessionId, status: fallback, info: details.get(sessionId) }
+      })
+      .sort((a, b) => a.sessionId.localeCompare(b.sessionId))
+
+    const lines = rows.map((entry) => formatTaskToolAgentEntry(entry))
+
+    return [
+      "<task_tool_agents>",
+      "These async subagent sessions run in the background; expect completion messages for running sessions.",
+      "Completed or error sessions can be continued with the task tool using session_id and prompt 'continue'.",
+      ...lines,
+      "</task_tool_agents>",
+    ].join("\n")
+  }
+
+  function formatTaskToolAgentEntry(input: {
+    sessionId: string
+    status: TaskToolAgentStatus
+    info: TaskToolAgentInfo | undefined
+  }) {
+    const fields = [`session_id: ${input.sessionId}`, `status: ${input.status}`]
+    if (input.info?.agent) fields.push(`agent: ${input.info.agent}`)
+    if (input.info?.description) fields.push(`description: ${input.info.description}`)
+    return `- ${fields.join(" ")}`
+  }
+
+  function taskToolAgentInfoFromInput(input: unknown): TaskToolAgentInfo | undefined {
+    if (!isRecord(input)) return
+    const description = input.description
+    const agent = input.subagent_type
+    const info: TaskToolAgentInfo = {}
+    if (typeof description === "string" && description.length > 0) info.description = description
+    if (typeof agent === "string" && agent.length > 0) info.agent = agent
+    if (!info.agent && !info.description) return
+    return info
+  }
+
+  function asyncSessionIdFromMetadata(input: unknown) {
+    if (!isRecord(input)) return
+    if (input.async !== true) return
+    const sessionId = input.sessionId
+    if (typeof sessionId !== "string") return
+    if (sessionId.length === 0) return
+    return sessionId
+  }
+
+  function isRecord(input: unknown): input is Record<string, unknown> {
+    return typeof input === "object" && input !== null
   }
 
   function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {

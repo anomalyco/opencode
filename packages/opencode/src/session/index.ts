@@ -304,6 +304,15 @@ export namespace Session {
     return result
   })
 
+  export const runningChildren = fn(Identifier.schema("session"), async (parentID) => {
+    const kids = await Session.children(parentID)
+    const { SessionStatus } = await import("./status")
+    return kids.filter((child) => {
+      const status = SessionStatus.get(child.id)
+      return status.type === "busy" || status.type === "retry"
+    })
+  })
+
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
     const project = Instance.project
     try {

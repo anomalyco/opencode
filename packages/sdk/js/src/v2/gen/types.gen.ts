@@ -430,6 +430,10 @@ export type Part =
       description: string
       agent: string
       command?: string
+      subagentSessionID?: string
+      status?: "completed" | "error"
+      error?: string
+      summary?: string
     }
   | ReasoningPart
   | FilePart
@@ -1683,6 +1687,10 @@ export type Config = {
      * Timeout in milliseconds for model context protocol (MCP) requests
      */
     mcp_timeout?: number
+    /**
+     * Maximum concurrent async background tasks per parent session (default: 3)
+     */
+    async_task_limit?: number
   }
 }
 
@@ -1761,6 +1769,10 @@ export type SubtaskPartInput = {
   description: string
   agent: string
   command?: string
+  subagentSessionID?: string
+  status?: "completed" | "error"
+  error?: string
+  summary?: string
 }
 
 export type Command = {
