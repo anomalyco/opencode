@@ -262,6 +262,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
       }
+
+      // Handle instance.directory.changed event (not yet in SDK types)
+      if ((event as { type: string }).type === "instance.directory.changed") {
+        const props = (event as unknown as { properties: { directory: string; worktree: string } }).properties
+        setStore("path", {
+          directory: props.directory,
+          worktree: props.worktree,
+        })
+      }
     })
 
     const exit = useExit()
