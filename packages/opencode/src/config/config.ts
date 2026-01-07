@@ -465,6 +465,10 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
+      hidden: z
+        .boolean()
+        .optional()
+        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
       options: z.record(z.string(), z.any()).optional(),
       color: z
         .string()
@@ -490,6 +494,7 @@ export namespace Config {
         "temperature",
         "top_p",
         "mode",
+        "hidden",
         "color",
         "steps",
         "maxSteps",
