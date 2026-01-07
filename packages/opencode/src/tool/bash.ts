@@ -96,12 +96,74 @@ function resolveWindowsCommand(command: string, shell: string): { cmd: string[];
   const trimmed = command.trim()
   const shellName = path.basename(shell).toLowerCase()
 
-  // Always use shell execution for now - this is safer and handles all cases
-  // The shell will properly handle both built-ins and external commands
-
   // Use appropriate flag for different shells
   const flag = shellName.includes('cmd') ? '/c' : '-c'
   return { cmd: [shell, flag, trimmed], useShell: true }
+}
+
+/**
+ * Detects the shell type from a command string
+ * Returns: 'powershell' | 'pwsh' | 'cmd' | 'bash' | 'other'
+ */
+export function detectCommandShell(command: string): 'powershell' | 'pwsh' | 'cmd' | 'bash' | 'other' {
+  const trimmed = command.trim().toLowerCase()
+
+  // PowerShell detection
+  if (trimmed.startsWith('powershell.exe') || trimmed.startsWith('powershell') || trimmed.startsWith('pwsh')) {
+    return trimmed.startsWith('pwsh') ? 'pwsh' : 'powershell'
+  }
+
+  // CMD detection
+  if (trimmed.startsWith('cmd.exe') || trimmed.startsWith('cmd ')) {
+    return 'cmd'
+  }
+
+  // Bash detection
+  if (trimmed.startsWith('bash') || trimmed.startsWith('sh') || trimmed.startsWith('/bin/bash') || trimmed.startsWith('/bin/sh')) {
+    return 'bash'
+  }
+
+  return 'other'
+}
+
+/**
+ * Parses command to extract executable and arguments
+ * Returns: { executable: string, args: string[], shouldBypassShell: boolean }
+ */
+export function parseCommand(command: string): { executable: string; args: string[]; shouldBypassShell: boolean } {
+  const trimmed = command.trim()
+  const shellType = detectCommandShell(trimmed)
+
+  // PowerShell commands: extract PowerShell executable and arguments
+  if (shellType === 'powershell' || shellType === 'pwsh') {
+    const parts = trimmed.split(/\s+/)
+    const executable = shellType === 'pwsh' ? 'pwsh' : 'powershell.exe'
+    const args = parts.slice(1)
+
+    return {
+      executable,
+      args,
+      shouldBypassShell: true // Direct execution, no shell wrapping
+    }
+  }
+
+  // CMD commands: extract cmd.exe and arguments
+  if (shellType === 'cmd') {
+    const parts = trimmed.split(/\s+/)
+    if (parts.length > 0 && (parts[0] === 'cmd.exe' || parts[0] === 'cmd')) {
+      return {
+        executable: parts[0],
+        args: parts.slice(1),
+        shouldBypassShell: true // Direct execution, no shell wrapping
+      }
+    }
+  }
+
+  return {
+    executable: command, // Use entire command as executable
+    args: [],
+    shouldBypassShell: false // Use default shell wrapping
+  }
 }
 
 // TODO: we may wanna rename this tool so it works better on other shells
@@ -208,10 +270,29 @@ export const BashTool = Tool.define("bash", async () => {
       }
 
       // Resolve command for Windows compatibility
-      const { cmd, useShell } = resolveWindowsCommand(params.command, shell)
+      // Use parseCommand to detect native Windows commands and bypass shell wrapping
+      const parsed = parseCommand(params.command)
+      let cmd: string[]
+      let shellConfig: string | undefined
+
+      if (parsed.shouldBypassShell && process.platform === "win32") {
+        // Direct execution for PowerShell and CMD commands
+        log.info("Direct execution detected", {
+          command: params.command,
+          executable: parsed.executable,
+          args: parsed.args
+        })
+        cmd = [parsed.executable, ...parsed.args]
+        shellConfig = undefined // No shell wrapper
+      } else {
+        // Use shell wrapper for other commands
+        const { cmd: shellCmd, useShell } = resolveWindowsCommand(params.command, shell)
+        cmd = shellCmd
+        shellConfig = useShell ? undefined : shell
+      }
 
       const proc = Bun.spawn(cmd, {
-        shell: useShell ? undefined : shell,
+        shell: shellConfig,
         cwd,
         env: buildGitEnv(),
         stdio: ["ignore", "pipe", "pipe"],
