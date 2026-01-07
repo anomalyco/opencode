@@ -1,6 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -311,6 +311,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         })
     })
 
+    function detectMode(bg: string): "dark" | "light" {
+      const rgba = RGBA.fromHex(bg)
+      const luminance = 0.299 * rgba.r + 0.587 * rgba.g + 0.114 * rgba.b
+      return luminance > 0.5 ? "light" : "dark"
+    }
+
     function resolveSystemTheme() {
       console.log("resolved system theme")
       renderer
@@ -329,9 +335,12 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             }
             return
           }
+          const bg = colors.defaultBackground ?? colors.palette[0]
+          const mode = detectMode(bg)
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
+              draft.mode = mode
+              draft.themes.system = generateSystem(colors, mode)
               if (store.active === "system") {
                 draft.ready = true
               }
@@ -354,6 +363,23 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const syntax = createMemo(() => generateSyntax(values()))
     const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
+
+    const intervalId = setInterval(async () => {
+      renderer.clearPaletteCache() // opentui caches palette, must clear to get fresh values
+      const colors = await renderer.getPalette({ size: 1 })
+      const bg = colors.defaultBackground ?? colors.palette[0]
+      if (!bg) return
+      const mode = detectMode(bg)
+      if (mode !== store.mode) {
+        if (store.active === "system") {
+          resolveSystemTheme()
+        } else {
+          setStore("mode", mode)
+          kv.set("theme_mode", mode)
+        }
+      }
+    }, 5000)
+    onCleanup(() => clearInterval(intervalId))
 
     return {
       theme: new Proxy(values(), {
