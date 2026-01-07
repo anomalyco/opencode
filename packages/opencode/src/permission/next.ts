@@ -231,14 +231,14 @@ export namespace PermissionNext {
         }
         return
       }
-      delete s.pending[input.requestID]
-      Bus.publish(Event.Replied, {
-        sessionID: existing.info.sessionID,
-        requestID: existing.info.id,
-        reply: input.reply,
-      })
       if (input.reply === "once") {
         existing.resolve()
+        Bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
+        delete s.pending[input.requestID]
         return
       }
       if (input.reply === "always") {
@@ -251,6 +251,12 @@ export namespace PermissionNext {
         }
 
         existing.resolve()
+        Bus.publish(Event.Replied, {
+          sessionID: existing.info.sessionID,
+          requestID: existing.info.id,
+          reply: input.reply,
+        })
+        delete s.pending[input.requestID]
 
         const sessionID = existing.info.sessionID
         for (const [id, pending] of Object.entries(s.pending)) {
@@ -259,13 +265,13 @@ export namespace PermissionNext {
             (pattern) => evaluate(pending.info.permission, pattern, s.approved).action === "allow",
           )
           if (!ok) continue
-          delete s.pending[id]
+          pending.resolve()
           Bus.publish(Event.Replied, {
             sessionID: pending.info.sessionID,
             requestID: pending.info.id,
             reply: "always",
           })
-          pending.resolve()
+          delete s.pending[id]
         }
 
         // TODO: we don't save the permission ruleset to disk yet until there's
