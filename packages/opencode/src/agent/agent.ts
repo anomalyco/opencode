@@ -4,6 +4,7 @@ import { Provider } from "../provider/provider"
 import { generateObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
+import { Truncate } from "../tool/truncation"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -46,7 +47,10 @@ export namespace Agent {
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       doom_loop: "ask",
-      external_directory: "ask",
+      external_directory: {
+        "*": "ask",
+        [Truncate.DIR]: "allow",
+      },
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
@@ -110,6 +114,9 @@ export namespace Agent {
             websearch: "allow",
             codesearch: "allow",
             read: "allow",
+            external_directory: {
+              [Truncate.DIR]: "allow",
+            },
           }),
           user,
         ),
