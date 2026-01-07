@@ -116,44 +116,50 @@ export namespace ToolRegistry {
     return all().then((x) => x.map((t) => t.id))
   }
 
-  export async function tools(providerID: string, agent?: Agent.Info) {
-    const tools = await all()
-    const result = await Promise.all(
-      tools
-        .filter((t) => {
-          // Enable websearch/codesearch for zen users OR via enable flag
-          if (t.id === "codesearch" || t.id === "websearch") {
-            return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
-          }
-          
-          // Filter based on agent permissions if provided
-          if (agent?.permission) {
-            const toolPermission = (agent.permission as unknown as Record<string, unknown>)[t.id]
-            
-            // If permission is an object (has command-level rules), allow the tool
-            // Command restrictions are enforced at execution time
-            if (toolPermission !== null && typeof toolPermission === "object") {
-              return true
-            }
-            
-            // If permission is explicitly "deny" string, filter out the tool
-            if (toolPermission === "deny") {
-              return false
-            }
-            
-            // "allow", "ask", or undefined → allow the tool
-          }
-          
-          return true
-        })
-        .map(async (t) => {
-          using _ = log.time(t.id)
-          return {
-            id: t.id,
-            ...(await t.init({ agent })),
-          }
-        }),
-    )
-    return result
-  }
+   export async function tools(providerID: string, agent?: Agent.Info) {
+     const tools = await all()
+     const result = await Promise.all(
+       tools
+         .filter((t) => {
+           // Enable websearch/codesearch for zen users OR via enable flag
+           if (t.id === "codesearch" || t.id === "websearch") {
+             return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
+           }
+
+           // Filter based on agent permissions if provided
+           if (agent?.permission && Array.isArray(agent.permission) && agent.permission.length > 0) {
+             // Get all rules for this specific tool
+             // Note: pattern field is intentionally ignored here - patterns are checked
+             // at command execution time, not tool availability time
+             const toolRules = agent.permission.filter(
+               (rule: PermissionNext.Rule) => rule.permission === t.id
+             )
+
+             if (toolRules.length > 0) {
+               // Tool has explicit rules - only filter out if ALL rules are "deny"
+               const allDeny = toolRules.every((rule: PermissionNext.Rule) => rule.action === "deny")
+               return !allDeny
+             }
+
+             // No specific rules for this tool - check for catch-all deny
+             const hasCatchAllDeny = agent.permission.some(
+               (rule: PermissionNext.Rule) => rule.permission === "*" && rule.action === "deny"
+             )
+             if (hasCatchAllDeny) {
+               return false
+             }
+           }
+
+           return true
+         })
+         .map(async (t) => {
+           using _ = log.time(t.id)
+           return {
+             id: t.id,
+             ...(await t.init({ agent })),
+           }
+         }),
+     )
+     return result
+   }
 }
