@@ -95,7 +95,6 @@ export namespace Agent {
         options: {},
         mode: "subagent",
         native: true,
-        hidden: true,
       },
       explore: {
         name: "explore",
@@ -188,7 +187,8 @@ export namespace Agent {
       item.topP = value.top_p ?? item.topP
       item.mode = value.mode ?? item.mode
       item.color = value.color ?? item.color
-      item.name = value.options?.name ?? item.name
+      item.hidden = value.hidden ?? item.hidden
+      item.name = value.name ?? item.name
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
