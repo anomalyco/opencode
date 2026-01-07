@@ -57,7 +57,7 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    cleanup(Global.Path.log)
+    await cleanup(Global.Path.log)
     if (options.print) return
     logpath = path.join(
       Global.Path.log,
@@ -83,7 +83,7 @@ export namespace Log {
     )
     if (files.length <= 5) return
 
-    const filesToDelete = files.slice(0, -10)
+    const filesToDelete = files.sort().slice(0, -10)
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
