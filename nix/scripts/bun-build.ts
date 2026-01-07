@@ -60,7 +60,12 @@ const result = await Bun.build({
   compile: {
     target,
     outfile: "opencode",
-    execArgv: ["--user-agent=opencode/" + version, '--env-file=""', "--"],
+    autoloadBunfig: false,
+    autoloadDotenv: false,
+    //@ts-ignore (bun types aren't up to date)
+    autoloadTsconfig: true,
+    autoloadPackageJson: true,
+    execArgv: ["--user-agent=opencode/" + version, "--use-system-ca", "--"],
     windows: {},
   },
 })
