@@ -526,7 +526,8 @@ export namespace Config {
       // Convert legacy maxSteps to steps
       const steps = agent.steps ?? agent.maxSteps
 
-      return { ...agent, options, permission, steps } as typeof agent & {
+      const { tools, maxSteps, ...rest } = agent
+      return { ...rest, options, permission, steps } as typeof agent & {
         options?: Record<string, unknown>
         permission?: Permission
         steps?: number
