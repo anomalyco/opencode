@@ -687,10 +687,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (!shellMode) {
       const commandPartIndex = rawParts.findIndex((p) => p.type === "command")
-      const commandPillNotAtStart =
-        commandPartIndex > 0 ||
-        (commandPartIndex === 0 && rawParts[0].type === "command" && (rawParts[0] as CommandPart).start > 0)
-      if (commandPillNotAtStart) {
+      if (commandPartIndex > 0) {
         const textPart = {
           type: "text" as const,
           content: rawText,
