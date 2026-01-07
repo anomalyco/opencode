@@ -52,7 +52,7 @@ export namespace Clipboard {
       }
     }
 
-    const text = await clipboardy.read().catch(() => {})
+    const text = await clipboardy.read().catch(() => { })
     if (text) {
       return { data: text, mime: "text/plain" }
     }
@@ -70,13 +70,15 @@ export namespace Clipboard {
     }
 
     if (os === "linux") {
-      if (process.env["WAYLAND_DISPLAY"] && Bun.which("wl-copy")) {
+      const isWayland = !!process.env["WAYLAND_DISPLAY"]
+      if (isWayland && Bun.which("wl-copy")) {
         console.log("clipboard: using wl-copy")
         return async (text: string) => {
           const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited.catch(() => {})
+          const code = await proc.exited.catch(() => 1)
+          if (code !== 0) throw new Error("wl-copy failed to copy to clipboard")
         }
       }
       if (Bun.which("xclip")) {
@@ -89,7 +91,8 @@ export namespace Clipboard {
           })
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited.catch(() => {})
+          const code = await proc.exited.catch(() => 1)
+          if (code !== 0) throw new Error("xclip failed to copy to clipboard")
         }
       }
       if (Bun.which("xsel")) {
@@ -102,8 +105,17 @@ export namespace Clipboard {
           })
           proc.stdin.write(text)
           proc.stdin.end()
-          await proc.exited.catch(() => {})
+          const code = await proc.exited.catch(() => 1)
+          if (code !== 0) throw new Error("xsel failed to copy to clipboard")
         }
+      }
+
+      return async () => {
+        throw new Error(
+          isWayland
+            ? "No clipboard tool found. Please install 'wl-clipboard'."
+            : "No clipboard tool found. Please install 'xclip' or 'xsel'.",
+        )
       }
     }
 
@@ -112,13 +124,13 @@ export namespace Clipboard {
       return async (text: string) => {
         // need to escape backticks because powershell uses them as escape code
         const escaped = text.replace(/"/g, '""').replace(/`/g, "``")
-        await $`powershell -NonInteractive -NoProfile -Command "Set-Clipboard -Value \"${escaped}\""`.nothrow().quiet()
+        await $`powershell -NonInteractive -NoProfile -Command "Set-Clipboard -Value \"${escaped}\""`.quiet()
       }
     }
 
     console.log("clipboard: no native support")
     return async (text: string) => {
-      await clipboardy.write(text).catch(() => {})
+      await clipboardy.write(text)
     }
   })
 
