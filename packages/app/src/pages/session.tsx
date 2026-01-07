@@ -55,6 +55,12 @@ import { same } from "@/utils/same"
 
 type DiffStyle = "unified" | "split"
 
+const handoff = {
+  prompt: "",
+  terminals: [] as string[],
+  files: {} as Record<string, SelectedLineRange | null>,
+}
+
 interface SessionReviewTabProps {
   diffs: () => FileDiff[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
@@ -362,11 +368,10 @@ export default function Page() {
   })
 
   createEffect(() => {
-    if (layout.terminal.opened()) {
-      if (terminal.all().length === 0) {
-        terminal.new()
-      }
-    }
+    if (!layout.terminal.opened()) return
+    if (!terminal.ready()) return
+    if (terminal.all().length !== 0) return
+    terminal.new()
   })
 
   createEffect(
@@ -839,7 +844,30 @@ export default function Page() {
     document.addEventListener("keydown", handleKeyDown)
   })
 
+  const previewPrompt = () =>
+    prompt
+      .current()
+      .map((part) => {
+        if (part.type === "file") return `[file:${part.path}]`
+        if (part.type === "agent") return `@${part.name}`
+        if (part.type === "image") return `[image:${part.filename}]`
+        return part.content
+      })
+      .join("")
+      .trim()
+
   onCleanup(() => {
+    handoff.prompt = previewPrompt()
+    handoff.terminals = terminal.all().map((t) => t.title)
+    handoff.files = Object.fromEntries(
+      tabs()
+        .all()
+        .flatMap((tab) => {
+          const path = file.pathFromTab(tab)
+          if (!path) return []
+          return [[path, file.selectedLines(path) ?? null] as const]
+        }),
+    )
     document.removeEventListener("keydown", handleKeyDown)
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
   })
@@ -1046,13 +1074,22 @@ export default function Page() {
                 "md:max-w-200": !showTabs(),
               }}
             >
-              <PromptInput
-                ref={(el) => {
-                  inputRef = el
-                }}
-                newSessionWorktree={newSessionWorktree()}
-                onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-              />
+              <Show
+                when={prompt.ready()}
+                fallback={
+                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                    {handoff.prompt || "Loading prompt..."}
+                  </div>
+                }
+              >
+                <PromptInput
+                  ref={(el) => {
+                    inputRef = el
+                  }}
+                  newSessionWorktree={newSessionWorktree()}
+                  onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                />
+              </Show>
             </div>
           </div>
 
@@ -1214,7 +1251,8 @@ export default function Page() {
                     const selectedLines = createMemo(() => {
                       const p = path()
                       if (!p) return null
-                      return file.selectedLines(p) ?? null
+                      if (file.ready()) return file.selectedLines(p) ?? null
+                      return handoff.files[p] ?? null
                     })
                     const selection = createMemo(() => {
                       const range = selectedLines()
@@ -1423,54 +1461,74 @@ export default function Page() {
             onResize={layout.terminal.resize}
             onCollapse={layout.terminal.close}
           />
-          <DragDropProvider
-            onDragStart={handleTerminalDragStart}
-            onDragEnd={handleTerminalDragEnd}
-            onDragOver={handleTerminalDragOver}
-            collisionDetector={closestCenter}
-          >
-            <DragDropSensors />
-            <ConstrainDragYAxis />
-            <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
-              <Tabs.List class="h-10">
-                <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                  <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
-                </SortableProvider>
-                <div class="h-full flex items-center justify-center">
-                  <TooltipKeybind
-                    title="New terminal"
-                    keybind={command.keybind("terminal.new")}
-                    class="flex items-center"
-                  >
-                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                  </TooltipKeybind>
+          <Show
+            when={terminal.ready()}
+            fallback={
+              <div class="flex flex-col h-full pointer-events-none">
+                <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger overflow-hidden">
+                  <For each={handoff.terminals}>
+                    {(title) => (
+                      <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
+                        {title}
+                      </div>
+                    )}
+                  </For>
+                  <div class="flex-1" />
+                  <div class="text-text-weak pr-2">Loading...</div>
                 </div>
-              </Tabs.List>
-              <For each={terminal.all()}>
-                {(pty) => (
-                  <Tabs.Content value={pty.id}>
-                    <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
-                  </Tabs.Content>
-                )}
-              </For>
-            </Tabs>
-            <DragOverlay>
-              <Show when={store.activeTerminalDraggable}>
-                {(draggedId) => {
-                  const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
-                  return (
-                    <Show when={pty()}>
-                      {(t) => (
-                        <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                          {t().title}
-                        </div>
-                      )}
-                    </Show>
-                  )
-                }}
-              </Show>
-            </DragOverlay>
-          </DragDropProvider>
+                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
+              </div>
+            }
+          >
+            <DragDropProvider
+              onDragStart={handleTerminalDragStart}
+              onDragEnd={handleTerminalDragEnd}
+              onDragOver={handleTerminalDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragYAxis />
+              <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
+                <Tabs.List class="h-10">
+                  <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
+                  </SortableProvider>
+                  <div class="h-full flex items-center justify-center">
+                    <TooltipKeybind
+                      title="New terminal"
+                      keybind={command.keybind("terminal.new")}
+                      class="flex items-center"
+                    >
+                      <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
+                    </TooltipKeybind>
+                  </div>
+                </Tabs.List>
+                <For each={terminal.all()}>
+                  {(pty) => (
+                    <Tabs.Content value={pty.id}>
+                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
+                    </Tabs.Content>
+                  )}
+                </For>
+              </Tabs>
+              <DragOverlay>
+                <Show when={store.activeTerminalDraggable}>
+                  {(draggedId) => {
+                    const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
+                    return (
+                      <Show when={pty()}>
+                        {(t) => (
+                          <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                            {t().title}
+                          </div>
+                        )}
+                      </Show>
+                    )
+                  }}
+                </Show>
+              </DragOverlay>
+            </DragDropProvider>
+          </Show>
         </div>
       </Show>
     </div>
