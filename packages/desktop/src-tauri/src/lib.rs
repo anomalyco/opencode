@@ -139,7 +139,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
             .args([
                 "-il",
                 "-c",
-                &format!("{} serve --port={}", sidecar.display(), port),
+                &format!("\"{}\" serve --port={}", sidecar.display(), port),
             ])
             .spawn()
             .expect("Failed to spawn opencode")
