@@ -18,7 +18,7 @@ import { Suspense, createResource, ParentProps } from "solid-js"
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
 import pkg from "../package.json"
-import { Show } from "solid-js";
+import { Show } from "solid-js"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
