@@ -6,7 +6,7 @@ import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { Command } from "../../command"
 import { EOL } from "os"
-import { select } from "@clack/prompts"
+import { select, spinner } from "@clack/prompts"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
@@ -159,6 +159,9 @@ export const RunCommand = cmd({
       const events = await sdk.event.subscribe()
       let errorMsg: string | undefined
 
+      const quietSpinner = args.quiet && process.stdout.isTTY ? spinner() : null
+      if (quietSpinner) quietSpinner.start("Thinking...")
+
       const eventProcessor = (async () => {
         for await (const event of events.stream) {
           if (event.type === "message.part.updated") {
@@ -189,6 +192,7 @@ export const RunCommand = cmd({
             }
 
             if (part.type === "text" && part.time?.end) {
+              if (quietSpinner) quietSpinner.stop("")
               if (outputJsonEvent("text", { part })) continue
               const isPiped = !process.stdout.isTTY
               if (!isPiped) UI.println()
@@ -205,6 +209,7 @@ export const RunCommand = cmd({
               err = String(props.error.data.message)
             }
             errorMsg = errorMsg ? errorMsg + EOL + err : err
+            if (quietSpinner) quietSpinner.stop("Error")
             if (outputJsonEvent("error", { error: props.error })) continue
             UI.error(err)
           }
