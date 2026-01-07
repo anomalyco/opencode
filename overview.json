@@ -1,0 +1,845 @@
+{
+  "rootFolder": "e:\\code\\Opencode-Git-Bash-Forks\\opencode",
+  "analyzedAt": "2026-01-07T09:36:54.545Z",
+  "rootStructure": [
+    {
+      "name": ".github",
+      "type": "dir"
+    },
+    {
+      "name": ".gitignore",
+      "type": "file",
+      "size": 303,
+      "lines": 33
+    },
+    {
+      "name": "AGENTS.md",
+      "type": "file",
+      "size": 244,
+      "lines": 5
+    },
+    {
+      "name": "BUILD_AND_RUN.md",
+      "type": "file",
+      "size": 12534,
+      "lines": 539
+    },
+    {
+      "name": "BUILD_FIX_PLAN.md",
+      "type": "file",
+      "size": 4863,
+      "lines": 149
+    },
+    {
+      "name": "bun.lock",
+      "type": "file",
+      "size": 618481,
+      "lines": 5195
+    },
+    {
+      "name": "bunfig.toml",
+      "type": "file",
+      "size": 76,
+      "lines": 7
+    },
+    {
+      "name": "CONTRIBUTING.md",
+      "type": "file",
+      "size": 7038,
+      "lines": 174
+    },
+    {
+      "name": "devplans",
+      "type": "dir"
+    },
+    {
+      "name": "dev_output.txt",
+      "type": "file",
+      "size": 3125,
+      "lines": 46
+    },
+    {
+      "name": "flake.lock",
+      "type": "file",
+      "size": 596,
+      "lines": 28
+    },
+    {
+      "name": "flake.nix",
+      "type": "file",
+      "size": 3234,
+      "lines": 120
+    },
+    {
+      "name": "github",
+      "type": "dir"
+    },
+    {
+      "name": "github-issue-6488-full.png",
+      "type": "file",
+      "size": 95754,
+      "lines": 274
+    },
+    {
+      "name": "github-issue-6488.png",
+      "type": "file",
+      "size": 95754,
+      "lines": 274
+    },
+    {
+      "name": "infra",
+      "type": "dir"
+    },
+    {
+      "name": "install",
+      "type": "file",
+      "size": 13333,
+      "lines": 447
+    },
+    {
+      "name": "LICENSE",
+      "type": "file",
+      "size": 1086,
+      "lines": 22
+    },
+    {
+      "name": "logs",
+      "type": "dir"
+    },
+    {
+      "name": "nix",
+      "type": "dir"
+    },
+    {
+      "name": "node_modules",
+      "type": "dir"
+    },
+    {
+      "name": "package.json",
+      "type": "file",
+      "size": 2831,
+      "lines": 101
+    },
+    {
+      "name": "packages",
+      "type": "dir"
+    },
+    {
+      "name": "patches",
+      "type": "dir"
+    },
+    {
+      "name": "README.md",
+      "type": "file",
+      "size": 5204,
+      "lines": 113
+    },
+    {
+      "name": "README.zh-CN.md",
+      "type": "file",
+      "size": 4964,
+      "lines": 116
+    },
+    {
+      "name": "README.zh-TW.md",
+      "type": "file",
+      "size": 5550,
+      "lines": 116
+    },
+    {
+      "name": "script",
+      "type": "dir"
+    },
+    {
+      "name": "sdks",
+      "type": "dir"
+    },
+    {
+      "name": "specs",
+      "type": "dir"
+    },
+    {
+      "name": "sst-env.d.ts",
+      "type": "file",
+      "size": 3710,
+      "lines": 168
+    },
+    {
+      "name": "sst.config.ts",
+      "type": "file",
+      "size": 590,
+      "lines": 24
+    },
+    {
+      "name": "STATS.md",
+      "type": "file",
+      "size": 16232,
+      "lines": 196
+    },
+    {
+      "name": "STYLE_GUIDE.md",
+      "type": "file",
+      "size": 457,
+      "lines": 13
+    },
+    {
+      "name": "tsconfig.json",
+      "type": "file",
+      "size": 131,
+      "lines": 6
+    },
+    {
+      "name": "turbo.json",
+      "type": "file",
+      "size": 268,
+      "lines": 15
+    }
+  ],
+  "rootFileSnippets": {
+    "AGENTS.md": [
+      "- To test opencode in the `packages/opencode` directory you can run `bun dev`",
+      "- To regenerate the javascript SDK, run ./packages/sdk/js/script/build.ts",
+      "- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.",
+      "- the default branch in this repo is `dev`",
+      ""
+    ],
+    "BUILD_AND_RUN.md": [
+      "# OpenCode Build and Run Guide",
+      "",
+      "This document provides comprehensive instructions for building and running OpenCode in all its different interfaces: Desktop GUI, TUI, CLI, and Web Interface.",
+      "",
+      "## Table of Contents",
+      "",
+      "- [Prerequisites](#prerequisites)",
+      "- [Project Structure](#project-structure)",
+      "- [Interface Overview](#interface-overview)",
+      "- [Building and Running](#building-and-running)"
+    ],
+    "BUILD_FIX_PLAN.md": [
+      "# OpenCode Build and Runtime Failures - Comprehensive Resolution Plan",
+      "",
+      "## Executive Summary",
+      "",
+      "This plan addresses 5 critical build and runtime failures in the OpenCode project. Each issue has been analyzed with root cause identification, specific fixes, and verification procedures.",
+      "",
+      "## Issue Analysis & Resolution Plan",
+      "",
+      "### 1. Root Package Initialization Error ❌",
+      ""
+    ],
+    "bun.lock": [
+      "{",
+      "\"lockfileVersion\": 1,",
+      "\"configVersion\": 1,",
+      "\"workspaces\": {",
+      "\"\": {",
+      "\"name\": \"opencode\",",
+      "\"dependencies\": {",
+      "\"@aws-sdk/client-s3\": \"3.933.0\",",
+      "\"@opencode-ai/plugin\": \"workspace:*\",",
+      "\"@opencode-ai/script\": \"workspace:*\","
+    ],
+    "bunfig.toml": [
+      "[install]",
+      "exact = true",
+      "",
+      "[test]",
+      "root = \"./do-not-run-tests-from-root\"",
+      "",
+      ""
+    ],
+    "CONTRIBUTING.md": [
+      "# Contributing to OpenCode",
+      "",
+      "We want to make it easy for you to contribute to OpenCode. Here are the most common type of changes that get merged:",
+      "",
+      "- Bug fixes",
+      "- Additional LSPs / Formatters",
+      "- Improvements to LLM performance",
+      "- Support for new providers",
+      "- Fixes for environment-specific quirks",
+      "- Missing standard behavior"
+    ],
+    "dev_output.txt": [
+      "",
+      "\u001b[0m▄",
+      "█▀▀█ █▀▀█ █▀▀█ █▀▀▄ \u001b[0m█▀▀▀ █▀▀█ █▀▀█ █▀▀█",
+      "█░░█ █░░█ █▀▀▀ █░░█ \u001b[0m█░░░ █░░█ █░░█ █▀▀▀",
+      "▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀ \u001b[0m▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
+      "",
+      "Commands:",
+      "opencode completion          generate shell completion script",
+      "opencode acp                 start ACP (Agent Client Protocol) server",
+      "opencode [project]           start opencode tui                                          [default]"
+    ],
+    "flake.lock": [
+      "{",
+      "\"nodes\": {",
+      "\"nixpkgs\": {",
+      "\"locked\": {",
+      "\"lastModified\": 1767364772,",
+      "\"narHash\": \"sha256-fFUnEYMla8b7UKjijLnMe+oVFOz6HjijGGNS1l7dYaQ=\",",
+      "\"owner\": \"NixOS\",",
+      "\"repo\": \"nixpkgs\",",
+      "\"rev\": \"16c7794d0a28b5a37904d55bcca36003b9109aaa\",",
+      "\"type\": \"github\""
+    ],
+    "flake.nix": [
+      "{",
+      "description = \"OpenCode development flake\";",
+      "",
+      "inputs = {",
+      "nixpkgs.url = \"github:NixOS/nixpkgs/nixpkgs-unstable\";",
+      "};",
+      "",
+      "outputs =",
+      "{",
+      "nixpkgs,"
+    ],
+    "github-issue-6488-full.png": [
+      "�PNG",
+      "\u001a",
+      "\u0000\u0000\u0000\rIHDR\u0000\u0000\u0005\u0000\u0000\u0000\u0003 \b\u0002\u0000\u0000\u0000��X�\u0000\u0000\u0010\u0000IDATx���\u000b@���\u0007�o��EǵH�)�6�K����܍1\u0016\u000b�-\u001br\t3d\u00136F�F��e6w������V\u0011\u0011ʥ�rJu�����s:�:�9�rޯ_�9�?���<��<��c�ʥ\u001d\u0001\u0000\u0000\u0000\u0000\u0000\u0000x�\u0019\u0013\u0000\u0000\u0000\u0000\u0000\u0000\u0000=�\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000�\u001e��\\Z�}�ACkR5/23n'��|'��",
+      "}?�\u0018���N˖�ֺ���Ȉ���I�ij���\r�`�ʥ\u001d�nݺv�ޭ\u000b����K���\u0017.^�x�2\u0001\u0000\u0000\u0000\u0000\u00005Ա�w��.\u0014�ݹ\u0015���\t�\u001a�ƶ�ڸ�xf\u0017��fg\t\bHiܤ���iYYY'�\u001f���XRRBj!\u0003\u0003�6..�\u0007\f���",
+      "ݼ��ӧjΨ�ݯ�6T~��\u0018\u0000Ӹ�K�/�\u0007.�Uj}�/�C6\u0011\u0000\u0000\u0000\u0000\u0000(S���O\u001e�&�w�h�˻\u001dl�ڟ<\u0011A@��o�ܸ~�ȡ��0x��\u001d:,�n���kc�+�\r�f�к1�\u000e_�M[�b��]S�W�dݻu�d�\u0006\u0003\u0000\u0000\u0000\u0000��������ꥳD���?mj��Ԕ���s\u0002��\u001fzԯ_?��0�H�}�c��\u0016\u0016�)��;��v�B�P\u0015�D�h���~�ʅ�j�\u0013�Y�\u0004\u0000\u0000\u0000\u0000\u0000\u0014�n��[�D\u000b�b��\t�\r��>q�\u0018y��=���Δ��}���*t\u001d\u0000� v���e�yV��BgD\f\f\u0000\u0000\u0000\u0000��AC몷�U�.��]j�M�i��V���7\u0018�#5����\rU��\u0000��~I\u0015 \u0006\u0006\u0000\u0000\u0000\u0000��UK{�*C��HK���T�i\u0000,]������C~)w\u0016:�ܔ\u0015�;\r\u0000\u0000\u0000\u0000\u0000\u0000���{����&]���>�L�N�7��ݺv�\u0006JށD�Љ����Ľt8�\u0005]C\u0003\u0000\u0000\u0000\u0000\u0000�X\\���}5�.\u0003`�%�l(�\u0018��\u000f������.",
+      "o\t\u0006\u0000\u0000\u0000\u0000�\u0010�-��M5{;}\t�J�U���I�tT\u0005�F��j��N�\u0015�'l�p�r�\u0004RqA\u00117�\u0012n$]\b�D���\u0003I\t\u0007�HE-9�P�\u0004\u0007��\u0011s\u0011N�XB�\u0012��Τ�*u�\u0004\u0000(��~��u��ֲd\u001a\u0018�;�ߥ\u0003H�<��>�?I�F���p:\u0019�>:*\u0001�\u0015\rw�\rǼ�V�߳.���w\u001b�<����/�жJ\u000b�Qh<���c�{\u0007���\u0010P����\u001d��\u000b.���\u0013N@mr�c���\u0003\u0017\u0012ݡ�nF���?�\u000e\u000f$zA�\u001cg�ѾW��Y��L\u000b\u0000P&�5�����*Q2M\u0011�]z5TR�\u0018zyn7>����d�dT�����YW�\u001e^��oi��\u0006vH�[�\u000b{��%I�V\"n�JDu~K]�X�5yu\u0011\u0000+�۬N�Wr��*݃4MJ�X�ׂ.\rz�\u0013�Y�.�\u0012��\u001f掙HgeGk+���VE�����c\u0011Ds�\u001bGRz�[2��\u0012R����2��Yǖ��nX=l �%����\u0014��AW�\\�s�����\u0013�3߂\"\u000e\u0010�R�g[̯x�D-�j�O�^;�\u001f���L.�q�(��+w������v\u0000@M�\u0005��\u000e\\�晆%4\u0014�^���օK��u�\u0017�Ίo)��v�N�.л}͊*�\u001f`~%�[��\u0007����\u0017y�@�K��j�5���.�@+�����+��Z�P\u001e>q�E���\u0007\u0013\t��tjI��J\u0003��(�U�v߿�\u0011�\u000eK\b�!(��~e\u0002*�L�@r�ẩ\u0018\u001fԡ%�\u0017=Q�3\u001c�\"P������Y\u000f\u00005\t�^\u0015%w��\u001e���im���\u001d�\u0012O�~g��[JzS!H�\u0013��,\u001c�oe!4��RL�3�!V�h\u000f��� q*]����i\u0019�ʦ��pZ�WZ�]�F�i��T�l��h S`��$l9<��9+��K<�ԭ<��x\t7��rq�YɊ�&�l���[\u0014�\u00186Tiޢ\u0003�(R5�v*�\u000ff���D\u000e���[���?�'r�2�\u0006\u001dG�w_��u���>��\u0011K��J�Z�0��TB�iU\u0016�,$�\u000eP�b\\�\u0010�H[��)���[�h\u0016�4����@�TR�%���z\u0013C?j�un�bq�?/d����$�B�t��#�w�B���(_��w4�+\u001f�*��7wg�\u0000�$U�p��\u0018�t�uU%\u001d3���e�m�Tz*�W",
+      "�P�AT51G�,5+��3�D\u0019���!���\u001b.���~\u0011�iRù�\u0011t�\u0000\u0000�h|+]1U�N{*��\\Y!\u0013��,�����D,��Lѕ�^\u000f/�\u0006I�R\\63��BZ��:@\u000b$w/��m\u0013\u000fd��q?j�/\u0005w�g~a�-�\u001a�X&7Q21�t�E)Y�:$)Ŕ��V��!\u0000�\u0014�˓�e��5�J�#?8�c�Άs[���\\Vˏ٬\u0016���y�=��\u001c\u001dNˋh�U�?ﱕ\t۶g\u001b�\\8�G�\u0001v���+/�oS��=�Ff���Pˏ�����\u0007�ٛ�y�����U�ߤ��u��U���~�\u0003�(RyK\u0006�Ǘ�f\u000es���E�]��\u001e}",
+      "P��[\u0016\u000egv��:(����U�m&!Ns�m�t��r�t�E�p�Uk�f$\\R��X���J��\u0003\u001fӠ��%�gq\u0013\u0017�6[\u000f�V�\u0016�l\u001a&��B�Z����\u000fSz)��4�Y�$D��D4�z��Z�(�V�j�'\u0019��*Amc\u001eI5*mcI�.u����\u000f\u0017H��R�\u0014��<��z��O�@o��S\b��z8��l9�˺R�%]���4��#t8[h�*_)�\u0003C�AT:1�&��(�O,\u001dX�RO�\u0015��ݑ�W\u0007��?|��\"0\t�8B��dv��_��{X\u0011\u0000\u0000E�\u0018��;�cc����eF��*\u001f؉\u001a�p?%���tNa��#��o�EA��",
+      "9*3�vl�y��\fz'�*",
+      "\u00155\u0003d/�[���]4�qD���[\u000e�\u001e�+ԥ�U���y����]������m������\u0018�\u001bR�]��\"\u0000�R���s����R� %\u0002��\u0017\u000f\f?�����H֤0\u000f�V����vߍ�8�����(�.I!\u0018S�ń֢ye��\u0014��X.I��q7vt`U�v�H���e�\u001f�|��*y��R�Ei4��#M\u0015Ap�+%��\\��n\u001fK6 ��FQ�R�\u0013��$�~x��w���&ZL+\u0016W���1��EI\u0014�q7ra�8�/�f�{�@\u001fѡ�Jږ�W�KC����%�p\"=PRI[ٖ(����z��t8}`,3Y�\t��g˹,+�>LʨJa�{\u0007$M�U�J�\u0001\u0016��E恱V\u000fGy�-K�Y�����y�zI�*_q��Q�T\u001cD�\u0013s�\u001f�,�-��RJ�'>�y�$y�ET�|�Z2Pyk��j\u0011�|�i���^\u0003��K�\u000b͓�9 \u0001\u0000�(z��늖L�ǚ�����\u001c��A[��k&ۢ���Ə��QY9�\u0012\u0013k\rSN�2�u��Rh�6��?%�_�.Wjd�~��i���#Q�ԝ��\u0003���Su\u0004�����+\t]t��>���d��\"���Bs����(���YE��2\u001d��w���!ֶS�ӻ��ӧA�}� ��\u001c��`�B\u0002e�{8z?�}��\u001d�?\u0001�Xnč�vl��l�\u0019/SN����\u001f[�$\u001a�X\u001e�=.~z7W�\u0012�\u001e\u001d�݌���'�I\u001f�ӝ�\u0016�J�\u001d\u000eۣ��@O��&���r?Kj�,:v��{\u001f����ǹ��[�*��T�\u0005�e��­\u001ci\u0012͕��y�\u0013��%*h+�T]�\u001d�\"s��S3f�`RFe"
+    ],
+    "github-issue-6488.png": [
+      "�PNG",
+      "\u001a",
+      "\u0000\u0000\u0000\rIHDR\u0000\u0000\u0005\u0000\u0000\u0000\u0003 \b\u0002\u0000\u0000\u0000��X�\u0000\u0000\u0010\u0000IDATx���\u000b@���\u0007�o��EǵH�)�6�K����܍1\u0016\u000b�-\u001br\t3d\u00136F�F��e6w������V\u0011\u0011ʥ�rJu�����s:�:�9�rޯ_�9�?���<��<��c�ʥ\u001d\u0001\u0000\u0000\u0000\u0000\u0000\u0000x�\u0019\u0013\u0000\u0000\u0000\u0000\u0000\u0000\u0000=�\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000\u0000@/ \u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0000��\u0000\u0018\u0000\u0000\u0000\u0000\u0000\u0000�\u0002\u0002`\u0000\u0000\u0000\u0000\u0000\u0000�\u000b\b�\u0001\u0000\u0000\u0000\u0000�\u001e��\\Z�}�ACkR5/23n'��|'��",
+      "}?�\u0018���N˖�ֺ���Ȉ���I�ij���\r�`�ʥ\u001d�nݺv�ޭ\u000b����K���\u0017.^�x�2\u0001\u0000\u0000\u0000\u0000\u00005Ա�w��.\u0014�ݹ\u0015���\t�\u001a�ƶ�ڸ�xf\u0017��fg\t\bHiܤ���iYYY'�\u001f���XRRBj!\u0003\u0003�6..�\u0007\f���",
+      "ݼ��ӧjΨ�ݯ�6T~��\u0018\u0000Ӹ�K�/�\u0007.�Uj}�/�C6\u0011\u0000\u0000\u0000\u0000\u0000(S���O\u001e�&�w�h�˻\u001dl�ڟ<\u0011A@��o�ܸ~�ȡ��0x��\u001d:,�n���kc�+�\r�f�к1�\u000e_�M[�b��]S�W�dݻu�d�\u0006\u0003\u0000\u0000\u0000\u0000��������ꥳD���?mj��Ԕ���s\u0002��\u001fzԯ_?��0�H�}�c��\u0016\u0016�)��;��v�B�P\u0015�D�h���~�ʅ�j�\u0013�Y�\u0004\u0000\u0000\u0000\u0000\u0000\u0014�n��[�D\u000b�b��\t�\r��>q�\u0018y��=���Δ��}���*t\u001d\u0000� v���e�yV��BgD\f\f\u0000\u0000\u0000\u0000��AC몷�U�.��]j�M�i��V���7\u0018�#5����\rU��\u0000��~I\u0015 \u0006\u0006\u0000\u0000\u0000\u0000��UK{�*C��HK���T�i\u0000,]������C~)w\u0016:�ܔ\u0015�;\r\u0000\u0000\u0000\u0000\u0000\u0000���{����&]���>�L�N�7��ݺv�\u0006JށD�Љ����Ľt8�\u0005]C\u0003\u0000\u0000\u0000\u0000\u0000�X\\���}5�.\u0003`�%�l(�\u0018��\u000f������.",
+      "o\t\u0006\u0000\u0000\u0000\u0000�\u0010�-��M5{;}\t�J�U���I�tT\u0005�F��j��N�\u0015�'l�p�r�\u0004RqA\u00117�\u0012n$]\b�D���\u0003I\t\u0007�HE-9�P�\u0004\u0007��\u0011s\u0011N�XB�\u0012��Τ�*u�\u0004\u0000(��~��u��ֲd\u001a\u0018�;�ߥ\u0003H�<��>�?I�F���p:\u0019�>:*\u0001�\u0015\rw�\rǼ�V�߳.���w\u001b�<����/�жJ\u000b�Qh<���c�{\u0007���\u0010P����\u001d��\u000b.���\u0013N@mr�c���\u0003\u0017\u0012ݡ�nF���?�\u000e\u000f$zA�\u001cg�ѾW��Y��L\u000b\u0000P&�5�����*Q2M\u0011�]z5TR�\u0018zyn7>����d�dT�����YW�\u001e^��oi��\u0006vH�[�\u000b{��%I�V\"n�JDu~K]�X�5yu\u0011\u0000+�۬N�Wr��*݃4MJ�X�ׂ.\rz�\u0013�Y�.�\u0012��\u001f掙HgeGk+���VE�����c\u0011Ds�\u001bGRz�[2��\u0012R����2��Yǖ��nX=l �%����\u0014��AW�\\�s�����\u0013�3߂\"\u000e\u0010�R�g[̯x�D-�j�O�^;�\u001f���L.�q�(��+w������v\u0000@M�\u0005��\u000e\\�晆%4\u0014�^���օK��u�\u0017�Ίo)��v�N�.л}͊*�\u001f`~%�[��\u0007����\u0017y�@�K��j�5���.�@+�����+��Z�P\u001e>q�E���\u0007\u0013\t��tjI��J\u0003��(�U�v߿�\u0011�\u000eK\b�!(��~e\u0002*�L�@r�ẩ\u0018\u001fԡ%�\u0017=Q�3\u001c�\"P������Y\u000f\u00005\t�^\u0015%w��\u001e���im���\u001d�\u0012O�~g��[JzS!H�\u0013��,\u001c�oe!4��RL�3�!V�h\u000f��� q*]����i\u0019�ʦ��pZ�WZ�]�F�i��T�l��h S`��$l9<��9+��K<�ԭ<��x\t7��rq�YɊ�&�l���[\u0014�\u00186Tiޢ\u0003�(R5�v*�\u000ff���D\u000e���[���?�'r�2�\u0006\u001dG�w_��u���>��\u0011K��J�Z�0��TB�iU\u0016�,$�\u000eP�b\\�\u0010�H[��)���[�h\u0016�4����@�TR�%���z\u0013C?j�un�bq�?/d����$�B�t��#�w�B���(_��w4�+\u001f�*��7wg�\u0000�$U�p��\u0018�t�uU%\u001d3���e�m�Tz*�W",
+      "�P�AT51G�,5+��3�D\u0019���!���\u001b.���~\u0011�iRù�\u0011t�\u0000\u0000�h|+]1U�N{*��\\Y!\u0013��,�����D,��Lѕ�^\u000f/�\u0006I�R\\63��BZ��:@\u000b$w/��m\u0013\u000fd��q?j�/\u0005w�g~a�-�\u001a�X&7Q21�t�E)Y�:$)Ŕ��V��!\u0000�\u0014�˓�e��5�J�#?8�c�Άs[���\\Vˏ٬\u0016���y�=��\u001c\u001dNˋh�U�?ﱕ\t۶g\u001b�\\8�G�\u0001v���+/�oS��=�Ff���Pˏ�����\u0007�ٛ�y�����U�ߤ��u��U���~�\u0003�(RyK\u0006�Ǘ�f\u000es���E�]��\u001e}",
+      "P��[\u0016\u000egv��:(����U�m&!Ns�m�t��r�t�E�p�Uk�f$\\R��X���J��\u0003\u001fӠ��%�gq\u0013\u0017�6[\u000f�V�\u0016�l\u001a&��B�Z����\u000fSz)��4�Y�$D��D4�z��Z�(�V�j�'\u0019��*Amc\u001eI5*mcI�.u����\u000f\u0017H��R�\u0014��<��z��O�@o��S\b��z8��l9�˺R�%]���4��#t8[h�*_)�\u0003C�AT:1�&��(�O,\u001dX�RO�\u0015��ݑ�W\u0007��?|��\"0\t�8B��dv��_��{X\u0011\u0000\u0000E�\u0018��;�cc����eF��*\u001f؉\u001a�p?%���tNa��#��o�EA��",
+      "9*3�vl�y��\fz'�*",
+      "\u00155\u0003d/�[���]4�qD���[\u000e�\u001e�+ԥ�U���y����]������m������\u0018�\u001bR�]��\"\u0000�R���s����R� %\u0002��\u0017\u000f\f?�����H֤0\u000f�V����vߍ�8�����(�.I!\u0018S�ń֢ye��\u0014��X.I��q7vt`U�v�H���e�\u001f�|��*y��R�Ei4��#M\u0015Ap�+%��\\��n\u001fK6 ��FQ�R�\u0013��$�~x��w���&ZL+\u0016W���1��EI\u0014�q7ra�8�/�f�{�@\u001fѡ�Jږ�W�KC����%�p\"=PRI[ٖ(����z��t8}`,3Y�\t��g˹,+�>LʨJa�{\u0007$M�U�J�\u0001\u0016��E恱V\u000fGy�-K�Y�����y�zI�*_q��Q�T\u001cD�\u0013s�\u001f�,�-��RJ�'>�y�$y�ET�|�Z2Pyk��j\u0011�|�i���^\u0003��K�\u000b͓�9 \u0001\u0000�(z��늖L�ǚ�����\u001c��A[��k&ۢ���Ə��QY9�\u0012\u0013k\rSN�2�u��Rh�6��?%�_�.Wjd�~��i���#Q�ԝ��\u0003���Su\u0004�����+\t]t��>���d��\"���Bs����(���YE��2\u001d��w���!ֶS�ӻ��ӧA�}� ��\u001c��`�B\u0002e�{8z?�}��\u001d�?\u0001�Xnč�vl��l�\u0019/SN����\u001f[�$\u001a�X\u001e�=.~z7W�\u0012�\u001e\u001d�݌���'�I\u001f�ӝ�\u0016�J�\u001d\u000eۣ��@O��&���r?Kj�,:v��{\u001f����ǹ��[�*��T�\u0005�e��­\u001ci\u0012͕��y�\u0013��%*h+�T]�\u001d�\"s��S3f�`RFe"
+    ],
+    "install": [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      "APP=opencode",
+      "",
+      "MUTED='\\033[0;2m'",
+      "RED='\\033[0;31m'",
+      "ORANGE='\\033[38;5;214m'",
+      "NC='\\033[0m' # No Color",
+      "",
+      "usage() {"
+    ],
+    "LICENSE": [
+      "MIT License",
+      "",
+      "Copyright (c) 2025 opencode",
+      "",
+      "Permission is hereby granted, free of charge, to any person obtaining a copy",
+      "of this software and associated documentation files (the \"Software\"), to deal",
+      "in the Software without restriction, including without limitation the rights",
+      "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell",
+      "copies of the Software, and to permit persons to whom the Software is",
+      "furnished to do so, subject to the following conditions:"
+    ],
+    "package.json": [
+      "{",
+      "\"$schema\": \"https://json.schemastore.org/package.json\",",
+      "\"name\": \"opencode\",",
+      "\"description\": \"AI-powered development tool\",",
+      "\"private\": true,",
+      "\"type\": \"module\",",
+      "\"packageManager\": \"bun@1.3.5\",",
+      "\"scripts\": {",
+      "\"dev\": \"bun run --cwd packages/opencode --conditions=browser src/index.ts\",",
+      "\"typecheck\": \"bun turbo typecheck\","
+    ],
+    "README.md": [
+      "<p align=\"center\">",
+      "<a href=\"https://opencode.ai\">",
+      "<picture>",
+      "<source srcset=\"packages/console/app/src/asset/logo-ornate-dark.svg\" media=\"(prefers-color-scheme: dark)\">",
+      "<source srcset=\"packages/console/app/src/asset/logo-ornate-light.svg\" media=\"(prefers-color-scheme: light)\">",
+      "<img src=\"packages/console/app/src/asset/logo-ornate-light.svg\" alt=\"OpenCode logo\">",
+      "</picture>",
+      "</a>",
+      "</p>",
+      "<p align=\"center\">The open source AI coding agent.</p>"
+    ],
+    "README.zh-CN.md": [
+      "<p align=\"center\">",
+      "<a href=\"https://opencode.ai\">",
+      "<picture>",
+      "<source srcset=\"packages/console/app/src/asset/logo-ornate-dark.svg\" media=\"(prefers-color-scheme: dark)\">",
+      "<source srcset=\"packages/console/app/src/asset/logo-ornate-light.svg\" media=\"(prefers-color-scheme: light)\">",
+      "<img src=\"packages/console/app/src/asset/logo-ornate-light.svg\" alt=\"OpenCode logo\">",
+      "</picture>",
+      "</a>",
+      "</p>",
+      "<p align=\"center\">开源的 AI Coding Agent。</p>"
+    ],
+    "README.zh-TW.md": [
+      "<p align=\"center\">",
+      "<a href=\"https://opencode.ai\">",
+      "<picture>",
+      "<source srcset=\"packages/console/app/src/asset/logo-ornate-dark.svg\" media=\"(prefers-color-scheme: dark)\">",
+      "<source srcset=\"packages/console/app/src/asset/logo-ornate-light.svg\" media=\"(prefers-color-scheme: light)\">",
+      "<img src=\"packages/console/app/src/asset/logo-ornate-light.svg\" alt=\"OpenCode logo\">",
+      "</picture>",
+      "</a>",
+      "</p>",
+      "<p align=\"center\">開源的 AI Coding Agent。</p>"
+    ],
+    "sst-env.d.ts": [
+      "/* This file is auto-generated by SST. Do not edit. */",
+      "/* tslint:disable */",
+      "/* eslint-disable */",
+      "/* deno-fmt-ignore-file */",
+      "",
+      "declare module \"sst\" {",
+      "export interface Resource {",
+      "\"ADMIN_SECRET\": {",
+      "\"type\": \"sst.sst.Secret\"",
+      "\"value\": string"
+    ],
+    "sst.config.ts": [
+      "/// <reference path=\"./.sst/platform/config.d.ts\" />",
+      "",
+      "export default $config({",
+      "app(input) {",
+      "return {",
+      "name: \"opencode\",",
+      "removal: input?.stage === \"production\" ? \"retain\" : \"remove\",",
+      "protect: [\"production\"].includes(input?.stage),",
+      "home: \"cloudflare\",",
+      "providers: {"
+    ],
+    "STATS.md": [
+      "# Download Stats",
+      "",
+      "| Date       | GitHub Downloads     | npm Downloads       | Total                |",
+      "| ---------- | -------------------- | ------------------- | -------------------- |",
+      "| 2025-06-29 | 18,789 (+0)          | 39,420 (+0)         | 58,209 (+0)          |",
+      "| 2025-06-30 | 20,127 (+1,338)      | 41,059 (+1,639)     | 61,186 (+2,977)      |",
+      "| 2025-07-01 | 22,108 (+1,981)      | 43,745 (+2,686)     | 65,853 (+4,667)      |",
+      "| 2025-07-02 | 24,814 (+2,706)      | 46,168 (+2,423)     | 70,982 (+5,129)      |",
+      "| 2025-07-03 | 27,834 (+3,020)      | 49,955 (+3,787)     | 77,789 (+6,807)      |",
+      "| 2025-07-04 | 30,608 (+2,774)      | 54,758 (+4,803)     | 85,366 (+7,577)      |"
+    ],
+    "STYLE_GUIDE.md": [
+      "## Style Guide",
+      "",
+      "- Try to keep things in one function unless composable or reusable",
+      "- DO NOT do unnecessary destructuring of variables",
+      "- DO NOT use `else` statements unless necessary",
+      "- DO NOT use `try`/`catch` if it can be avoided",
+      "- AVOID `try`/`catch` where possible",
+      "- AVOID `else` statements",
+      "- AVOID using `any` type",
+      "- AVOID `let` statements"
+    ],
+    "tsconfig.json": [
+      "{",
+      "\"$schema\": \"https://json.schemastore.org/tsconfig\",",
+      "\"extends\": \"@tsconfig/bun/tsconfig.json\",",
+      "\"compilerOptions\": {}",
+      "}",
+      ""
+    ],
+    "turbo.json": [
+      "{",
+      "\"$schema\": \"https://turborepo.com/schema.json\",",
+      "\"tasks\": {",
+      "\"typecheck\": {},",
+      "\"build\": {",
+      "\"dependsOn\": [\"^build\"],",
+      "\"outputs\": [\"dist/**\"]",
+      "},",
+      "\"opencode#test\": {",
+      "\"dependsOn\": [\"^build\"],"
+    ]
+  },
+  "importantFolders": [
+    {
+      "path": ".opencode\\skill\\test-skill",
+      "category": "tests",
+      "fileCount": 1
+    },
+    {
+      "path": "github\\script",
+      "category": "scripts",
+      "fileCount": 2
+    },
+    {
+      "path": "nix\\scripts",
+      "category": "scripts",
+      "fileCount": 5,
+      "primaryLanguage": "TypeScript"
+    },
+    {
+      "path": "script",
+      "category": "scripts",
+      "fileCount": 10,
+      "primaryLanguage": "TypeScript"
+    },
+    {
+      "path": "sdks\\vscode\\images",
+      "category": "assets",
+      "fileCount": 3
+    },
+    {
+      "path": "sdks\\vscode\\script",
+      "category": "scripts",
+      "fileCount": 2
+    },
+    {
+      "path": "specs",
+      "category": "tests",
+      "fileCount": 1
+    }
+  ],
+  "readmeParagraphs": {
+    "github": "# opencode GitHub Action\r\n\r\nA GitHub Action that integrates [opencode](https://opencode.ai) directly into your GitHub workflow.\r",
+    "sdks\\vscode": "# opencode VS Code Extension\r\n\r\nA Visual Studio Code extension that integrates [opencode](https://opencode.ai) directly into your development workflow.\r",
+    "root": "<p align=\"center\">\r\n  <a href=\"https://opencode.ai\">\r\n    <picture>\r"
+  },
+  "totals": {
+    "numFiles": 164,
+    "numDirs": 42,
+    "totalSizeBytes": 2641548,
+    "totalLinesOfCode": 3308
+  },
+  "fileCategories": {
+    "other": 61,
+    "config": 46,
+    "source": 30,
+    "documentation": 26,
+    "test": 1
+  },
+  "linesOfCodePerLanguage": {
+    "Shell": 122,
+    "TypeScript": 3131,
+    "JavaScript": 55
+  },
+  "filesPerLanguage": {
+    "Shell": 2,
+    "TypeScript": 27,
+    "JavaScript": 1
+  },
+  "projectTypes": [
+    "JavaScript/Node.js"
+  ],
+  "frameworks": [],
+  "entryPoints": [
+    ".husky\\_\\husky.sh",
+    "nix\\scripts\\patch-wasm.ts",
+    "nix\\scripts\\update-hashes.sh"
+  ],
+  "ciCdTools": [
+    "GitHub Actions"
+  ],
+  "packageManagers": [
+    "npm/yarn"
+  ],
+  "topLevelDirectories": [
+    {
+      "name": "github",
+      "numFiles": 10,
+      "totalLoc": 1062,
+      "dominantLanguage": "TypeScript"
+    },
+    {
+      "name": "script",
+      "numFiles": 10,
+      "totalLoc": 835,
+      "dominantLanguage": "TypeScript"
+    },
+    {
+      "name": "nix",
+      "numFiles": 10,
+      "totalLoc": 567,
+      "dominantLanguage": "TypeScript"
+    },
+    {
+      "name": "infra",
+      "numFiles": 5,
+      "totalLoc": 287,
+      "dominantLanguage": "TypeScript"
+    },
+    {
+      "name": "sdks",
+      "numFiles": 16,
+      "totalLoc": 202,
+      "dominantLanguage": "TypeScript"
+    },
+    {
+      "name": "devplans",
+      "numFiles": 3,
+      "totalLoc": 0
+    },
+    {
+      "name": "logs",
+      "numFiles": 2,
+      "totalLoc": 0
+    },
+    {
+      "name": "patches",
+      "numFiles": 1,
+      "totalLoc": 0
+    },
+    {
+      "name": "specs",
+      "numFiles": 1,
+      "totalLoc": 0
+    }
+  ],
+  "detailedDirectories": [
+    {
+      "path": "github",
+      "name": "github",
+      "level": 1,
+      "numFiles": 10,
+      "totalLoc": 1062,
+      "dominantLanguage": "TypeScript",
+      "category": "General",
+      "description": "# opencode GitHub Action\r",
+      "subdirectories": [
+        {
+          "path": "github\\script",
+          "name": "script",
+          "level": 2,
+          "numFiles": 2,
+          "totalLoc": 0,
+          "category": "Tools/Scripts",
+          "description": "Tools/Scripts module with 2 files",
+          "subdirectories": []
+        }
+      ]
+    },
+    {
+      "path": "script",
+      "name": "script",
+      "level": 1,
+      "numFiles": 10,
+      "totalLoc": 835,
+      "dominantLanguage": "TypeScript",
+      "category": "Tools/Scripts",
+      "description": "Tools/Scripts module with 10 files (TypeScript)",
+      "subdirectories": []
+    },
+    {
+      "path": "nix",
+      "name": "nix",
+      "level": 1,
+      "numFiles": 10,
+      "totalLoc": 567,
+      "dominantLanguage": "TypeScript",
+      "category": "General",
+      "description": "General module with 10 files (TypeScript)",
+      "subdirectories": [
+        {
+          "path": "nix\\scripts",
+          "name": "scripts",
+          "level": 2,
+          "numFiles": 5,
+          "totalLoc": 526,
+          "dominantLanguage": "TypeScript",
+          "category": "Tools/Scripts",
+          "description": "Tools/Scripts module with 5 files (TypeScript)",
+          "subdirectories": []
+        }
+      ]
+    },
+    {
+      "path": "infra",
+      "name": "infra",
+      "level": 1,
+      "numFiles": 5,
+      "totalLoc": 287,
+      "dominantLanguage": "TypeScript",
+      "category": "General",
+      "description": "General module with 5 files (TypeScript)",
+      "subdirectories": []
+    },
+    {
+      "path": "sdks",
+      "name": "sdks",
+      "level": 1,
+      "numFiles": 16,
+      "totalLoc": 202,
+      "dominantLanguage": "TypeScript",
+      "category": "General",
+      "description": "General module with 16 files (TypeScript)",
+      "subdirectories": [
+        {
+          "path": "sdks\\vscode",
+          "name": "vscode",
+          "level": 2,
+          "numFiles": 16,
+          "totalLoc": 202,
+          "dominantLanguage": "TypeScript",
+          "category": "General",
+          "description": "# opencode VS Code Extension\r",
+          "subdirectories": [
+            {
+              "path": "sdks\\vscode\\src",
+              "name": "src",
+              "level": 3,
+              "numFiles": 1,
+              "totalLoc": 138,
+              "dominantLanguage": "TypeScript",
+              "category": "General",
+              "description": "General module with 1 files (TypeScript)",
+              "subdirectories": []
+            },
+            {
+              "path": "sdks\\vscode\\images",
+              "name": "images",
+              "level": 3,
+              "numFiles": 3,
+              "totalLoc": 0,
+              "category": "General",
+              "description": "General module with 3 files",
+              "subdirectories": []
+            },
+            {
+              "path": "sdks\\vscode\\script",
+              "name": "script",
+              "level": 3,
+              "numFiles": 2,
+              "totalLoc": 0,
+              "category": "Tools/Scripts",
+              "description": "Tools/Scripts module with 2 files",
+              "subdirectories": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "devplans",
+      "name": "devplans",
+      "level": 1,
+      "numFiles": 3,
+      "totalLoc": 0,
+      "category": "General",
+      "description": "General module with 3 files",
+      "subdirectories": [
+        {
+          "path": "devplans\\agentic-loops",
+          "name": "agentic-loops",
+          "level": 2,
+          "numFiles": 1,
+          "totalLoc": 0,
+          "category": "General",
+          "description": "General module with 1 files",
+          "subdirectories": []
+        }
+      ]
+    },
+    {
+      "path": "logs",
+      "name": "logs",
+      "level": 1,
+      "numFiles": 2,
+      "totalLoc": 0,
+      "category": "General",
+      "description": "General module with 2 files",
+      "subdirectories": []
+    },
+    {
+      "path": "patches",
+      "name": "patches",
+      "level": 1,
+      "numFiles": 1,
+      "totalLoc": 0,
+      "category": "General",
+      "description": "General module with 1 files",
+      "subdirectories": []
+    },
+    {
+      "path": "specs",
+      "name": "specs",
+      "level": 1,
+      "numFiles": 1,
+      "totalLoc": 0,
+      "category": "Testing",
+      "description": "Testing module with 1 files",
+      "subdirectories": []
+    }
+  ],
+  "architecturalInsights": {
+    "coreApplications": [],
+    "entryPointDetails": [
+      {
+        "path": "C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\.husky\\_\\husky.sh",
+        "type": "Unknown",
+        "description": ""
+      },
+      {
+        "path": "C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\nix\\scripts\\patch-wasm.ts",
+        "type": "Unknown",
+        "description": ""
+      },
+      {
+        "path": "C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\nix\\scripts\\update-hashes.sh",
+        "type": "Unknown",
+        "description": ""
+      }
+    ],
+    "serviceArchitecture": {
+      "microservices": [],
+      "monoliths": [],
+      "libraries": []
+    },
+    "layeredArchitecture": {
+      "presentation": [],
+      "business": [],
+      "data": [],
+      "infrastructure": []
+    }
+  },
+  "largeFiles": [
+    {
+      "path": ".runtime\\mcp-coordination-hub.sqlite-wal",
+      "sizeMb": 1.31
+    }
+  ],
+  "dependencies": {
+    "production": [
+      "@aws-sdk/client-s3",
+      "@opencode-ai/plugin",
+      "@opencode-ai/script",
+      "@opencode-ai/sdk",
+      "typescript"
+    ],
+    "development": [
+      "@actions/artifact",
+      "@tsconfig/bun",
+      "husky",
+      "prettier",
+      "sst",
+      "turbo"
+    ],
+    "total": 11
+  },
+  "complexity": {
+    "averageFileSize": 20.170731707317074,
+    "maxFileSize": 13736.3456,
+    "nestedDepth": 0,
+    "estimatedComplexity": "medium"
+  },
+  "gitRepo": {
+    "firstCommitDate": "2026-01-07",
+    "totalCommits": 6812,
+    "numContributors": 0,
+    "currentBranch": "Git-Bash-Fork-Fix",
+    "remoteUrls": [
+      "https://github.com/burgercrisis/opencode",
+      "https://github.com/anomalyco/opencode.git"
+    ]
+  },
+  "license": "MIT"
+}
