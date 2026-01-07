@@ -1483,6 +1483,10 @@ export namespace SessionPrompt {
     exited = true
     abort.removeEventListener("abort", abortHandler)
 
+    // Guarantee streams drain before returning (Issue #19 fix)
+    // This prevents data loss when proc.exited resolves before streams finish
+    await Promise.all([stdoutPromise, stderrPromise]).catch(() => {})
+
     if (aborted) {
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
     }
