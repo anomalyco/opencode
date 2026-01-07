@@ -134,7 +134,9 @@ export function parseCommand(command: string): { executable: string; args: strin
   const trimmed = command.trim()
   const shellType = detectCommandShell(trimmed)
 
-  // PowerShell commands: extract PowerShell executable and arguments
+  // PowerShell commands: MUST use shell wrapper for proper argument parsing
+  // Issue #27 fix: PowerShell -Command "..." requires cmd.exe to parse correctly
+  // Without shell wrapping, arguments are split incorrectly and commands fail
   if (shellType === 'powershell' || shellType === 'pwsh') {
     const parts = trimmed.split(/\s+/)
     const executable = shellType === 'pwsh' ? 'pwsh' : 'powershell.exe'
@@ -143,7 +145,7 @@ export function parseCommand(command: string): { executable: string; args: strin
     return {
       executable,
       args,
-      shouldBypassShell: true // Direct execution, no shell wrapping
+      shouldBypassShell: false // Use shell wrapper for proper parsing
     }
   }
 
@@ -332,17 +334,12 @@ export const BashTool = Tool.define("bash", async () => {
         if (!reader) return
         try {
           while (true) {
-            const { done, value } = await Promise.race([
-              reader.read(),
-              new Promise<{ done: true }>((_, reject) => {
-                ctx.abort.addEventListener("abort", () => reject(new Error("Aborted")), { once: true })
-              })
-            ])
+            const { done, value } = await reader.read()
             if (done) break
             append(value)
           }
-        } catch (_e) {
-          // Stream reading ended or was aborted
+        } catch {
+          // Stream reading ended (abort or natural completion)
         }
       }
 
@@ -352,6 +349,7 @@ export const BashTool = Tool.define("bash", async () => {
 
       const kill = () => Shell.killTree(proc, { exited: () => exited })
 
+      // Handle abort before starting
       if (ctx.abort.aborted) {
         aborted = true
         await kill()
@@ -369,14 +367,18 @@ export const BashTool = Tool.define("bash", async () => {
         void kill()
       }, timeout + 100)
 
-      // Concurrent stream reading and process monitoring
-      await Promise.race([
-        proc.exited,
-        Promise.all([
-          readOutput(stdoutReader),
-          readOutput(stderrReader),
-        ]).then(() => proc.exited),
-      ])
+      // Start reading streams
+      const stdoutPromise = readOutput(stdoutReader)
+      const stderrPromise = readOutput(stderrReader)
+
+      // Wait for process exit
+      await proc.exited
+
+      // Guarantee streams drain before returning (Issue #17 fix)
+      // This prevents data loss when proc.exited resolves before streams finish
+      await Promise.all([stdoutPromise, stderrPromise]).catch(() => {})
+
+      exited = true
 
       // Cleanup
       clearTimeout(timeoutTimer)
