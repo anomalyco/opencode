@@ -14,10 +14,14 @@ export namespace Plugin {
   const BUILTIN = ["opencode-copilot-auth@0.0.9", "opencode-anthropic-auth@0.0.5"]
 
   const state = Instance.state(async () => {
+    const localFetch: typeof fetch = async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      return Server.App().fetch(request)
+    }
+
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      fetch: localFetch,
     })
     const config = await Config.get()
     const hooks = []
