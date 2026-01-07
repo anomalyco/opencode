@@ -95,7 +95,6 @@ export namespace Agent {
         options: {},
         mode: "subagent",
         native: true,
-        hidden: true,
       },
       explore: {
         name: "explore",
@@ -141,6 +140,7 @@ export namespace Agent {
         options: {},
         native: true,
         hidden: true,
+        temperature: 0.5,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
