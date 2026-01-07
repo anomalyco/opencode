@@ -71,6 +71,7 @@ import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { HexColorPreview } from "../../component/hex-color-preview"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1303,6 +1304,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           conceal={ctx.conceal()}
           fg={theme.text}
         />
+        <HexColorPreview text={props.part.text} />
       </box>
     </Show>
   )
