@@ -27,6 +27,7 @@ export namespace Billing {
       tx
         .select({
           customerID: BillingTable.customerID,
+          subscriptionID: BillingTable.subscriptionID,
           paymentMethodID: BillingTable.paymentMethodID,
           paymentMethodType: BillingTable.paymentMethodType,
           paymentMethodLast4: BillingTable.paymentMethodLast4,

@@ -32,6 +32,9 @@
     "promote-models-to-dev": "script/promote-models.ts dev",
     "promote-models-to-prod": "script/promote-models.ts production",
     "pull-models-from-dev": "script/pull-models.ts dev",
+    "update-black": "script/update-black.ts",
+    "promote-black-to-dev": "script/promote-black.ts dev",
+    "promote-black-to-prod": "script/promote-black.ts production",
     "typecheck": "tsgo --noEmit"
   },
   "devDependencies": {
