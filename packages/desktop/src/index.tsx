@@ -283,13 +283,12 @@ render(() => {
 // Gate component that waits for the server to be ready
 function ServerGate(props: ParentProps) {
   const [status] = createResource(async () => {
-    if(window.__OPENCODE__?.serverReady) return;
+    if (window.__OPENCODE__?.serverReady) return
     return await invoke("ensure_server_started")
   })
 
   return (
-    <
-      Suspense
+    <Suspense
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
           <Logo class="w-xl opacity-12 animate-pulse" />
@@ -299,9 +298,7 @@ function ServerGate(props: ParentProps) {
     >
       {/* Triggers suspense/error boundaries without rendering the returned value */}
       {(status(), null)}
-      <Suspense>
-        {props.children}
-      </Suspense>
+      <Suspense>{props.children}</Suspense>
     </Suspense>
   )
 }

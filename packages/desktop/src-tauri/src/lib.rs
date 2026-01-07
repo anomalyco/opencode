@@ -258,15 +258,13 @@ pub fn run() {
                     .hidden_title(true);
             }
 
-            let _window = window_builder.build().expect("Failed to create window");
+            let window = window_builder.build().expect("Failed to create window");
 
             let (tx, rx) = tokio::sync::oneshot::channel();
             app.manage(ServerState::new(None, rx));
 
             {
                 let app = app.clone();
-
-                // Spawn server in background and notify when ready
                 tauri::async_runtime::spawn(async move {
                     let should_spawn_sidecar = !is_server_running(port).await;
 
@@ -300,11 +298,12 @@ pub fn run() {
                     };
 
                     app.state::<ServerState>().set_child(child);
-                    let _ = tx.send(res);
 
-                    if let Some(window) = app.get_webview_window("main") {
+                    if res.is_ok() {
                         let _ = window.eval("window.__OPENCODE__.serverReady = true;");
                     }
+
+                    let _ = tx.send(res);
                 });
             }
 
