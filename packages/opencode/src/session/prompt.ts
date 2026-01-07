@@ -1578,20 +1578,28 @@ export namespace SessionPrompt {
       throw error
     }
 
+    const commandText = `/${input.command}${input.arguments ? " " + input.arguments : ""}`
+    const commandPart = {
+      type: "command" as const,
+      command: commandText,
+      prompt: template,
+    }
+
     const templateParts = await resolvePromptParts(template)
-    const parts =
-      (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
-        ? [
-            {
-              type: "subtask" as const,
-              agent: agent.name,
-              description: command.description ?? "",
-              command: input.command,
-              // TODO: how can we make task tool accept a more complex input?
-              prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
-            },
-          ]
-        : [...templateParts, ...(input.parts ?? [])]
+    const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
+    const parts = isSubtask
+      ? [
+          commandPart,
+          {
+            type: "subtask" as const,
+            agent: agent.name,
+            description: command.description ?? "",
+            command: input.command,
+            // TODO: how can we make task tool accept a more complex input?
+            prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+          },
+        ]
+      : [commandPart, ...templateParts, ...(input.parts ?? [])]
 
     const result = (await prompt({
       sessionID: input.sessionID,
