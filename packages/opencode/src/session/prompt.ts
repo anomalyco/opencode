@@ -1559,7 +1559,6 @@ export namespace SessionPrompt {
       {
         type: "command" as const,
         command: `/${input.command}${input.arguments ? " " + input.arguments : ""}`,
-        prompt: template,
       },
       ...((agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
         ? [

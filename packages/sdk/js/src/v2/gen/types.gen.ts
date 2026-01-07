@@ -425,7 +425,6 @@ export type CommandPart = {
   messageID: string
   type: "command"
   command: string
-  prompt: string
 }
 
 export type Part =
@@ -1777,7 +1776,6 @@ export type CommandPartInput = {
   id?: string
   type: "command"
   command: string
-  prompt: string
 }
 
 export type Command = {

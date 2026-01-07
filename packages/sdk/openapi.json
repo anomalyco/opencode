@@ -6644,12 +6644,9 @@
           },
           "command": {
             "type": "string"
-          },
-          "prompt": {
-            "type": "string"
           }
         },
-        "required": ["id", "sessionID", "messageID", "type", "command", "prompt"]
+        "required": ["id", "sessionID", "messageID", "type", "command"]
       },
       "Part": {
         "anyOf": [
@@ -9473,12 +9470,9 @@
           },
           "command": {
             "type": "string"
-          },
-          "prompt": {
-            "type": "string"
           }
         },
-        "required": ["type", "command", "prompt"]
+        "required": ["type", "command"]
       },
       "Command": {
         "type": "object",

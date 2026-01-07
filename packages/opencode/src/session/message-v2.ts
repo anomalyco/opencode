@@ -175,7 +175,6 @@ export namespace MessageV2 {
   export const CommandPart = PartBase.extend({
     type: z.literal("command"),
     command: z.string(),
-    prompt: z.string(),
   }).meta({
     ref: "CommandPart",
   })
