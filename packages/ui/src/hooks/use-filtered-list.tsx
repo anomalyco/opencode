@@ -1,6 +1,6 @@
 import fuzzysort from "fuzzysort"
 import { entries, flatMap, groupBy, map, pipe } from "remeda"
-import { createMemo, createResource } from "solid-js"
+import { createEffect, createMemo, createResource, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createList } from "solid-list"
 
@@ -86,9 +86,14 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     }
   }
 
+  createEffect(
+    on(grouped, () => {
+      reset()
+    }),
+  )
+
   const onInput = (value: string) => {
     setStore("filter", value)
-    reset()
   }
 
   return {
