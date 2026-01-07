@@ -1259,6 +1259,10 @@ export type AgentConfig = {
    */
   description?: string
   mode?: "subagent" | "primary" | "all"
+  /**
+   * Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)
+   */
+  hidden?: boolean
   options?: {
     [key: string]: unknown
   }

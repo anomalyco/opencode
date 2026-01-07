@@ -10,6 +10,13 @@ import { SessionPrompt } from "../session/prompt"
 import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
+import { PermissionNext } from "@/permission/next"
+
+export { DESCRIPTION as TASK_DESCRIPTION }
+
+export function filterSubagents(agents: Agent.Info[], ruleset: PermissionNext.Ruleset) {
+  return agents.filter((a) => PermissionNext.evaluate("task", a.name, ruleset).action !== "deny")
+}
 
 export const TaskTool = Tool.define("task", async () => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -30,8 +37,10 @@ export const TaskTool = Tool.define("task", async () => {
     }),
     async execute(params, ctx) {
       const config = await Config.get()
+
+      const userInvokedAgents = (ctx.extra?.userInvokedAgents ?? []) as string[]
       // Skip permission check when invoked from a command subtask (user already approved by invoking the command)
-      if (!ctx.extra?.bypassAgentCheck) {
+      if (!ctx.extra?.bypassAgentCheck && !userInvokedAgents.includes(params.subagent_type)) {
         await ctx.ask({
           permission: "task",
           patterns: [params.subagent_type],
