@@ -1,6 +1,6 @@
 import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
 import path from "path"
-import { createEffect, createMemo, onMount } from "solid-js"
+import { createEffect, createMemo, onMount, onCleanup } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
@@ -102,6 +102,8 @@ type Theme = ThemeColors & {
   thinkingOpacity: number
 }
 
+export type ColorScheme = "dark" | "light" | "system"
+
 export function selectedForeground(theme: Theme): RGBA {
   // If theme explicitly defines selectedListItemText, use it
   if (theme._hasSelectedListItemText) {
@@ -126,6 +128,57 @@ type Variant = {
   light: HexColor | RefName
 }
 type ColorValue = HexColor | RefName | Variant | RGBA
+
+function isVariant(value: ColorValue): value is Variant {
+  return typeof value === "object" && value !== null && !(value instanceof RGBA) && "dark" in value && "light" in value
+}
+
+export type ThemeModeSupport = {
+  dark: boolean
+  light: boolean
+}
+
+function resolveColorRef(ref: string, defs: Record<string, HexColor | RefName>): string {
+  if (ref.startsWith("#")) return ref
+  if (defs[ref]) return resolveColorRef(defs[ref], defs)
+  return ref
+}
+
+function getLuminance(hex: string): number {
+  if (!hex.startsWith("#")) return 0.5
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+}
+
+export function getThemeModeSupport(theme: ThemeJson): ThemeModeSupport {
+  const defs = theme.defs ?? {}
+  const bgValue = theme.theme.background
+
+  if (isVariant(bgValue)) {
+    const darkBg = resolveColorRef(bgValue.dark, defs)
+    const lightBg = resolveColorRef(bgValue.light, defs)
+    const isTransparent = darkBg === "transparent" || darkBg === "none"
+    if (isTransparent || darkBg === lightBg) {
+      const textValue = theme.theme.text
+      if (isVariant(textValue)) {
+        const darkText = resolveColorRef(textValue.dark, defs)
+        const lightText = resolveColorRef(textValue.light, defs)
+        if (darkText !== lightText) return { dark: true, light: true }
+      }
+      if (isTransparent) return { dark: true, light: true }
+      const luminance = getLuminance(darkBg)
+      return { dark: luminance < 0.5, light: luminance >= 0.5 }
+    }
+    return { dark: true, light: true }
+  }
+
+  const resolvedBg = typeof bgValue === "string" ? resolveColorRef(bgValue, defs) : ""
+  if (resolvedBg === "transparent" || resolvedBg === "none") return { dark: true, light: true }
+  const luminance = getLuminance(resolvedBg)
+  return { dark: luminance < 0.5, light: luminance >= 0.5 }
+}
 type ThemeJson = {
   $schema?: string
   defs?: Record<string, HexColor | RefName>
@@ -279,17 +332,29 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { mode: "dark" | "light" }) => {
     const sync = useSync()
     const kv = useKV()
+    const configAppearance = sync.data.config.appearance as ColorScheme | undefined
+    const initialColorScheme = (configAppearance ?? kv.get("color_scheme", "system")) as ColorScheme
+    const initialMode = initialColorScheme === "system" ? props.mode : (initialColorScheme as "dark" | "light")
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
+      colorScheme: initialColorScheme,
+      mode: initialMode,
       active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
 
     createEffect(() => {
       const theme = sync.data.config.theme
-      console.log("theme", theme)
       if (theme) setStore("active", theme)
+      const appearance = sync.data.config.appearance as ColorScheme | undefined
+      if (appearance) {
+        setStore("colorScheme", appearance)
+        if (appearance === "system") {
+          setStore("mode", props.mode)
+        } else {
+          setStore("mode", appearance)
+        }
+      }
     })
 
     createEffect(() => {
@@ -348,6 +413,39 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       resolveSystemTheme()
     })
 
+    // Poll terminal background for real-time system theme detection
+    createEffect(() => {
+      if (store.colorScheme !== "system") return
+
+      let active = true
+
+      const checkTerminalMode = () => {
+        if (!active) return
+        renderer
+          .getPalette({ size: 1 })
+          .then((colors) => {
+            if (!active || !colors.defaultBackground) return
+            const hex = colors.defaultBackground
+            const r = parseInt(hex.slice(1, 3), 16)
+            const g = parseInt(hex.slice(3, 5), 16)
+            const b = parseInt(hex.slice(5, 7), 16)
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+            const detectedMode = luminance > 0.5 ? "light" : "dark"
+            if (store.colorScheme === "system" && store.mode !== detectedMode) {
+              setStore("mode", detectedMode)
+            }
+          })
+          .catch(() => {})
+      }
+
+      const interval = setInterval(checkTerminalMode, 5000)
+
+      onCleanup(() => {
+        active = false
+        clearInterval(interval)
+      })
+    })
+
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
     })
@@ -372,6 +470,18 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       subtleSyntax,
       mode() {
         return store.mode
+      },
+      colorScheme() {
+        return store.colorScheme
+      },
+      setColorScheme(scheme: ColorScheme) {
+        setStore("colorScheme", scheme)
+        kv.set("color_scheme", scheme)
+        if (scheme === "system") {
+          setStore("mode", props.mode)
+        } else {
+          setStore("mode", scheme)
+        }
       },
       setMode(mode: "dark" | "light") {
         setStore("mode", mode)

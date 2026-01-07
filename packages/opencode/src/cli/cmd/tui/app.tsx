@@ -177,7 +177,7 @@ function App() {
   const command = useCommandDialog()
   const sdk = useSDK()
   const toast = useToast()
-  const { theme, mode, setMode } = useTheme()
+  const { theme } = useTheme()
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
@@ -421,15 +421,7 @@ function App() {
       },
       category: "System",
     },
-    {
-      title: "Toggle appearance",
-      value: "theme.switch_mode",
-      onSelect: (dialog) => {
-        setMode(mode() === "dark" ? "light" : "dark")
-        dialog.clear()
-      },
-      category: "System",
-    },
+
     {
       title: "Help",
       value: "help.show",

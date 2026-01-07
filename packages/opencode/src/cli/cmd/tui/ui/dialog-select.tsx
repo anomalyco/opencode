@@ -19,6 +19,7 @@ export interface DialogSelectProps<T> {
   onMove?: (option: DialogSelectOption<T>) => void
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
+  onNavigateUp?: () => void
   skipFilter?: boolean
   keybind?: {
     keybind: Keybind.Info
@@ -124,7 +125,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   function move(direction: number) {
     if (flat().length === 0) return
     let next = store.selected + direction
-    if (next < 0) next = flat().length - 1
+    if (next < 0) {
+      if (props.onNavigateUp) {
+        props.onNavigateUp()
+        return
+      }
+      next = flat().length - 1
+    }
     if (next >= flat().length) next = 0
     moveTo(next)
   }
