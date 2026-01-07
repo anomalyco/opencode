@@ -2,8 +2,10 @@ import z from "zod"
 import { Tool } from "./tool"
 import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
+import { Token } from "../util/token"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_TOKENS = 50_000 // Maximum tokens to return (to avoid exceeding budget)
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
@@ -89,50 +91,45 @@ export const WebFetchTool = Tool.define("webfetch", {
     const title = `${params.url} (${contentType})`
 
     // Handle content based on requested format and actual content type
+    let output = ""
     switch (params.format) {
       case "markdown":
         if (contentType.includes("text/html")) {
-          const markdown = convertHTMLToMarkdown(content)
-          return {
-            output: markdown,
-            title,
-            metadata: {},
-          }
+          output = convertHTMLToMarkdown(content)
+        } else {
+          output = content
         }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+        break
 
       case "text":
         if (contentType.includes("text/html")) {
-          const text = await extractTextFromHTML(content)
-          return {
-            output: text,
-            title,
-            metadata: {},
-          }
+          output = await extractTextFromHTML(content)
+        } else {
+          output = content
         }
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+        break
 
       case "html":
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+        output = content
+        break
 
       default:
-        return {
-          output: content,
-          title,
-          metadata: {},
-        }
+        output = content
+    }
+
+    // Truncate if exceeds token limit
+    const tokenCount = Token.estimate(output)
+    if (tokenCount > MAX_TOKENS) {
+      const charsPerToken = 4
+      const maxChars = MAX_TOKENS * charsPerToken
+      output = output.slice(0, maxChars)
+      output += `\n\n[Content truncated: Response was ~${tokenCount.toLocaleString()} tokens, truncated to ${MAX_TOKENS.toLocaleString()} tokens to avoid exceeding budget]`
+    }
+
+    return {
+      output,
+      title,
+      metadata: {},
     }
   },
 })
