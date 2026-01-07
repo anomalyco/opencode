@@ -137,7 +137,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const legacyViewKey = createMemo(() => `${params.dir}/file${params.id ? "/" + params.id : ""}.v1`)
 
     const [view, setView, _, ready] = persisted(
-      Persist.scoped(params.dir, params.id, "file-view", [legacyViewKey()]),
+      Persist.scoped(params.dir!, params.id, "file-view", [legacyViewKey()]),
       createStore<{
         file: Record<string, FileViewState>
       }>({
