@@ -24,6 +24,7 @@ import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
 import { Truncate } from "../session/truncation"
+import { PermissionNext } from "../permission/next"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -124,6 +125,15 @@ export namespace ToolRegistry {
           if (t.id === "codesearch" || t.id === "websearch") {
             return providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
           }
+          
+          // Filter based on agent permissions if provided
+          if (agent?.permission) {
+            const rule = PermissionNext.evaluate(t.id, "*", agent.permission)
+            if (rule.action === "deny") {
+              return false
+            }
+          }
+          
           return true
         })
         .map(async (t) => {
