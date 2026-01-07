@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@opencode-ai/app": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
     "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "~2",
