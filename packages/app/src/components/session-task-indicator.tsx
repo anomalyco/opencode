@@ -23,17 +23,11 @@ export function SessionTaskIndicator() {
   const handleClick = () => {
     const sessionKey = `${params.dir}${params.id ? "/" + params.id : ""}`
     const tabs = layout.tabs(sessionKey)
-
-    // If tasks tab is already active, close the panel
     if (tabs.active() === "tasks") {
       layout.review.close()
       return
     }
-
-    // Open the review panel if not open and switch to tasks tab
-    if (!layout.review.opened()) {
-      layout.review.open()
-    }
+    if (!layout.review.opened()) layout.review.open()
     tabs.setActive("tasks")
   }
 
