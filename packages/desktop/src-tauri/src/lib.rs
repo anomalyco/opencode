@@ -236,6 +236,7 @@ pub fn run() {
                 .unwrap_or(LogicalSize::new(1920, 1080));
 
             // Create window immediately with serverReady = false
+            let app_for_nav = app.clone();
             let mut window_builder =
                 WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
                     .title("OpenCode")
@@ -243,6 +244,24 @@ pub fn run() {
                     .decorations(true)
                     .zoom_hotkeys_enabled(true)
                     .disable_drag_drop_handler()
+                    .on_navigation(move |url| {
+                        // Allow internal navigation (tauri:// scheme)
+                        if url.scheme() == "tauri" {
+                            return true;
+                        }
+                        // Allow localhost (the app's own server)
+                        if let Some(host) = url.host_str() {
+                            if host == "localhost" || host == "127.0.0.1" {
+                                return true;
+                            }
+                        }
+                        // Open external http/https URLs in default browser
+                        if url.scheme() == "http" || url.scheme() == "https" {
+                            let _ = app_for_nav.shell().open(url.as_str(), None);
+                            return false; // Cancel internal navigation
+                        }
+                        true
+                    })
                     .initialization_script(format!(
                         r#"
                       window.__OPENCODE__ ??= {{}};
