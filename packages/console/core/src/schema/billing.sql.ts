@@ -23,7 +23,11 @@ export const BillingTable = mysqlTable(
     timeReloadLockedTill: utc("time_reload_locked_till"),
     subscriptionID: varchar("subscription_id", { length: 28 }),
   },
-  (table) => [...workspaceIndexes(table), uniqueIndex("global_customer_id").on(table.customerID)],
+  (table) => [
+    ...workspaceIndexes(table),
+    uniqueIndex("global_customer_id").on(table.customerID),
+    uniqueIndex("global_subscription_id").on(table.subscriptionID),
+  ],
 )
 
 export const PaymentTable = mysqlTable(
