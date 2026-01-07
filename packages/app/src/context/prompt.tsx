@@ -106,7 +106,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
     const legacy = createMemo(() => `${params.dir}/prompt${params.id ? "/" + params.id : ""}.v2`)
 
     const [store, setStore, _, ready] = persisted(
-      Persist.scoped(params.dir, params.id, "prompt", [legacy()]),
+      Persist.scoped(params.dir!, params.id, "prompt", [legacy()]),
       createStore<{
         prompt: Prompt
         cursor?: number

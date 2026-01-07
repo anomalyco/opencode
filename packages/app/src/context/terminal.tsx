@@ -22,7 +22,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const legacy = createMemo(() => `${params.dir}/terminal${params.id ? "/" + params.id : ""}.v1`)
 
     const [store, setStore, _, ready] = persisted(
-      Persist.scoped(params.dir, params.id, "terminal", [legacy()]),
+      Persist.scoped(params.dir!, params.id, "terminal", [legacy()]),
       createStore<{
         active?: string
         all: LocalPTY[]
