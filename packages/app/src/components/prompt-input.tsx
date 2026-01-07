@@ -248,17 +248,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
-  createEffect(() => {
-    params.id
-    editorRef.focus()
-    if (params.id) return
-    const interval = setInterval(() => {
-      setStore("placeholder", (prev) => (prev + 1) % PLACEHOLDERS.length)
-    }, 6500)
-    onCleanup(() => clearInterval(interval))
-  })
-
   const isFocused = createFocusSignal(() => editorRef)
+
+  createEffect(
+    on(
+      () => params.id,
+      () => {
+        queueMicrotask(() => editorRef.focus())
+        if (params.id) return
+        const interval = setInterval(() => {
+          setStore("placeholder", (prev) => (prev + 1) % PLACEHOLDERS.length)
+        }, 6500)
+        onCleanup(() => clearInterval(interval))
+      },
+    ),
+  )
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
@@ -288,6 +292,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
+    if (!isFocused()) return
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
