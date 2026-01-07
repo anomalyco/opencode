@@ -2,6 +2,7 @@ import { test, expect } from "bun:test"
 import { PermissionNext } from "../../src/permission/next"
 import { Bus } from "../../src/bus"
 import { Instance } from "../../src/project/instance"
+import { Session } from "../../src/session"
 import { tmpdir } from "../fixture/fixture"
 
 test("clearSession - rejects pending permissions for session", async () => {
@@ -129,22 +130,19 @@ test("init - subscribes to session.deleted and clears session", async () => {
 
         // Simulate session deletion by publishing the event
         // Bus.publish returns a Promise that resolves when all handlers complete
-        await Bus.publish(
-          { type: "session.deleted", properties: {} as any },
-          {
-            info: {
-              id: "session_deleted",
-              projectID: "project_1",
-              directory: tmp.path,
-              title: "Test Session",
-              version: "1.0.0",
-              time: {
-                created: Date.now(),
-                updated: Date.now(),
-              },
+        await Bus.publish(Session.Event.Deleted, {
+          info: {
+            id: "session_deleted",
+            projectID: "project_1",
+            directory: tmp.path,
+            title: "Test Session",
+            version: "1.0.0",
+            time: {
+              created: Date.now(),
+              updated: Date.now(),
             },
           },
-        )
+        })
 
         // Verify pending was cleared
         expect((await PermissionNext.list()).length).toBe(0)
@@ -181,22 +179,19 @@ test("dispose - unsubscribes from events", async () => {
       expect((await PermissionNext.list()).length).toBe(1)
 
       // Publish session deleted event - should NOT clear because we disposed
-      await Bus.publish(
-        { type: "session.deleted", properties: {} as any },
-        {
-          info: {
-            id: "session_after_dispose",
-            projectID: "project_1",
-            directory: tmp.path,
-            title: "Test Session",
-            version: "1.0.0",
-            time: {
-              created: Date.now(),
-              updated: Date.now(),
-            },
+      await Bus.publish(Session.Event.Deleted, {
+        info: {
+          id: "session_after_dispose",
+          projectID: "project_1",
+          directory: tmp.path,
+          title: "Test Session",
+          version: "1.0.0",
+          time: {
+            created: Date.now(),
+            updated: Date.now(),
           },
         },
-      )
+      })
 
       // Pending should still exist because we disposed
       expect((await PermissionNext.list()).length).toBe(1)
@@ -233,22 +228,19 @@ test("init - calling init twice does not duplicate subscriptions", async () => {
         const result = askPromise.catch((e) => e)
 
         // Publish session deleted event
-        await Bus.publish(
-          { type: "session.deleted", properties: {} as any },
-          {
-            info: {
-              id: "session_multi_init",
-              projectID: "project_1",
-              directory: tmp.path,
-              title: "Test Session",
-              version: "1.0.0",
-              time: {
-                created: Date.now(),
-                updated: Date.now(),
-              },
+        await Bus.publish(Session.Event.Deleted, {
+          info: {
+            id: "session_multi_init",
+            projectID: "project_1",
+            directory: tmp.path,
+            title: "Test Session",
+            version: "1.0.0",
+            time: {
+              created: Date.now(),
+              updated: Date.now(),
             },
           },
-        )
+        })
 
         // Should be cleared exactly once (no duplicate handlers)
         expect((await PermissionNext.list()).length).toBe(0)
