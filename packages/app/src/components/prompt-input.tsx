@@ -42,7 +42,7 @@ import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
@@ -189,7 +189,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
-    "prompt-history.v1",
+    Persist.global("prompt-history", ["prompt-history.v1"]),
     createStore<{
       entries: Prompt[]
     }>({
@@ -197,7 +197,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
   const [shellHistory, setShellHistory] = persisted(
-    "prompt-history-shell.v1",
+    Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
     createStore<{
       entries: Prompt[]
     }>({
@@ -1593,14 +1593,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
                       classList={{
                         "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                        "text-text-base": !permission.isAutoAccepting(params.id!),
-                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!),
+                        "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
+                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
                       }}
                     >
                       <Icon
                         name="chevron-double-right"
                         size="small"
-                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!) }}
+                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
                       />
                     </Button>
                   </TooltipKeybind>

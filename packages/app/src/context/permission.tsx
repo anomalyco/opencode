@@ -1,12 +1,12 @@
 import { createMemo, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
-import { base64Decode } from "@opencode-ai/util/encode"
+import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -60,7 +60,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     })
 
     const [store, setStore, _, ready] = persisted(
-      "permission.v3",
+      Persist.global("permission", ["permission.v3"]),
       createStore({
         autoAcceptEdits: {} as Record<string, boolean>,
       }),
@@ -85,8 +85,14 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       })
     }
 
-    function isAutoAccepting(sessionID: string) {
-      return store.autoAcceptEdits[sessionID] ?? false
+    function acceptKey(sessionID: string, directory?: string) {
+      if (!directory) return sessionID
+      return `${base64Encode(directory)}/${sessionID}`
+    }
+
+    function isAutoAccepting(sessionID: string, directory?: string) {
+      const key = acceptKey(sessionID, directory)
+      return store.autoAcceptEdits[key] ?? store.autoAcceptEdits[sessionID] ?? false
     }
 
     const unsubscribe = globalSDK.event.listen((e) => {
@@ -94,7 +100,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       if (event?.type !== "permission.asked") return
 
       const perm = event.properties
-      if (!isAutoAccepting(perm.sessionID)) return
+      if (!isAutoAccepting(perm.sessionID, e.name)) return
       if (!shouldAutoAccept(perm)) return
 
       respondOnce(perm, e.name)
@@ -102,7 +108,13 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     onCleanup(unsubscribe)
 
     function enable(sessionID: string, directory: string) {
-      setStore("autoAcceptEdits", sessionID, true)
+      const key = acceptKey(sessionID, directory)
+      setStore(
+        produce((draft) => {
+          draft.autoAcceptEdits[key] = true
+          delete draft.autoAcceptEdits[sessionID]
+        }),
+      )
 
       globalSDK.client.permission
         .list({ directory })
@@ -117,31 +129,37 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         .catch(() => undefined)
     }
 
-    function disable(sessionID: string) {
-      setStore("autoAcceptEdits", sessionID, false)
+    function disable(sessionID: string, directory?: string) {
+      const key = directory ? acceptKey(sessionID, directory) : undefined
+      setStore(
+        produce((draft) => {
+          if (key) delete draft.autoAcceptEdits[key]
+          delete draft.autoAcceptEdits[sessionID]
+        }),
+      )
     }
 
     return {
       ready,
       respond,
-      autoResponds(permission: PermissionRequest) {
-        return isAutoAccepting(permission.sessionID) && shouldAutoAccept(permission)
+      autoResponds(permission: PermissionRequest, directory?: string) {
+        return isAutoAccepting(permission.sessionID, directory) && shouldAutoAccept(permission)
       },
       isAutoAccepting,
       toggleAutoAccept(sessionID: string, directory: string) {
-        if (isAutoAccepting(sessionID)) {
-          disable(sessionID)
+        if (isAutoAccepting(sessionID, directory)) {
+          disable(sessionID, directory)
           return
         }
 
         enable(sessionID, directory)
       },
       enableAutoAccept(sessionID: string, directory: string) {
-        if (isAutoAccepting(sessionID)) return
+        if (isAutoAccepting(sessionID, directory)) return
         enable(sessionID, directory)
       },
-      disableAutoAccept(sessionID: string) {
-        disable(sessionID)
+      disableAutoAccept(sessionID: string, directory?: string) {
+        disable(sessionID, directory)
       },
       permissionsEnabled,
     }

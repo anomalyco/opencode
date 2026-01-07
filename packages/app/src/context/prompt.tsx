@@ -3,7 +3,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createMemo } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 
 interface PartBase {
   content: string
@@ -103,10 +103,10 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
   name: "Prompt",
   init: () => {
     const params = useParams()
-    const name = createMemo(() => `${params.dir}/prompt${params.id ? "/" + params.id : ""}.v2`)
+    const legacy = createMemo(() => `${params.dir}/prompt${params.id ? "/" + params.id : ""}.v2`)
 
     const [store, setStore, _, ready] = persisted(
-      name(),
+      Persist.scoped(params.dir, params.id, "prompt", [legacy()]),
       createStore<{
         prompt: Prompt
         cursor?: number

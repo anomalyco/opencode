@@ -1,4 +1,4 @@
-import { createMemo, onCleanup } from "solid-js"
+import { createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { FileContent } from "@opencode-ai/sdk/v2"
@@ -7,7 +7,7 @@ import { useParams } from "@solidjs/router"
 import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 
 export type FileSelection = {
   startLine: number
@@ -134,16 +134,42 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       file: {},
     })
 
-    const viewKey = createMemo(() => `${params.dir}/file${params.id ? "/" + params.id : ""}.v1`)
+    const legacyViewKey = createMemo(() => `${params.dir}/file${params.id ? "/" + params.id : ""}.v1`)
 
     const [view, setView, _, ready] = persisted(
-      viewKey(),
+      Persist.scoped(params.dir, params.id, "file-view", [legacyViewKey()]),
       createStore<{
         file: Record<string, FileViewState>
       }>({
         file: {},
       }),
     )
+
+    const MAX_VIEW_FILES = 500
+    const viewMeta = { pruned: false }
+
+    const pruneView = (keep?: string) => {
+      const keys = Object.keys(view.file)
+      if (keys.length <= MAX_VIEW_FILES) return
+
+      const drop = keys.filter((key) => key !== keep).slice(0, keys.length - MAX_VIEW_FILES)
+      if (drop.length === 0) return
+
+      setView(
+        produce((draft) => {
+          for (const key of drop) {
+            delete draft.file[key]
+          }
+        }),
+      )
+    }
+
+    createEffect(() => {
+      if (!ready()) return
+      if (viewMeta.pruned) return
+      viewMeta.pruned = true
+      pruneView()
+    })
 
     function ensure(path: string) {
       if (!path) return
@@ -233,6 +259,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           scrollTop: top,
         }
       })
+      pruneView(path)
     }
 
     const setScrollLeft = (input: string, left: number) => {
@@ -244,6 +271,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           scrollLeft: left,
         }
       })
+      pruneView(path)
     }
 
     const setSelectedLines = (input: string, range: SelectedLineRange | null) => {
@@ -256,6 +284,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           selectedLines: next,
         }
       })
+      pruneView(path)
     }
 
     onCleanup(() => stop())
