@@ -1,5 +1,6 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on, batch } from "solid-js"
+import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type SelectedLineRange } from "@/context/file"
@@ -24,7 +25,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum, base64Decode } from "@opencode-ai/util/encode"
+import { checksum, base64Encode, base64Decode } from "@opencode-ai/util/encode"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -48,12 +49,7 @@ import {
   NewSessionView,
 } from "@/components/session"
 import { usePlatform } from "@/context/platform"
-
-function same<T>(a: readonly T[], b: readonly T[]) {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
-}
+import { same } from "@/utils/same"
 
 type DiffStyle = "unified" | "split"
 
@@ -62,6 +58,7 @@ interface SessionReviewTabProps {
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
   onDiffStyleChange?: (style: DiffStyle) => void
+  onViewFile?: (file: string) => void
   classes?: {
     root?: string
     header?: string
@@ -141,6 +138,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       diffs={props.diffs()}
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
+      onViewFile={props.onViewFile}
     />
   )
 }
@@ -253,6 +251,14 @@ export default function Page() {
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "review",
     newSessionWorktree: "main",
+    promptHeight: 0,
+  })
+
+  const newSessionWorktree = createMemo(() => {
+    if (store.newSessionWorktree === "create") return "create"
+    const project = sync.project
+    if (project && sync.data.path.directory !== project.worktree) return sync.data.path.directory
+    return "main"
   })
 
   const activeMessage = createMemo(() => {
@@ -287,6 +293,8 @@ export default function Page() {
 
   const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
+  let promptDock: HTMLDivElement | undefined
+  let scroller: HTMLDivElement | undefined
 
   createEffect(() => {
     if (!params.id) return
@@ -459,7 +467,10 @@ export default function Page() {
     },
     {
       id: "permissions.autoaccept",
-      title: params.id && permission.isAutoAccepting(params.id) ? "Stop auto-accepting edits" : "Auto-accept edits",
+      title:
+        params.id && permission.isAutoAccepting(params.id, sdk.directory)
+          ? "Stop auto-accepting edits"
+          : "Auto-accept edits",
       category: "Permissions",
       keybind: "mod+shift+a",
       disabled: !params.id || !permission.permissionsEnabled(),
@@ -468,8 +479,10 @@ export default function Page() {
         if (!sessionID) return
         permission.toggleAutoAccept(sessionID, sdk.directory)
         showToast({
-          title: permission.isAutoAccepting(sessionID) ? "Auto-accepting edits" : "Stopped auto-accepting edits",
-          description: permission.isAutoAccepting(sessionID)
+          title: permission.isAutoAccepting(sessionID, sdk.directory)
+            ? "Auto-accepting edits"
+            : "Stopped auto-accepting edits",
+          description: permission.isAutoAccepting(sessionID, sdk.directory)
             ? "Edit and write permissions will be automatically approved"
             : "Edit and write permissions will require approval",
         })
@@ -496,7 +509,7 @@ export default function Page() {
         // Restore the prompt from the reverted message
         const parts = sync.data.part[message.id]
         if (parts) {
-          const restored = extractPromptFromParts(parts)
+          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
           prompt.set(restored)
         }
         // Navigate to the message before the reverted one (which will be the new last visible message)
@@ -666,8 +679,29 @@ export default function Page() {
   const anchor = (id: string) => `message-${id}`
 
   const setScrollRef = (el: HTMLDivElement | undefined) => {
+    scroller = el
     autoScroll.scrollRef(el)
   }
+
+  createResizeObserver(
+    () => promptDock,
+    ({ height }) => {
+      const next = Math.ceil(height)
+
+      if (next === store.promptHeight) return
+
+      const el = scroller
+      const stick = el ? el.scrollHeight - el.clientHeight - el.scrollTop < 10 : false
+
+      setStore("promptHeight", next)
+
+      if (stick && el) {
+        requestAnimationFrame(() => {
+          el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
+        })
+      }
+    },
+  )
 
   const updateHash = (id: string) => {
     window.history.replaceState(null, "", `#${anchor(id)}`)
@@ -774,7 +808,10 @@ export default function Page() {
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 md:flex-none py-6 md:py-3": true,
           }}
-          style={{ width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%" }}
+          style={{
+            width: isDesktop() && showTabs() ? `${layout.session.width()}px` : "100%",
+            "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
+          }}
         >
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
@@ -788,8 +825,13 @@ export default function Page() {
                           diffs={diffs}
                           view={view}
                           diffStyle="unified"
+                          onViewFile={(path) => {
+                            const value = file.tab(path)
+                            tabs().open(value)
+                            file.load(path)
+                          }}
                           classes={{
-                            root: "pb-32",
+                            root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
                             header: "px-4",
                             container: "px-4",
                           }}
@@ -820,7 +862,7 @@ export default function Page() {
                       >
                         <div
                           ref={autoScroll.contentRef}
-                          class="flex flex-col gap-32 items-start justify-start pb-32 md:pb-40 transition-[margin]"
+                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "mt-0.5": !showTabs(),
                             "mt-0": showTabs(),
@@ -833,9 +875,9 @@ export default function Page() {
                                 data-message-id={message.id}
                                 classList={{
                                   "min-w-0 w-full max-w-full": true,
-                                  "last:min-h-[calc(100vh-13.5rem)] md:last:min-h-[calc(100vh-14.5rem)]":
+                                  "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
                                     platform.platform !== "desktop",
-                                  "last:min-h-[calc(100vh-15rem)] md:last:min-h-[calc(100vh-16rem)]":
+                                  "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
                                     platform.platform === "desktop",
                                 }}
                               >
@@ -871,15 +913,31 @@ export default function Page() {
               </Match>
               <Match when={true}>
                 <NewSessionView
-                  worktree={store.newSessionWorktree}
-                  onWorktreeChange={(value) => setStore("newSessionWorktree", value)}
+                  worktree={newSessionWorktree()}
+                  onWorktreeChange={(value) => {
+                    if (value === "create") {
+                      setStore("newSessionWorktree", value)
+                      return
+                    }
+
+                    setStore("newSessionWorktree", "main")
+
+                    const target = value === "main" ? sync.project?.worktree : value
+                    if (!target) return
+                    if (target === sync.data.path.directory) return
+                    layout.projects.open(target)
+                    navigate(`/${base64Encode(target)}/session`)
+                  }}
                 />
               </Match>
             </Switch>
           </div>
 
           {/* Prompt input */}
-          <div class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none">
+          <div
+            ref={(el) => (promptDock = el)}
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+          >
             <div
               classList={{
                 "w-full md:px-6 pointer-events-auto": true,
@@ -890,7 +948,7 @@ export default function Page() {
                 ref={(el) => {
                   inputRef = el
                 }}
-                newSessionWorktree={store.newSessionWorktree}
+                newSessionWorktree={newSessionWorktree()}
                 onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
               />
             </div>
@@ -947,6 +1005,7 @@ export default function Page() {
                           </Tooltip>
                         }
                         hideCloseButton
+                        onMiddleClick={() => tabs().close("context")}
                       >
                         <div class="flex items-center gap-2">
                           <SessionContextUsage variant="indicator" />
@@ -981,6 +1040,11 @@ export default function Page() {
                         view={view}
                         diffStyle={layout.review.diffStyle()}
                         onDiffStyleChange={layout.review.setDiffStyle}
+                        onViewFile={(path) => {
+                          const value = file.tab(path)
+                          tabs().open(value)
+                          file.load(path)
+                        }}
                       />
                     </div>
                   </Tabs.Content>

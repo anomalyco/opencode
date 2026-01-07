@@ -27,6 +27,7 @@ export function DialogSelectFile() {
             const value = file.tab(path)
             tabs().open(value)
             file.load(path)
+            layout.review.open()
           }
           dialog.close()
         }}
