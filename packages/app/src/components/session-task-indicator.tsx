@@ -16,8 +16,7 @@ export function SessionTaskIndicator() {
     const completed = todos.filter((t) => t.status === "completed").length
     const hasInProgress = todos.some((t) => t.status === "in_progress")
     const hasIncomplete = todos.some((t) => t.status !== "completed")
-    const total = todos.length
-    return { completed, total, hasInProgress, hasIncomplete }
+    return { completed, total: todos.length, hasInProgress, hasIncomplete }
   })
 
   const handleClick = () => {
@@ -38,8 +37,7 @@ export function SessionTaskIndicator() {
           classList={{
             "size-1.5 rounded-full": true,
             "bg-icon-warning-base animate-pulse": taskStats().hasInProgress,
-            "bg-icon-success-base": !taskStats().hasInProgress && taskStats().completed === taskStats().total,
-            "bg-icon-weak": !taskStats().hasInProgress && taskStats().completed < taskStats().total,
+            "bg-icon-weak": !taskStats().hasInProgress,
           }}
         />
         <span class="text-12-regular text-text-weak">
