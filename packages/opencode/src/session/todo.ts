@@ -4,6 +4,9 @@ import z from "zod"
 import { Storage } from "../storage/storage"
 
 export namespace Todo {
+  const DEFAULT_STATE: State = {
+    paused: false,
+  }
   export const Info = z
     .object({
       content: z.string().describe("Brief description of the task"),
@@ -52,8 +55,8 @@ export namespace Todo {
 
   export async function getState(sessionID: string) {
     return Storage.read<State>(["todo_state", sessionID])
-      .then((x) => x || { paused: false })
-      .catch(() => ({ paused: false }))
+      .then((x) => x || DEFAULT_STATE)
+      .catch(() => DEFAULT_STATE)
   }
 
   export async function updateState(sessionID: string, patch: Partial<State>) {
