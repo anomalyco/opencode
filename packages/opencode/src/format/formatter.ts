@@ -357,3 +357,33 @@ export const cargofmt: Info = {
     return found.length > 0
   },
 }
+
+export const fantomas: Info = {
+  name: "fantomas",
+  command: ["dotnet", "fantomas", "$FILE"],
+  extensions: [".fs", ".fsx", ".fsi"],
+  async enabled() {
+    if (!Bun.which("dotnet")) return false
+    try {
+      // Check if fantomas is installed globally or locally
+      const proc = Bun.spawn(["dotnet", "tool", "list", "--global"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      await proc.exited
+      const output = await readableStreamToText(proc.stdout)
+      if (output.includes("fantomas")) return true
+
+      // Also check local tools
+      const localProc = Bun.spawn(["dotnet", "tool", "list"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      await localProc.exited
+      const localOutput = await readableStreamToText(localProc.stdout)
+      return localOutput.includes("fantomas")
+    } catch {
+      return false
+    }
+  },
+}
