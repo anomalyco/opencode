@@ -1424,6 +1424,11 @@ function InlineTool(props: {
   const ctx = use()
   const sync = useSync()
 
+  const truncated = createMemo(() => {
+    if (props.part.state.status !== "completed") return false
+    return props.part.state.metadata?.truncated === true
+  })
+
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
     if (!callID) return false
@@ -1470,6 +1475,9 @@ function InlineTool(props: {
       <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
         <Show fallback={<>~ {props.pending}</>} when={props.complete}>
           <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
+          <Show when={truncated()}>
+            <span style={{ fg: theme.warning }}> [truncated]</span>
+          </Show>
         </Show>
       </text>
       <Show when={error() && !denied()}>
@@ -1484,6 +1492,10 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const truncated = createMemo(() => {
+    if (props.part?.state.status !== "completed") return false
+    return props.part.state.metadata?.truncated === true
+  })
   return (
     <box
       border={["left"]}
@@ -1504,6 +1516,9 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
     >
       <text paddingLeft={3} fg={theme.textMuted}>
         {props.title}
+        <Show when={truncated()}>
+          <span style={{ fg: theme.warning }}> [truncated]</span>
+        </Show>
       </text>
       {props.children}
       <Show when={error()}>
