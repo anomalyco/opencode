@@ -12,6 +12,36 @@ import z from "zod"
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
 
+  const subscriptions: Array<() => void> = []
+
+  export function dispose() {
+    for (const unsubscribe of subscriptions) {
+      unsubscribe()
+    }
+    subscriptions.length = 0
+  }
+
+  export function init() {
+    dispose()
+    subscriptions.push(
+      Bus.subscribeAll(async (evt) => {
+        if (evt.type === "session.deleted") {
+          await clearSession(evt.properties.info.id)
+        }
+      }),
+    )
+  }
+
+  export async function clearSession(sessionID: string) {
+    const s = await state()
+    for (const [id, pending] of Object.entries(s.pending)) {
+      if (pending.info.sessionID === sessionID) {
+        delete s.pending[id]
+        pending.reject(new RejectedError())
+      }
+    }
+  }
+
   export const Action = z.enum(["allow", "deny", "ask"]).meta({
     ref: "PermissionAction",
   })
