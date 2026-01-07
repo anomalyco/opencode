@@ -266,24 +266,30 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  function projectSessions(directory: string) {
-    if (!directory) return []
-    const sessions = globalSync.child(directory)[0].session.toSorted(sortSessions)
-    return (sessions ?? []).filter((s) => !s.parentID)
+  const currentProject = createMemo(() => {
+    const directory = params.dir ? base64Decode(params.dir) : undefined
+    if (!directory) return
+    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+  })
+
+  function projectSessions(project: LocalProject | undefined) {
+    if (!project) return []
+    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+    const stores = dirs.map((dir) => globalSync.child(dir)[0])
+    const sessions = stores
+      .flatMap((store) => store.session.filter((session) => session.directory === store.path.directory))
+      .toSorted(sortSessions)
+    return sessions.filter((s) => !s.parentID)
   }
 
-  const currentSessions = createMemo(() => {
-    if (!params.dir) return []
-    const directory = base64Decode(params.dir)
-    return projectSessions(directory)
-  })
+  const currentSessions = createMemo(() => projectSessions(currentProject()))
 
   function navigateSessionByOffset(offset: number) {
     const projects = layout.projects.list()
     if (projects.length === 0) return
 
-    const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
-    const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
+    const project = currentProject()
+    const projectIndex = project ? projects.findIndex((p) => p.worktree === project.worktree) : -1
 
     if (projectIndex === -1) {
       const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
@@ -312,14 +318,14 @@ export default function Layout(props: ParentProps) {
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
-    const nextProjectSessions = projectSessions(nextProject.worktree)
+    const nextProjectSessions = projectSessions(nextProject)
     if (nextProjectSessions.length === 0) {
       navigateToProject(nextProject.worktree)
       return
     }
 
     const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
-    navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+    navigateToSession(targetSession)
     queueMicrotask(() => scrollToSession(targetSession.id))
   }
 
@@ -465,7 +471,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
-    navigate(`/${params.dir}/session/${session?.id}`)
+    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
     layout.mobileSidebar.hide()
   }
 
@@ -514,7 +520,8 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    untrack(() => layout.projects.expand(directory))
+    const project = currentProject()
+    untrack(() => layout.projects.expand(project?.worktree ?? directory))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
