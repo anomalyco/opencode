@@ -868,3 +868,48 @@ test("merges legacy tools with existing permission config", async () => {
     },
   })
 })
+
+test("permission config preserves key order", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            "*": "deny",
+            edit: "ask",
+            write: "ask",
+            external_directory: "ask",
+            read: "allow",
+            todowrite: "allow",
+            todoread: "allow",
+            "thoughts_*": "allow",
+            "reasoning_model_*": "allow",
+            "tools_*": "allow",
+            "pr_comments_*": "allow",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(Object.keys(config.permission!)).toEqual([
+        "*",
+        "edit",
+        "write",
+        "external_directory",
+        "read",
+        "todowrite",
+        "todoread",
+        "thoughts_*",
+        "reasoning_model_*",
+        "tools_*",
+        "pr_comments_*",
+      ])
+    },
+  })
+})

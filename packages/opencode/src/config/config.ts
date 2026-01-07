@@ -395,27 +395,52 @@ export namespace Config {
   })
   export type PermissionRule = z.infer<typeof PermissionRule>
 
+  // Capture original key order before zod reorders, then rebuild in original order
+  const permissionPreprocess = (val: unknown) => {
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      return { __originalKeys: Object.keys(val), ...val }
+    }
+    return val
+  }
+
+  const permissionTransform = (x: unknown): Record<string, PermissionRule> => {
+    if (typeof x === "string") return { "*": x as PermissionAction }
+    const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
+    const { __originalKeys, ...rest } = obj
+    if (!__originalKeys) return rest as Record<string, PermissionRule>
+    const result: Record<string, PermissionRule> = {}
+    for (const key of __originalKeys) {
+      if (key in rest) result[key] = rest[key] as PermissionRule
+    }
+    return result
+  }
+
   export const Permission = z
-    .object({
-      read: PermissionRule.optional(),
-      edit: PermissionRule.optional(),
-      glob: PermissionRule.optional(),
-      grep: PermissionRule.optional(),
-      list: PermissionRule.optional(),
-      bash: PermissionRule.optional(),
-      task: PermissionRule.optional(),
-      external_directory: PermissionRule.optional(),
-      todowrite: PermissionAction.optional(),
-      todoread: PermissionAction.optional(),
-      webfetch: PermissionAction.optional(),
-      websearch: PermissionAction.optional(),
-      codesearch: PermissionAction.optional(),
-      lsp: PermissionRule.optional(),
-      doom_loop: PermissionAction.optional(),
-    })
-    .catchall(PermissionRule)
-    .or(PermissionAction)
-    .transform((x) => (typeof x === "string" ? { "*": x } : x))
+    .preprocess(
+      permissionPreprocess,
+      z
+        .object({
+          __originalKeys: z.string().array().optional(),
+          read: PermissionRule.optional(),
+          edit: PermissionRule.optional(),
+          glob: PermissionRule.optional(),
+          grep: PermissionRule.optional(),
+          list: PermissionRule.optional(),
+          bash: PermissionRule.optional(),
+          task: PermissionRule.optional(),
+          external_directory: PermissionRule.optional(),
+          todowrite: PermissionAction.optional(),
+          todoread: PermissionAction.optional(),
+          webfetch: PermissionAction.optional(),
+          websearch: PermissionAction.optional(),
+          codesearch: PermissionAction.optional(),
+          lsp: PermissionRule.optional(),
+          doom_loop: PermissionAction.optional(),
+        })
+        .catchall(PermissionRule)
+        .or(PermissionAction),
+    )
+    .transform(permissionTransform)
     .meta({
       ref: "PermissionConfig",
     })
@@ -440,6 +465,10 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
+      hidden: z
+        .boolean()
+        .optional()
+        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
       options: z.record(z.string(), z.any()).optional(),
       color: z
         .string()
@@ -458,12 +487,14 @@ export namespace Config {
     .catchall(z.any())
     .transform((agent, ctx) => {
       const knownKeys = new Set([
+        "name",
         "model",
         "prompt",
         "description",
         "temperature",
         "top_p",
         "mode",
+        "hidden",
         "color",
         "steps",
         "maxSteps",
