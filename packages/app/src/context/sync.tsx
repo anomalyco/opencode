@@ -30,6 +30,22 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return undefined
     }
 
+    const limitFor = (count: number) => {
+      if (count <= chunk) return chunk
+      return Math.ceil(count / chunk) * chunk
+    }
+
+    const hydrateMessages = (sessionID: string) => {
+      if (meta.limit[sessionID] !== undefined) return
+
+      const messages = store.message[sessionID]
+      if (!messages) return
+
+      const limit = limitFor(messages.length)
+      setMeta("limit", sessionID, limit)
+      setMeta("complete", sessionID, messages.length < limit)
+    }
+
     const loadMessages = async (sessionID: string, limit: number) => {
       if (meta.loading[sessionID]) return
 
@@ -118,7 +134,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           const hasSession = getSession(sessionID) !== undefined
-          const hasMessages = store.message[sessionID] !== undefined && meta.limit[sessionID] !== undefined
+          hydrateMessages(sessionID)
+
+          const hasMessages = store.message[sessionID] !== undefined
           if (hasSession && hasMessages) return
 
           const pending = inflight.get(sessionID)
