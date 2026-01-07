@@ -15,6 +15,7 @@ use tauri::{
 };
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::StoreExt;
 use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
@@ -45,6 +46,65 @@ impl ServerState {
 struct LogState(Arc<Mutex<VecDeque<String>>>);
 
 const MAX_LOG_ENTRIES: usize = 200;
+const GLOBAL_STORAGE: &str = "opencode.global.dat";
+
+/// Check if a URL's origin matches any configured server in the store.
+/// Returns true if the URL should be allowed for internal navigation.
+fn is_allowed_server(app: &AppHandle, url: &tauri::Url) -> bool {
+    // Always allow localhost and 127.0.0.1
+    if let Some(host) = url.host_str() {
+        if host == "localhost" || host == "127.0.0.1" {
+            return true;
+        }
+    }
+
+    // Try to read the server list from the store
+    let Ok(store) = app.store(GLOBAL_STORAGE) else {
+        return false;
+    };
+
+    let Some(server_data) = store.get("server") else {
+        return false;
+    };
+
+    // Parse the server list from the stored JSON
+    let Some(list) = server_data.get("list").and_then(|v| v.as_array()) else {
+        return false;
+    };
+
+    // Get the origin of the navigation URL (scheme + host + port)
+    let url_origin = format!(
+        "{}://{}{}",
+        url.scheme(),
+        url.host_str().unwrap_or(""),
+        url.port().map(|p| format!(":{}", p)).unwrap_or_default()
+    );
+
+    // Check if any configured server matches the URL's origin
+    for server in list {
+        let Some(server_url) = server.as_str() else {
+            continue;
+        };
+
+        // Parse the server URL to extract its origin
+        let Ok(parsed) = tauri::Url::parse(server_url) else {
+            continue;
+        };
+
+        let server_origin = format!(
+            "{}://{}{}",
+            parsed.scheme(),
+            parsed.host_str().unwrap_or(""),
+            parsed.port().map(|p| format!(":{}", p)).unwrap_or_default()
+        );
+
+        if url_origin == server_origin {
+            return true;
+        }
+    }
+
+    false
+}
 
 #[tauri::command]
 fn kill_sidecar(app: AppHandle) {
@@ -249,11 +309,9 @@ pub fn run() {
                         if url.scheme() == "tauri" {
                             return true;
                         }
-                        // Allow localhost (the app's own server)
-                        if let Some(host) = url.host_str() {
-                            if host == "localhost" || host == "127.0.0.1" {
-                                return true;
-                            }
+                        // Allow navigation to configured servers (localhost, 127.0.0.1, or remote)
+                        if is_allowed_server(&app_for_nav, url) {
+                            return true;
                         }
                         // Open external http/https URLs in default browser
                         if url.scheme() == "http" || url.scheme() == "https" {
