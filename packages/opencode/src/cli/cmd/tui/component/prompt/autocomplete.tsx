@@ -653,8 +653,10 @@ export function Autocomplete(props: {
   })
 
   const height = createMemo(() => {
-    if (options().length) return Math.min(10, options().length)
-    return 1
+    const count = options().length || 1
+    if (!store.visible) return Math.min(10, count)
+    positionTick()
+    return Math.min(10, count, Math.max(1, props.anchor().y))
   })
 
   let scroll: ScrollBoxRenderable
