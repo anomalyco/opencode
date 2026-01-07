@@ -98,6 +98,7 @@ const context = createContext<{
   showThinking: () => boolean
   showTimestamps: () => boolean
   showDetails: () => boolean
+  dynamicDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
 }>()
@@ -147,6 +148,7 @@ export function Session() {
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
+  const [dynamicDetails, setDynamicDetails] = kv.signal("dynamic_details", true)
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
@@ -568,6 +570,15 @@ export function Session() {
       },
     },
     {
+      title: dynamicDetails() ? "Disable dynamic details" : "Enable dynamic details",
+      value: "session.toggle.dynamic_details",
+      category: "Session",
+      onSelect: (dialog) => {
+        setDynamicDetails((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle session scrollbar",
       value: "session.toggle.scrollbar",
       keybind: "scrollbar_toggle",
@@ -951,6 +962,7 @@ export function Session() {
         showThinking,
         showTimestamps,
         showDetails,
+        dynamicDetails,
         diffWrapMode,
         sync,
       }}
@@ -1578,17 +1590,82 @@ function InlineTool(props: {
   )
 }
 
+// Safely convert value to string for line counting
+function safeString(value: unknown): string {
+  if (typeof value === "string") return value
+  if (value == null) return ""
+  return String(value)
+}
+
+// Helper to count lines from tool data (with trimEnd to ignore trailing whitespace)
+function getDataLineCount(part: ToolPart | undefined): number {
+  if (!part) return 0
+  if (part.state.status !== "completed") return 0
+
+  const tool = part.tool
+  const state = part.state
+
+  if (tool === "bash") {
+    const cmd = safeString(state.input?.command).trimEnd()
+    const out = stripAnsi(safeString(state.metadata?.output)).trimEnd()
+    const cmdLines = cmd ? cmd.split("\n").length : 0
+    const outLines = out ? out.split("\n").length : 0
+    return cmdLines + outLines
+  }
+
+  if (tool === "edit") {
+    const diff = safeString(state.metadata?.diff).trimEnd()
+    return diff ? diff.split("\n").length : 0
+  }
+
+  if (tool === "write") {
+    const content = safeString(state.input?.content).trimEnd()
+    return content ? content.split("\n").length : 0
+  }
+
+  if (tool === "patch") {
+    const output = safeString(state.output).trimEnd()
+    return output ? output.split("\n").length : 0
+  }
+
+  // Default: use output field
+  const output = safeString(state.output).trimEnd()
+  return output ? output.split("\n").length : 0
+}
+
 function BlockTool(props: {
   title: string
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
   spinner?: boolean
+  disableDynamic?: boolean
 }) {
   const { theme } = useTheme()
+  const { dynamicDetails, sync } = use()
   const renderer = useRenderer()
-  const [hover, setHover] = createSignal(false)
+  const [collapsed, setCollapsed] = createSignal(true)
+  const [visualLines, setVisualLines] = createSignal(0)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+
+  const maxLines = createMemo(() => sync.data.config.tui?.dynamic_details_max_lines ?? 15)
+  const showArrows = createMemo(() => sync.data.config.tui?.dynamic_details_show_arrows ?? false)
+  const dataLines = createMemo(() => getDataLineCount(props.part))
+  const shouldCollapse = createMemo(() => {
+    if (props.disableDynamic) return false
+    if (!dynamicDetails()) return false
+    return dataLines() > maxLines()
+  })
+
+  const handleClick = () => {
+    if (renderer.getSelection()?.getSelectedText()) return
+    if (shouldCollapse()) {
+      setCollapsed(!collapsed())
+    } else {
+      props.onClick?.()
+    }
+  }
+
   return (
     <box
       border={["left"]}
@@ -1597,14 +1674,38 @@ function BlockTool(props: {
       paddingLeft={2}
       marginTop={1}
       gap={1}
-      backgroundColor={hover() ? theme.backgroundMenu : theme.backgroundPanel}
+      backgroundColor={theme.backgroundPanel}
       customBorderChars={SplitBorder.customBorderChars}
       borderColor={theme.background}
-      onMouseOver={() => props.onClick && setHover(true)}
-      onMouseOut={() => setHover(false)}
-      onMouseUp={() => {
-        if (renderer.getSelection()?.getSelectedText()) return
-        props.onClick?.()
+      maxHeight={shouldCollapse() && collapsed() ? maxLines() + 3 : undefined}
+      overflow={shouldCollapse() && collapsed() ? "hidden" : undefined}
+      justifyContent={shouldCollapse() && collapsed() ? "flex-start" : undefined}
+      onMouseUp={handleClick}
+      renderBefore={function () {
+        if (!shouldCollapse()) return
+        const el = this as any
+        const countVisualLines = (node: any): number => {
+          const children = node.getChildren?.() ?? []
+          const isSplitView = "view" in node && node.view === "split"
+          let maxChildLines = 0
+          let sumChildLines = 0
+          for (const child of children) {
+            let childLines = 0
+            if ("virtualLineCount" in child && typeof child.virtualLineCount === "number") {
+              childLines = child.virtualLineCount
+            }
+            if (child.getChildren) {
+              childLines = Math.max(childLines, countVisualLines(child))
+            }
+            maxChildLines = Math.max(maxChildLines, childLines)
+            sumChildLines += childLines
+          }
+          return isSplitView ? maxChildLines : sumChildLines
+        }
+        const count = countVisualLines(el)
+        if (count > 0 && count !== visualLines()) {
+          setVisualLines(count)
+        }
       }}
     >
       <Show
@@ -1618,6 +1719,22 @@ function BlockTool(props: {
         <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
       </Show>
       {props.children}
+      <Show when={shouldCollapse() && (visualLines() === 0 || visualLines() > maxLines())}>
+        <box flexDirection="row">
+          <box backgroundColor={theme.backgroundElement} paddingLeft={2} paddingRight={2}>
+            <text fg={theme.textMuted}>
+              {collapsed() ? (
+                <>
+                  {showArrows() ? "▶ " : ""}Click to expand{" "}
+                  <span style={{ fg: theme.border }}>(+{Math.max(1, visualLines() - maxLines())})</span>
+                </>
+              ) : (
+                <>{showArrows() ? "▼ " : ""}Click to collapse</>
+              )}
+            </text>
+          </box>
+        </box>
+      </Show>
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
@@ -1628,11 +1745,12 @@ function BlockTool(props: {
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
+  const { dynamicDetails } = use()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
-  const overflow = createMemo(() => lines().length > 10)
+  const overflow = createMemo(() => !dynamicDetails() && lines().length > 10)
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
     return [...lines().slice(0, 10), "…"].join("\n")
@@ -1919,7 +2037,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
         <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
-          <box paddingLeft={1}>
+          <box paddingLeft={1} width="100%">
             <diff
               diff={diffContent()}
               view={view()}
@@ -2041,7 +2159,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.todos?.length}>
-        <BlockTool title="# Todos" part={props.part}>
+        <BlockTool title="# Todos" part={props.part} disableDynamic>
           <box>
             <For each={props.input.todos ?? []}>
               {(todo) => <TodoItem status={todo.status} content={todo.content} />}

@@ -1641,6 +1641,14 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Max visible lines before tool output becomes collapsible (default: 15)
+     */
+    dynamic_details_max_lines?: number
+    /**
+     * Show arrow indicators on collapsible tool outputs (default: true)
+     */
+    dynamic_details_show_arrows?: boolean
   }
   server?: ServerConfig
   /**

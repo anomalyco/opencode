@@ -928,6 +928,16 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    dynamic_details_max_lines: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("Max visible lines before tool output becomes collapsible (default: 15)"),
+    dynamic_details_show_arrows: z
+      .boolean()
+      .optional()
+      .describe("Show arrow indicators on collapsible tool outputs (default: false)"),
   })
 
   export const Server = z
