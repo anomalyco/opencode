@@ -82,6 +82,14 @@ const invoice = invoices.data[0]
 const invoiceID = invoice?.id
 const paymentID = invoice?.payments?.data[0]?.payment.payment_intent as string | undefined
 
+// Get the default payment method from the customer
+const paymentMethodID = (customer.invoice_settings.default_payment_method ?? subscription.default_payment_method) as
+  | string
+  | null
+const paymentMethod = paymentMethodID ? await Billing.stripe().paymentMethods.retrieve(paymentMethodID) : null
+const paymentMethodLast4 = paymentMethod?.card?.last4 ?? null
+const paymentMethodType = paymentMethod?.type ?? null
+
 // Look up the user by email via AuthTable
 const auth = await Database.use((tx) =>
   tx
@@ -116,12 +124,15 @@ await Billing.stripe().customers.update(customerID, {
 })
 
 await Database.transaction(async (tx) => {
-  // Set customer id and subscription id on workspace billing
+  // Set customer id, subscription id, and payment method on workspace billing
   await tx
     .update(BillingTable)
     .set({
       customerID,
       subscriptionID,
+      paymentMethodID,
+      paymentMethodLast4,
+      paymentMethodType,
     })
     .where(eq(BillingTable.workspaceID, workspaceID))
 
@@ -147,6 +158,9 @@ await Database.transaction(async (tx) => {
 console.log(`Successfully onboarded workspace ${workspaceID}`)
 console.log(`  Customer ID: ${customerID}`)
 console.log(`  Subscription ID: ${subscriptionID}`)
+console.log(
+  `  Payment Method: ${paymentMethodID ?? "(none)"} (${paymentMethodType ?? "unknown"} ending in ${paymentMethodLast4 ?? "????"})`,
+)
 console.log(`  User ID: ${user.id}`)
 console.log(`  Invoice ID: ${invoiceID ?? "(none)"}`)
 console.log(`  Payment ID: ${paymentID ?? "(none)"}`)
