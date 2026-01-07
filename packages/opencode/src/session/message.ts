@@ -69,6 +69,7 @@ export namespace Message {
   export const ReasoningPart = z
     .object({
       type: z.literal("reasoning"),
+      signature: z.string().optional(),
       text: z.string(),
       providerMetadata: z.record(z.string(), z.any()).optional(),
     })
