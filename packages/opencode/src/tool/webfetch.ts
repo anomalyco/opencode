@@ -74,10 +74,32 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error(`Request failed with status code: ${response.status}`)
     }
 
-    // Check content length
+    // Check content length and estimate token count
     const contentLength = response.headers.get("content-length")
-    if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
-      throw new Error("Response too large (exceeds 5MB limit)")
+    if (contentLength) {
+      const bytes = parseInt(contentLength)
+      if (bytes > MAX_RESPONSE_SIZE) {
+        throw new Error("Response too large (exceeds 5MB limit)")
+      }
+
+      // Estimate tokens from byte size (rough estimate: 1 token ≈ 4 bytes)
+      const estimatedTokens = Math.round(bytes / 4)
+      if (estimatedTokens > MAX_TOKENS) {
+        return {
+          output: `⚠️  Response size check: This URL will return approximately ${estimatedTokens.toLocaleString()} tokens (${(bytes / 1024).toFixed(0)} KB)
+
+This exceeds the safe limit of ${MAX_TOKENS.toLocaleString()} tokens and will likely cause "prompt is too long" errors.
+
+Recommended actions:
+• I can fetch it and save to a file in your project directory, then analyze it
+• You can ask me to fetch specific parts/fields only if this is an API
+• You can provide filters or query parameters to reduce the response size
+
+Would you like me to proceed with fetching and saving to a file, or would you prefer a different approach?`,
+          title: `${params.url} [Size Warning]`,
+          metadata: {},
+        }
+      }
     }
 
     const arrayBuffer = await response.arrayBuffer()
@@ -117,13 +139,15 @@ export const WebFetchTool = Tool.define("webfetch", {
         output = content
     }
 
-    // Truncate if exceeds token limit
+    // Check if response exceeds token limit - if so, summarize intelligently
     const tokenCount = Token.estimate(output)
     if (tokenCount > MAX_TOKENS) {
-      const charsPerToken = 4
-      const maxChars = MAX_TOKENS * charsPerToken
-      output = output.slice(0, maxChars)
-      output += `\n\n[Content truncated: Response was ~${tokenCount.toLocaleString()} tokens, truncated to ${MAX_TOKENS.toLocaleString()} tokens to avoid exceeding budget]`
+      const summary = createLargeResponseWarning(output, contentType, params.url, tokenCount)
+      return {
+        output: summary,
+        title: `${title} [Summarized]`,
+        metadata: {},
+      }
     }
 
     return {
@@ -176,4 +200,56 @@ function convertHTMLToMarkdown(html: string): string {
   })
   turndownService.remove(["script", "style", "meta", "link"])
   return turndownService.turndown(html)
+}
+
+function createLargeResponseWarning(content: string, contentType: string, url: string, tokenCount: number): string {
+  let previewSection = ""
+
+  // Try to provide structure info for JSON
+  if (contentType.includes("json") || contentType.includes("application/json")) {
+    try {
+      const parsed = JSON.parse(content)
+      if (Array.isArray(parsed)) {
+        previewSection = `Type: JSON Array
+Items: ${parsed.length}
+
+To avoid exceeding token budget, showing structural summary instead of full content.
+
+First item as example:
+${JSON.stringify(parsed[0], null, 2)}`
+      } else if (typeof parsed === "object") {
+        const keys = Object.keys(parsed)
+        const sample = Object.fromEntries(keys.slice(0, 3).map((k) => [k, parsed[k]]))
+        previewSection = `Type: JSON Object
+Keys: ${keys.length}
+
+To avoid exceeding token budget, showing structural summary instead of full content.
+
+Sample of data:
+${JSON.stringify(sample, null, 2)}`
+      }
+    } catch {
+      // Fall through to text preview
+    }
+  }
+
+  // Fall back to text preview if not JSON or parsing failed
+  if (!previewSection) {
+    previewSection = `Content-Type: ${contentType}
+
+To avoid exceeding token budget, showing preview instead of full content.
+
+Preview (first 2000 characters):
+${content.slice(0, 2000)}...`
+  }
+
+  return `⚠️  Large response detected (~${tokenCount.toLocaleString()} tokens)
+
+URL: ${url}
+${previewSection}
+
+To access this data, please:
+• Ask me to save the full response to a file
+• Specify what information you're looking for
+• Request specific sections or search terms`
 }
