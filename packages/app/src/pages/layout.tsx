@@ -874,7 +874,7 @@ export default function Layout(props: ParentProps) {
             </Collapsible>
           </Match>
           <Match when={true}>
-            <Tooltip placement="right" value={props.project.worktree}>
+            <Tooltip placement="right" value={getFilename(props.project.worktree)}>
               <ProjectVisual project={props.project} />
             </Tooltip>
           </Match>
