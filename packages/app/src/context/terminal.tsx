@@ -3,7 +3,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createMemo } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 
 export type LocalPTY = {
   id: string
@@ -19,10 +19,10 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
   init: () => {
     const sdk = useSDK()
     const params = useParams()
-    const name = createMemo(() => `${params.dir}/terminal${params.id ? "/" + params.id : ""}.v1`)
+    const legacy = createMemo(() => `${params.dir}/terminal${params.id ? "/" + params.id : ""}.v1`)
 
     const [store, setStore, _, ready] = persisted(
-      name(),
+      Persist.scoped(params.dir, params.id, "terminal", [legacy()]),
       createStore<{
         active?: string
         all: LocalPTY[]
