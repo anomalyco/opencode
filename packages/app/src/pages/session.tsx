@@ -1,4 +1,4 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -8,6 +8,7 @@ import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -49,6 +50,7 @@ import {
   NewSessionView,
 } from "@/components/session"
 import { usePlatform } from "@/context/platform"
+import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
 type DiffStyle = "unified" | "split"
@@ -162,6 +164,46 @@ export default function Page() {
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
 
+  if (import.meta.env.DEV) {
+    createEffect(
+      on(
+        () => [params.dir, params.id] as const,
+        ([dir, id], prev) => {
+          if (!id) return
+          navParams({ dir, from: prev?.[1], to: id })
+        },
+      ),
+    )
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (!prompt.ready()) return
+      navMark({ dir: params.dir, to: id, name: "storage:prompt-ready" })
+    })
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (!terminal.ready()) return
+      navMark({ dir: params.dir, to: id, name: "storage:terminal-ready" })
+    })
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (!file.ready()) return
+      navMark({ dir: params.dir, to: id, name: "storage:file-view-ready" })
+    })
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (sync.data.message[id] === undefined) return
+      navMark({ dir: params.dir, to: id, name: "session:data-ready" })
+    })
+  }
+
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
   function normalizeTab(tab: string) {
@@ -216,12 +258,24 @@ export default function Page() {
   })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const reviewCount = createMemo(() => info()?.summary?.files ?? 0)
+  const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
     return sync.data.message[id] !== undefined
+  })
+  const historyMore = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return sync.session.history.more(id)
+  })
+  const historyLoading = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return sync.session.history.loading(id)
   })
   const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
@@ -290,6 +344,12 @@ export default function Page() {
   }
 
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const diffsReady = createMemo(() => {
+    const id = params.id
+    if (!id) return true
+    if (!hasReview()) return true
+    return sync.data.session_diff[id] !== undefined
+  })
 
   const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
@@ -643,12 +703,10 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
-  const reviewTab = createMemo(() => diffs().length > 0 || tabs().active() === "review")
-  const mobileReview = createMemo(() => !isDesktop() && diffs().length > 0 && store.mobileTab === "review")
+  const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
+  const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
 
-  const showTabs = createMemo(
-    () => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0 || contextOpen()),
-  )
+  const showTabs = createMemo(() => layout.review.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()))
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
@@ -664,8 +722,20 @@ export default function Page() {
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (diffs().length === 0 && openedTabs().length === 0 && !contextOpen()) return
+    if (!hasReview() && openedTabs().length === 0 && !contextOpen()) return
     tabs().setActive(activeTab())
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    if (!hasReview()) return
+
+    const wants = isDesktop() ? layout.review.opened() && activeTab() === "review" : store.mobileTab === "review"
+    if (!wants) return
+    if (diffsReady()) return
+
+    sync.session.diff(id)
   })
 
   const isWorking = createMemo(() => status().type !== "idle")
@@ -779,7 +849,7 @@ export default function Page() {
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Mobile tab bar - only shown on mobile when there are diffs */}
-        <Show when={!isDesktop() && diffs().length > 0}>
+        <Show when={!isDesktop() && hasReview()}>
           <Tabs class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -796,7 +866,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "review")}
               >
-                {diffs().length} Files Changed
+                {reviewCount()} Files Changed
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
@@ -821,21 +891,26 @@ export default function Page() {
                     when={!mobileReview()}
                     fallback={
                       <div class="relative h-full overflow-hidden">
-                        <SessionReviewTab
-                          diffs={diffs}
-                          view={view}
-                          diffStyle="unified"
-                          onViewFile={(path) => {
-                            const value = file.tab(path)
-                            tabs().open(value)
-                            file.load(path)
-                          }}
-                          classes={{
-                            root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                            header: "px-4",
-                            container: "px-4",
-                          }}
-                        />
+                        <Show
+                          when={diffsReady()}
+                          fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                        >
+                          <SessionReviewTab
+                            diffs={diffs}
+                            view={view}
+                            diffStyle="unified"
+                            onViewFile={(path) => {
+                              const value = file.tab(path)
+                              tabs().open(value)
+                              file.load(path)
+                            }}
+                            classes={{
+                              root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                              header: "px-4",
+                              container: "px-4",
+                            }}
+                          />
+                        </Show>
                       </div>
                     }
                   >
@@ -868,42 +943,69 @@ export default function Page() {
                             "mt-0": showTabs(),
                           }}
                         >
-                          <For each={visibleUserMessages()}>
-                            {(message) => (
-                              <div
-                                id={anchor(message.id)}
-                                data-message-id={message.id}
-                                classList={{
-                                  "min-w-0 w-full max-w-full": true,
-                                  "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
-                                    platform.platform !== "desktop",
-                                  "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
-                                    platform.platform === "desktop",
+                          <Show when={historyMore()}>
+                            <div class="w-full flex justify-center">
+                              <Button
+                                variant="ghost"
+                                size="large"
+                                class="text-12-medium opacity-50"
+                                disabled={historyLoading()}
+                                onClick={() => {
+                                  const id = params.id
+                                  if (!id) return
+                                  sync.session.history.loadMore(id)
                                 }}
                               >
-                                <SessionTurn
-                                  sessionID={params.id!}
-                                  messageID={message.id}
-                                  lastUserMessageID={lastUserMessage()?.id}
-                                  stepsExpanded={store.expanded[message.id] ?? false}
-                                  onStepsExpandedToggle={() =>
-                                    setStore("expanded", message.id, (open: boolean | undefined) => !open)
-                                  }
-                                  classes={{
-                                    root: "min-w-0 w-full relative",
-                                    content:
-                                      "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                                    container:
-                                      "px-4 md:px-6 " +
-                                      (!showTabs()
-                                        ? "md:max-w-200 md:mx-auto"
-                                        : visibleUserMessages().length > 1
-                                          ? "md:pr-6 md:pl-18"
-                                          : ""),
+                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
+                              </Button>
+                            </div>
+                          </Show>
+                          <For each={visibleUserMessages()}>
+                            {(message) => {
+                              if (import.meta.env.DEV) {
+                                onMount(() => {
+                                  const id = params.id
+                                  if (!id) return
+                                  navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
+                                })
+                              }
+
+                              return (
+                                <div
+                                  id={anchor(message.id)}
+                                  data-message-id={message.id}
+                                  classList={{
+                                    "min-w-0 w-full max-w-full": true,
+                                    "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
+                                      platform.platform !== "desktop",
+                                    "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
+                                      platform.platform === "desktop",
                                   }}
-                                />
-                              </div>
-                            )}
+                                >
+                                  <SessionTurn
+                                    sessionID={params.id!}
+                                    messageID={message.id}
+                                    lastUserMessageID={lastUserMessage()?.id}
+                                    stepsExpanded={store.expanded[message.id] ?? false}
+                                    onStepsExpandedToggle={() =>
+                                      setStore("expanded", message.id, (open: boolean | undefined) => !open)
+                                    }
+                                    classes={{
+                                      root: "min-w-0 w-full relative",
+                                      content:
+                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                      container:
+                                        "px-4 md:px-6 " +
+                                        (!showTabs()
+                                          ? "md:max-w-200 md:mx-auto"
+                                          : visibleUserMessages().length > 1
+                                            ? "md:pr-6 md:pl-18"
+                                            : ""),
+                                    }}
+                                  />
+                                </div>
+                              )
+                            }}
                           </For>
                         </div>
                       </div>
@@ -1035,17 +1137,22 @@ export default function Page() {
                 <Show when={reviewTab()}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
                     <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <SessionReviewTab
-                        diffs={diffs}
-                        view={view}
-                        diffStyle={layout.review.diffStyle()}
-                        onDiffStyleChange={layout.review.setDiffStyle}
-                        onViewFile={(path) => {
-                          const value = file.tab(path)
-                          tabs().open(value)
-                          file.load(path)
-                        }}
-                      />
+                      <Show
+                        when={diffsReady()}
+                        fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                      >
+                        <SessionReviewTab
+                          diffs={diffs}
+                          view={view}
+                          diffStyle={layout.review.diffStyle()}
+                          onDiffStyleChange={layout.review.setDiffStyle}
+                          onViewFile={(path) => {
+                            const value = file.tab(path)
+                            tabs().open(value)
+                            file.load(path)
+                          }}
+                        />
+                      </Show>
                     </div>
                   </Tabs.Content>
                 </Show>

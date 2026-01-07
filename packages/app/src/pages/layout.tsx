@@ -55,6 +55,7 @@ import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
+import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { useServer } from "@/context/server"
 
@@ -309,6 +310,14 @@ export default function Layout(props: ParentProps) {
 
     if (targetIndex >= 0 && targetIndex < sessions.length) {
       const session = sessions[targetIndex]
+      if (import.meta.env.DEV) {
+        navStart({
+          dir: base64Encode(session.directory),
+          from: params.id,
+          to: session.id,
+          trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
+        })
+      }
       navigateToSession(session)
       queueMicrotask(() => scrollToSession(session.id))
       return
@@ -325,6 +334,14 @@ export default function Layout(props: ParentProps) {
     }
 
     const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
+    if (import.meta.env.DEV) {
+      navStart({
+        dir: base64Encode(targetSession.directory),
+        from: params.id,
+        to: targetSession.id,
+        trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
+      })
+    }
     navigateToSession(targetSession)
     queueMicrotask(() => scrollToSession(targetSession.id))
   }
