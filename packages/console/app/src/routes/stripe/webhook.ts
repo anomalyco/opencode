@@ -147,48 +147,41 @@ export async function POST(input: APIEvent) {
           .where(eq(BillingTable.workspaceID, workspaceID))
       })
     }
-    if (body.type === "invoice.payment_succeeded") {
-      const invoice = body.data.object
-      if (invoice.billing_reason === "subscription_cycle") {
-        const invoiceID = invoice.id as string
-        const amountInCents = invoice.amount_paid
-        const customerID = invoice.customer as string
-        const subscriptionID = invoice.parent?.subscription_details?.subscription as string
+    if (body.type === "invoice.payment_succeeded" && body.data.object.billing_reason === "subscription_cycle") {
+      const invoiceID = body.data.object.id as string
+      const amountInCents = body.data.object.amount_paid
+      const customerID = body.data.object.customer as string
+      const subscriptionID = body.data.object.parent?.subscription_details?.subscription as string
 
-        if (!customerID) throw new Error("Customer ID not found")
-        if (!invoiceID) throw new Error("Invoice ID not found")
-        if (!subscriptionID) throw new Error("Subscription ID not found")
+      if (!customerID) throw new Error("Customer ID not found")
+      if (!invoiceID) throw new Error("Invoice ID not found")
+      if (!subscriptionID) throw new Error("Subscription ID not found")
 
-        const payment = await Billing.stripe().invoicePayments.retrieve(invoiceID)
-        const paymentID = payment.id as string
-        if (!paymentID) throw new Error("Payment ID not found")
+      const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
+        expand: ["payments"],
+      })
+      const paymentID = invoice.payments?.data[0].payment.payment_intent as string
+      if (!paymentID) throw new Error("Payment ID not found")
 
-        const workspaceID = await Database.use((tx) =>
-          tx
-            .select({ workspaceID: BillingTable.workspaceID })
-            .from(BillingTable)
-            .where(eq(BillingTable.customerID, customerID))
-            .then((rows) => rows[0]?.workspaceID),
-        )
-        if (!workspaceID) throw new Error("Workspace ID not found for customer")
+      const workspaceID = await Database.use((tx) =>
+        tx
+          .select({ workspaceID: BillingTable.workspaceID })
+          .from(BillingTable)
+          .where(eq(BillingTable.customerID, customerID))
+          .then((rows) => rows[0]?.workspaceID),
+      )
+      if (!workspaceID) throw new Error("Workspace ID not found for customer")
 
-        await Database.transaction(async (tx) => {
-          await tx
-            .update(BillingTable)
-            .set({
-              balance: sql`${BillingTable.balance} + ${centsToMicroCents(amountInCents)}`,
-            })
-            .where(eq(BillingTable.workspaceID, workspaceID))
-          await tx.insert(PaymentTable).values({
-            workspaceID,
-            id: Identifier.create("payment"),
-            amount: centsToMicroCents(amountInCents),
-            paymentID,
-            invoiceID,
-            customerID,
-          })
-        })
-      }
+      await Database.use((tx) =>
+        tx.insert(PaymentTable).values({
+          workspaceID,
+          id: Identifier.create("payment"),
+          amount: centsToMicroCents(amountInCents),
+          paymentID,
+          invoiceID,
+          customerID,
+        }),
+      )
     }
     if (body.type === "customer.subscription.created") {
       const data = {
