@@ -60,6 +60,9 @@ describe("ACPSessionManager", () => {
       const sdk = {
         session: {
           create: async () => ({ data: { id: `session-${counter++}` } }),
+          get: async (params: any) => ({
+            data: { id: params.sessionID, time: { created: new Date().toISOString() } },
+          }),
         },
       } as any
 
@@ -83,6 +86,9 @@ describe("ACPSessionManager", () => {
       const sdk = {
         session: {
           create: async () => ({ data: { id: `session-${counter++}` } }),
+          get: async (params: any) => ({
+            data: { id: params.sessionID, time: { created: new Date().toISOString() } },
+          }),
         },
       } as any
 
