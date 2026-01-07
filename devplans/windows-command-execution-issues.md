@@ -5,10 +5,9 @@
 Complete investigation of Windows command execution issues across all related files. **28 issues identified** with confidence-sorted analysis.
 
 **Status Update**:
-- Issues #1, #2, #16, #17, #18, #19: ✅ FIXED
-- Issues #20-24, #25-26: NEW ISSUES FOUND (requires investigation)
-- Issue #27: PowerShell command execution ✅ FIXED
-- Issue #28: CMD double-escaping (NOT YET FIXED)
+- **Fixed Issues (7)**: #1, #2, #16, #17, #18, #19, #27
+- **Unfixed Issues (21)**: #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #21, #22, #23, #24, #25, #26, #28
+- Issue #20: No cleanup on early abort - marked as NOT A BUG (removed from active list)
 
 ---
 
@@ -16,17 +15,18 @@ Complete investigation of Windows command execution issues across all related fi
 
 | # | Issue | Severity | Status | Confidence | Root Cause | Location |
 |---|-------|----------|--------|------------|------------|----------|
+| **FIXED ISSUES (7 issues)** | | | | | | |
 | 1 | PowerShell/CMD double-wrapping | HIGH | ✅ FIXED | 100% | Shell wrapper always used | bash.ts:278 |
 | 2 | Environment variable handling | MEDIUM | ✅ FIXED | 100% | Missing Git env vars | git-env.ts:69 |
 | 17 | Stream reading race condition | HIGH | ✅ FIXED | 100% | Promise.race() data loss | bash.ts:372 |
 | 18 | Duplicate abort listeners | LOW | ✅ FIXED | 100% | Two handlers on same signal | bash.ts:361 + 376 |
 | 19 | Missing stream draining | MEDIUM | ✅ FIXED | 100% | No Promise.all for streams | prompt.ts:1483 |
-| 20 | No cleanup on early abort | LOW | ⚠️ NOT A BUG | 100% | Cleanup happens at end | bash.ts:350 |
-| 23 | ripgrep files() stream handling | LOW | ⚠️ NEEDS FIX | 100% | Complex stream reading | ripgrep.ts:242 |
 | 16 | No shell bypass (prompt.ts) | HIGH | ✅ FIXED | 95% | Added bypass logic | prompt.ts:1397 |
-| 24 | grep tool stream handling | LOW | ⚠️ EDGE CASE | 95% | Simple await pattern | grep.ts:47 |
-| 8 | tree-sitter parser latency | MEDIUM | ℹ️ KNOWN | 90% | WASM loading on first use | bash.ts:31 |
 | 27 | PowerShell command execution | HIGH | ✅ FIXED | 90% | Shell bypass prevents proper parsing | bash.ts:138-147 + prompt.ts:82-91 |
+| **UNFIXED ISSUES (21 issues)** | | | | | | |
+| 23 | ripgrep files() stream handling | LOW | ⚠️ NEEDS FIX | 100% | Complex stream reading | ripgrep.ts:242 |
+| 8 | tree-sitter parser latency | MEDIUM | ℹ️ KNOWN | 90% | WASM loading on first use | bash.ts:31 |
+| 24 | grep tool stream handling | LOW | ⚠️ EDGE CASE | 95% | Simple await pattern | grep.ts:47 |
 | 5 | Exit code error handling | MEDIUM | ⚠️ NEEDS IMPROVE | 85% | Silent failures | bash.ts:405 |
 | 12 | Output truncation mid-line | MEDIUM | ⚠️ UX ISSUE | 85% | Check before adding | bash.ts:316 |
 | 11 | Timeout handling | LOW | ⚠️ SUBOPTIMAL | 80% | Arbitrary buffer | bash.ts:367 |
@@ -348,64 +348,87 @@ sequenceDiagram
     end
 ```
 
+### Fixed Issues (7 issues)
+
 | Category | Count | Percentage |
 |----------|-------|------------|
-| 100% (Confirmed Fixed) | 7 | 29% |
-| 100% (Confirmed Issue) | 4 | 17% |
-| 95% (Unit Tests Pass) | 1 | 4% |
-| 90% (High Confidence) | 1 | 4% |
-| 85% (High Confidence) | 2 | 8% |
-| 80% (Medium-High) | 3 | 13% |
-| 75% (Medium) | 2 | 8% |
-| 70% (Medium) | 2 | 8% |
-| 60% (Low-Medium) | 2 | 8% |
-| 40% (Low) | 1 | 4% |
+| 100% (Confirmed Fixed) | 5 | 71% |
+| 95% (High Confidence) | 1 | 14% |
+| 90% (High Confidence) | 1 | 14% |
 
-**Overall Average Confidence: 77%**
+**Fixed Issues Average Confidence: 98%**
+
+### Unfixed Issues (21 issues)
+
+| Category | Count | Percentage |
+|----------|-------|------------|
+| 100% (Confirmed Issue) | 1 | 5% |
+| 95% (Edge Case) | 1 | 5% |
+| 90% (Known Limitation) | 1 | 5% |
+| 85% (High Confidence) | 2 | 10% |
+| 80% (Medium-High) | 5 | 24% |
+| 75% (Medium) | 2 | 10% |
+| 70% (Medium) | 3 | 14% |
+| 60% (Low-Medium) | 3 | 14% |
+| 40% (Low) | 1 | 5% |
+| 60% (User Error) | 1 | 5% |
+
+**Unfixed Issues Average Confidence: 72%**
 
 ---
 
 ## Action Plan
 
-### P0 (Already Done)
+### P0 (Already Fixed - 7 Issues)
 
-| Issue | Action | Status |
-|-------|--------|--------|
-| #1 | Add shell bypass to bash.ts | ✅ FIXED |
-| #2 | Add Git cmd and MinGW paths to git-env.ts | ✅ FIXED |
-| #16 | Add shell bypass to prompt.ts | ✅ FIXED |
-| #17 | Fix stream reading race condition | ✅ FIXED |
-| #18 | Remove duplicate abort listeners from bash.ts | ✅ FIXED |
-| #19 | Add stream draining to prompt.ts | ✅ FIXED |
-| #27 | Fix PowerShell command execution | ✅ FIXED |
-| **#25** | **Fix CMD quote handling** | **Medium** | **MEDIUM** |
-| **#28** | **Fix CMD double-escaping** | **Easy** | **MEDIUM** |
-| #5 | Improve error handling for exit codes | Low | MEDIUM |
-| #23 | Simplify ripgrep files() stream reading | Medium | LOW |
+| Issue | Action | Status | Confidence |
+|-------|--------|--------|------------|
+| #1 | Add shell bypass to bash.ts | ✅ FIXED | 100% |
+| #2 | Add Git cmd and MinGW paths to git-env.ts | ✅ FIXED | 100% |
+| #16 | Add shell bypass to prompt.ts | ✅ FIXED | 95% |
+| #17 | Fix stream reading race condition | ✅ FIXED | 100% |
+| #18 | Remove duplicate abort listeners from bash.ts | ✅ FIXED | 100% |
+| #19 | Add stream draining to prompt.ts | ✅ FIXED | 100% |
+| #27 | Fix PowerShell command execution | ✅ FIXED | 90% |
 
-### P2 (Medium - This Sprint)
+### P1 (High Priority Unfixed Issues)
 
-| Issue | Action | Effort |
-|-------|--------|--------|
-| #21 | Add timeout handling to prompt.ts | Medium |
-| #22 | Add timedOut metadata to prompt.ts | Easy |
-| #4 | Use shell-quote for argument parsing | Medium |
-| #9 | Handle variable expansion in patterns | Medium |
-| #10 | Add UNC path support | Medium |
-| #11 | Adaptive timeout handling | Medium |
-| #12 | Improve output truncation | Low |
-| #13 | Fix shell name matching | Low |
-| #14 | Improve fallback handling | Low |
-| #15 | Fix PowerShell quoting | Medium |
+| Issue | Action | Effort | Confidence |
+|-------|--------|--------|------------|
+| #28 | Fix CMD double-escaping | Easy | 80% |
+| #25 | Fix CMD quote/path handling | Medium | 70% |
+| #23 | Review ripgrep files() stream reading | Low | 100% |
+| #24 | Review grep.ts edge cases | Low | 95% |
+| #26 | Fix Edit tool multi-line patterns | Medium | 60% |
 
-### P3 (Low - Backlog)
+### P2 (Medium Priority)
 
-| Issue | Action |
-|-------|--------|
-| #6 | Add PowerShell syntax hints in documentation |
-| #7 | Add delete verification (file exists check) |
-| #8 | tree-sitter parser latency (known limitation) |
-| #24 | Review grep.ts edge cases |
+| Issue | Action | Effort | Confidence |
+|-------|--------|--------|------------|
+| #5 | Improve error handling for exit codes | Low | 85% |
+| #12 | Improve output truncation | Low | 85% |
+| #21 | Add timeout handling to prompt.ts | Medium | 80% |
+| #22 | Add timedOut metadata to prompt.ts | Easy | 80% |
+| #4 | Use shell-quote for argument parsing | Medium | 80% |
+| #11 | Adaptive timeout handling | Medium | 80% |
+
+### P3 (Lower Priority / Edge Cases)
+
+| Issue | Action | Effort | Confidence |
+|-------|--------|--------|------------|
+| #10 | Add UNC path support | Medium | 75% |
+| #14 | Improve fallback handling | Low | 75% |
+| #9 | Handle variable expansion in patterns | Medium | 70% |
+| #13 | Fix shell name matching | Low | 70% |
+| #15 | Fix PowerShell quoting | Medium | 60% |
+
+### P4 (Known Limitations / External)
+
+| Issue | Action | Effort | Confidence |
+|-------|--------|--------|------------|
+| #6 | Add PowerShell syntax hints in documentation | Low | 60% |
+| #7 | Add delete verification (file exists check) | Medium | 40% |
+| #8 | tree-sitter parser latency (known limitation) | N/A | 90% |
 
 ---
 
