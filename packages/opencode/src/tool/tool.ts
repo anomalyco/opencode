@@ -2,6 +2,7 @@ import z from "zod"
 import type { MessageV2 } from "../session/message-v2"
 import type { Agent } from "../agent/agent"
 import type { PermissionNext } from "../permission/next"
+import { Truncate } from "../session/truncation"
 
 export namespace Tool {
   interface Metadata {
@@ -52,7 +53,7 @@ export namespace Tool {
       init: async (ctx) => {
         const toolInfo = init instanceof Function ? await init(ctx) : init
         const execute = toolInfo.execute
-        toolInfo.execute = (args, ctx) => {
+        toolInfo.execute = async (args, ctx) => {
           try {
             toolInfo.parameters.parse(args)
           } catch (error) {
@@ -64,7 +65,16 @@ export namespace Tool {
               { cause: error },
             )
           }
-          return execute(args, ctx)
+          const result = await execute(args, ctx)
+          const truncated = Truncate.output(result.output)
+          return {
+            ...result,
+            output: truncated.content,
+            metadata: {
+              ...result.metadata,
+              truncated: truncated.truncated,
+            },
+          }
         }
         return toolInfo
       },
