@@ -965,6 +965,10 @@ export namespace ACP {
       const session = this.sessionManager.get(params.sessionId)
       // Cleanup event subscription for this session
       this.cleanupSession(params.sessionId)
+      if (!session) {
+        log.warn("cancel called for unknown session", { sessionId: params.sessionId })
+        return
+      }
       await this.config.sdk.session.abort(
         {
           sessionID: params.sessionId,
