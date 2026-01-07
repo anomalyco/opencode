@@ -30,3 +30,7 @@ logs/
 *mcp-coordination*
 .mcp-coord/
 .mcp-coordination/
+
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
