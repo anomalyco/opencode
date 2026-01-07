@@ -19,30 +19,30 @@ Complete investigation of Windows command execution issues across all related fi
 | 1 | PowerShell/CMD double-wrapping | HIGH | ✅ FIXED | 100% | Shell wrapper always used | bash.ts:278 |
 | 2 | Environment variable handling | MEDIUM | ✅ FIXED | 100% | Missing Git env vars | git-env.ts:69 |
 | 17 | Stream reading race condition | HIGH | ✅ FIXED | 100% | Promise.race() data loss | bash.ts:372 |
-| 16 | No shell bypass (prompt.ts) | HIGH | ✅ FIXED | 95% | Added bypass logic | prompt.ts:1397 |
 | 18 | Duplicate abort listeners | LOW | ✅ FIXED | 100% | Two handlers on same signal | bash.ts:361 + 376 |
 | 19 | Missing stream draining | MEDIUM | ✅ FIXED | 100% | No Promise.all for streams | prompt.ts:1483 |
 | 20 | No cleanup on early abort | LOW | ⚠️ NOT A BUG | 100% | Cleanup happens at end | bash.ts:350 |
 | 23 | ripgrep files() stream handling | LOW | ⚠️ NEEDS FIX | 100% | Complex stream reading | ripgrep.ts:242 |
+| 16 | No shell bypass (prompt.ts) | HIGH | ✅ FIXED | 95% | Added bypass logic | prompt.ts:1397 |
 | 24 | grep tool stream handling | LOW | ⚠️ EDGE CASE | 95% | Simple await pattern | grep.ts:47 |
 | 8 | tree-sitter parser latency | MEDIUM | ℹ️ KNOWN | 90% | WASM loading on first use | bash.ts:31 |
+| 27 | PowerShell command execution | HIGH | ✅ FIXED | 90% | Shell bypass prevents proper parsing | bash.ts:138-147 + prompt.ts:82-91 |
 | 5 | Exit code error handling | MEDIUM | ⚠️ NEEDS IMPROVE | 85% | Silent failures | bash.ts:405 |
 | 12 | Output truncation mid-line | MEDIUM | ⚠️ UX ISSUE | 85% | Check before adding | bash.ts:316 |
+| 11 | Timeout handling | LOW | ⚠️ SUBOPTIMAL | 80% | Arbitrary buffer | bash.ts:367 |
 | 21 | Missing timeout handling (prompt.ts) | LOW | ⚠️ NEEDS FIX | 80% | No timeout parameter | prompt.ts:1262 |
 | 22 | Missing timedOut metadata (prompt.ts) | LOW | ⚠️ NEEDS FIX | 80% | No timedOut tracking | prompt.ts:1484 |
-| 11 | Timeout handling | LOW | ⚠️ SUBOPTIMAL | 80% | Arbitrary buffer | bash.ts:367 |
 | 4 | parseCommand naive splitting | LOW | ⚠️ SUBOPTIMAL | 80% | No quote handling | bash.ts:139 |
+| 28 | CMD double-escaping | MEDIUM | ⚠️ NEEDS FIX | 80% | Extra backslashes before quotes | bash.ts:288-292 |
 | 10 | Path resolution on Windows | MEDIUM | ⚠️ EDGE CASE | 75% | realpath failures | bash.ts:226 |
 | 14 | Fallback to empty args (prompt.ts) | LOW | ⚠️ EDGE CASE | 75% | Unknown shell handling | prompt.ts:1329 |
 | 9 | Permission pattern extraction | MEDIUM | ⚠️ EDGE CASE | 70% | Variable expansion issues | bash.ts:207 |
 | 13 | Shell name matching bug (prompt.ts) | LOW | ⚠️ EDGE CASE | 70% | Basename extraction | prompt.ts:1343 |
+| 25 | CMD quote/path handling | MEDIUM | ⚠️ NEEDS FIX | 70% | Double-escaping in shell wrapper | bash.ts:288-292 |
 | 6 | PowerShell -Path misuse | LOW | ❌ USER ERROR | 60% | User confused syntax | User error |
 | 15 | PowerShell quoting issues (prompt.ts) | LOW | ⚠️ EDGE CASE | 60% | Hardcoded args | prompt.ts:1381 |
-| 7 | Files remain after delete | MEDIUM | ❓ EXTERNAL | 40% | Lock/permission/path | External |
-| 25 | CMD quote/path handling | MEDIUM | ⚠️ NEEDS FIX | 70% | Double-escaping in shell wrapper | bash.ts:288-292 |
 | 26 | Edit tool multi-line patterns | MEDIUM | ⚠️ NEEDS FIX | 60% | Empty lines break matching | edit.ts |
-| 27 | PowerShell command execution | HIGH | ✅ FIXED | 90% | Shell bypass prevents proper parsing | bash.ts:138-147 + prompt.ts:82-91 |
-| 28 | CMD double-escaping | MEDIUM | ⚠️ NEEDS FIX | 80% | Extra backslashes before quotes | bash.ts:288-292 |
+| 7 | Files remain after delete | MEDIUM | ❓ EXTERNAL | 40% | Lock/permission/path | External |
 
 ---
 
