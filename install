@@ -424,6 +424,13 @@ if [[ "$no_modify_path" != "true" ]]; then
     fi
 fi
 
+if [[ "$no_modify_path" != "true" ]] && [[ -n $config_file ]] && [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo -e ""
+    echo -e "${ORANGE}To use opencode, reload your shell configuration:${NC}"
+    echo -e "  source $config_file"
+    echo -e ""
+fi
+
 if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
     print_message info "Added $INSTALL_DIR to \$GITHUB_PATH"
