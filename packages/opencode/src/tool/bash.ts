@@ -1,5 +1,4 @@
 import z from "zod"
-import { spawn } from "child_process"
 import { Tool } from "./tool"
 import path from "path"
 import DESCRIPTION from "./bash.txt"
@@ -18,6 +17,7 @@ import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 
 const MAX_METADATA_LENGTH = 30_000
+const MAX_OUTPUT_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
@@ -52,8 +52,7 @@ const parser = lazy(async () => {
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
-  const shell = Shell.acceptable()
-  log.info("bash tool using shell", { shell })
+  log.info("bash tool using shell", { shell: Shell.acceptable() })
 
   return {
     description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
@@ -154,18 +153,6 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
-      const proc = spawn(params.command, {
-        shell,
-        cwd,
-        env: {
-          ...process.env,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-        detached: process.platform !== "win32",
-      })
-
-      let output = ""
-
       // Initialize metadata with empty output
       ctx.metadata({
         metadata: {
@@ -174,69 +161,40 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
 
-      const append = (chunk: Buffer) => {
-        output += chunk.toString()
-        ctx.metadata({
-          metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-            description: params.description,
-          },
-        })
-      }
+      let currentOutput = ""
 
-      proc.stdout?.on("data", append)
-      proc.stderr?.on("data", append)
-
-      let timedOut = false
-      let aborted = false
-      let exited = false
-
-      const kill = () => Shell.killTree(proc, { exited: () => exited })
-
-      if (ctx.abort.aborted) {
-        aborted = true
-        await kill()
-      }
-
-      const abortHandler = () => {
-        aborted = true
-        void kill()
-      }
-
-      ctx.abort.addEventListener("abort", abortHandler, { once: true })
-
-      const timeoutTimer = setTimeout(() => {
-        timedOut = true
-        void kill()
-      }, timeout + 100)
-
-      await new Promise<void>((resolve, reject) => {
-        const cleanup = () => {
-          clearTimeout(timeoutTimer)
-          ctx.abort.removeEventListener("abort", abortHandler)
-        }
-
-        proc.once("exit", () => {
-          exited = true
-          cleanup()
-          resolve()
-        })
-
-        proc.once("error", (error) => {
-          exited = true
-          cleanup()
-          reject(error)
-        })
+      const result = await Shell.execute({
+        command: params.command,
+        cwd,
+        loadRcFiles: true,
+        timeout,
+        abort: ctx.abort,
+        onOutput: (output) => {
+          currentOutput = output
+          if (output.length <= MAX_OUTPUT_LENGTH) {
+            ctx.metadata({
+              metadata: {
+                output,
+                description: params.description,
+              },
+            })
+          }
+        },
       })
 
+      let output = currentOutput
       const resultMetadata: string[] = []
 
-      if (timedOut) {
+      if (output.length > MAX_OUTPUT_LENGTH) {
+        output = output.slice(0, MAX_OUTPUT_LENGTH)
+        resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
+      }
+
+      if (result.timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
       }
 
-      if (aborted) {
+      if (result.aborted) {
         resultMetadata.push("User aborted the command")
       }
 
@@ -248,7 +206,7 @@ export const BashTool = Tool.define("bash", async () => {
         title: params.description,
         metadata: {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
-          exit: proc.exitCode,
+          exit: result.exitCode,
           description: params.description,
         },
         output,

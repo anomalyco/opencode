@@ -64,4 +64,132 @@ export namespace Shell {
     if (s && !BLACKLIST.has(process.platform === "win32" ? path.win32.basename(s) : path.basename(s))) return s
     return fallback()
   })
+
+  function getInvocationArgs(shell: string, command: string): string[] {
+    const shellName = (
+      process.platform === "win32" ? path.win32.basename(shell, ".exe") : path.basename(shell)
+    ).toLowerCase()
+
+    const invocations: Record<string, string[]> = {
+      nu: ["-c", command],
+      fish: ["-c", command],
+      zsh: [
+        "-c",
+        "-l",
+        `[[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
+[[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
+eval ${JSON.stringify(command)}`,
+      ],
+      bash: [
+        "-c",
+        "-l",
+        `shopt -s expand_aliases
+[[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
+eval ${JSON.stringify(command)}`,
+      ],
+      cmd: ["/c", command],
+      powershell: ["-NoProfile", "-Command", command],
+      pwsh: ["-NoProfile", "-Command", command],
+    }
+
+    return invocations[shellName] ?? ["-c", command]
+  }
+
+  // ============ Unified Execution ============
+
+  export interface ExecuteOptions {
+    command: string
+    cwd: string
+    shell?: string
+    loadRcFiles?: boolean
+    timeout?: number
+    abort: AbortSignal
+    env?: Record<string, string>
+    onOutput?: (output: string) => void
+  }
+
+  export interface ExecuteResult {
+    output: string
+    exitCode: number | null
+    timedOut: boolean
+    aborted: boolean
+  }
+
+  export async function execute(options: ExecuteOptions): Promise<ExecuteResult> {
+    const { command, cwd, shell = acceptable(), loadRcFiles = false, timeout, abort, env = {}, onOutput } = options
+
+    const proc = loadRcFiles
+      ? spawn(shell, getInvocationArgs(shell, command), {
+          cwd,
+          env: { ...process.env, TERM: "dumb", ...env },
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: process.platform !== "win32",
+        })
+      : spawn(command, {
+          shell,
+          cwd,
+          env: { ...process.env, TERM: "dumb", ...env },
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: process.platform !== "win32",
+        })
+
+    let output = ""
+    let timedOut = false
+    let aborted = false
+    let exited = false
+
+    const append = (chunk: Buffer) => {
+      output += chunk.toString()
+      onOutput?.(output)
+    }
+
+    proc.stdout?.on("data", append)
+    proc.stderr?.on("data", append)
+
+    const kill = () => killTree(proc, { exited: () => exited })
+
+    if (abort.aborted) {
+      aborted = true
+      await kill()
+    }
+
+    const abortHandler = () => {
+      aborted = true
+      void kill()
+    }
+    abort.addEventListener("abort", abortHandler, { once: true })
+
+    const timeoutTimer = timeout
+      ? setTimeout(() => {
+          timedOut = true
+          void kill()
+        }, timeout + 100)
+      : undefined
+
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        if (timeoutTimer) clearTimeout(timeoutTimer)
+        abort.removeEventListener("abort", abortHandler)
+      }
+
+      proc.once("exit", () => {
+        exited = true
+        cleanup()
+        resolve()
+      })
+
+      proc.once("error", (error) => {
+        exited = true
+        cleanup()
+        reject(error)
+      })
+    })
+
+    return {
+      output,
+      exitCode: proc.exitCode,
+      timedOut,
+      aborted,
+    }
+  }
 }
