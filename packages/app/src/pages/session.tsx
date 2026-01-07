@@ -48,6 +48,7 @@ import {
   SortableTerminalTab,
   NewSessionView,
 } from "@/components/session"
+import { SessionTaskPanel } from "@/components/session-task-panel"
 import { usePlatform } from "@/context/platform"
 import { same } from "@/utils/same"
 
@@ -640,14 +641,23 @@ export default function Page() {
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context"),
+      .filter((tab) => tab !== "context" && tab !== "tasks"),
   )
 
   const reviewTab = createMemo(() => diffs().length > 0 || tabs().active() === "review")
   const mobileReview = createMemo(() => !isDesktop() && diffs().length > 0 && store.mobileTab === "review")
 
+  const hasIncompleteTasks = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return false
+    const todos = sync.data.todo[sessionID] ?? []
+    return todos.some((t) => t.status !== "completed")
+  })
+
+  const tasksTab = createMemo(() => hasIncompleteTasks())
+
   const showTabs = createMemo(
-    () => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0 || contextOpen()),
+    () => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0 || contextOpen() || tasksTab()),
   )
 
   const activeTab = createMemo(() => {
@@ -658,13 +668,14 @@ export default function Page() {
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (tasksTab()) return "tasks"
     return "review"
   })
 
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (diffs().length === 0 && openedTabs().length === 0 && !contextOpen()) return
+    if (diffs().length === 0 && openedTabs().length === 0 && !contextOpen() && !tasksTab()) return
     tabs().setActive(activeTab())
   })
 
@@ -1013,6 +1024,23 @@ export default function Page() {
                         </div>
                       </Tabs.Trigger>
                     </Show>
+                    <Show when={tasksTab()}>
+                      <Tabs.Trigger value="tasks">
+                        <div class="flex items-center gap-2">
+                          <Icon name="checklist" size="small" />
+                          <div>Tasks</div>
+                          {(() => {
+                            const todos = sync.data.todo[params.id ?? ""] ?? []
+                            const completed = todos.filter((t) => t.status === "completed").length
+                            return (
+                              <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                {completed}/{todos.length}
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </Tabs.Trigger>
+                    </Show>
                     <SortableProvider ids={openedTabs()}>
                       <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                     </SortableProvider>
@@ -1059,6 +1087,11 @@ export default function Page() {
                         info={info}
                       />
                     </div>
+                  </Tabs.Content>
+                </Show>
+                <Show when={tasksTab()}>
+                  <Tabs.Content value="tasks" class="flex flex-col h-full overflow-hidden contain-strict">
+                    <SessionTaskPanel />
                   </Tabs.Content>
                 </Show>
                 <For each={openedTabs()}>

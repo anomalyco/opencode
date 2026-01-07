@@ -60,6 +60,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           opened: true,
           diffStyle: "split" as ReviewDiffStyle,
         },
+        tasks: {
+          opened: false,
+        },
         session: {
           width: 600,
         },
@@ -339,6 +342,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         toggle() {
           setStore("review", "opened", (x) => !x)
+        },
+      },
+      tasks: {
+        opened: createMemo(() => store.tasks?.opened ?? false),
+        open() {
+          setStore("tasks", "opened", true)
+        },
+        close() {
+          setStore("tasks", "opened", false)
+        },
+        toggle() {
+          setStore("tasks", "opened", (x) => !x)
         },
       },
       session: {

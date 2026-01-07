@@ -19,6 +19,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
+import { SessionTaskIndicator } from "@/components/session-task-indicator"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 import { same } from "@/utils/same"
 
@@ -43,6 +44,15 @@ export function SessionHeader() {
   })
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const worktrees = createMemo(() => layout.projects.list().map((p) => p.worktree), [], { equals: same })
+
+  const hasIncompleteTasks = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return false
+    const todos = sync.data.todo[sessionID] ?? []
+    return todos.some((t) => t.status !== "completed")
+  })
+
+  const showSidebarToggle = createMemo(() => currentSession()?.summary?.files || hasIncompleteTasks())
 
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
@@ -163,12 +173,13 @@ export function SessionHeader() {
             </Button>
             <SessionLspIndicator />
             <SessionMcpIndicator />
+            <SessionTaskIndicator />
           </div>
           <div class="flex items-center gap-1">
-            <Show when={currentSession()?.summary?.files}>
+            <Show when={showSidebarToggle()}>
               <TooltipKeybind
                 class="hidden md:block shrink-0"
-                title="Toggle review"
+                title="Toggle sidebar"
                 keybind={command.keybind("review.toggle")}
               >
                 <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
