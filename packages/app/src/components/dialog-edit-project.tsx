@@ -7,14 +7,10 @@ import { createMemo, createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { type LocalProject, getAvatarColors } from "@/context/layout"
+import { getFilename } from "@opencode-ai/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
-
-function getFilename(input: string) {
-  const parts = input.split("/")
-  return parts[parts.length - 1] || input
-}
 
 export function DialogEditProject(props: { project: LocalProject }) {
   const dialog = useDialog()
