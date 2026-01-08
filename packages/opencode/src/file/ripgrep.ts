@@ -11,7 +11,28 @@ import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
 import { Log } from "@/util/log"
 
 export namespace Ripgrep {
+  // ============================================================================
+  // Internal: Constants
+  // ============================================================================
+
   const log = Log.create({ service: "ripgrep" })
+
+  const RG_VERSION = "14.1.1"
+
+  const PLATFORMS = {
+    "arm64-darwin": { target: "aarch64-apple-darwin", ext: "tar.gz" },
+    "arm64-linux": { target: "aarch64-unknown-linux-gnu", ext: "tar.gz" },
+    "x64-darwin": { target: "x86_64-apple-darwin", ext: "tar.gz" },
+    "x64-linux": { target: "x86_64-unknown-linux-musl", ext: "tar.gz" },
+    "x64-win32": { target: "x86_64-pc-windows-msvc", ext: "zip" },
+  } as const
+
+  type Platform = keyof typeof PLATFORMS
+
+  // ============================================================================
+  // Internal: Schemas (for parsing ripgrep JSON output)
+  // ============================================================================
+
   const Stats = z.object({
     elapsed: z.object({
       secs: z.number(),
@@ -35,7 +56,7 @@ export namespace Ripgrep {
     }),
   })
 
-  export const Match = z.object({
+  const MatchSchema = z.object({
     type: z.literal("match"),
     data: z.object({
       path: z.object({
@@ -81,25 +102,11 @@ export namespace Ripgrep {
     }),
   })
 
-  const Result = z.union([Begin, Match, End, Summary])
+  const Result = z.union([Begin, MatchSchema, End, Summary])
 
-  export type Result = z.infer<typeof Result>
-  export type Match = z.infer<typeof Match>
-  export type Begin = z.infer<typeof Begin>
-  export type End = z.infer<typeof End>
-  export type Summary = z.infer<typeof Summary>
-
-  const RG_VERSION = "14.1.1"
-
-  const PLATFORMS = {
-    "arm64-darwin": { target: "aarch64-apple-darwin", ext: "tar.gz" },
-    "arm64-linux": { target: "aarch64-unknown-linux-gnu", ext: "tar.gz" },
-    "x64-darwin": { target: "x86_64-apple-darwin", ext: "tar.gz" },
-    "x64-linux": { target: "x86_64-unknown-linux-musl", ext: "tar.gz" },
-    "x64-win32": { target: "x86_64-pc-windows-msvc", ext: "zip" },
-  } as const
-
-  type Platform = keyof typeof PLATFORMS
+  // ============================================================================
+  // Internal: Functions
+  // ============================================================================
 
   function getPlatformConfig() {
     const platform = `${process.arch}-${process.platform}`
@@ -179,6 +186,54 @@ export namespace Ripgrep {
     await zipFileReader.close()
   }
 
+  const MAX_BUFFER_BYTES = 20 * 1024 * 1024
+
+  interface FilesInput {
+    cwd: string
+    glob?: string[]
+    hidden?: boolean
+    follow?: boolean
+    maxDepth?: number
+  }
+
+  function buildFilesArgs(input: FilesInput): string[] {
+    const args = ["--files", "--glob=!.git/*"]
+    if (input.follow !== false) args.push("--follow")
+    if (input.hidden !== false) args.push("--hidden")
+    if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
+    for (const g of input.glob ?? []) args.push(`--glob=${g}`)
+    return args
+  }
+
+  async function* streamLines(stdout: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+    const reader = stdout.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (line) yield line
+        }
+      }
+
+      if (buffer) yield buffer
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
+  // ============================================================================
+  // Exports: Errors
+  // ============================================================================
+
   export const ExtractionFailedError = NamedError.create(
     "RipgrepExtractionFailedError",
     z.object({
@@ -202,6 +257,14 @@ export namespace Ripgrep {
     }),
   )
 
+  export type Result = z.infer<typeof Result>
+  export type Match = z.infer<typeof MatchSchema>
+  export type Begin = z.infer<typeof Begin>
+  export type End = z.infer<typeof End>
+  export type Summary = z.infer<typeof Summary>
+
+  export const Match = MatchSchema
+
   export const filepath = lazy(async (): Promise<string> => {
     const existing = await findExisting()
     if (existing) return existing
@@ -221,23 +284,7 @@ export namespace Ripgrep {
     return binRgPath
   })
 
-  export async function* files(input: {
-    cwd: string
-    glob?: string[]
-    hidden?: boolean
-    follow?: boolean
-    maxDepth?: number
-  }) {
-    const args = [await filepath(), "--files", "--glob=!.git/*"]
-    if (input.follow !== false) args.push("--follow")
-    if (input.hidden !== false) args.push("--hidden")
-    if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
-    if (input.glob) {
-      for (const g of input.glob) {
-        args.push(`--glob=${g}`)
-      }
-    }
-
+  export async function* files(input: FilesInput) {
     // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
     // See https://github.com/oven-sh/bun/issues/24012
     if (!(await fs.stat(input.cwd).catch(() => undefined))?.isDirectory()) {
@@ -248,42 +295,21 @@ export namespace Ripgrep {
       })
     }
 
-    const proc = Bun.spawn(args, {
+    const proc = Bun.spawn([await filepath(), ...buildFilesArgs(input)], {
       cwd: input.cwd,
       stdout: "pipe",
       stderr: "ignore",
-      maxBuffer: 1024 * 1024 * 20,
+      maxBuffer: MAX_BUFFER_BYTES,
     })
 
-    const reader = proc.stdout.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
+    yield* streamLines(proc.stdout)
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        // Handle both Unix (\n) and Windows (\r\n) line endings
-        const lines = buffer.split(/\r?\n/)
-        buffer = lines.pop() || ""
-
-        for (const line of lines) {
-          if (line) yield line
-        }
-      }
-
-      if (buffer) yield buffer
-    } finally {
-      reader.releaseLock()
-      await proc.exited
-    }
+    await proc.exited
   }
 
   export async function tree(input: { cwd: string; limit?: number }) {
     log.info("tree", input)
-    const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
+    const fileList = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
     interface Node {
       path: string[]
       children: Node[]
@@ -311,7 +337,7 @@ export namespace Ripgrep {
       path: [],
       children: [],
     }
-    for (const file of files) {
+    for (const file of fileList) {
       if (file.includes(".opencode")) continue
       const parts = file.split(path.sep)
       getPath(root, parts, true)
@@ -400,14 +426,13 @@ export namespace Ripgrep {
     args.push(input.pattern)
 
     const command = args.join(" ")
-    const result = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
-    if (result.exitCode !== 0) {
+    const searchResult = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
+    if (searchResult.exitCode !== 0) {
       return []
     }
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = result.text().trim().split(/\r?\n/).filter(Boolean)
-    // Parse JSON lines from ripgrep output
+    const lines = searchResult.text().trim().split(/\r?\n/).filter(Boolean)
 
     return lines
       .map((line) => JSON.parse(line))
