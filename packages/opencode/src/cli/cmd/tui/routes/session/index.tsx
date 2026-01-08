@@ -136,7 +136,11 @@ export function Session() {
   })
 
   const dimensions = useTerminalDimensions()
-  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(kv.get("sidebar", "auto"))
+  const validSidebar = (v: unknown): v is "show" | "hide" | "auto" => v === "show" || v === "hide" || v === "auto"
+  const initialSidebar = validSidebar(sync.data.config.tui?.sidebar)
+    ? sync.data.config.tui.sidebar
+    : kv.get("sidebar", "auto")
+  const [sidebar, setSidebar] = createSignal<"show" | "hide" | "auto">(initialSidebar)
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = createSignal(kv.get("thinking_visibility", true))
   const [showTimestamps, setShowTimestamps] = createSignal(kv.get("timestamps", "hide") === "show")
@@ -454,12 +458,10 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setSidebar((prev) => {
-          if (prev === "auto") return sidebarVisible() ? "hide" : "show"
-          if (prev === "show") return "hide"
-          return "show"
+          const next = prev === "auto" ? (sidebarVisible() ? "hide" : "show") : prev === "show" ? "hide" : "show"
+          kv.set("sidebar", next)
+          return next
         })
-        if (sidebar() === "show") kv.set("sidebar", "auto")
-        if (sidebar() === "hide") kv.set("sidebar", "hide")
         dialog.clear()
       },
     },

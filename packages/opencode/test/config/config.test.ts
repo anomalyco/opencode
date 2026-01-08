@@ -870,6 +870,80 @@ test("merges legacy tools with existing permission config", async () => {
   })
 })
 
+// TUI sidebar config tests
+// The TUI uses: sync.data.config.tui?.sidebar ?? kv.get("sidebar", "auto")
+// Priority: Config > KV store > "auto"
+// Config provides per-workspace default, KV provides global fallback
+
+test("sidebar is undefined when not set in config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {},
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.sidebar).toBeUndefined()
+    },
+  })
+})
+
+test("loads TUI sidebar config with custom value", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            sidebar: "hide",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.sidebar).toBe("hide")
+    },
+  })
+})
+
+test("TUI sidebar config accepts all valid values", async () => {
+  for (const value of ["auto", "show", "hide"] as const) {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            tui: {
+              sidebar: value,
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.tui?.sidebar).toBe(value)
+      },
+    })
+  }
+})
+
 test("permission config preserves key order", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

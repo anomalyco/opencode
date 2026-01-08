@@ -9101,6 +9101,11 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
+              },
+              "sidebar": {
+                "description": "Control sidebar visibility: 'show' always shows sidebar, 'hide' always hides it, 'auto' adapts to terminal width",
+                "type": "string",
+                "enum": ["show", "hide", "auto"]
               }
             }
           },

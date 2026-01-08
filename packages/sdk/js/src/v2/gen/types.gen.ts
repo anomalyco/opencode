@@ -1557,6 +1557,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Default sidebar visibility: 'auto' shows on wide terminals, 'show' always visible, 'hide' always hidden
+     */
+    sidebar?: "auto" | "show" | "hide"
   }
   server?: ServerConfig
   /**
