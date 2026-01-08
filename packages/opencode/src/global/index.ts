@@ -11,6 +11,11 @@ const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
 export namespace Global {
+  export const Platform = {
+    isWindows: process.platform === "win32",
+    binExt: process.platform === "win32" ? ".exe" : "",
+  }
+
   export const Path = {
     // Allow override via OPENCODE_TEST_HOME for test isolation
     get home() {
