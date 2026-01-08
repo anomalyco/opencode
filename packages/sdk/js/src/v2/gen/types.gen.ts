@@ -517,13 +517,6 @@ export type EventSessionIdle = {
   }
 }
 
-export type EventSessionCompacted = {
-  type: "session.compacted"
-  properties: {
-    sessionID: string
-  }
-}
-
 export type QuestionOption = {
   /**
    * Display text (1-5 words, concise)
@@ -582,6 +575,13 @@ export type EventQuestionRejected = {
   properties: {
     sessionID: string
     requestID: string
+  }
+}
+
+export type EventSessionCompacted = {
+  type: "session.compacted"
+  properties: {
+    sessionID: string
   }
 }
 
@@ -849,10 +849,10 @@ export type Event =
   | EventPermissionReplied
   | EventSessionStatus
   | EventSessionIdle
-  | EventSessionCompacted
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
+  | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
   | EventTuiPromptAppend
@@ -1297,6 +1297,7 @@ export type PermissionConfig =
       external_directory?: PermissionRuleConfig
       todowrite?: PermissionActionConfig
       todoread?: PermissionActionConfig
+      question?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
       codesearch?: PermissionActionConfig
