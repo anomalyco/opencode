@@ -248,6 +248,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
+  const isFocused = createFocusSignal(() => editorRef)
+
   createEffect(() => {
     params.id
     editorRef.focus()
@@ -258,7 +260,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onCleanup(() => clearInterval(interval))
   })
 
-  const isFocused = createFocusSignal(() => editorRef)
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
@@ -292,12 +293,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
+    event.preventDefault()
+    event.stopPropagation()
+
     const items = Array.from(clipboardData.items)
     const imageItems = items.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
 
     if (imageItems.length > 0) {
-      event.preventDefault()
-      event.stopPropagation()
       for (const item of imageItems) {
         const file = item.getAsFile()
         if (file) await addImageAttachment(file)
@@ -305,8 +307,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    event.preventDefault()
-    event.stopPropagation()
     const plainText = clipboardData.getData("text/plain") ?? ""
     addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
@@ -347,13 +347,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   onMount(() => {
-    editorRef.addEventListener("paste", handlePaste)
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
   })
   onCleanup(() => {
-    editorRef.removeEventListener("paste", handlePaste)
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
     document.removeEventListener("drop", handleGlobalDrop)
@@ -1508,6 +1506,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
             contenteditable="true"
             onInput={handleInput}
+            onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
             onKeyDown={handleKeyDown}
