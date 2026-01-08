@@ -357,3 +357,18 @@ export const cargofmt: Info = {
     return found.length > 0
   },
 }
+
+export const pint: Info = {
+  name: "pint",
+  command: ["./vendor/bin/pint", "$FILE"],
+  extensions: [".php"],
+  async enabled() {
+    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.require?.["laravel/pint"]) return true
+      if (json["require-dev"]?.["laravel/pint"]) return true
+    }
+    return false
+  },
+}
