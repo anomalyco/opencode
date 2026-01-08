@@ -44,11 +44,10 @@ export function transformShareData(shareData: ShareData[]): {
     if (item.type === "message") {
       messageMap.set(item.data.id, item.data)
     } else if (item.type === "part") {
-      const messageID = item.data.messageID
-      if (!partMap.has(messageID)) {
-        partMap.set(messageID, [])
+      if (!partMap.has(item.data.messageID)) {
+        partMap.set(item.data.messageID, [])
       }
-      partMap.get(messageID)!.push(item.data)
+      partMap.get(item.data.messageID)!.push(item.data)
     }
   }
 
