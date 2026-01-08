@@ -1,8 +1,6 @@
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright"
+import { type Browser, type BrowserContext, type Page } from "playwright"
 import { Log } from "@/util/log"
-import { Config } from "@/config/config"
 import path from "path"
-import os from "os"
 import { spawn, ChildProcess } from "child_process"
 
 const log = Log.create({ service: "browser.manager" })
@@ -50,8 +48,6 @@ export interface InteractiveElement {
  * Runs Bun on main process, spawns Node.js for Chromium
  */
 export namespace BrowserManager {
-  let browser: Browser | null = null
-  let context: BrowserContext | null = null
   let currentPage: Page | null = null
   let browserServerProcess: ChildProcess | null = null
   let config: BrowserConfig = {}

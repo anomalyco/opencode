@@ -26,13 +26,6 @@ export interface AnnotationResult {
   elementMap?: Map<number, { selector: string; element: InteractiveElement }>
 }
 
-// Default cursor SVG (red arrow pointer)
-const CURSOR_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-  <path fill="#FF0000" stroke="#000" stroke-width="1" d="M5.5 3.21V20.8l4.29-4.29 3.21 6.79 2.8-1.32-3.21-6.79H19.5z"/>
-</svg>
-`
-
 // Colors for element numbering
 const ELEMENT_COLORS = [
   "#FF6B6B", // Red
