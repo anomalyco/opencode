@@ -88,16 +88,96 @@ export namespace Ripgrep {
   export type Begin = z.infer<typeof Begin>
   export type End = z.infer<typeof End>
   export type Summary = z.infer<typeof Summary>
-  const PLATFORM = {
-    "arm64-darwin": { platform: "aarch64-apple-darwin", extension: "tar.gz" },
-    "arm64-linux": {
-      platform: "aarch64-unknown-linux-gnu",
-      extension: "tar.gz",
-    },
-    "x64-darwin": { platform: "x86_64-apple-darwin", extension: "tar.gz" },
-    "x64-linux": { platform: "x86_64-unknown-linux-musl", extension: "tar.gz" },
-    "x64-win32": { platform: "x86_64-pc-windows-msvc", extension: "zip" },
+
+  const RG_VERSION = "14.1.1"
+
+  const PLATFORMS = {
+    "arm64-darwin": { target: "aarch64-apple-darwin", ext: "tar.gz" },
+    "arm64-linux": { target: "aarch64-unknown-linux-gnu", ext: "tar.gz" },
+    "x64-darwin": { target: "x86_64-apple-darwin", ext: "tar.gz" },
+    "x64-linux": { target: "x86_64-unknown-linux-musl", ext: "tar.gz" },
+    "x64-win32": { target: "x86_64-pc-windows-msvc", ext: "zip" },
   } as const
+
+  type Platform = keyof typeof PLATFORMS
+
+  function getPlatformConfig() {
+    const platform = `${process.arch}-${process.platform}`
+    if (!(platform in PLATFORMS)) {
+      throw new UnsupportedPlatformError({ platform })
+    }
+    return PLATFORMS[platform as Platform]
+  }
+
+  async function findExisting(): Promise<string | null> {
+    const systemPath = Bun.which("rg")
+    if (systemPath) return systemPath
+
+    const localPath = path.join(Global.Path.bin, `rg${Global.Platform.binExt}`)
+    if (await Bun.file(localPath).exists()) return localPath
+
+    return null
+  }
+
+  async function downloadRg(config: { target: string; ext: string }): Promise<string> {
+    const filename = `ripgrep-${RG_VERSION}-${config.target}.${config.ext}`
+    const url = `https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${filename}`
+
+    const response = await fetch(url)
+    if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
+
+    const archivePath = path.join(Global.Path.bin, filename)
+    await Bun.write(archivePath, await response.arrayBuffer())
+
+    return archivePath
+  }
+
+  async function extractPosix(archivePath: string, binRgPath: string): Promise<void> {
+    const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
+
+    if (process.platform === "darwin") args.push("--include=*/rg")
+    if (process.platform === "linux") args.push("--wildcards", "*/rg")
+
+    const proc = Bun.spawn(args, {
+      cwd: Global.Path.bin,
+      stderr: "pipe",
+      stdout: "pipe",
+    })
+    await proc.exited
+
+    if (proc.exitCode !== 0) {
+      throw new ExtractionFailedError({
+        filepath: binRgPath,
+        stderr: await new Response(proc.stderr).text(),
+      })
+    }
+
+    await fs.chmod(binRgPath, 0o755)
+  }
+
+  async function extractWindows(archivePath: string, binRgPath: string): Promise<void> {
+    const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+    const entries = await zipFileReader.getEntries()
+
+    const rgEntry = entries.find((e) => e.filename.endsWith("rg.exe"))
+    if (!rgEntry) {
+      throw new ExtractionFailedError({
+        filepath: archivePath,
+        stderr: "rg.exe not found in zip archive",
+      })
+    }
+
+    const rgBlob = await rgEntry.getData!(new BlobWriter())
+    if (!rgBlob) {
+      throw new ExtractionFailedError({
+        filepath: archivePath,
+        stderr: "Failed to extract rg.exe from zip archive",
+      })
+    }
+
+    await Bun.write(binRgPath, await rgBlob.arrayBuffer())
+    await zipFileReader.close()
+  }
 
   export const ExtractionFailedError = NamedError.create(
     "RipgrepExtractionFailedError",
@@ -122,88 +202,24 @@ export namespace Ripgrep {
     }),
   )
 
-  const state = lazy(async () => {
-    let filepath = Bun.which("rg")
-    if (filepath) return { filepath }
-    filepath = path.join(Global.Path.bin, "rg" + (process.platform === "win32" ? ".exe" : ""))
+  export const filepath = lazy(async (): Promise<string> => {
+    const existing = await findExisting()
+    if (existing) return existing
 
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
-      const platformKey = `${process.arch}-${process.platform}` as keyof typeof PLATFORM
-      const config = PLATFORM[platformKey]
-      if (!config) throw new UnsupportedPlatformError({ platform: platformKey })
+    const binRgPath = path.join(Global.Path.bin, `rg${Global.Platform.binExt}`)
+    const config = getPlatformConfig()
+    const archivePath = await downloadRg(config)
 
-      const version = "14.1.1"
-      const filename = `ripgrep-${version}-${config.platform}.${config.extension}`
-      const url = `https://github.com/BurntSushi/ripgrep/releases/download/${version}/${filename}`
-
-      const response = await fetch(url)
-      if (!response.ok) throw new DownloadFailedError({ url, status: response.status })
-
-      const buffer = await response.arrayBuffer()
-      const archivePath = path.join(Global.Path.bin, filename)
-      await Bun.write(archivePath, buffer)
-      if (config.extension === "tar.gz") {
-        const args = ["tar", "-xzf", archivePath, "--strip-components=1"]
-
-        if (platformKey.endsWith("-darwin")) args.push("--include=*/rg")
-        if (platformKey.endsWith("-linux")) args.push("--wildcards", "*/rg")
-
-        const proc = Bun.spawn(args, {
-          cwd: Global.Path.bin,
-          stderr: "pipe",
-          stdout: "pipe",
-        })
-        await proc.exited
-        if (proc.exitCode !== 0)
-          throw new ExtractionFailedError({
-            filepath,
-            stderr: await Bun.readableStreamToText(proc.stderr),
-          })
-      }
-      if (config.extension === "zip") {
-        if (config.extension === "zip") {
-          const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
-          const entries = await zipFileReader.getEntries()
-          let rgEntry: any
-          for (const entry of entries) {
-            if (entry.filename.endsWith("rg.exe")) {
-              rgEntry = entry
-              break
-            }
-          }
-
-          if (!rgEntry) {
-            throw new ExtractionFailedError({
-              filepath: archivePath,
-              stderr: "rg.exe not found in zip archive",
-            })
-          }
-
-          const rgBlob = await rgEntry.getData(new BlobWriter())
-          if (!rgBlob) {
-            throw new ExtractionFailedError({
-              filepath: archivePath,
-              stderr: "Failed to extract rg.exe from zip archive",
-            })
-          }
-          await Bun.write(filepath, await rgBlob.arrayBuffer())
-          await zipFileReader.close()
-        }
-      }
-      await fs.unlink(archivePath)
-      if (!platformKey.endsWith("-win32")) await fs.chmod(filepath, 0o755)
+    if (Global.Platform.isWindows) {
+      await extractWindows(archivePath, binRgPath)
+    } else {
+      await extractPosix(archivePath, binRgPath)
     }
 
-    return {
-      filepath,
-    }
+    await fs.unlink(archivePath)
+
+    return binRgPath
   })
-
-  export async function filepath() {
-    const { filepath } = await state()
-    return filepath
-  }
 
   export async function* files(input: {
     cwd: string
