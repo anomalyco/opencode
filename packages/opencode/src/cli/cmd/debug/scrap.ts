@@ -5,6 +5,7 @@ import { cmd } from "../cmd"
 
 export const ScrapCommand = cmd({
   command: "scrap",
+  describe: "list all known projects",
   builder: (yargs) => yargs,
   async handler() {
     const timer = Log.Default.time("scrap")
