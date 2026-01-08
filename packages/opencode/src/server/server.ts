@@ -2826,14 +2826,34 @@ export namespace Server {
                 properties: {},
               }),
             })
-            const unsub = Bus.subscribeAll(async (event) => {
-              await stream.writeSSE({
-                data: JSON.stringify(event),
-              })
-              if (event.type === Bus.InstanceDisposed.type) {
-                stream.close()
+            // Track current directory to filter GlobalBus events.
+            // We use GlobalBus instead of per-instance Bus because Instance.setDirectory()
+            // disposes old state (including Bus subscriptions). GlobalBus persists across
+            // directory changes, allowing this SSE connection to follow /cd commands.
+            let currentDirectory = Instance.directory
+
+            function globalHandler(event: { directory?: string; payload: any }) {
+              // Forward events for the current directory
+              const isCurrentDirectory = event.directory === currentDirectory
+              // Also accept directory changes originating from our tracked directory
+              const isDirectoryChangeFromHere =
+                event.payload.type === "instance.directory.changed" &&
+                event.payload.properties.previousDirectory === currentDirectory
+
+              if (isCurrentDirectory || isDirectoryChangeFromHere) {
+                // Update tracked directory when it changes
+                if (event.payload.type === "instance.directory.changed") {
+                  currentDirectory = event.payload.properties.directory
+                }
+                stream.writeSSE({
+                  data: JSON.stringify(event.payload),
+                })
+                if (event.payload.type === Bus.InstanceDisposed.type) {
+                  stream.close()
+                }
               }
-            })
+            }
+            GlobalBus.on("event", globalHandler)
 
             // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
             const heartbeat = setInterval(() => {
@@ -2848,7 +2868,7 @@ export namespace Server {
             await new Promise<void>((resolve) => {
               stream.onAbort(() => {
                 clearInterval(heartbeat)
-                unsub()
+                GlobalBus.off("event", globalHandler)
                 resolve()
                 log.info("event disconnected")
               })
