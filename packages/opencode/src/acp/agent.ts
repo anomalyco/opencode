@@ -584,6 +584,30 @@ export namespace ACP {
           sessionId,
         })
 
+        // Send initial prompt if provided (don't await - let it stream via events)
+        if (this.config.initialPrompt) {
+          const agent = await AgentModule.defaultAgent()
+          this.sdk.session
+            .prompt({
+              sessionID: sessionId,
+              directory,
+              model: {
+                providerID: model.providerID,
+                modelID: model.modelID,
+              },
+              agent,
+              parts: [
+                {
+                  type: "text",
+                  text: this.config.initialPrompt,
+                },
+              ],
+            })
+            .catch((err) => {
+              log.error("failed to send initial prompt", { error: err, sessionId })
+            })
+        }
+
         return {
           sessionId,
           models: load.models,

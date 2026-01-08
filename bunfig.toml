@@ -1,6 +1,6 @@
 [install]
 exact = true
+linker = "isolated"
 
 [test]
 root = "./do-not-run-tests-from-root"
-

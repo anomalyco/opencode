@@ -21,4 +21,5 @@ export interface ACPConfig {
     providerID: ProviderID
     modelID: ModelID
   }
+  initialPrompt?: string
 }

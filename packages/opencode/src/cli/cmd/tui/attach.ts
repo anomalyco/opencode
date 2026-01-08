@@ -5,6 +5,7 @@ import { win32DisableProcessedInput, win32InstallCtrlCGuard } from "./win32"
 import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
+import { iife } from "@/util/iife"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -38,6 +39,10 @@ export const AttachCommand = cmd({
         alias: ["p"],
         type: "string",
         describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
+      })
+      .option("prompt", {
+        type: "string",
+        describe: "prompt to use",
       }),
   handler: async (args) => {
     const unguard = win32InstallCtrlCGuard()
@@ -70,6 +75,13 @@ export const AttachCommand = cmd({
         directory: directory && existsSync(directory) ? directory : process.cwd(),
         fn: () => TuiConfig.get(),
       })
+
+      const prompt = await iife(async () => {
+        const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
+        if (!args.prompt) return piped
+        return piped ? piped + "\n" + args.prompt : args.prompt
+      })
+
       await tui({
         url: args.url,
         config,
@@ -77,6 +89,7 @@ export const AttachCommand = cmd({
           continue: args.continue,
           sessionID: args.session,
           fork: args.fork,
+          prompt,
         },
         directory,
         headers,

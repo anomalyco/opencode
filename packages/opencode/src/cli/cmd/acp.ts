@@ -13,11 +13,16 @@ export const AcpCommand = cmd({
   command: "acp",
   describe: "start ACP (Agent Client Protocol) server",
   builder: (yargs) => {
-    return withNetworkOptions(yargs).option("cwd", {
-      describe: "working directory",
-      type: "string",
-      default: process.cwd(),
-    })
+    return withNetworkOptions(yargs)
+      .option("cwd", {
+        describe: "working directory",
+        type: "string",
+        default: process.cwd(),
+      })
+      .option("prompt", {
+        describe: "prompt to use",
+        type: "string",
+      })
   },
   handler: async (args) => {
     process.env.OPENCODE_CLIENT = "acp"
@@ -56,7 +61,7 @@ export const AcpCommand = cmd({
       const agent = await ACP.init({ sdk })
 
       new AgentSideConnection((conn) => {
-        return agent.create(conn, { sdk })
+        return agent.create(conn, { sdk, initialPrompt: args.prompt })
       }, stream)
 
       log.info("setup connection")
