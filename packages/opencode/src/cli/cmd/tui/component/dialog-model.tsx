@@ -179,9 +179,9 @@ export function DialogModel(props: { providerID?: string }) {
 
     // Apply fuzzy filtering to each section separately, maintaining section order
     if (q) {
-      const filteredFavorites = fuzzysort.go(q, favoriteOptions, { keys: ["title"] }).map((x) => x.obj)
+      const filteredFavorites = fuzzysort.go(q, favoriteOptions, { keys: ["title", "description"] }).map((x) => x.obj)
       const filteredRecents = fuzzysort
-        .go(q, recentOptions, { keys: ["title"] })
+        .go(q, recentOptions, { keys: ["title", "description"] })
         .map((x) => x.obj)
         .slice(0, 5)
       const filteredProviders = fuzzysort.go(q, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj)
