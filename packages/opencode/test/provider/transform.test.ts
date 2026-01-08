@@ -410,6 +410,181 @@ describe("ProviderTransform.message - empty image handling", () => {
   })
 })
 
+describe("ProviderTransform.message - anthropic empty content filtering", () => {
+  const anthropicModel = {
+    id: "anthropic/claude-3-5-sonnet",
+    providerID: "anthropic",
+    api: {
+      id: "claude-3-5-sonnet-20241022",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude 3.5 Sonnet",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.003,
+      output: 0.015,
+      cache: { read: 0.0003, write: 0.00375 },
+    },
+    limit: {
+      context: 200000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("filters out messages with empty string content", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "" },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel)
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("filters out empty text parts from array content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "text", text: "Hello" },
+          { type: "text", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Hello" })
+  })
+
+  test("filters out empty reasoning parts from array content", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "" },
+          { type: "text", text: "Answer" },
+          { type: "reasoning", text: "" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("removes entire message when all parts are empty", () => {
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "reasoning", text: "" },
+        ],
+      },
+      { role: "user", content: "World" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel)
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("Hello")
+    expect(result[1].content).toBe("World")
+  })
+
+  test("keeps non-text/reasoning parts even if text parts are empty", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "" },
+          { type: "tool-call", toolCallId: "123", toolName: "bash", input: { command: "ls" } },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({
+      type: "tool-call",
+      toolCallId: "123",
+      toolName: "bash",
+      input: { command: "ls" },
+    })
+  })
+
+  test("keeps messages with valid text alongside empty parts", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Thinking..." },
+          { type: "text", text: "" },
+          { type: "text", text: "Result" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, anthropicModel)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content).toHaveLength(2)
+    expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
+    expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
+  })
+
+  test("does not filter for non-anthropic providers", () => {
+    const openaiModel = {
+      ...anthropicModel,
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+
+    const msgs = [
+      { role: "assistant", content: "" },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel)
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toBe("")
+    expect(result[1].content).toHaveLength(1)
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
@@ -694,10 +869,10 @@ describe("ProviderTransform.variants", () => {
 
     test("standard azure models return custom efforts with reasoningSummary", () => {
       const model = createMockModel({
-        id: "azure/gpt-4o",
+        id: "o1",
         providerID: "azure",
         api: {
-          id: "gpt-4o",
+          id: "o1",
           url: "https://azure.com",
           npm: "@ai-sdk/azure",
         },
@@ -713,7 +888,7 @@ describe("ProviderTransform.variants", () => {
 
     test("gpt-5 adds minimal effort", () => {
       const model = createMockModel({
-        id: "azure/gpt-5",
+        id: "gpt-5",
         providerID: "azure",
         api: {
           id: "gpt-5",
@@ -743,10 +918,10 @@ describe("ProviderTransform.variants", () => {
 
     test("standard openai models return custom efforts with reasoningSummary", () => {
       const model = createMockModel({
-        id: "openai/gpt-4o",
+        id: "gpt-5",
         providerID: "openai",
         api: {
-          id: "gpt-4o",
+          id: "gpt-5",
           url: "https://api.openai.com",
           npm: "@ai-sdk/openai",
         },
@@ -763,10 +938,10 @@ describe("ProviderTransform.variants", () => {
 
     test("models after 2025-11-13 include 'none' effort", () => {
       const model = createMockModel({
-        id: "openai/gpt-4.5",
+        id: "gpt-5-nano",
         providerID: "openai",
         api: {
-          id: "gpt-4.5",
+          id: "gpt-5-nano",
           url: "https://api.openai.com",
           npm: "@ai-sdk/openai",
         },

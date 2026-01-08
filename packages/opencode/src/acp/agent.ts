@@ -34,13 +34,9 @@ import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
-  export async function init({ sdk }: { sdk: OpencodeClient }) {
-    const model = await defaultModel({ sdk })
+  export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
       create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
-        if (!fullConfig.defaultModel) {
-          fullConfig.defaultModel = model
-        }
         return new Agent(connection, fullConfig)
       },
     }
@@ -171,6 +167,8 @@ export namespace ACP {
                             sessionUpdate: "tool_call_update",
                             toolCallId: part.callID,
                             status: "in_progress",
+                            kind: toToolKind(part.tool),
+                            title: part.tool,
                             locations: toLocations(part.tool, part.state.input),
                             rawInput: part.state.input,
                           },
@@ -246,6 +244,7 @@ export namespace ACP {
                             kind,
                             content,
                             title: part.state.title,
+                            rawInput: part.state.input,
                             rawOutput: {
                               output: part.state.output,
                               metadata: part.state.metadata,
@@ -264,6 +263,9 @@ export namespace ACP {
                             sessionUpdate: "tool_call_update",
                             toolCallId: part.callID,
                             status: "failed",
+                            kind: toToolKind(part.tool),
+                            title: part.tool,
+                            rawInput: part.state.input,
                             content: [
                               {
                                 type: "content",
@@ -495,6 +497,8 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "in_progress",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
                   },
@@ -570,6 +574,7 @@ export namespace ACP {
                     kind,
                     content,
                     title: part.state.title,
+                    rawInput: part.state.input,
                     rawOutput: {
                       output: part.state.output,
                       metadata: part.state.metadata,
@@ -588,6 +593,9 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "failed",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
+                    rawInput: part.state.input,
                     content: [
                       {
                         type: "content",
@@ -988,8 +996,10 @@ export namespace ACP {
     const configured = config.defaultModel
     if (configured) return configured
 
-    const model = await sdk.config
-      .get({ directory: cwd }, { throwOnError: true })
+    const directory = cwd ?? process.cwd()
+
+    const specified = await sdk.config
+      .get({ directory }, { throwOnError: true })
       .then((resp) => {
         const cfg = resp.data
         if (!cfg || !cfg.model) return undefined
@@ -1004,7 +1014,47 @@ export namespace ACP {
         return undefined
       })
 
-    return model ?? { providerID: "opencode", modelID: "big-pickle" }
+    const providers = await sdk.config
+      .providers({ directory }, { throwOnError: true })
+      .then((x) => x.data?.providers ?? [])
+      .catch((error) => {
+        log.error("failed to list providers for default model", { error })
+        return []
+      })
+
+    if (specified && providers.length) {
+      const provider = providers.find((p) => p.id === specified.providerID)
+      if (provider && provider.models[specified.modelID]) return specified
+    }
+
+    if (specified && !providers.length) return specified
+
+    const opencodeProvider = providers.find((p) => p.id === "opencode")
+    if (opencodeProvider) {
+      if (opencodeProvider.models["big-pickle"]) {
+        return { providerID: "opencode", modelID: "big-pickle" }
+      }
+      const [best] = Provider.sort(Object.values(opencodeProvider.models))
+      if (best) {
+        return {
+          providerID: best.providerID,
+          modelID: best.id,
+        }
+      }
+    }
+
+    const models = providers.flatMap((p) => Object.values(p.models))
+    const [best] = Provider.sort(models)
+    if (best) {
+      return {
+        providerID: best.providerID,
+        modelID: best.id,
+      }
+    }
+
+    if (specified) return specified
+
+    return { providerID: "opencode", modelID: "big-pickle" }
   }
 
   function parseUri(

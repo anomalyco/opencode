@@ -281,6 +281,48 @@
       "when": 1766946179892,
       "tag": "0039_striped_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1767584617316,
+      "tag": "0040_broken_gamora",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1767732559197,
+      "tag": "0041_odd_misty_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1767744077346,
+      "tag": "0042_flat_nightmare",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1767752636118,
+      "tag": "0043_lame_calypso",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1767759322451,
+      "tag": "0044_tiny_captain_midlands",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1767765497502,
+      "tag": "0045_cuddly_diamondback",
+      "breakpoints": true
     }
   ]
 }

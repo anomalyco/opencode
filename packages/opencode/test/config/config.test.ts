@@ -1,6 +1,7 @@
-import { test, expect } from "bun:test"
+import { test, expect, mock, afterEach } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
+import { Auth } from "../../src/auth"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -488,6 +489,87 @@ Helper subagent prompt`,
   })
 })
 
+test("merges instructions arrays from global and local configs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const projectDir = path.join(dir, "project")
+      const opencodeDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          instructions: ["global-instructions.md", "shared-rules.md"],
+        }),
+      )
+
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          instructions: ["local-instructions.md"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const config = await Config.get()
+      const instructions = config.instructions ?? []
+
+      expect(instructions).toContain("global-instructions.md")
+      expect(instructions).toContain("shared-rules.md")
+      expect(instructions).toContain("local-instructions.md")
+      expect(instructions.length).toBe(3)
+    },
+  })
+})
+
+test("deduplicates duplicate instructions from global and local configs", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const projectDir = path.join(dir, "project")
+      const opencodeDir = path.join(projectDir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          instructions: ["duplicate.md", "global-only.md"],
+        }),
+      )
+
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          instructions: ["duplicate.md", "local-only.md"],
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: path.join(tmp.path, "project"),
+    fn: async () => {
+      const config = await Config.get()
+      const instructions = config.instructions ?? []
+
+      expect(instructions).toContain("global-only.md")
+      expect(instructions).toContain("local-only.md")
+      expect(instructions).toContain("duplicate.md")
+
+      const duplicates = instructions.filter((i) => i === "duplicate.md")
+      expect(duplicates.length).toBe(1)
+      expect(instructions.length).toBe(3)
+    },
+  })
+})
+
 test("deduplicates duplicate plugins from global and local configs", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
@@ -786,4 +868,280 @@ test("merges legacy tools with existing permission config", async () => {
       })
     },
   })
+})
+
+test("permission config preserves key order", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission: {
+            "*": "deny",
+            edit: "ask",
+            write: "ask",
+            external_directory: "ask",
+            read: "allow",
+            todowrite: "allow",
+            todoread: "allow",
+            "thoughts_*": "allow",
+            "reasoning_model_*": "allow",
+            "tools_*": "allow",
+            "pr_comments_*": "allow",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(Object.keys(config.permission!)).toEqual([
+        "*",
+        "edit",
+        "write",
+        "external_directory",
+        "read",
+        "todowrite",
+        "todoread",
+        "thoughts_*",
+        "reasoning_model_*",
+        "tools_*",
+        "pr_comments_*",
+      ])
+    },
+  })
+})
+
+// MCP config merging tests
+
+test("project config can override MCP server enabled status", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Simulates a base config (like from remote .well-known) with disabled MCP
+      await Bun.write(
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            jira: {
+              type: "remote",
+              url: "https://jira.example.com/mcp",
+              enabled: false,
+            },
+            wiki: {
+              type: "remote",
+              url: "https://wiki.example.com/mcp",
+              enabled: false,
+            },
+          },
+        }),
+      )
+      // Project config enables just jira
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            jira: {
+              type: "remote",
+              url: "https://jira.example.com/mcp",
+              enabled: true,
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // jira should be enabled (overridden by project config)
+      expect(config.mcp?.jira).toEqual({
+        type: "remote",
+        url: "https://jira.example.com/mcp",
+        enabled: true,
+      })
+      // wiki should still be disabled (not overridden)
+      expect(config.mcp?.wiki).toEqual({
+        type: "remote",
+        url: "https://wiki.example.com/mcp",
+        enabled: false,
+      })
+    },
+  })
+})
+
+test("MCP config deep merges preserving base config properties", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Base config with full MCP definition
+      await Bun.write(
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "remote",
+              url: "https://myserver.example.com/mcp",
+              enabled: false,
+              headers: {
+                "X-Custom-Header": "value",
+              },
+            },
+          },
+        }),
+      )
+      // Override just enables it, should preserve other properties
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            myserver: {
+              type: "remote",
+              url: "https://myserver.example.com/mcp",
+              enabled: true,
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.myserver).toEqual({
+        type: "remote",
+        url: "https://myserver.example.com/mcp",
+        enabled: true,
+        headers: {
+          "X-Custom-Header": "value",
+        },
+      })
+    },
+  })
+})
+
+test("local .opencode config can override MCP from project config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Project config with disabled MCP
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            docs: {
+              type: "remote",
+              url: "https://docs.example.com/mcp",
+              enabled: false,
+            },
+          },
+        }),
+      )
+      // Local .opencode directory config enables it
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      await Bun.write(
+        path.join(opencodeDir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            docs: {
+              type: "remote",
+              url: "https://docs.example.com/mcp",
+              enabled: true,
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.mcp?.docs?.enabled).toBe(true)
+    },
+  })
+})
+
+test("project config overrides remote well-known config", async () => {
+  const originalFetch = globalThis.fetch
+  let fetchedUrl: string | undefined
+  const mockFetch = mock((url: string | URL | Request) => {
+    const urlStr = url.toString()
+    if (urlStr.includes(".well-known/opencode")) {
+      fetchedUrl = urlStr
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            config: {
+              mcp: {
+                jira: {
+                  type: "remote",
+                  url: "https://jira.example.com/mcp",
+                  enabled: false,
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    }
+    return originalFetch(url)
+  })
+  globalThis.fetch = mockFetch as unknown as typeof fetch
+
+  const originalAuthAll = Auth.all
+  Auth.all = mock(() =>
+    Promise.resolve({
+      "https://example.com": {
+        type: "wellknown" as const,
+        key: "TEST_TOKEN",
+        token: "test-token",
+      },
+    }),
+  )
+
+  try {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        // Project config enables jira (overriding remote default)
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            mcp: {
+              jira: {
+                type: "remote",
+                url: "https://jira.example.com/mcp",
+                enabled: true,
+              },
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        // Verify fetch was called for wellknown config
+        expect(fetchedUrl).toBe("https://example.com/.well-known/opencode")
+        // Project config (enabled: true) should override remote (enabled: false)
+        expect(config.mcp?.jira?.enabled).toBe(true)
+      },
+    })
+  } finally {
+    globalThis.fetch = originalFetch
+    Auth.all = originalAuthAll
+  }
 })

@@ -170,11 +170,11 @@ export default function Layout(props: ParentProps) {
       if (e.details?.type !== "permission.asked") return
       const directory = e.name
       const perm = e.details.properties
-      if (permission.autoResponds(perm)) return
+      if (permission.autoResponds(perm, directory)) return
 
-      const sessionKey = `${directory}:${perm.sessionID}`
       const [store] = globalSync.child(directory)
       const session = store.session.find((s) => s.id === perm.sessionID)
+      const sessionKey = `${directory}:${perm.sessionID}`
 
       const sessionTitle = session?.title ?? "New session"
       const projectName = getFilename(directory)
@@ -266,24 +266,30 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  function projectSessions(directory: string) {
-    if (!directory) return []
-    const sessions = globalSync.child(directory)[0].session.toSorted(sortSessions)
-    return (sessions ?? []).filter((s) => !s.parentID)
+  const currentProject = createMemo(() => {
+    const directory = params.dir ? base64Decode(params.dir) : undefined
+    if (!directory) return
+    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+  })
+
+  function projectSessions(project: LocalProject | undefined) {
+    if (!project) return []
+    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+    const stores = dirs.map((dir) => globalSync.child(dir)[0])
+    const sessions = stores
+      .flatMap((store) => store.session.filter((session) => session.directory === store.path.directory))
+      .toSorted(sortSessions)
+    return sessions.filter((s) => !s.parentID)
   }
 
-  const currentSessions = createMemo(() => {
-    if (!params.dir) return []
-    const directory = base64Decode(params.dir)
-    return projectSessions(directory)
-  })
+  const currentSessions = createMemo(() => projectSessions(currentProject()))
 
   function navigateSessionByOffset(offset: number) {
     const projects = layout.projects.list()
     if (projects.length === 0) return
 
-    const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
-    const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
+    const project = currentProject()
+    const projectIndex = project ? projects.findIndex((p) => p.worktree === project.worktree) : -1
 
     if (projectIndex === -1) {
       const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
@@ -312,14 +318,14 @@ export default function Layout(props: ParentProps) {
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
-    const nextProjectSessions = projectSessions(nextProject.worktree)
+    const nextProjectSessions = projectSessions(nextProject)
     if (nextProjectSessions.length === 0) {
       navigateToProject(nextProject.worktree)
       return
     }
 
     const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
-    navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+    navigateToSession(targetSession)
     queueMicrotask(() => scrollToSession(targetSession.id))
   }
 
@@ -465,7 +471,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
-    navigate(`/${params.dir}/session/${session?.id}`)
+    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
     layout.mobileSidebar.hide()
   }
 
@@ -514,7 +520,8 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    untrack(() => layout.projects.expand(directory))
+    const project = currentProject()
+    untrack(() => layout.projects.expand(project?.worktree ?? directory))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
@@ -644,13 +651,13 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const [sessionStore] = globalSync.child(props.session.directory)
     const hasPermissions = createMemo(() => {
-      const store = globalSync.child(props.project.worktree)[0]
-      const permissions = store.permission?.[props.session.id] ?? []
+      const permissions = sessionStore.permission?.[props.session.id] ?? []
       if (permissions.length > 0) return true
-      const childSessions = store.session.filter((s) => s.parentID === props.session.id)
+      const childSessions = sessionStore.session.filter((s) => s.parentID === props.session.id)
       for (const child of childSessions) {
-        const childPermissions = store.permission?.[child.id] ?? []
+        const childPermissions = sessionStore.permission?.[child.id] ?? []
         if (childPermissions.length > 0) return true
       }
       return false
@@ -658,21 +665,20 @@ export default function Layout(props: ParentProps) {
     const isWorking = createMemo(() => {
       if (props.session.id === params.id) return false
       if (hasPermissions()) return false
-      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
     return (
       <>
         <div
           data-session-id={props.session.id}
-          class="group/session relative w-full pr-2 py-1 rounded-md cursor-default transition-colors
+          class="group/session relative w-full rounded-md cursor-default transition-colors
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
-          style={{ "padding-left": "16px" }}
         >
           <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
             <A
               href={`${props.slug}/session/${props.session.id}`}
-              class="flex flex-col min-w-0 text-left w-full focus:outline-none"
+              class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
                 <span
@@ -740,10 +746,17 @@ export default function Layout(props: ParentProps) {
   const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const showExpanded = createMemo(() => props.mobile || layout.sidebar.opened())
-    const slug = createMemo(() => base64Encode(props.project.worktree))
+    const defaultWorktree = createMemo(() => base64Encode(props.project.worktree))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const [store, setProjectStore] = globalSync.child(props.project.worktree)
-    const sessions = createMemo(() => store.session.toSorted(sortSessions))
+    const stores = createMemo(() =>
+      [props.project.worktree, ...(props.project.sandboxes ?? [])].map((dir) => globalSync.child(dir)[0]),
+    )
+    const sessions = createMemo(() =>
+      stores()
+        .flatMap((store) => store.session.filter((session) => session.directory === store.path.directory))
+        .toSorted(sortSessions),
+    )
     const rootSessions = createMemo(() => sessions().filter((s) => !s.parentID))
     const hasMoreSessions = createMemo(() => store.session.length >= store.limit)
     const loadMoreSessions = async () => {
@@ -753,6 +766,10 @@ export default function Layout(props: ParentProps) {
     const isExpanded = createMemo(() =>
       props.mobile ? mobileProjects.expanded(props.project.worktree) : props.project.expanded,
     )
+    const isActive = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return props.project.worktree === current || props.project.sandboxes?.includes(current)
+    })
     const handleOpenChange = (open: boolean) => {
       if (props.mobile) {
         if (open) mobileProjects.expand(props.project.worktree)
@@ -771,7 +788,10 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg"
+                classList={{
+                  "group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg": true,
+                  "bg-surface-raised-base-hover": isActive() && !isExpanded(),
+                }}
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <ProjectAvatar
@@ -799,7 +819,7 @@ export default function Layout(props: ParentProps) {
                     </DropdownMenu.Portal>
                   </DropdownMenu>
                   <TooltipKeybind placement="top" title="New session" keybind={command.keybind("session.new")}>
-                    <IconButton as={A} href={`${slug()}/session`} icon="plus-small" variant="ghost" />
+                    <IconButton as={A} href={`${defaultWorktree()}/session`} icon="plus-small" variant="ghost" />
                   </TooltipKeybind>
                 </div>
               </Button>
@@ -807,7 +827,12 @@ export default function Layout(props: ParentProps) {
                 <nav class="hidden @[4rem]:flex w-full flex-col gap-1.5">
                   <For each={rootSessions()}>
                     {(session) => (
-                      <SessionItem session={session} slug={slug()} project={props.project} mobile={props.mobile} />
+                      <SessionItem
+                        session={session}
+                        slug={base64Encode(session.directory)}
+                        project={props.project}
+                        mobile={props.mobile}
+                      />
                     )}
                   </For>
                   <Show when={rootSessions().length === 0}>
@@ -819,7 +844,7 @@ export default function Layout(props: ParentProps) {
                         <div class="flex-1 min-w-0">
                           <Tooltip placement={props.mobile ? "bottom" : "right"} value="New session">
                             <A
-                              href={`${slug()}/session`}
+                              href={`${defaultWorktree()}/session`}
                               class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
@@ -875,76 +900,85 @@ export default function Layout(props: ParentProps) {
   const SidebarContent = (sidebarProps: { mobile?: boolean }) => {
     const expanded = () => sidebarProps.mobile || layout.sidebar.opened()
     return (
-      <>
-        <div class="flex flex-col items-start self-stretch gap-4 p-2 min-h-0 overflow-hidden">
+      <div class="flex flex-col self-stretch h-full items-center justify-between overflow-hidden min-h-0">
+        <div class="flex flex-col items-start self-stretch gap-4 min-h-0">
           <Show when={!sidebarProps.mobile}>
-            <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2" data-tauri-drag-region>
-              <Mark class="shrink-0" />
-            </A>
-          </Show>
-          <Show when={!sidebarProps.mobile}>
-            <TooltipKeybind
-              class="shrink-0"
-              placement="right"
-              title="Toggle sidebar"
-              keybind={command.keybind("sidebar.toggle")}
-              inactive={expanded()}
-            >
-              <Button
-                variant="ghost"
-                size="large"
-                class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
-                onClick={layout.sidebar.toggle}
-              >
-                <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left" : "layout-right"}
-                    size="small"
-                    class="group-hover/sidebar-toggle:hidden"
-                  />
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left-partial" : "layout-right-partial"}
-                    size="small"
-                    class="hidden group-hover/sidebar-toggle:inline-block"
-                  />
-                  <Icon
-                    name={layout.sidebar.opened() ? "layout-left-full" : "layout-right-full"}
-                    size="small"
-                    class="hidden group-active/sidebar-toggle:inline-block"
-                  />
-                </div>
-                <Show when={layout.sidebar.opened()}>
-                  <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
-                    Toggle sidebar
-                  </div>
-                </Show>
-              </Button>
-            </TooltipKeybind>
-          </Show>
-          <DragDropProvider
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragOver={handleDragOver}
-            collisionDetector={closestCenter}
-          >
-            <DragDropSensors />
-            <ConstrainDragXAxis />
             <div
-              ref={(el) => {
-                if (!sidebarProps.mobile) scrollContainerRef = el
+              classList={{
+                "border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75 shrink-0": true,
+                "justify-start": expanded(),
               }}
-              class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
             >
-              <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
-                <For each={layout.projects.list()}>
-                  {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
-                </For>
-              </SortableProvider>
+              <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2 w-full" data-tauri-drag-region>
+                <Mark class="shrink-0" />
+              </A>
             </div>
-            <DragOverlay>
-              <ProjectDragOverlay />
-            </DragOverlay>
-          </DragDropProvider>
+          </Show>
+          <div class="flex flex-col items-start self-stretch gap-4 px-2 overflow-hidden min-h-0">
+            <Show when={!sidebarProps.mobile}>
+              <TooltipKeybind
+                class="shrink-0"
+                placement="right"
+                title="Toggle sidebar"
+                keybind={command.keybind("sidebar.toggle")}
+                inactive={expanded()}
+              >
+                <Button
+                  variant="ghost"
+                  size="large"
+                  class="group/sidebar-toggle shrink-0 w-full text-left justify-start rounded-lg px-2"
+                  onClick={layout.sidebar.toggle}
+                >
+                  <div class="relative -ml-px flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left" : "layout-right"}
+                      size="small"
+                      class="group-hover/sidebar-toggle:hidden"
+                    />
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left-partial" : "layout-right-partial"}
+                      size="small"
+                      class="hidden group-hover/sidebar-toggle:inline-block"
+                    />
+                    <Icon
+                      name={layout.sidebar.opened() ? "layout-left-full" : "layout-right-full"}
+                      size="small"
+                      class="hidden group-active/sidebar-toggle:inline-block"
+                    />
+                  </div>
+                  <Show when={layout.sidebar.opened()}>
+                    <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
+                      Toggle sidebar
+                    </div>
+                  </Show>
+                </Button>
+              </TooltipKeybind>
+            </Show>
+            <DragDropProvider
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragXAxis />
+              <div
+                ref={(el) => {
+                  if (!sidebarProps.mobile) scrollContainerRef = el
+                }}
+                class="w-full min-w-8 flex flex-col gap-2 min-h-0 overflow-y-auto no-scrollbar"
+              >
+                <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
+                  <For each={layout.projects.list()}>
+                    {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
+                  </For>
+                </SortableProvider>
+              </div>
+              <DragOverlay>
+                <ProjectDragOverlay />
+              </DragOverlay>
+            </DragDropProvider>
+          </div>
         </div>
         <div class="flex flex-col gap-1.5 self-stretch items-start shrink-0 px-2 py-3">
           <Switch>
@@ -1017,7 +1051,7 @@ export default function Layout(props: ParentProps) {
             </Button>
           </Tooltip>
         </div>
-      </>
+      </div>
     )
   }
 
@@ -1065,12 +1099,21 @@ export default function Layout(props: ParentProps) {
           />
           <div
             classList={{
-              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pt-12 pb-5 transition-transform duration-200 ease-out": true,
+              "@container fixed inset-y-0 left-0 z-50 w-72 bg-background-base border-r border-border-weak-base flex flex-col gap-5.5 items-start self-stretch justify-between pb-5 transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            <div class="border-b border-border-weak-base w-full h-12 ml-px flex items-center pl-1.75 shrink-0">
+              <A
+                href="/"
+                class="shrink-0 h-8 flex items-center justify-start px-2 w-full"
+                onClick={() => layout.mobileSidebar.hide()}
+              >
+                <Mark class="shrink-0" />
+              </A>
+            </div>
             <SidebarContent mobile />
           </div>
         </div>

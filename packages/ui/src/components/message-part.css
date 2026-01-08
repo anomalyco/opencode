@@ -77,6 +77,7 @@
 
   [data-slot="user-message-text"] {
     white-space: pre-wrap;
+    word-break: break-all;
     overflow: hidden;
     background: var(--surface-base);
     padding: 8px 12px;

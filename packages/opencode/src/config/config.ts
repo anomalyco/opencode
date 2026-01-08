@@ -18,49 +18,70 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
+import { existsSync } from "fs"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
 
-  // Custom merge function that concatenates plugin arrays instead of replacing them
-  function mergeConfigWithPlugins(target: Info, source: Info): Info {
+  // Custom merge function that concatenates array fields instead of replacing them
+  function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
-    // If both configs have plugin arrays, concatenate them instead of replacing
     if (target.plugin && source.plugin) {
-      const pluginSet = new Set([...target.plugin, ...source.plugin])
-      merged.plugin = Array.from(pluginSet)
+      merged.plugin = Array.from(new Set([...target.plugin, ...source.plugin]))
+    }
+    if (target.instructions && source.instructions) {
+      merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
     }
     return merged
   }
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
-    let result = await global()
 
-    // Override with custom config if provided
-    if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigWithPlugins(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
-    }
-
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeConfigWithPlugins(result, await loadFile(resolved))
-      }
-    }
-
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigWithPlugins(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-    }
-
+    // Load remote/well-known config first as the base layer (lowest precedence)
+    // This allows organizations to provide default configs that users can override
+    let result: Info = {}
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeConfigWithPlugins(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
+        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
+        const response = await fetch(`${key}/.well-known/opencode`)
+        if (!response.ok) {
+          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+        }
+        const wellknown = (await response.json()) as any
+        const remoteConfig = wellknown.config ?? {}
+        // Add $schema to prevent load() from trying to write back to a non-existent file
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+        result = mergeConfigConcatArrays(
+          result,
+          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
+        )
+        log.debug("loaded remote config from well-known", { url: key })
       }
+    }
+
+    // Global user config overrides remote config
+    result = mergeConfigConcatArrays(result, await global())
+
+    // Custom config path overrides global
+    if (Flag.OPENCODE_CONFIG) {
+      result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    // Project config has highest precedence (overrides global and remote)
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        result = mergeConfigConcatArrays(result, await loadFile(resolved))
+      }
+    }
+
+    // Inline config content has highest precedence
+    if (Flag.OPENCODE_CONFIG_CONTENT) {
+      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
     result.agent = result.agent || {}
@@ -94,7 +115,7 @@ export namespace Config {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigWithPlugins(result, await loadFile(path.join(dir, file)))
+          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
           result.agent ??= {}
           result.mode ??= {}
@@ -102,7 +123,10 @@ export namespace Config {
         }
       }
 
-      installDependencies(dir)
+      const exists = existsSync(path.join(dir, "node_modules"))
+      const installing = installDependencies(dir)
+      if (!exists) await installing
+
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
@@ -160,9 +184,7 @@ export namespace Config {
     }
   })
 
-  async function installDependencies(dir: string) {
-    if (Installation.isLocal()) return
-
+  export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
 
     if (!(await Bun.file(pkg).exists())) {
@@ -392,27 +414,53 @@ export namespace Config {
   })
   export type PermissionRule = z.infer<typeof PermissionRule>
 
+  // Capture original key order before zod reorders, then rebuild in original order
+  const permissionPreprocess = (val: unknown) => {
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      return { __originalKeys: Object.keys(val), ...val }
+    }
+    return val
+  }
+
+  const permissionTransform = (x: unknown): Record<string, PermissionRule> => {
+    if (typeof x === "string") return { "*": x as PermissionAction }
+    const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
+    const { __originalKeys, ...rest } = obj
+    if (!__originalKeys) return rest as Record<string, PermissionRule>
+    const result: Record<string, PermissionRule> = {}
+    for (const key of __originalKeys) {
+      if (key in rest) result[key] = rest[key] as PermissionRule
+    }
+    return result
+  }
+
   export const Permission = z
-    .object({
-      read: PermissionRule.optional(),
-      edit: PermissionRule.optional(),
-      glob: PermissionRule.optional(),
-      grep: PermissionRule.optional(),
-      list: PermissionRule.optional(),
-      bash: PermissionRule.optional(),
-      task: PermissionRule.optional(),
-      external_directory: PermissionRule.optional(),
-      todowrite: PermissionAction.optional(),
-      todoread: PermissionAction.optional(),
-      webfetch: PermissionAction.optional(),
-      websearch: PermissionAction.optional(),
-      codesearch: PermissionAction.optional(),
-      lsp: PermissionRule.optional(),
-      doom_loop: PermissionAction.optional(),
-    })
-    .catchall(PermissionRule)
-    .or(PermissionAction)
-    .transform((x) => (typeof x === "string" ? { "*": x } : x))
+    .preprocess(
+      permissionPreprocess,
+      z
+        .object({
+          __originalKeys: z.string().array().optional(),
+          read: PermissionRule.optional(),
+          edit: PermissionRule.optional(),
+          glob: PermissionRule.optional(),
+          grep: PermissionRule.optional(),
+          list: PermissionRule.optional(),
+          bash: PermissionRule.optional(),
+          task: PermissionRule.optional(),
+          external_directory: PermissionRule.optional(),
+          todowrite: PermissionAction.optional(),
+          todoread: PermissionAction.optional(),
+          question: PermissionAction.optional(),
+          webfetch: PermissionAction.optional(),
+          websearch: PermissionAction.optional(),
+          codesearch: PermissionAction.optional(),
+          lsp: PermissionRule.optional(),
+          doom_loop: PermissionAction.optional(),
+        })
+        .catchall(PermissionRule)
+        .or(PermissionAction),
+    )
+    .transform(permissionTransform)
     .meta({
       ref: "PermissionConfig",
     })
@@ -437,6 +485,10 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
+      hidden: z
+        .boolean()
+        .optional()
+        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
       options: z.record(z.string(), z.any()).optional(),
       color: z
         .string()
@@ -455,12 +507,14 @@ export namespace Config {
     .catchall(z.any())
     .transform((agent, ctx) => {
       const knownKeys = new Set([
+        "name",
         "model",
         "prompt",
         "description",
         "temperature",
         "top_p",
         "mode",
+        "hidden",
         "color",
         "steps",
         "maxSteps",
@@ -477,7 +531,7 @@ export namespace Config {
       }
 
       // Convert legacy tools config to permissions
-      const permission: Permission = { ...agent.permission }
+      const permission: Permission = {}
       for (const [tool, enabled] of Object.entries(agent.tools ?? {})) {
         const action = enabled ? "allow" : "deny"
         // write, edit, patch, multiedit all map to edit permission
@@ -487,6 +541,7 @@ export namespace Config {
           permission[tool] = action
         }
       }
+      Object.assign(permission, agent.permission)
 
       // Convert legacy maxSteps to steps
       const steps = agent.steps ?? agent.maxSteps
@@ -816,7 +871,20 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
-      mcp: z.record(z.string(), Mcp).optional().describe("MCP (Model Context Protocol) server configurations"),
+      mcp: z
+        .record(
+          z.string(),
+          z.union([
+            Mcp,
+            z
+              .object({
+                enabled: z.boolean(),
+              })
+              .strict(),
+          ]),
+        )
+        .optional()
+        .describe("MCP (Model Context Protocol) server configurations"),
       formatter: z
         .union([
           z.literal(false),
