@@ -1,3 +1,11 @@
+/**
+ * Markdown table formatting
+ * Based on opencode-md-table-formatter by franlol
+ * https://github.com/franlol/opencode-md-table-formatter
+ *
+ * MIT License - Copyright (c) 2025 franlol
+ */
+
 export namespace TextFormat {
   // Width cache for performance optimization
   const widthCache = new Map<string, number>()
