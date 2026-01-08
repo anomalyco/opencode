@@ -1840,6 +1840,12 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
 function Question(props: ToolProps<typeof QuestionTool>) {
   const { theme } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
+
+  function format(answer?: string[]) {
+    if (!answer?.length) return "(no answer)"
+    return answer.join(", ")
+  }
+
   return (
     <Switch>
       <Match when={props.metadata.answers}>
@@ -1849,7 +1855,7 @@ function Question(props: ToolProps<typeof QuestionTool>) {
               {(q, i) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{props.metadata.answers?.[i()] || "(no answer)"}</text>
+                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
                 </box>
               )}
             </For>
