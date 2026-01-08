@@ -965,14 +965,11 @@ export namespace ACP {
       const session = this.sessionManager.get(params.sessionId)
       // Cleanup event subscription for this session
       this.cleanupSession(params.sessionId)
-      if (!session) {
-        log.warn("cancel called for unknown session", { sessionId: params.sessionId })
-        return
-      }
+      // Always call SDK abort - directory is optional, session.cwd provides optimization hint
       await this.config.sdk.session.abort(
         {
           sessionID: params.sessionId,
-          directory: session.cwd,
+          directory: session?.cwd,
         },
         { throwOnError: true },
       )
