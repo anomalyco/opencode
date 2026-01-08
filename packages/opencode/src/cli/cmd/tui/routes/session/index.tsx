@@ -81,6 +81,8 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 import { useTuiConfig } from "../../context/tui-config"
+import { FilePathLink } from "../../ui/link"
+import { TextWithLinks } from "../../ui/text-with-links"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1455,6 +1457,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
+
   return (
     <Show when={props.part.text.trim()}>
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
@@ -1728,7 +1731,7 @@ function InlineTool(props: {
 }
 
 function BlockTool(props: {
-  title: string
+  title: string | JSX.Element
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
@@ -1738,6 +1741,24 @@ function BlockTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+
+  // Wrap title in a fragment instead of text if it's already an element (like FilePathLink)
+  // to avoid nested text rendering issues which might break links
+  const titleContent = createMemo(() => {
+    if (typeof props.title === "string") {
+      return (
+        <text paddingLeft={3} fg={theme.textMuted}>
+          {props.title}
+        </text>
+      )
+    }
+    return (
+      <text paddingLeft={3} fg={theme.textMuted}>
+        {props.title}
+      </text>
+    )
+  })
+
   return (
     <box
       border={["left"]}
@@ -1756,15 +1777,10 @@ function BlockTool(props: {
         props.onClick?.()
       }}
     >
-      <Show
-        when={props.spinner}
-        fallback={
-          <text paddingLeft={3} fg={theme.textMuted}>
-            {props.title}
-          </text>
-        }
-      >
-        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+      <Show when={props.spinner} fallback={titleContent()}>
+        <Spinner color={theme.textMuted}>
+          {typeof props.title === "string" ? props.title.replace(/^# /, "") : ""}
+        </Spinner>
       </Show>
       {props.children}
       <Show when={error()}>
@@ -1824,7 +1840,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
             <Show when={output()}>
-              <text fg={theme.text}>{limited()}</text>
+              <TextWithLinks text={limited()} fg={theme.text} />
             </Show>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
@@ -1851,7 +1867,14 @@ function Write(props: ToolProps<typeof WriteTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool
+          title={
+            <>
+              # Wrote <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>
+            </>
+          }
+          part={props.part}
+        >
           <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
             <code
               conceal={false}
@@ -1866,7 +1889,7 @@ function Write(props: ToolProps<typeof WriteTool>) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing write..." complete={props.input.filePath} part={props.part}>
-          Write {normalizePath(props.input.filePath!)}
+          Write <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>
         </InlineTool>
       </Match>
     </Switch>
@@ -1876,7 +1899,10 @@ function Write(props: ToolProps<typeof WriteTool>) {
 function Glob(props: ToolProps<typeof GlobTool>) {
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
-      Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      Glob "{props.input.pattern}"{" "}
+      <Show when={props.input.path}>
+        in <FilePathLink path={props.input.path!}>{normalizePath(props.input.path)}</FilePathLink>{" "}
+      </Show>
       <Show when={props.metadata.count}>
         ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
       </Show>
@@ -1903,13 +1929,14 @@ function Read(props: ToolProps<typeof ReadTool>) {
         spinner={isRunning()}
         part={props.part}
       >
-        Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+        Read <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>{" "}
+        {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3}>
             <text paddingLeft={3} fg={theme.textMuted}>
-              ↳ Loaded {normalizePath(filepath)}
+              ↳ Loaded <FilePathLink path={filepath}>{normalizePath(filepath)}</FilePathLink>
             </text>
           </box>
         )}
@@ -1921,7 +1948,10 @@ function Read(props: ToolProps<typeof ReadTool>) {
 function Grep(props: ToolProps<typeof GrepTool>) {
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
-      Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
+      Grep "{props.input.pattern}"{" "}
+      <Show when={props.input.path}>
+        in <FilePathLink path={props.input.path!}>{normalizePath(props.input.path)}</FilePathLink>{" "}
+      </Show>
       <Show when={props.metadata.matches}>
         ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
       </Show>
@@ -1930,23 +1960,21 @@ function Grep(props: ToolProps<typeof GrepTool>) {
 }
 
 function List(props: ToolProps<typeof ListTool>) {
-  const dir = createMemo(() => {
-    if (props.input.path) {
-      return normalizePath(props.input.path)
-    }
-    return ""
-  })
   return (
     <InlineTool icon="→" pending="Listing directory..." complete={props.input.path !== undefined} part={props.part}>
-      List {dir()}
+      List{" "}
+      <Show when={props.input.path}>
+        <FilePathLink path={props.input.path!}>{normalizePath(props.input.path)}</FilePathLink>
+      </Show>
     </InlineTool>
   )
 }
 
 function WebFetch(props: ToolProps<typeof WebFetchTool>) {
+  const url = () => (props.input as any).url
   return (
-    <InlineTool icon="%" pending="Fetching from the web..." complete={(props.input as any).url} part={props.part}>
-      WebFetch {(props.input as any).url}
+    <InlineTool icon="%" pending="Fetching from the web..." complete={url()} part={props.part}>
+      WebFetch <a href={url()}>{url()}</a>
     </InlineTool>
   )
 }
@@ -2057,7 +2085,15 @@ function Edit(props: ToolProps<typeof EditTool>) {
   return (
     <Switch>
       <Match when={props.metadata.diff !== undefined}>
-        <BlockTool title={"← Edit " + normalizePath(props.input.filePath!)} part={props.part}>
+        <BlockTool
+          title={
+            <>
+              {"← Edit "}
+              <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>
+            </>
+          }
+          part={props.part}
+        >
           <box paddingLeft={1}>
             <diff
               diff={diffContent()}
@@ -2084,7 +2120,8 @@ function Edit(props: ToolProps<typeof EditTool>) {
       </Match>
       <Match when={true}>
         <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
-          Edit {normalizePath(props.input.filePath!)} {input({ replaceAll: props.input.replaceAll })}
+          Edit <FilePathLink path={props.input.filePath!}>{normalizePath(props.input.filePath!)}</FilePathLink>{" "}
+          {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
       </Match>
     </Switch>
