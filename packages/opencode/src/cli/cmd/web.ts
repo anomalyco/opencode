@@ -6,6 +6,8 @@ import { Flag } from "../../flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { Hono } from "hono"
+import { proxy } from "hono/proxy"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -32,28 +34,60 @@ function getNetworkIPs() {
 export const WebCommand = cmd({
   command: "web",
   builder: (yargs) => {
-    return withNetworkOptions(yargs).option("prompt", {
-      describe: "prompt to use",
-      type: "string",
-    })
+    return withNetworkOptions(yargs)
+      .option("prompt", {
+        describe: "prompt to use",
+        type: "string",
+      })
+      .option("attach", {
+        describe: "attach to an existing OpenCode server",
+        type: "string",
+      })
   },
   describe: "start opencode server and open web interface",
   handler: async (args) => {
-    if (!Flag.OPENCODE_SERVER_PASSWORD) {
-      UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+    let server: ReturnType<typeof Server.listen> | Awaited<ReturnType<typeof Bun.serve>> | undefined
+    let baseUrl: string
+    let opts: Awaited<ReturnType<typeof resolveNetworkOptions>> | undefined
+    let remoteUrl: string | undefined
+
+    if (args.attach) {
+      remoteUrl = args.attach
+      opts = await resolveNetworkOptions(args)
+
+      // Create a proxy server that forwards to the remote server
+      const app = new Hono()
+      app.all("*", async (c) => {
+        const url = new URL(c.req.url)
+        const targetUrl = `${remoteUrl}${url.pathname}${url.search}`
+        return proxy(targetUrl, {
+          ...c.req,
+        })
+      })
+
+      server = Bun.serve({
+        hostname: opts.hostname,
+        port: opts.port,
+        fetch: app.fetch,
+      })
+
+      baseUrl = opts.hostname === "0.0.0.0" ? `http://localhost:${server.port}` : server.url.toString()
+    } else {
+      if (!Flag.OPENCODE_SERVER_PASSWORD) {
+        UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+      }
+      opts = await resolveNetworkOptions(args)
+      server = Server.listen(opts)
+      baseUrl = opts.hostname === "0.0.0.0" ? `http://localhost:${server.port}` : server.url.toString()
     }
-    const opts = await resolveNetworkOptions(args)
-    const server = Server.listen(opts)
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
 
-    const baseUrl = opts.hostname === "0.0.0.0" ? `http://localhost:${server.port}` : server.url.toString()
-
     // If prompt is provided, create a session and send the prompt
     if (args.prompt) {
       const sdk = createOpencodeClient({
-        baseUrl,
+        baseUrl: remoteUrl ?? baseUrl,
       })
 
       if (opts.mdns) {
@@ -88,7 +122,10 @@ export const WebCommand = cmd({
       // Open the session in browser
       open(sessionUrl).catch(() => {})
     } else {
-      if (opts.hostname === "0.0.0.0") {
+      // Show server/proxy details (identical output for both)
+      if (!server) return
+
+      if (opts!.hostname === "0.0.0.0") {
         // Show localhost for local access
         const localhostUrl = `http://localhost:${server.port}`
         UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
@@ -113,12 +150,14 @@ export const WebCommand = cmd({
         open(localhostUrl.toString()).catch(() => {})
       } else {
         const displayUrl = server.url.toString()
-        UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
+        UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:     ", UI.Style.TEXT_NORMAL, displayUrl)
         open(displayUrl).catch(() => {})
       }
     }
 
     await new Promise(() => {})
-    await server.stop()
+    if (server) {
+      await server.stop()
+    }
   },
 })

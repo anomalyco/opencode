@@ -23,15 +23,28 @@ export const AcpCommand = cmd({
         describe: "prompt to use",
         type: "string",
       })
+      .option("attach", {
+        describe: "attach to existing server URL instead of starting new one",
+        type: "string",
+      })
   },
   handler: async (args) => {
     process.env.OPENCODE_CLIENT = "acp"
     await bootstrap(process.cwd(), async () => {
-      const opts = await resolveNetworkOptions(args)
-      const server = Server.listen(opts)
+      let server: ReturnType<typeof Server.listen> | undefined
+      let baseUrl: string
+
+      // If attach URL is provided, use it instead of starting a server
+      if (args.attach) {
+        baseUrl = args.attach
+      } else {
+        const opts = await resolveNetworkOptions(args)
+        server = Server.listen(opts)
+        baseUrl = `http://${server.hostname}:${server.port}`
+      }
 
       const sdk = createOpencodeClient({
-        baseUrl: `http://${server.hostname}:${server.port}`,
+        baseUrl,
       })
 
       const input = new WritableStream<Uint8Array>({
@@ -70,6 +83,11 @@ export const AcpCommand = cmd({
         process.stdin.on("end", resolve)
         process.stdin.on("error", reject)
       })
+
+      // Only stop server if we started one
+      if (server) {
+        await server.stop()
+      }
     })
   },
 })
