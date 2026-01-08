@@ -31,6 +31,13 @@ export namespace MessageV2 {
       responseHeaders: z.record(z.string(), z.string()).optional(),
       responseBody: z.string().optional(),
       metadata: z.record(z.string(), z.string()).optional(),
+      rateLimitInfo: z.object({
+        retryAfter: z.number().optional(),
+        resetTime: z.number().optional(),
+        quotaStatus: z.string().optional(),
+        quotaUtilization: z.number().optional(),
+        quotaDetails: z.record(z.string(), z.any()).optional(),
+      }).optional(),
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
@@ -601,6 +608,103 @@ export namespace MessageV2 {
     return result
   }
 
+  /**
+   * Extract rate limit information from API error responses.
+   * Supports Anthropic and Google provider-specific headers so far.
+   */
+  function extractRateLimitInfo(error: APICallError): {
+    retryAfter?: number
+    resetTime?: number
+    quotaStatus?: string
+    quotaUtilization?: number
+    quotaDetails?: Record<string, any>
+  } | undefined {
+    const headers = error.responseHeaders
+    if (!headers || error.statusCode !== 429) return undefined
+
+    const info: ReturnType<typeof extractRateLimitInfo> = {}
+
+    // Extract retry-after (common standard)
+    const retryAfter = headers["retry-after"]
+    if (retryAfter) {
+      const parsedSeconds = Number.parseFloat(retryAfter)
+      if (!Number.isNaN(parsedSeconds)) {
+        info.retryAfter = Math.ceil(parsedSeconds * 1000) // convert to ms
+      } else {
+        const parsed = Date.parse(retryAfter)
+        if (!Number.isNaN(parsed)) {
+          info.retryAfter = Math.max(0, parsed - Date.now())
+        }
+      }
+    }
+
+    // Anthropic-specific headers
+    const anthropicReset = headers["anthropic-ratelimit-unified-reset"]
+    if (anthropicReset) {
+      const resetTimestamp = Number.parseInt(anthropicReset, 10)
+      if (!Number.isNaN(resetTimestamp)) {
+        info.resetTime = resetTimestamp * 1000 // Unix timestamp in ms
+        if (!info.retryAfter) {
+          info.retryAfter = Math.max(0, info.resetTime - Date.now())
+        }
+      }
+    }
+
+    const anthropicStatus = headers["anthropic-ratelimit-unified-status"]
+    if (anthropicStatus) {
+      info.quotaStatus = anthropicStatus
+    }
+
+    const anthropicUtilization = headers["anthropic-ratelimit-unified-utilization"]
+    if (anthropicUtilization) {
+      const util = Number.parseFloat(anthropicUtilization)
+      if (!Number.isNaN(util)) {
+        info.quotaUtilization = util
+      }
+    }
+
+    // Try to extract Google rate limit details from response body
+    if (error.responseBody) {
+      try {
+        const body = JSON.parse(error.responseBody)
+
+        // Google API quota details
+        if (body.error?.details) {
+          const details: Record<string, any> = {}
+
+          for (const detail of body.error.details) {
+            // QuotaFailure details
+            if (detail["@type"]?.includes("QuotaFailure") && detail.violations) {
+              details.quotaViolations = detail.violations.map((v: any) => ({
+                metric: v.quotaMetric,
+                limit: v.quotaLimit,
+                dimensions: v.quotaDimensions,
+              }))
+            }
+
+            // RetryInfo details
+            if (detail["@type"]?.includes("RetryInfo") && detail.retryDelay) {
+              const delayStr = detail.retryDelay
+              const seconds = Number.parseFloat(delayStr.replace(/[^0-9.]/g, ""))
+              if (!Number.isNaN(seconds) && !info.retryAfter) {
+                info.retryAfter = Math.ceil(seconds * 1000)
+              }
+            }
+          }
+
+          if (Object.keys(details).length > 0) {
+            info.quotaDetails = details
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    // Return undefined if no rate limit info was extracted
+    return Object.keys(info).length > 0 ? info : undefined
+  }
+
   export function fromError(e: unknown, ctx: { providerID: string }) {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
@@ -659,7 +763,7 @@ export namespace MessageV2 {
             if (errMsg && typeof errMsg === "string") {
               return `${msg}: ${errMsg}`
             }
-          } catch {}
+          } catch { }
 
           return `${msg}: ${e.responseBody}`
         }).trim()
@@ -671,6 +775,7 @@ export namespace MessageV2 {
             isRetryable: e.isRetryable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
+            rateLimitInfo: extractRateLimitInfo(e),
           },
           { cause: e },
         ).toObject()
