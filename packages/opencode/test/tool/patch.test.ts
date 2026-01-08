@@ -3,16 +3,17 @@ import path from "path"
 import { PatchTool } from "../../src/tool/patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
-import { Permission } from "../../src/permission"
+import { PermissionNext } from "../../src/permission/next"
 import * as fs from "fs/promises"
 
 const ctx = {
   sessionID: "test",
   messageID: "",
-  toolCallID: "",
+  callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
   metadata: () => {},
+  ask: async () => {},
 }
 
 const patchTool = await PatchTool.init()
@@ -59,7 +60,8 @@ describe("tool.patch", () => {
         patchTool.execute({ patchText: maliciousPatch }, ctx)
         // TODO: this sucks
         await new Promise((resolve) => setTimeout(resolve, 1000))
-        expect(Permission.pending()[ctx.sessionID]).toBeDefined()
+        const pending = await PermissionNext.list()
+        expect(pending.find((p) => p.sessionID === ctx.sessionID)).toBeDefined()
       },
     })
   })

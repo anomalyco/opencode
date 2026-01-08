@@ -3,9 +3,8 @@ import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
-import { SplitBorder, EmptyBorder } from "@tui/component/border"
+import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
-import { useDirectory } from "../../context/directory"
 import { useKeybind } from "../../context/keybind"
 
 const Title = (props: { session: Accessor<Session> }) => {
@@ -33,7 +32,6 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
-  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -82,6 +80,9 @@ export function Header() {
                 <b>Subagent session</b>
               </text>
               <text fg={theme.text}>
+                Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
+              </text>
+              <text fg={theme.text}>
                 Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
               </text>
               <text fg={theme.text}>
@@ -96,24 +97,6 @@ export function Header() {
               <Title session={session} />
               <ContextInfo context={context} cost={cost} />
             </box>
-            <Show when={shareEnabled()}>
-              <box flexDirection="row" justifyContent="space-between" gap={1}>
-                <box flexGrow={1} flexShrink={1}>
-                  <Switch>
-                    <Match when={session().share?.url}>
-                      <text fg={theme.textMuted} wrapMode="word">
-                        {session().share!.url}
-                      </text>
-                    </Match>
-                    <Match when={true}>
-                      <text fg={theme.text} wrapMode="word">
-                        /share <span style={{ fg: theme.textMuted }}>copy link</span>
-                      </text>
-                    </Match>
-                  </Switch>
-                </box>
-              </box>
-            </Show>
           </Match>
         </Switch>
       </box>

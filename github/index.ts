@@ -281,7 +281,7 @@ async function assertOpencodeConnected() {
       connected = true
       break
     } catch (e) {}
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await Bun.sleep(300)
   } while (retry++ < 30)
 
   if (!connected) {
@@ -574,10 +574,13 @@ async function subscribeSessionEvents() {
 }
 
 async function summarize(response: string) {
-  const payload = useContext().payload as IssueCommentEvent
   try {
     return await chat(`Summarize the following in less than 40 characters:\n\n${response}`)
   } catch (e) {
+    if (isScheduleEvent()) {
+      return "Scheduled task changes"
+    }
+    const payload = useContext().payload as IssueCommentEvent
     return `Fix issue: ${payload.issue.title}`
   }
 }
