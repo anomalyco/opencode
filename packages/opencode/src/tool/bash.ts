@@ -134,9 +134,9 @@ export function parseCommand(command: string): { executable: string; args: strin
   const trimmed = command.trim()
   const shellType = detectCommandShell(trimmed)
 
-  // PowerShell commands: MUST use shell wrapper for proper argument parsing
-  // Issue #27 fix: PowerShell -Command "..." requires cmd.exe to parse correctly
-  // Without shell wrapping, arguments are split incorrectly and commands fail
+  // PowerShell commands: On Windows, use direct execution to bypass cmd.exe corruption
+  // Issue #10 fix: cmd.exe wrapper corrupts PowerShell -Command arguments
+  // Issue #13 fix: Ensure consistent behavior between Unix and Windows
   if (shellType === 'powershell' || shellType === 'pwsh') {
     const parts = trimmed.split(/\s+/)
     const executable = shellType === 'pwsh' ? 'pwsh' : 'powershell.exe'
@@ -145,7 +145,9 @@ export function parseCommand(command: string): { executable: string; args: strin
     return {
       executable,
       args,
-      shouldBypassShell: false // Use shell wrapper for proper parsing
+      // On Windows, bypass shell wrapper to avoid cmd.exe corruption
+      // On Unix, use shell wrapper (pwsh handles this correctly)
+      shouldBypassShell: process.platform === "win32"
     }
   }
 
@@ -274,11 +276,22 @@ export const BashTool = Tool.define("bash", async () => {
       // Resolve command for Windows compatibility
       // Use parseCommand to detect native Windows commands and bypass shell wrapping
       const parsed = parseCommand(params.command)
+      const shellType = detectCommandShell(params.command)
       let cmd: string[]
       let shellConfig: string | undefined
 
-      if (parsed.shouldBypassShell && process.platform === "win32") {
-        // Direct execution for PowerShell and CMD commands
+      // Issue #10 fix: PowerShell on Windows needs direct execution (bypass cmd.exe wrapper)
+      // The cmd.exe wrapper corrupts PowerShell -Command arguments, causing commands to echo instead of execute
+      if (process.platform === "win32" && (shellType === 'powershell' || shellType === 'pwsh')) {
+        log.info("Direct PowerShell execution (bypassing cmd.exe wrapper)", {
+          command: params.command,
+          executable: parsed.executable,
+          args: parsed.args
+        })
+        cmd = [parsed.executable, ...parsed.args]
+        shellConfig = undefined // Direct execution, no shell wrapper
+      } else if (parsed.shouldBypassShell && process.platform === "win32") {
+        // Direct execution for CMD commands
         log.info("Direct execution detected", {
           command: params.command,
           executable: parsed.executable,

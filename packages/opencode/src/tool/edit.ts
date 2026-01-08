@@ -36,12 +36,12 @@ export const EditTool = Tool.define("edit", {
       throw new Error("filePath is required")
     }
 
-    // FIX #7: Add newString validation guard
-    if (params.newString === undefined || params.newString === null) {
+    // FIX #7: Add newString validation guard (handles undefined, null, AND empty string)
+    if (params.newString === undefined || params.newString === null || params.newString === "") {
       throw new Error(
-        "newString parameter is required but was undefined. " +
+        "newString parameter is required but was empty or undefined. " +
         "This may indicate a serialization issue in the tool invocation layer. " +
-        "Ensure newString is properly passed as a string value."
+        "Ensure newString is properly passed as a non-empty string value."
       )
     }
 
