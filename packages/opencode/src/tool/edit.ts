@@ -29,13 +29,40 @@ export const EditTool = Tool.define("edit", {
     oldString: z.string().describe("The text to replace"),
     newString: z.string().describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
+    replaceFirst: z.boolean().optional().describe("Replace only the first occurrence when multiple matches exist (default false)"),
   }),
   async execute(params, ctx) {
     if (!params.filePath) {
       throw new Error("filePath is required")
     }
 
-    if (params.oldString === params.newString) {
+    // FIX #7: Add newString validation guard
+    if (params.newString === undefined || params.newString === null) {
+      throw new Error(
+        "newString parameter is required but was undefined. " +
+        "This may indicate a serialization issue in the tool invocation layer. " +
+        "Ensure newString is properly passed as a string value."
+      )
+    }
+
+    // Ensure newString is a string (handles edge cases)
+    const safeNewString = params.newString === null ? "" : String(params.newString)
+
+    // Normalize line endings
+    const normalizedNewString = safeNewString
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "")
+
+    // Log for debugging (can be removed after fix is verified)
+    // console.log("[EDIT-TOOL] Called with:", {
+    //   filePath: params.filePath,
+    //   oldStringLength: params.oldString?.length ?? 0,
+    //   newStringLength: normalizedNewString.length,
+    //   hasNewString: normalizedNewString.length > 0,
+    //   firstChars: normalizedNewString.substring(0, 50).replace(/\n/g, "\\n"),
+    // })
+
+    if (params.oldString === safeNewString) {
       throw new Error("oldString and newString must be different")
     }
 
@@ -58,7 +85,7 @@ export const EditTool = Tool.define("edit", {
     let contentNew = ""
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
-        contentNew = params.newString
+        contentNew = normalizedNewString
         diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
         await ctx.ask({
           permission: "edit",
@@ -69,7 +96,7 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await Bun.write(filePath, params.newString)
+        await Bun.write(filePath, normalizedNewString)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -83,7 +110,7 @@ export const EditTool = Tool.define("edit", {
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
       contentOld = await file.text()
-      contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
+      contentNew = replace(contentOld, params.oldString, normalizedNewString, params.replaceAll, params.replaceFirst)
 
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
@@ -229,7 +256,8 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
   const originalLines = content.split("\n")
   const searchLines = find.split("\n")
 
-  if (searchLines.length < 3) {
+  // FIX #26: Allow 2-line patterns with empty line (was < 3)
+  if (searchLines.length < 2) {
     return
   }
 
@@ -248,12 +276,22 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
       continue
     }
 
-    // Look for the matching last line after this first line
-    for (let j = i + 2; j < originalLines.length; j++) {
-      if (originalLines[j].trim() === lastLineSearch) {
-        candidates.push({ startLine: i, endLine: j })
+    // FIX #26: Allow variable gap for empty lines when looking for last line
+    for (let j = i + 1; j < originalLines.length; j++) {
+      // Skip consecutive empty lines when looking for last anchor
+      let skipCount = 0
+      while (j + skipCount < originalLines.length && 
+             originalLines[j + skipCount].trim() === "" && 
+             skipCount < 2) {
+        skipCount++
+      }
+      const actualJ = j + skipCount
+      if (actualJ >= originalLines.length) break
+      if (originalLines[actualJ].trim() === lastLineSearch) {
+        candidates.push({ startLine: i, endLine: actualJ })
         break // Only match the first occurrence of the last line
       }
+      j = actualJ  // Continue from after empty lines
     }
   }
 
@@ -481,6 +519,78 @@ export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
   }
 }
 
+// FIX #19: Add UnicodeNormalizedReplacer for smart quotes, em-dashes, etc.
+export const UnicodeNormalizedReplacer: Replacer = function* (content, find) {
+  // Character mapping: smart characters → regular characters
+  const smartCharMap: Record<string, string> = {
+    // Smart double quotes → regular quote
+    '\u201C': '"',  // "
+    '\u201D': '"',  // "
+    '\u201E': '"',  // ,,
+    '\u201F': '"',  // ,,
+    // Smart single quotes → regular apostrophe
+    '\u2018': "'",  // '
+    '\u2019': "'",  // '
+    '\u201A': "'",  // ,,
+    '\u201B': "'",  // ,,
+    // Dashes
+    '\u2014': '-',  // Em dash
+    '\u2013': '-',  // En dash
+    '\u2212': '-',  // Minus sign
+    // Ellipsis
+    '\u2026': '...',
+    // Other
+    '\u00A0': ' ',  // Non-breaking space
+  }
+
+  const cleanString = (str: string): string => {
+    let result = str
+    for (const [smart, regular] of Object.entries(smartCharMap)) {
+      result = result.replace(new RegExp(smart, 'g'), regular)
+    }
+    return result
+  }
+
+  const normalizedContent = cleanString(content)
+  const normalizedFind = cleanString(find)
+
+  // Try exact normalized match first
+  if (normalizedContent.includes(normalizedFind)) {
+    // Find all positions where normalized strings match
+    const positions: number[] = []
+    let pos = 0
+    while (pos < content.length) {
+      const chunk = cleanString(content.substring(pos, Math.min(pos + normalizedFind.length + 10, content.length)))
+      if (chunk.startsWith(normalizedFind)) {
+        positions.push(pos)
+      }
+      pos++
+    }
+
+    for (const startPos of positions) {
+      yield content.substring(startPos, startPos + normalizedFind.length)
+    }
+    return
+  }
+
+  // Try fuzzy line-by-line matching
+  const contentLines = content.split("\n")
+  const findLines = normalizedFind.split("\n")
+
+  for (let i = 0; i <= contentLines.length - findLines.length; i++) {
+    let allMatch = true
+    for (let j = 0; j < findLines.length; j++) {
+      if (cleanString(contentLines[i + j]) !== findLines[j]) {
+        allMatch = false
+        break
+      }
+    }
+    if (allMatch) {
+      yield contentLines.slice(i, i + findLines.length).join("\n")
+    }
+  }
+}
+
 export const MultiOccurrenceReplacer: Replacer = function* (content, find) {
   // This replacer yields all exact matches, allowing the replace function
   // to handle multiple occurrences based on replaceAll parameter
@@ -615,13 +725,16 @@ export function trimDiff(diff: string): string {
   return trimmedLines.join("\n")
 }
 
-export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
+export function replace(content: string, oldString: string, newString: string, replaceAll = false, replaceFirst = false): string {
   if (oldString === newString) {
     throw new Error("oldString and newString must be different")
   }
 
   let notFound = true
+  let firstMatchIndex = -1
+  let firstMatchLength = 0
 
+  // First pass: find all matches
   for (const replacer of [
     SimpleReplacer,
     LineTrimmedReplacer,
@@ -629,20 +742,57 @@ export function replace(content: string, oldString: string, newString: string, r
     WhitespaceNormalizedReplacer,
     IndentationFlexibleReplacer,
     EscapeNormalizedReplacer,
+    UnicodeNormalizedReplacer,  // FIX #19: Added UnicodeNormalizedReplacer
     TrimmedBoundaryReplacer,
     ContextAwareReplacer,
-    MultiOccurrenceReplacer,
   ]) {
     for (const search of replacer(content, oldString)) {
       const index = content.indexOf(search)
       if (index === -1) continue
+      
       notFound = false
-      if (replaceAll) {
-        return content.replaceAll(search, newString)
+      
+      // Record first match for replaceFirst mode
+      if (replaceFirst && firstMatchIndex === -1) {
+        firstMatchIndex = index
+        firstMatchLength = search.length
       }
-      const lastIndex = content.lastIndexOf(search)
-      if (index !== lastIndex) continue
-      return content.substring(0, index) + newString + content.substring(index + search.length)
+      
+      if (!replaceAll && !replaceFirst) {
+        const lastIndex = content.lastIndexOf(search)
+        if (index !== lastIndex) continue  // Multiple matches, skip
+        return content.substring(0, index) + newString + content.substring(index + search.length)
+      }
+    }
+  }
+
+  // Handle replaceFirst mode
+  if (replaceFirst && firstMatchIndex !== -1) {
+    return content.substring(0, firstMatchIndex) + 
+           newString + 
+           content.substring(firstMatchIndex + firstMatchLength)
+  }
+
+  // Handle replaceAll mode
+  if (replaceAll) {
+    // Try MultiOccurrenceReplacer for exact matches
+    const matches: Array<{ search: string; index: number; length: number }> = []
+    for (const search of MultiOccurrenceReplacer(content, oldString)) {
+      const index = content.indexOf(search)
+      if (index !== -1) {
+        matches.push({ search, index, length: search.length })
+      }
+    }
+    
+    if (matches.length > 0) {
+      // Replace from end to avoid index shifting
+      let result = content
+      for (const match of matches.sort((a, b) => b.index - a.index)) {
+        result = result.substring(0, match.index) + 
+                 newString + 
+                 result.substring(match.index + match.length)
+      }
+      return result
     }
   }
 
@@ -650,6 +800,7 @@ export function replace(content: string, oldString: string, newString: string, r
     throw new Error("oldString not found in content")
   }
   throw new Error(
-    "Found multiple matches for oldString. Provide more surrounding lines in oldString to identify the correct match.",
+    "Found multiple matches for oldString. " +
+    "Provide more surrounding lines in oldString or use replaceFirst parameter."
   )
 }

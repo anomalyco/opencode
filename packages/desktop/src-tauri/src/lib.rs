@@ -1,7 +1,10 @@
 mod cli;
 mod window_customizer;
 
+#[cfg(not(target_os = "windows"))]
 use cli::{get_sidecar_path, install_cli, sync_cli};
+#[cfg(target_os = "windows")]
+use cli::{install_cli, sync_cli};
 use std::{
     collections::VecDeque,
     net::{SocketAddr, TcpListener},
@@ -40,7 +43,7 @@ fn kill_sidecar(app: AppHandle) {
         .expect("Failed to acquire mutex lock")
         .take()
     else {
-        println!("Server state missing");
+        println!("No server to kill (already stopped or none spawned)");
         return;
     };
 
@@ -228,8 +231,10 @@ pub fn run() {
 
                     let should_spawn_sidecar = !is_server_running(port).await;
 
+                    let mut spawned_sidecar = false;
                     let child = if should_spawn_sidecar {
                         let child = spawn_sidecar(&app, port);
+                        spawned_sidecar = true;
 
                         let timestamp = Instant::now();
                         loop {
@@ -302,6 +307,8 @@ pub fn run() {
                         let server_state = app.state::<ServerState>();
                         let mut state = server_state.0.lock().unwrap();
                         *state = Some(child);
+                    } else if !spawned_sidecar {
+                        // No-op: no sidecar spawned and no server to manage
                     }
                 });
             }
