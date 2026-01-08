@@ -42,4 +42,5 @@ export {
   oneDarkProTheme,
   shadesOfPurpleTheme,
   nightowlTheme,
+  vesperTheme,
 } from "./default-themes"
