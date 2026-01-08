@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, type JSX } from "solid-js"
+import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
 
@@ -24,11 +24,19 @@ export interface BasicToolProps {
   children?: JSX.Element
   hideDetails?: boolean
   defaultOpen?: boolean
+  forceOpen?: boolean
+  onSubtitleClick?: () => void
 }
 
 export function BasicTool(props: BasicToolProps) {
+  const [open, setOpen] = createSignal(props.defaultOpen ?? false)
+
+  createEffect(() => {
+    if (props.forceOpen) setOpen(true)
+  })
+
   return (
-    <Collapsible defaultOpen={props.defaultOpen}>
+    <Collapsible open={open()} onOpenChange={setOpen}>
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
@@ -52,6 +60,13 @@ export function BasicTool(props: BasicToolProps) {
                             data-slot="basic-tool-tool-subtitle"
                             classList={{
                               [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
+                              clickable: !!props.onSubtitleClick,
+                            }}
+                            onClick={(e) => {
+                              if (props.onSubtitleClick) {
+                                e.stopPropagation()
+                                props.onSubtitleClick()
+                              }
                             }}
                           >
                             {trigger().subtitle}

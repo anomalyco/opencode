@@ -62,7 +62,7 @@ if (!Script.preview) {
     }
   }
 
-  const image = "ghcr.io/sst/opencode"
+  const image = "ghcr.io/anomalyco/opencode"
   const platforms = "linux/amd64,linux/arm64"
   const tags = [`${image}:${Script.version}`, `${image}:latest`]
   const tagFlags = tags.flatMap((t) => ["-t", t])

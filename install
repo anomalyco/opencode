@@ -16,16 +16,19 @@ Usage: install.sh [options]
 Options:
     -h, --help              Display this help message
     -v, --version <version> Install a specific version (e.g., 1.0.180)
+    -b, --binary <path>     Install from a local binary instead of downloading
         --no-modify-path    Don't modify shell config files (.zshrc, .bashrc, etc.)
 
 Examples:
     curl -fsSL https://opencode.ai/install | bash
     curl -fsSL https://opencode.ai/install | bash -s -- --version 1.0.180
+    ./install --binary /path/to/opencode
 EOF
 }
 
 requested_version=${VERSION:-}
 no_modify_path=false
+binary_path=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -42,6 +45,15 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             ;;
+        -b|--binary)
+            if [[ -n "${2:-}" ]]; then
+                binary_path="$2"
+                shift 2
+            else
+                echo -e "${RED}Error: --binary requires a path argument${NC}"
+                exit 1
+            fi
+            ;;
         --no-modify-path)
             no_modify_path=true
             shift
@@ -53,110 +65,129 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-raw_os=$(uname -s)
-os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
-case "$raw_os" in
-  Darwin*) os="darwin" ;;
-  Linux*) os="linux" ;;
-  MINGW*|MSYS*|CYGWIN*) os="windows" ;;
-esac
-
-arch=$(uname -m)
-if [[ "$arch" == "aarch64" ]]; then
-  arch="arm64"
-fi
-if [[ "$arch" == "x86_64" ]]; then
-  arch="x64"
-fi
-
-if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
-  rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
-  if [ "$rosetta_flag" = "1" ]; then
-    arch="arm64"
-  fi
-fi
-
-combo="$os-$arch"
-case "$combo" in
-  linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
-    ;;
-  *)
-    echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
-    exit 1
-    ;;
-esac
-
-archive_ext=".zip"
-if [ "$os" = "linux" ]; then
-  archive_ext=".tar.gz"
-fi
-
-is_musl=false
-if [ "$os" = "linux" ]; then
-  if [ -f /etc/alpine-release ]; then
-    is_musl=true
-  fi
-
-  if command -v ldd >/dev/null 2>&1; then
-    if ldd --version 2>&1 | grep -qi musl; then
-      is_musl=true
-    fi
-  fi
-fi
-
-needs_baseline=false
-if [ "$arch" = "x64" ]; then
-  if [ "$os" = "linux" ]; then
-    if ! grep -qi avx2 /proc/cpuinfo 2>/dev/null; then
-      needs_baseline=true
-    fi
-  fi
-
-  if [ "$os" = "darwin" ]; then
-    avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
-    if [ "$avx2" != "1" ]; then
-      needs_baseline=true
-    fi
-  fi
-fi
-
-target="$os-$arch"
-if [ "$needs_baseline" = "true" ]; then
-  target="$target-baseline"
-fi
-if [ "$is_musl" = "true" ]; then
-  target="$target-musl"
-fi
-
-filename="$APP-$target$archive_ext"
-
-
-if [ "$os" = "linux" ]; then
-    if ! command -v tar >/dev/null 2>&1; then
-         echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
-         exit 1
-    fi
-else
-    if ! command -v unzip >/dev/null 2>&1; then
-        echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
-        exit 1
-    fi
-fi
-
 INSTALL_DIR=$HOME/.opencode/bin
 mkdir -p "$INSTALL_DIR"
 
-if [ -z "$requested_version" ]; then
-    url="https://github.com/sst/opencode/releases/latest/download/$filename"
-    specific_version=$(curl -s https://api.github.com/repos/sst/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
-
-    if [[ $? -ne 0 || -z "$specific_version" ]]; then
-        echo -e "${RED}Failed to fetch version information${NC}"
+# If --binary is provided, skip all download/detection logic
+if [ -n "$binary_path" ]; then
+    if [ ! -f "$binary_path" ]; then
+        echo -e "${RED}Error: Binary not found at ${binary_path}${NC}"
         exit 1
     fi
+    specific_version="local"
 else
-    url="https://github.com/sst/opencode/releases/download/v${requested_version}/$filename"
-    specific_version=$requested_version
+    raw_os=$(uname -s)
+    os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
+    case "$raw_os" in
+      Darwin*) os="darwin" ;;
+      Linux*) os="linux" ;;
+      MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+    esac
+
+    arch=$(uname -m)
+    if [[ "$arch" == "aarch64" ]]; then
+      arch="arm64"
+    fi
+    if [[ "$arch" == "x86_64" ]]; then
+      arch="x64"
+    fi
+
+    if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
+      rosetta_flag=$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)
+      if [ "$rosetta_flag" = "1" ]; then
+        arch="arm64"
+      fi
+    fi
+
+    combo="$os-$arch"
+    case "$combo" in
+      linux-x64|linux-arm64|darwin-x64|darwin-arm64|windows-x64)
+        ;;
+      *)
+        echo -e "${RED}Unsupported OS/Arch: $os/$arch${NC}"
+        exit 1
+        ;;
+    esac
+
+    archive_ext=".zip"
+    if [ "$os" = "linux" ]; then
+      archive_ext=".tar.gz"
+    fi
+
+    is_musl=false
+    if [ "$os" = "linux" ]; then
+      if [ -f /etc/alpine-release ]; then
+        is_musl=true
+      fi
+
+      if command -v ldd >/dev/null 2>&1; then
+        if ldd --version 2>&1 | grep -qi musl; then
+          is_musl=true
+        fi
+      fi
+    fi
+
+    needs_baseline=false
+    if [ "$arch" = "x64" ]; then
+      if [ "$os" = "linux" ]; then
+        if ! grep -qi avx2 /proc/cpuinfo 2>/dev/null; then
+          needs_baseline=true
+        fi
+      fi
+
+      if [ "$os" = "darwin" ]; then
+        avx2=$(sysctl -n hw.optional.avx2_0 2>/dev/null || echo 0)
+        if [ "$avx2" != "1" ]; then
+          needs_baseline=true
+        fi
+      fi
+    fi
+
+    target="$os-$arch"
+    if [ "$needs_baseline" = "true" ]; then
+      target="$target-baseline"
+    fi
+    if [ "$is_musl" = "true" ]; then
+      target="$target-musl"
+    fi
+
+    filename="$APP-$target$archive_ext"
+
+
+    if [ "$os" = "linux" ]; then
+        if ! command -v tar >/dev/null 2>&1; then
+             echo -e "${RED}Error: 'tar' is required but not installed.${NC}"
+             exit 1
+        fi
+    else
+        if ! command -v unzip >/dev/null 2>&1; then
+            echo -e "${RED}Error: 'unzip' is required but not installed.${NC}"
+            exit 1
+        fi
+    fi
+
+    if [ -z "$requested_version" ]; then
+        url="https://github.com/anomalyco/opencode/releases/latest/download/$filename"
+        specific_version=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
+
+        if [[ $? -ne 0 || -z "$specific_version" ]]; then
+            echo -e "${RED}Failed to fetch version information${NC}"
+            exit 1
+        fi
+    else
+        # Strip leading 'v' if present
+        requested_version="${requested_version#v}"
+        url="https://github.com/anomalyco/opencode/releases/download/v${requested_version}/$filename"
+        specific_version=$requested_version
+
+        # Verify the release exists before downloading
+        http_status=$(curl -sI -o /dev/null -w "%{http_code}" "https://github.com/anomalyco/opencode/releases/tag/v${requested_version}")
+        if [ "$http_status" = "404" ]; then
+            echo -e "${RED}Error: Release v${requested_version} not found${NC}"
+            echo -e "${MUTED}Available releases: https://github.com/anomalyco/opencode/releases${NC}"
+            exit 1
+        fi
+    fi
 fi
 
 print_message() {
@@ -177,11 +208,8 @@ check_version() {
     if command -v opencode >/dev/null 2>&1; then
         opencode_path=$(which opencode)
 
-
-        ## TODO: check if version is installed
-        # installed_version=$(opencode version)
-        installed_version="0.0.1"
-        installed_version=$(echo $installed_version | awk '{print $2}')
+        ## Check the installed version
+        installed_version=$(opencode --version 2>/dev/null || echo "")
 
         if [[ "$installed_version" != "$specific_version" ]]; then
             print_message info "${MUTED}Installed version: ${NC}$installed_version."
@@ -257,11 +285,11 @@ download_with_progress() {
     {
         local length=0
         local bytes=0
-        
+
         while IFS=" " read -r -a line; do
             [ "${#line[@]}" -lt 2 ] && continue
             local tag="${line[0]} ${line[1]}"
-            
+
             if [ "$tag" = "0000: content-length:" ]; then
                 length="${line[2]}"
                 length=$(echo "$length" | tr -d '\r')
@@ -286,7 +314,7 @@ download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
     mkdir -p "$tmp_dir"
-    
+
     if [[ "$os" == "windows" ]] || ! [ -t 2 ] || ! download_with_progress "$url" "$tmp_dir/$filename"; then
         # Fallback to standard curl on Windows, non-TTY environments, or if custom progress fails
         curl -# -L -o "$tmp_dir/$filename" "$url"
@@ -297,14 +325,24 @@ download_and_install() {
     else
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
-    
+
     mv "$tmp_dir/opencode" "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
     rm -rf "$tmp_dir"
 }
 
-check_version
-download_and_install
+install_from_binary() {
+    print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
+    cp "$binary_path" "${INSTALL_DIR}/opencode"
+    chmod 755 "${INSTALL_DIR}/opencode"
+}
+
+if [ -n "$binary_path" ]; then
+    install_from_binary
+else
+    check_version
+    download_and_install
+fi
 
 
 add_to_path() {
@@ -406,4 +444,3 @@ echo -e ""
 echo -e "${MUTED}For more information visit ${NC}https://opencode.ai/docs"
 echo -e ""
 echo -e ""
-

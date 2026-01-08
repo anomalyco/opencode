@@ -36,12 +36,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    white-space: nowrap;
+    min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   [data-slot="basic-tool-tool-title"] {
+    flex-shrink: 0;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;
@@ -56,6 +56,11 @@
   }
 
   [data-slot="basic-tool-tool-subtitle"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;
@@ -63,9 +68,24 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     color: var(--text-weak);
+
+    &.clickable {
+      cursor: pointer;
+      text-decoration: underline;
+      transition: color 0.15s ease;
+
+      &:hover {
+        color: var(--text-base);
+      }
+    }
   }
 
   [data-slot="basic-tool-tool-arg"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-style: normal;
