@@ -149,11 +149,37 @@ With that said, you may want to try these methods, as they might work for you.
 
 ## Pull Request Expectations
 
-- Try to keep pull requests small and focused.
-- Link relevant issue(s) in the description
+### Issue First Policy
+
+**All PRs must reference an existing issue.** Before opening a PR, open an issue describing the bug or feature. This helps maintainers triage and prevents duplicate work. PRs without a linked issue may be closed without review.
+
+- Use `Fixes #123` or `Closes #123` in your PR description to link the issue
+- For small fixes, a brief issue is fine - just enough context for maintainers to understand the problem
+
+### General Requirements
+
+- Keep pull requests small and focused
 - Explain the issue and why your change fixes it
-- Avoid having verbose LLM generated PR descriptions
-- Before adding new functions or functionality, ensure that such behavior doesn't already exist elsewhere in the codebase.
+- Before adding new functionality, ensure it doesn't already exist elsewhere in the codebase
+
+### UI Changes
+
+If your PR includes UI changes, please include screenshots or videos showing the before and after. This helps maintainers review faster and gives you quicker feedback.
+
+### Logic Changes
+
+For non-UI changes (bug fixes, new features, refactors), explain **how you verified it works**:
+
+- What did you test?
+- How can a reviewer reproduce/confirm the fix?
+
+### No AI-Generated Walls of Text
+
+Long, AI-generated PR descriptions and issues are not acceptable and may be ignored. Respect the maintainers' time:
+
+- Write short, focused descriptions
+- Explain what changed and why in your own words
+- If you can't explain it briefly, your PR might be too large
 
 ### PR Titles
 
