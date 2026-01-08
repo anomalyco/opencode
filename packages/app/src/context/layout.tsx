@@ -5,7 +5,7 @@ import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
 import { useServer } from "./server"
 import { Project } from "@opencode-ai/sdk/v2"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 
@@ -46,7 +46,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const globalSync = useGlobalSync()
     const server = useServer()
     const [store, setStore, _, ready] = persisted(
-      "layout.v6",
+      Persist.global("layout", ["layout.v6"]),
       createStore({
         sidebar: {
           opened: false,
@@ -75,6 +75,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const meta = { active: undefined as string | undefined, pruned: false }
     const used = new Map<string, number>()
 
+    const SESSION_STATE_KEYS = [
+      { key: "prompt", legacy: "prompt", version: "v2" },
+      { key: "terminal", legacy: "terminal", version: "v1" },
+      { key: "file-view", legacy: "file", version: "v1" },
+    ] as const
+
+    const dropSessionState = (keys: string[]) => {
+      for (const key of keys) {
+        const parts = key.split("/")
+        const dir = parts[0]
+        const session = parts[1]
+        if (!dir) continue
+
+        for (const entry of SESSION_STATE_KEYS) {
+          const target = session ? Persist.session(dir, session, entry.key) : Persist.workspace(dir, entry.key)
+          void removePersisted(target)
+
+          const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
+          void removePersisted({ key: legacyKey })
+        }
+      }
+    }
+
     function prune(keep?: string) {
       if (!keep) return
 
@@ -102,6 +125,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       )
 
       scroll.drop(drop)
+      dropSessionState(drop)
 
       for (const key of drop) {
         used.delete(key)

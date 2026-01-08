@@ -23,6 +23,7 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
+import { Truncate } from "./truncation"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -59,15 +60,16 @@ export namespace ToolRegistry {
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
       id,
-      init: async () => ({
+      init: async (initCtx) => ({
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
+          const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
-            output: result,
-            metadata: {},
+            output: out.truncated ? out.content : result,
+            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
           }
         },
       }),
