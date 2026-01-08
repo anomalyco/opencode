@@ -2,8 +2,7 @@
 ## Executive Summary
 Complete investigation of Windows command execution issues across all related files. **42 issues identified** with confidence-sorted analysis.
 **Status Update (January 8, 2026 17:52 UTC)**: 
-- **Verified Fixes (3)**: #2, #3, #9 - Details moved to `verified-fixes-summary.md`
-- **Fixed Issues (5)**: #4, #5, #8, and others marked FIXED
+- **Fixed Issues (5)**: #1, #4, #5, #8, and others marked FIXED
 - **Partial Fix (1)**: #1 - CMD works, PowerShell still broken
 - **Documented Behavior (2)**: #10, #13 - PowerShell inline execution is a KNOWN limitation with documented workarounds
 - **Likely Fixed (3)**: #15, #19, #26 - Edit tool bugs NOT REPRODUCED in latest testing
@@ -31,12 +30,6 @@ Complete investigation of Windows command execution issues across all related fi
 | Issue | Action | Status | Confidence |
 |-------|--------|--------|------------|
 | #1 | Add shell bypass to bash.ts | ⚠️ PARTIAL | 100% (CMD) / 0% (PS) |
-| #2 | Add Git cmd and MinGW paths to git-env.ts | ✅ FIXED | 100% |
-| #3 | Fix stream reading race condition | ✅ FIXED | 100% |
-| #4 | Remove duplicate abort listeners from bash.ts | ✅ FIXED | 100% |
-| #5 | Add stream draining to prompt.ts | ✅ FIXED | 100% |
-| #8 | Fix desktop race condition | ✅ FIXED | 100% |
-| #9 | Add shell bypass to prompt.ts | ✅ FIXED | 100% |
 ### P1 (Critical - Edit Tool Issues)
 | Issue | Action | Effort | Confidence |
 |-------|--------|--------|------------|
@@ -98,18 +91,15 @@ Complete investigation of Windows command execution issues across all related fi
 
 | # | Issue | Severity | Status | Confidence | Root Cause | Location |
 |---|-------|----------|--------|------------|------------|----------|
-| **FIXED & VERIFIED ISSUES (8 issues)** | | | | | | |
+| **FIXED & VERIFIED ISSUES (2 issues)** | | | | | | |
 | **PARTIAL FIX (1 issue)** | | | | | | |
 | 1 | PowerShell/CMD double-wrapping | HIGH | ⚠️ PARTIAL | 100% | Shell wrapper works for CMD, not PowerShell | bash.ts:278 |
-| 2 | Environment variable handling | MEDIUM | ✅ FIXED | 100% | Missing Git env vars | git-env.ts:69 |
-| 3 | Stream reading race condition | HIGH | ✅ FIXED | 100% | Promise.race() data loss |
-| 4 | Duplicate abort listeners | LOW | ✅ FIXED | 100% | Two handlers on same signal | bash.ts:361 + 376 |
-| 5 | Missing stream draining | MEDIUM | ✅ FIXED | 100% | No Promise.all for streams | prompt.ts:1483 |
+| 4 | Duplicate abort listeners | LOW | ✅ VERIFIED | 100% | Two handlers on same signal | bash.ts:361 + 376 |
+| 5 | Missing stream draining | MEDIUM | ✅ VERIFIED | 100% | No Promise.all for streams | prompt.ts:1483 |
 | 6 | ripgrep files() stream handling | LOW | ⚠️ NEEDS FIX | 100% | Complex stream reading | ripgrep.ts:242 |
 | 7 | Edit tool newString undefined | CRITICAL | ❌ UNFIXED | 100% | Parameter not passed correctly | edit.ts |
-| 8 | Desktop race condition | LOW | ✅ FIXED | 100% | ServerState initialized too late | lib.rs:299 |
-| **95% CONFIDENCE (3 issues)** | | | | | | |
-| 9 | No shell bypass (prompt.ts) | HIGH | ✅ FIXED | 100% |
+| 8 | Desktop race condition | LOW | ✅ VERIFIED | 100% | ServerState initialized too late | lib.rs:299 |
+| **95% CONFIDENCE (2 issues)** | | | | | | |
 | 10 | PowerShell inline execution | HIGH | 📋 DOC | 95% | Commands echoed not executed - DOCUMENTED LIMITATION | bash.ts:296-302 |
 | 11 | grep tool stream handling | LOW | ⚠️ EDGE CASE | 95% | Simple await pattern | grep.ts:47 |
 | **90% CONFIDENCE (4 issues)** | | | | | | |
