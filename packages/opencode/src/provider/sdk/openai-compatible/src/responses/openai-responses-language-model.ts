@@ -256,7 +256,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
       input,
       temperature,
       top_p: topP,
-      max_output_tokens: maxOutputTokens,
+      ...(!this.config.omitMaxOutputTokens && maxOutputTokens != null && { max_output_tokens: maxOutputTokens }),
 
       ...((responseFormat?.type === "json" || openaiOptions?.textVerbosity) && {
         text: {

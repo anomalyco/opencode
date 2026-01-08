@@ -15,4 +15,5 @@ export type OpenAIConfig = {
    * - Azure OpenAI: ['assistant-'] for IDs like 'assistant-abc123'
    */
   fileIdPrefixes?: readonly string[]
+  omitMaxOutputTokens?: boolean
 }

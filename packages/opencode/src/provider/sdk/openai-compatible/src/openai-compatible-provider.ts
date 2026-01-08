@@ -33,6 +33,12 @@ export interface OpenaiCompatibleProviderSettings {
    * Custom fetch implementation.
    */
   fetch?: FetchFunction
+
+  /**
+   * Omit max_output_tokens parameter from requests.
+   * Some OpenAI-compatible providers don't support this parameter.
+   */
+  omitMaxOutputTokens?: boolean
 }
 
 export interface OpenaiCompatibleProvider {
@@ -80,6 +86,7 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
       headers: getHeaders,
       url: ({ path }) => `${baseURL}${path}`,
       fetch: options.fetch,
+      omitMaxOutputTokens: options.omitMaxOutputTokens,
     })
   }
 

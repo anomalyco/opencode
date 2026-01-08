@@ -62,6 +62,8 @@ export namespace Provider {
     "@ai-sdk/vercel": createVercel,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    // @ts-ignore
+    "@opencode-ai/openai-compatible": createGitHubCopilotOpenAICompatible,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -974,9 +976,17 @@ export namespace Provider {
     const sdk = await getSDK(model)
 
     try {
-      const language = s.modelLoaders[model.providerID]
-        ? await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
-        : sdk.languageModel(model.api.id)
+      let language
+      if (s.modelLoaders[model.providerID]) {
+        language = await s.modelLoaders[model.providerID](sdk, model.api.id, provider.options)
+      } else if (model.api.npm === "@opencode-ai/openai-compatible") {
+        language =
+          provider.options?.useResponsesApi === false
+            ? (sdk as any).chat(model.api.id)
+            : (sdk as any).responses(model.api.id)
+      } else {
+        language = sdk.languageModel(model.api.id)
+      }
       s.models.set(key, language)
       return language
     } catch (e) {
