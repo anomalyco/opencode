@@ -1303,7 +1303,15 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
+  const ctx = use()
   const sync = useSync()
+
+  // Hide tool if showDetails is false and tool completed successfully
+  const shouldHide = createMemo(() => {
+    if (ctx.showDetails()) return false
+    if (props.part.state.status !== "completed") return false
+    return true
+  })
 
   const toolprops = {
     get metadata() {
@@ -1329,53 +1337,55 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   }
 
   return (
-    <Switch>
-      <Match when={props.part.tool === "bash"}>
-        <Bash {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "glob"}>
-        <Glob {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "read"}>
-        <Read {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "grep"}>
-        <Grep {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "list"}>
-        <List {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "webfetch"}>
-        <WebFetch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "codesearch"}>
-        <CodeSearch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "websearch"}>
-        <WebSearch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "write"}>
-        <Write {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "edit"}>
-        <Edit {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "task"}>
-        <Task {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "patch"}>
-        <Patch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "todowrite"}>
-        <TodoWrite {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "question"}>
-        <Question {...toolprops} />
-      </Match>
-      <Match when={true}>
-        <GenericTool {...toolprops} />
-      </Match>
-    </Switch>
+    <Show when={!shouldHide()}>
+      <Switch>
+        <Match when={props.part.tool === "bash"}>
+          <Bash {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "glob"}>
+          <Glob {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "read"}>
+          <Read {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "grep"}>
+          <Grep {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "list"}>
+          <List {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "webfetch"}>
+          <WebFetch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "codesearch"}>
+          <CodeSearch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "websearch"}>
+          <WebSearch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "write"}>
+          <Write {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "edit"}>
+          <Edit {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "task"}>
+          <Task {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "patch"}>
+          <Patch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "todowrite"}>
+          <TodoWrite {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "question"}>
+          <Question {...toolprops} />
+        </Match>
+        <Match when={true}>
+          <GenericTool {...toolprops} />
+        </Match>
+      </Switch>
+    </Show>
   )
 }
 
