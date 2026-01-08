@@ -66,12 +66,9 @@ export namespace Format {
   // Separate state for subscriptions with dispose callback
   const subscriptionState = Instance.state<(() => void)[]>(
     () => [],
-    async (subscriptions) => {
-      for (const unsub of subscriptions) {
-        unsub()
-      }
-      subscriptions.length = 0
-      log.info("disposed format subscriptions")
+    async () => {
+      // Delegate to the exported dispose function to keep cleanup logic centralized
+      dispose()
     },
   )
 
@@ -114,9 +111,9 @@ export namespace Format {
 
   export function init() {
     log.info("init")
-    const subscriptions = subscriptionState()
     // Clean up any existing subscriptions to prevent duplicates on re-init
     dispose()
+    const subscriptions = subscriptionState()
     subscriptions.push(
       Bus.subscribe(File.Event.Edited, async (payload) => {
         const file = payload.properties.file

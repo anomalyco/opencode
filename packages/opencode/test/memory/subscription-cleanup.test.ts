@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeAll } from "bun:test"
+import { test, expect, describe, beforeAll, afterAll } from "bun:test"
 import { Bus } from "../../src/bus"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -21,6 +21,13 @@ beforeAll(async () => {
   testDir = path.join(os.tmpdir(), `opencode-memory-test-${Date.now()}`)
   await fs.mkdir(testDir, { recursive: true })
   await fs.writeFile(path.join(testDir, "opencode.json"), JSON.stringify({}))
+})
+
+afterAll(async () => {
+  // Clean up the temp directory to prevent test artifacts from accumulating
+  if (testDir) {
+    await fs.rm(testDir, { recursive: true, force: true }).catch(() => {})
+  }
 })
 
 describe("subscription cleanup", () => {

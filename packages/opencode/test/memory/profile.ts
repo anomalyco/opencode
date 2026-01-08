@@ -13,8 +13,27 @@
  */
 
 import { Log } from "../../src/util/log"
+import { Instance } from "../../src/project/instance"
+import path from "path"
+import os from "os"
+import fs from "fs/promises"
 
 Log.init({ print: false, dev: false, level: "ERROR" })
+
+// Create a temp directory for Instance.provide
+let testDir: string
+
+async function setupTestDir() {
+  testDir = path.join(os.tmpdir(), `opencode-profile-${Date.now()}`)
+  await fs.mkdir(testDir, { recursive: true })
+  await fs.writeFile(path.join(testDir, "opencode.json"), JSON.stringify({}))
+}
+
+async function cleanupTestDir() {
+  if (testDir) {
+    await fs.rm(testDir, { recursive: true, force: true }).catch(() => {})
+  }
+}
 
 interface MemorySnapshot {
   label: string
@@ -79,39 +98,44 @@ async function testShareSubscriptionCycles() {
   console.log("TEST: Share subscription init/dispose cycles")
   console.log("=".repeat(60))
 
-  const { Share } = await import("../../src/share/share")
+  return Instance.provide({
+    directory: testDir,
+    fn: async () => {
+      const { Share } = await import("../../src/share/share")
 
-  forceGC()
-  await sleep(100)
-  const baseline = takeSnapshot("Baseline")
-  printSnapshot(baseline)
+      forceGC()
+      await sleep(100)
+      const baseline = takeSnapshot("Baseline")
+      printSnapshot(baseline)
 
-  const iterations = 1000
-  console.log(`\nRunning ${iterations} init/dispose cycles...`)
+      const iterations = 1000
+      console.log(`\nRunning ${iterations} init/dispose cycles...`)
 
-  for (let i = 0; i < iterations; i++) {
-    Share.init()
-    Share.dispose()
-    if (i % 100 === 0 && i > 0) {
-      process.stdout.write(`  ${i} cycles completed\r`)
-    }
-  }
-  console.log(`  ${iterations} cycles completed`)
+      for (let i = 0; i < iterations; i++) {
+        Share.init()
+        Share.dispose()
+        if (i % 100 === 0 && i > 0) {
+          process.stdout.write(`  ${i} cycles completed\r`)
+        }
+      }
+      console.log(`  ${iterations} cycles completed`)
 
-  forceGC()
-  await sleep(100)
-  const afterCycles = takeSnapshot("After cycles")
-  printSnapshot(afterCycles)
+      forceGC()
+      await sleep(100)
+      const afterCycles = takeSnapshot("After cycles")
+      printSnapshot(afterCycles)
 
-  const result = compareSnapshots(baseline, afterCycles)
+      const result = compareSnapshots(baseline, afterCycles)
 
-  // Check for leaks (should be less than 1MB growth for 1000 cycles)
-  if (result.heapDiff > 1024 * 1024) {
-    console.log("\n⚠️  WARNING: Potential memory leak detected!")
-    return false
-  }
-  console.log("\n✅ PASS: Memory stable after subscription cycles")
-  return true
+      // Check for leaks (should be less than 1MB growth for 1000 cycles)
+      if (result.heapDiff > 1024 * 1024) {
+        console.log("\n⚠️  WARNING: Potential memory leak detected!")
+        return false
+      }
+      console.log("\n✅ PASS: Memory stable after subscription cycles")
+      return true
+    },
+  })
 }
 
 async function testShareNextSubscriptionCycles() {
@@ -119,38 +143,43 @@ async function testShareNextSubscriptionCycles() {
   console.log("TEST: ShareNext subscription init/dispose cycles")
   console.log("=".repeat(60))
 
-  const { ShareNext } = await import("../../src/share/share-next")
+  return Instance.provide({
+    directory: testDir,
+    fn: async () => {
+      const { ShareNext } = await import("../../src/share/share-next")
 
-  forceGC()
-  await sleep(100)
-  const baseline = takeSnapshot("Baseline")
-  printSnapshot(baseline)
+      forceGC()
+      await sleep(100)
+      const baseline = takeSnapshot("Baseline")
+      printSnapshot(baseline)
 
-  const iterations = 1000
-  console.log(`\nRunning ${iterations} init/dispose cycles...`)
+      const iterations = 1000
+      console.log(`\nRunning ${iterations} init/dispose cycles...`)
 
-  for (let i = 0; i < iterations; i++) {
-    await ShareNext.init()
-    ShareNext.dispose()
-    if (i % 100 === 0 && i > 0) {
-      process.stdout.write(`  ${i} cycles completed\r`)
-    }
-  }
-  console.log(`  ${iterations} cycles completed`)
+      for (let i = 0; i < iterations; i++) {
+        await ShareNext.init()
+        ShareNext.dispose()
+        if (i % 100 === 0 && i > 0) {
+          process.stdout.write(`  ${i} cycles completed\r`)
+        }
+      }
+      console.log(`  ${iterations} cycles completed`)
 
-  forceGC()
-  await sleep(100)
-  const afterCycles = takeSnapshot("After cycles")
-  printSnapshot(afterCycles)
+      forceGC()
+      await sleep(100)
+      const afterCycles = takeSnapshot("After cycles")
+      printSnapshot(afterCycles)
 
-  const result = compareSnapshots(baseline, afterCycles)
+      const result = compareSnapshots(baseline, afterCycles)
 
-  if (result.heapDiff > 1024 * 1024) {
-    console.log("\n⚠️  WARNING: Potential memory leak detected!")
-    return false
-  }
-  console.log("\n✅ PASS: Memory stable after subscription cycles")
-  return true
+      if (result.heapDiff > 1024 * 1024) {
+        console.log("\n⚠️  WARNING: Potential memory leak detected!")
+        return false
+      }
+      console.log("\n✅ PASS: Memory stable after subscription cycles")
+      return true
+    },
+  })
 }
 
 async function testFormatSubscriptionCycles() {
@@ -158,38 +187,43 @@ async function testFormatSubscriptionCycles() {
   console.log("TEST: Format subscription init/dispose cycles")
   console.log("=".repeat(60))
 
-  const { Format } = await import("../../src/format")
+  return Instance.provide({
+    directory: testDir,
+    fn: async () => {
+      const { Format } = await import("../../src/format")
 
-  forceGC()
-  await sleep(100)
-  const baseline = takeSnapshot("Baseline")
-  printSnapshot(baseline)
+      forceGC()
+      await sleep(100)
+      const baseline = takeSnapshot("Baseline")
+      printSnapshot(baseline)
 
-  const iterations = 1000
-  console.log(`\nRunning ${iterations} init/dispose cycles...`)
+      const iterations = 1000
+      console.log(`\nRunning ${iterations} init/dispose cycles...`)
 
-  for (let i = 0; i < iterations; i++) {
-    Format.init()
-    Format.dispose()
-    if (i % 100 === 0 && i > 0) {
-      process.stdout.write(`  ${i} cycles completed\r`)
-    }
-  }
-  console.log(`  ${iterations} cycles completed`)
+      for (let i = 0; i < iterations; i++) {
+        Format.init()
+        Format.dispose()
+        if (i % 100 === 0 && i > 0) {
+          process.stdout.write(`  ${i} cycles completed\r`)
+        }
+      }
+      console.log(`  ${iterations} cycles completed`)
 
-  forceGC()
-  await sleep(100)
-  const afterCycles = takeSnapshot("After cycles")
-  printSnapshot(afterCycles)
+      forceGC()
+      await sleep(100)
+      const afterCycles = takeSnapshot("After cycles")
+      printSnapshot(afterCycles)
 
-  const result = compareSnapshots(baseline, afterCycles)
+      const result = compareSnapshots(baseline, afterCycles)
 
-  if (result.heapDiff > 1024 * 1024) {
-    console.log("\n⚠️  WARNING: Potential memory leak detected!")
-    return false
-  }
-  console.log("\n✅ PASS: Memory stable after subscription cycles")
-  return true
+      if (result.heapDiff > 1024 * 1024) {
+        console.log("\n⚠️  WARNING: Potential memory leak detected!")
+        return false
+      }
+      console.log("\n✅ PASS: Memory stable after subscription cycles")
+      return true
+    },
+  })
 }
 
 async function testACPControllerCleanup() {
@@ -199,7 +233,9 @@ async function testACPControllerCleanup() {
 
   const { ACP } = await import("../../src/acp/agent")
 
-  const mockConnection = {}
+  const mockConnection = {
+    closed: new Promise(() => {}), // Never resolves during test
+  }
   const mockConfig = {
     sdk: {
       event: { subscribe: async () => ({ stream: (async function* () {})() }) },
@@ -263,6 +299,9 @@ async function main() {
   console.log(`Platform: ${process.platform}`)
   console.log(`Bun Version: ${Bun.version}`)
 
+  // Setup test directory for Instance.provide
+  await setupTestDir()
+
   const results: boolean[] = []
 
   try {
@@ -272,8 +311,12 @@ async function main() {
     results.push(await testACPControllerCleanup())
   } catch (err) {
     console.error("\nError during profiling:", err)
+    await cleanupTestDir()
     process.exit(1)
   }
+
+  // Cleanup test directory
+  await cleanupTestDir()
 
   console.log("\n" + "=".repeat(60))
   console.log("SUMMARY")

@@ -20,14 +20,9 @@ export namespace Share {
       pending: new Map(),
       subscriptions: [],
     }),
-    async (s) => {
-      for (const unsub of s.subscriptions) {
-        unsub()
-      }
-      s.subscriptions.length = 0
-      s.pending.clear()
-      s.queue = Promise.resolve()
-      log.info("disposed share subscriptions")
+    async () => {
+      // Delegate to the exported dispose function to keep cleanup logic centralized
+      dispose()
     },
   )
 
@@ -68,9 +63,9 @@ export namespace Share {
   }
 
   export function init() {
-    const s = state()
     // Clean up any existing subscriptions to prevent duplicates on re-init
     dispose()
+    const s = state()
     s.subscriptions.push(
       Bus.subscribe(Session.Event.Updated, async (evt) => {
         await sync("session/info/" + evt.properties.info.id, evt.properties.info)

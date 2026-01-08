@@ -22,16 +22,9 @@ export namespace ShareNext {
       subscriptions: [],
       queue: new Map(),
     }),
-    async (s) => {
-      for (const unsub of s.subscriptions) {
-        unsub()
-      }
-      s.subscriptions.length = 0
-      for (const entry of s.queue.values()) {
-        clearTimeout(entry.timeout)
-      }
-      s.queue.clear()
-      log.info("disposed share-next subscriptions")
+    async () => {
+      // Delegate to the exported dispose function to keep cleanup logic centralized
+      dispose()
     },
   )
 
@@ -40,9 +33,9 @@ export namespace ShareNext {
   }
 
   export async function init() {
-    const s = state()
     // Clean up any existing subscriptions to prevent duplicates on re-init
     dispose()
+    const s = state()
     s.subscriptions.push(
       Bus.subscribe(Session.Event.Updated, async (evt) => {
         await sync(evt.properties.info.id, [
