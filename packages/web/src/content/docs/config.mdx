@@ -170,6 +170,7 @@ Available options:
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
 - `scroll_speed` - Custom scroll speed multiplier (default: `1`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
 - `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
+- `session_interrupt_timeout_ms` - Time window for double-Esc session interrupts (default: `5000`, min: `500`, max: `10000`). Applies to TUI session interruption only.
 
 [Learn more about using the TUI here](/docs/tui).
 

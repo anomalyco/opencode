@@ -18,6 +18,62 @@ test("loads config with defaults when no files exist", async () => {
   })
 })
 
+test("defaults session interrupt timeout when not configured", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.session_interrupt_timeout_ms).toBe(5000)
+    },
+  })
+})
+
+test("accepts in-range session interrupt timeout", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            session_interrupt_timeout_ms: 1200,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.tui?.session_interrupt_timeout_ms).toBe(1200)
+    },
+  })
+})
+
+test("rejects out-of-range session interrupt timeout", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          tui: {
+            session_interrupt_timeout_ms: 200,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(Config.get()).rejects.toThrow()
+    },
+  })
+})
+
 test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

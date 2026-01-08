@@ -66,6 +66,11 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const sessionInterruptTimeout = createMemo(() => {
+    const timeout = (sync.data.config as { tui?: { session_interrupt_timeout_ms?: number } }).tui
+      ?.session_interrupt_timeout_ms
+    return typeof timeout === "number" ? timeout : 5000
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const command = useCommandDialog()
@@ -212,7 +217,7 @@ export function Prompt(props: PromptProps) {
 
           setTimeout(() => {
             setStore("interrupt", 0)
-          }, 5000)
+          }, sessionInterruptTimeout())
 
           if (store.interrupt >= 2) {
             sdk.client.session.abort({

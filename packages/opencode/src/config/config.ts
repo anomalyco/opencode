@@ -169,6 +169,7 @@ export namespace Config {
     }
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
+    result.tui = Info.shape.tui.parse(result.tui ?? {})
 
     // Apply flag overrides for compaction settings
     if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) {
@@ -180,6 +181,7 @@ export namespace Config {
 
     return {
       config: result,
+
       directories,
     }
   })
@@ -716,6 +718,13 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    session_interrupt_timeout_ms: z
+      .number()
+      .int()
+      .min(500)
+      .max(10000)
+      .default(5000)
+      .describe("Time window in milliseconds to detect double-Esc interrupts"),
   })
 
   export const Server = z
