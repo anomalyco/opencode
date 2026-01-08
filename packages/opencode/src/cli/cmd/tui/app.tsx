@@ -657,9 +657,17 @@ function ErrorComponent(props: {
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
+  const renderer = useRenderer()
+
+  const handleExit = async () => {
+    renderer.setTerminalTitle("")
+    renderer.destroy()
+    props.onExit()
+  }
+
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      props.onExit()
+      handleExit()
     }
   })
   const [copied, setCopied] = createSignal(false)
@@ -712,7 +720,7 @@ function ErrorComponent(props: {
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>
