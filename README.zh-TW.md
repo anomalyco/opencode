@@ -28,7 +28,8 @@ curl -fsSL https://opencode.ai/install | bash
 npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
 scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
-brew install opencode              # macOS 與 Linux
+brew install anomalyco/tap/opencode # macOS 與 Linux（推薦，始終保持最新）
+brew install opencode              # macOS 與 Linux（官方 brew formula，更新頻率較低）
 paru -S opencode-bin               # Arch Linux
 mise use -g github:anomalyco/opencode    # 任何作業系統
 nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取得最新開發分支
