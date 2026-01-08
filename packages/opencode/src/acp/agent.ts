@@ -92,7 +92,8 @@ export namespace ACP {
         .subscribe({ directory }, { signal: controller.signal })
         .then(async (events) => {
           for await (const event of events.stream) {
-            // Check if subscription was aborted (belt and suspenders with signal)
+            // Belt-and-suspenders abort check: the signal passed to subscribe() should terminate
+            // the stream, but we also check here for clean loop exit in case of SDK variations
             if (controller.signal.aborted) {
               log.info("event subscription aborted", { sessionId })
               break

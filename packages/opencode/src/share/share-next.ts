@@ -49,6 +49,8 @@ export namespace ShareNext {
     // Fully dispose existing state (subscriptions, queue, pending timeouts) to prevent duplicates on re-init
     dispose()
     const s = state()
+    // Reset disposed flag to allow operations after re-init
+    s.disposed = false
     s.subscriptions.push(
       Bus.subscribe(Session.Event.Updated, async (evt) => {
         await sync(evt.properties.info.id, [
@@ -116,8 +118,6 @@ export namespace ShareNext {
       entry.abortController.abort()
     }
     s.queue.clear()
-    // Reset disposed flag to allow operations after re-init via init()
-    s.disposed = false
     log.info("disposed share-next subscriptions")
   }
 
@@ -129,7 +129,7 @@ export namespace ShareNext {
   /** @internal Test helper to add items to queue for testing dispose cleanup */
   export function _addToQueueForTesting(sessionID: string) {
     const s = state()
-    const timeout = setTimeout(() => {}, 10000)
+    const timeout = setTimeout(() => {}, 100)
     s.queue.set(sessionID, { timeout, data: new Map(), abortController: new AbortController() })
   }
 
@@ -199,12 +199,16 @@ export namespace ShareNext {
     const abortController = new AbortController()
     const timeout = setTimeout(async () => {
       const queued = s.queue.get(sessionID)
-      if (!queued) return
-      // Check if aborted before starting fetch
-      if (queued.abortController.signal.aborted) return
+      // Check both existence and abort status atomically
+      if (!queued || queued.abortController.signal.aborted) return
+      // Store local references before any async operations to avoid race conditions
+      const queuedData = queued.data
+      const queuedSignal = queued.abortController.signal
       s.queue.delete(sessionID)
       const share = await get(sessionID).catch(() => undefined)
       if (!share) return
+      // Re-check abort after async operation
+      if (queuedSignal.aborted) return
 
       await fetch(`${await url()}/api/share/${share.id}/sync`, {
         method: "POST",
@@ -213,9 +217,9 @@ export namespace ShareNext {
         },
         body: JSON.stringify({
           secret: share.secret,
-          data: Array.from(queued.data.values()),
+          data: Array.from(queuedData.values()),
         }),
-        signal: queued.abortController.signal,
+        signal: queuedSignal,
       }).catch((err) => {
         // Ignore abort errors during disposal
         if (err.name === "AbortError") return

@@ -58,6 +58,8 @@ export namespace Share {
         if (signal.aborted) return
         const content = s.pending.get(key)
         if (content === undefined) return
+        // Re-check abort in case disposal occurred after reading from pending
+        if (signal.aborted) return
         s.pending.delete(key)
 
         return fetch(`${URL}/share_sync`, {
@@ -91,6 +93,8 @@ export namespace Share {
     // before re-init to prevent duplicates and orphaned requests
     dispose()
     const s = state()
+    // Reset disposed flag to allow operations after re-init
+    s.disposed = false
     s.subscriptions.push(
       Bus.subscribe(Session.Event.Updated, async (evt) => {
         await sync("session/info/" + evt.properties.info.id, evt.properties.info)
@@ -127,8 +131,6 @@ export namespace Share {
     s.abortController.abort()
     // Create a new controller for potential re-init
     s.abortController = new AbortController()
-    // Reset disposed flag to allow operations after re-init via init()
-    s.disposed = false
     for (const unsub of s.subscriptions) {
       unsub()
     }
