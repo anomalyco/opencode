@@ -4,7 +4,6 @@ import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
-import { Global } from "@/global"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -34,6 +33,7 @@ import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
+import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
@@ -96,7 +96,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   })
 }
 
-export function tui(input: { url: string; args: Args; onExit?: () => Promise<void> }) {
+export function tui(input: { url: string; args: Args; directory?: string; onExit?: () => Promise<void> }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
@@ -116,7 +116,7 @@ export function tui(input: { url: string; args: Args; onExit?: () => Promise<voi
                 <KVProvider>
                   <ToastProvider>
                     <RouteProvider>
-                      <SDKProvider url={input.url}>
+                      <SDKProvider url={input.url} directory={input.directory}>
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
                             <LocalProvider>
@@ -373,6 +373,15 @@ function App() {
       },
     },
     {
+      title: "Variant cycle",
+      value: "variant.cycle",
+      keybind: "variant_cycle",
+      category: "Agent",
+      onSelect: () => {
+        local.model.variant.cycle()
+      },
+    },
+    {
       title: "Agent cycle reverse",
       value: "agent.cycle.reverse",
       keybind: "agent_cycle_reverse",
@@ -403,6 +412,7 @@ function App() {
     {
       title: "Switch theme",
       value: "theme.switch",
+      keybind: "theme_list",
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
@@ -468,6 +478,20 @@ function App() {
       },
     },
     {
+      title: "Write heap snapshot",
+      category: "System",
+      value: "app.heap_snapshot",
+      onSelect: (dialog) => {
+        const path = writeHeapSnapshot()
+        toast.show({
+          variant: "info",
+          message: `Heap snapshot written to ${path}`,
+          duration: 5000,
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Suspend terminal",
       value: "terminal.suspend",
       keybind: "terminal_suspend",
@@ -526,6 +550,13 @@ function App() {
     })
   })
 
+  sdk.event.on(TuiEvent.SessionSelect.type, (evt) => {
+    route.navigate({
+      type: "session",
+      sessionID: evt.properties.sessionID,
+    })
+  })
+
   sdk.event.on(SessionApi.Event.Deleted.type, (evt) => {
     if (route.data.type === "session" && route.data.sessionID === evt.properties.info.id) {
       route.navigate({ type: "home" })
@@ -539,7 +570,7 @@ function App() {
   sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
     const message = (() => {
-      if (!error) return "An error occured"
+      if (!error) return "An error occurred"
 
       if (typeof error === "object") {
         const data = error.data
@@ -625,7 +656,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/sst/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"

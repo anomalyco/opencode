@@ -59,12 +59,12 @@ export function Footer() {
           <Match when={connected()}>
             <Show when={permissions().length > 0}>
               <text fg={theme.warning}>
-                <span style={{ fg: theme.warning }}>◉</span> {permissions().length} Permission
+                <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
               </text>
             </Show>
             <text fg={theme.text}>
-              <span style={{ fg: theme.success }}>•</span> {lsp().length} LSP
+              <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
             </text>
             <Show when={mcp()}>
               <text fg={theme.text}>

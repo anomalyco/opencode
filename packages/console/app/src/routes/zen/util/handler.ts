@@ -124,6 +124,8 @@ export async function handler(
         res.status !== 200 &&
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
         res.status !== 404 &&
+        // ie. cannot change codex model providers mid-session
+        !modelInfo.stickyProvider &&
         modelInfo.fallbackProvider &&
         providerInfo.id !== modelInfo.fallbackProvider
       ) {
