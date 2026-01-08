@@ -1,0 +1,530 @@
+# GitLab Duo Integration
+
+GitLab Duo provides AI-powered coding assistance with native tool calling capabilities, seamlessly integrated into OpenCode.
+
+## Overview
+
+GitLab Duo offers:
+
+- **Native Tool Calling**: Access 104 GitLab tools via natural language
+- **Agentic Chat**: Powered by Claude through GitLab's Anthropic proxy
+- **GitLab API Access**: Merge requests, issues, pipelines, repositories, and more
+- **Self-Hosted Support**: Works with both GitLab.com and self-hosted instances
+
+## Prerequisites
+
+- GitLab account (Free, Premium, or Ultimate)
+- Personal Access Token OR OAuth app (for enhanced security)
+- For self-hosted: GitLab instance URL
+
+## Quick Start
+
+### Option 1: Personal Access Token (Easiest)
+
+1. **Create a Personal Access Token**:
+   - Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
+   - Click "Add new token"
+   - Name: `OpenCode`
+   - Scopes: Select `api`
+   - Expiration: Set according to your security policy
+   - Click "Create personal access token"
+   - Copy the token (starts with `glpat-`)
+
+2. **Set environment variable**:
+
+   ```bash
+   export GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
+   ```
+
+3. **Start OpenCode**:
+
+   ```bash
+   opencode
+   ```
+
+4. GitLab Duo models will automatically load (Haiku 4.5 is default)
+
+### Option 2: OAuth (Recommended for Security)
+
+1. **Start OpenCode**:
+
+   ```bash
+   opencode
+   ```
+
+2. **Initiate authentication**:
+
+   ```
+   /connect
+   ```
+
+3. **Select GitLab OAuth** from the menu
+
+4. **Follow the browser authorization flow**:
+   - Your browser will open to GitLab
+   - Authorize OpenCode
+   - Return to your terminal
+
+5. GitLab Duo models will be available
+
+## Self-Hosted GitLab
+
+To use with a self-hosted GitLab instance:
+
+```bash
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
+```
+
+Then start OpenCode as normal.
+
+## Available Models
+
+GitLab Duo provides 3 Claude-based models for different use cases:
+
+### duo-chat-haiku-4-5 (Default)
+
+- **Claude Model**: Claude Haiku 4.5 (`claude-haiku-4-5-20251001`)
+- **Released**: January 2026
+- **Best For**: Fast responses, quick queries, simple tasks
+- **Performance**: Fastest response time
+- **Context**: 200,000 tokens
+- **Output**: 8,192 tokens
+- **Use Cases**:
+  - Quick code lookups
+  - Simple MR reviews
+  - Listing resources
+  - Fast iterations
+  - Rapid prototyping
+
+### duo-chat-sonnet-4-5
+
+- **Claude Model**: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`)
+- **Released**: January 2026
+- **Best For**: Balanced performance and capability
+- **Performance**: Moderate response time
+- **Context**: 200,000 tokens
+- **Output**: 8,192 tokens
+- **Use Cases**:
+  - Complex code reviews
+  - Multi-file analysis
+  - Pipeline debugging
+  - Issue triage
+  - Refactoring suggestions
+
+### duo-chat-opus-4-5
+
+- **Claude Model**: Claude Opus 4.5 (`claude-opus-4-5-20251101`)
+- **Released**: January 2026
+- **Best For**: Most complex tasks requiring deep analysis
+- **Performance**: Slower but most capable
+- **Context**: 200,000 tokens
+- **Output**: 8,192 tokens
+- **Use Cases**:
+  - Architecture decisions
+  - Security analysis
+  - Complex refactoring
+  - Deep code understanding
+  - System design reviews
+
+**All models include**:
+
+- Native tool calling (104 GitLab tools)
+- Agentic chat capabilities
+- Self-hosted GitLab support
+- OAuth and PAT authentication
+- Free for GitLab Premium/Ultimate users
+
+**Selecting a Model**:
+
+```bash
+# Use default (Haiku - fastest)
+opencode
+
+# Explicitly select Haiku
+opencode --model gitlab/duo-chat-haiku-4-5
+
+# Use Sonnet for balanced performance
+opencode --model gitlab/duo-chat-sonnet-4-5
+
+# Use Opus for complex tasks
+opencode --model gitlab/duo-chat-opus-4-5
+```
+
+**Model Comparison**:
+
+| Model                     | Speed          | Capability    | Best For                       |
+| ------------------------- | -------------- | ------------- | ------------------------------ |
+| **Haiku 4.5** _(Default)_ | ⚡⚡⚡ Fastest | ⭐⭐ Good     | Quick tasks, fast responses    |
+| **Sonnet 4.5**            | ⚡⚡ Fast      | ⭐⭐⭐ Better | Balanced, most workflows       |
+| **Opus 4.5**              | ⚡ Moderate    | ⭐⭐⭐⭐ Best | Complex analysis, architecture |
+
+## Available Tools
+
+GitLab Duo provides **104 tools** across multiple categories:
+
+### Merge Requests (15 tools)
+
+- Get, list, create, update merge requests
+- Review code changes and diffs
+- Add comments and discussions
+- Approve and merge
+- View and manage pipelines
+
+### Issues (10 tools)
+
+- Create, update, and list issues
+- Add comments and notes
+- Search and filter
+- Manage assignees and labels
+
+### CI/CD Pipelines (11 tools)
+
+- List and monitor pipelines
+- View job logs and status
+- Retry failed jobs
+- Validate CI/CD configuration
+- Debug pipeline failures
+
+### Repository (14 tools)
+
+- Read and write files
+- List directory contents
+- View commits and branches
+- Create commits with multiple actions
+- Manage repository tree
+
+### Search (13 tools)
+
+- Search code (blobs)
+- Search issues and merge requests
+- Search commits
+- Search users and projects
+- Search documentation
+
+### Additional Categories
+
+- **Epics** (9 tools): Enterprise-level planning
+- **Security** (7 tools): Vulnerability scanning and management
+- **Audit** (3 tools): Security event tracking
+- **Wikis** (1 tool): Documentation access
+- **Work Items** (6 tools): Unified work tracking
+- **Snippets** (5 tools): Code snippet management
+- **TODOs** (3 tools): Personal task management
+- **Git Commands** (1 tool): Safe, read-only git operations
+- **Projects** (2 tools): Project information and members
+- **Universal Discussions** (4 tools): Cross-resource discussion management
+
+## Configuration
+
+### Basic Configuration
+
+Add to `~/.opencode/config.json`:
+
+```json
+{
+  "provider": {
+    "gitlab": {
+      "options": {
+        "instanceUrl": "https://gitlab.com"
+      }
+    }
+  }
+}
+```
+
+### Feature Flags
+
+Enable experimental GitLab Duo features:
+
+```json
+{
+  "provider": {
+    "gitlab": {
+      "options": {
+        "featureFlags": {
+          "duo_agent_platform_agentic_chat": true,
+          "duo_agent_platform": true
+        }
+      }
+    }
+  }
+}
+```
+
+### Project Override
+
+If automatic project detection doesn't work, specify explicitly:
+
+```json
+{
+  "provider": {
+    "gitlab": {
+      "options": {
+        "project": "group/project-name"
+      }
+    }
+  }
+}
+```
+
+### Default Model Selection
+
+Set a default model in your config:
+
+```json
+{
+  "model": "gitlab/duo-chat-sonnet-4-5"
+}
+```
+
+Or use environment variable:
+
+```bash
+export OPENCODE_MODEL=gitlab/duo-chat-opus-4-5
+```
+
+**Model Selection Tips**:
+
+- **Start with Haiku** (default) for fastest responses
+- **Upgrade to Sonnet** for complex code reviews and debugging
+- **Use Opus** for architecture decisions and security analysis
+
+## Usage Examples
+
+**Note**: These examples work with all models. The default (Haiku) is fast and efficient for most tasks. For complex analysis, consider using Sonnet or Opus.
+
+### Quick Query (Haiku - Default)
+
+```
+List my open merge requests
+```
+
+**Model**: Haiku 4.5 (default) - Fast response  
+**Tools Used**: `gitlab_list_merge_requests`
+
+### Simple Review (Haiku)
+
+```
+Review MR !123 for basic issues
+```
+
+**Model**: Haiku 4.5 - Quick feedback  
+**The AI will**:
+
+- Fetch MR details
+- Perform basic code review
+- Identify obvious issues
+- Provide quick feedback
+
+### Complex Review (Sonnet Recommended)
+
+```
+Review merge request !123 and provide detailed feedback on architecture, security, and performance
+```
+
+**Model**: Sonnet 4.5 (recommended) - Balanced analysis  
+**The AI will**:
+
+- Fetch the MR details
+- Analyze the code changes deeply
+- Check the CI/CD pipeline status
+- Provide structured feedback
+- Suggest improvements
+- Review architecture patterns
+
+### Debug Failed Pipeline (Sonnet Recommended)
+
+```
+Check why pipeline #456 failed and suggest fixes
+```
+
+**Model**: Sonnet 4.5 - Comprehensive debugging  
+**The AI will**:
+
+- Get pipeline details
+- Identify failed jobs
+- Fetch job logs
+- Analyze error messages
+- Identify root causes
+- Suggest solutions
+
+### Security Analysis (Opus Recommended)
+
+```
+Analyze the authentication system in src/auth/ for security vulnerabilities
+```
+
+**Model**: Opus 4.5 - Deep security analysis  
+**The AI will**:
+
+- Read all authentication code
+- Identify potential vulnerabilities
+- Check for common security issues
+- Review architecture for weaknesses
+- Provide comprehensive security recommendations
+
+### Create Issue from Bug (Haiku)
+
+```
+Create an issue for the authentication bug in auth.ts:45
+```
+
+**Model**: Haiku 4.5 - Quick task  
+**The AI will**:
+
+- Read the code context
+- Generate issue title and description
+- Create the issue with appropriate labels
+- Return the issue URL
+
+### Search Codebase
+
+```
+Find all API endpoints that handle user authentication
+```
+
+The AI will:
+
+- Search code for authentication patterns
+- List relevant files
+- Show code snippets
+- Explain the authentication flow
+
+## Troubleshooting
+
+### "Authentication failed"
+
+**Symptoms**: Model doesn't load or API calls fail
+
+**Solutions**:
+
+1. Verify token is valid:
+
+   ```bash
+   curl -H "PRIVATE-TOKEN: $GITLAB_TOKEN" https://gitlab.com/api/v4/user
+   ```
+
+2. Check token scopes include `api`
+
+3. For OAuth, try re-authenticating with `/connect`
+
+### "Project not found"
+
+**Symptoms**: Tools can't find your GitLab project
+
+**Solutions**:
+
+1. Ensure you're in a Git repository with GitLab remote:
+
+   ```bash
+   git remote -v
+   ```
+
+2. Manually specify project in config:
+   ```json
+   {
+     "provider": {
+       "gitlab": {
+         "options": {
+           "project": "group/project-name"
+         }
+       }
+     }
+   }
+   ```
+
+### Tools not available
+
+**Symptoms**: GitLab tools don't appear
+
+**Solutions**:
+
+1. Plugins should auto-load when authenticated
+2. Verify authentication is configured
+3. Check logs for plugin loading errors
+4. Restart OpenCode
+
+### Self-hosted instance issues
+
+**Symptoms**: Can't connect to self-hosted GitLab
+
+**Solutions**:
+
+1. Verify instance URL format:
+
+   ```bash
+   # Correct
+   export GITLAB_INSTANCE_URL=https://gitlab.example.com
+
+   # Incorrect (no trailing slash)
+   export GITLAB_INSTANCE_URL=https://gitlab.example.com/
+   ```
+
+2. Check SSL certificate is valid
+
+3. Ensure instance is accessible from your network
+
+## Environment Variables Reference
+
+| Variable              | Description           | Required     | Default              |
+| --------------------- | --------------------- | ------------ | -------------------- |
+| `GITLAB_TOKEN`        | Personal Access Token | For PAT auth | -                    |
+| `GITLAB_INSTANCE_URL` | GitLab instance URL   | No           | `https://gitlab.com` |
+
+## OAuth Setup (Advanced)
+
+For custom OAuth client ID:
+
+1. Register OAuth application:
+   - Go to [GitLab Applications](https://gitlab.com/-/user_settings/applications)
+   - Name: `OpenCode`
+   - Redirect URI: `http://127.0.0.1:8080/callback`
+   - Confidential: ✅ Yes
+   - Scopes: `api`
+
+2. Copy the Application ID
+
+3. Set environment variable:
+   ```bash
+   export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
+   ```
+
+## Enterprise Features
+
+Some tools require GitLab Premium or Ultimate:
+
+- Epics management
+- Security vulnerability scanning
+- Audit events
+- Advanced analytics
+
+Tools will return appropriate error messages if features are unavailable on your tier.
+
+## Security Best Practices
+
+1. **Use OAuth over PAT** when possible
+2. **Rotate PATs regularly** (set expiration dates)
+3. **Never commit tokens** to version control
+4. **Use environment variables** for sensitive data
+5. **Review authorized applications** periodically in GitLab settings
+6. **Limit token scopes** to minimum required (`api` scope only)
+
+## Performance Tips
+
+1. **Project Detection**: Specify project explicitly for faster tool execution
+2. **Token Caching**: OpenCode caches tokens to reduce API calls
+3. **Rate Limits**: GitLab API has rate limits; tools handle this gracefully
+4. **Network**: Ensure stable connection for best performance
+
+## Getting Help
+
+- **Issues**: [OpenCode GitHub Issues](https://github.com/sst/opencode/issues)
+- **Documentation**: [OpenCode Docs](https://opencode.ai)
+- **GitLab Duo**: [GitLab Duo Documentation](https://docs.gitlab.com/ee/user/gitlab_duo/)
+
+## Related Resources
+
+- [GitLab API Documentation](https://docs.gitlab.com/ee/api/)
+- [GitLab OAuth Documentation](https://docs.gitlab.com/ee/api/oauth2.html)
+- [Personal Access Tokens](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html)

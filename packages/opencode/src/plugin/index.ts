@@ -7,6 +7,11 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
+import { Auth } from "../auth"
+import { Env } from "../env"
+import fs from "fs"
+import path from "path"
+import os from "os"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -33,6 +38,44 @@ export namespace Plugin {
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push(...BUILTIN)
     }
+
+    // Auto-load GitLab auth and tools plugins when GitLab is configured
+    const shouldLoadGitLabPlugins = await (async () => {
+      // Check if GitLab provider is configured
+      if (config.provider?.["gitlab"]) return true
+
+      // Check if GitLab auth exists
+      const auth = await Auth.get("gitlab")
+      if (auth) return true
+
+      // Check auth.json for GitLab OAuth
+      try {
+        const homeDir = os.homedir()
+        const xdgDataHome = process.env.XDG_DATA_HOME
+        const authPath = xdgDataHome
+          ? path.join(xdgDataHome, "opencode", "auth.json")
+          : process.platform !== "win32"
+            ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
+            : path.join(homeDir, ".opencode", "auth.json")
+
+        if (fs.existsSync(authPath)) {
+          const authData = JSON.parse(fs.readFileSync(authPath, "utf-8"))
+          if (authData.gitlab) return true
+        }
+      } catch {}
+
+      // Check environment variables
+      if (Env.get("GITLAB_TOKEN")) return true
+
+      return false
+    })()
+
+    if (shouldLoadGitLabPlugins && !Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+      log.info("auto-loading GitLab plugins")
+      plugins.push("@gitlab/opencode-gitlab-auth@latest")
+      plugins.push("@gitlab/opencode-gitlab-plugin@latest")
+    }
+
     for (let plugin of plugins) {
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {

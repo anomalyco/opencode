@@ -1,4 +1,7 @@
 import z from "zod"
+import fs from "fs"
+import path from "path"
+import os from "os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -35,6 +38,7 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
+import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 
 export namespace Provider {
@@ -60,6 +64,7 @@ export namespace Provider {
     "@ai-sdk/togetherai": createTogetherAI,
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
+    "@gitlab/gitlab-ai-provider": createGitLab,
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
@@ -389,6 +394,125 @@ export namespace Provider {
         },
       }
     },
+    async gitlab(input) {
+      const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
+
+      // Helper to load auth from OpenCode's auth.json
+      const loadOpenCodeAuth = async () => {
+        try {
+          const homeDir = os.homedir()
+          const xdgDataHome = process.env.XDG_DATA_HOME
+          const authPath = xdgDataHome
+            ? path.join(xdgDataHome, "opencode", "auth.json")
+            : process.platform !== "win32"
+              ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
+              : path.join(homeDir, ".opencode", "auth.json")
+
+          if (!fs.existsSync(authPath)) return undefined
+
+          const authData = JSON.parse(fs.readFileSync(authPath, "utf-8"))
+          const gitlabAuth = authData.gitlab
+
+          if (gitlabAuth?.type === "oauth") {
+            const authUrl = gitlabAuth.enterpriseUrl || "https://gitlab.com"
+            if (authUrl === instanceUrl || authUrl === instanceUrl.replace(/\/$/, "")) {
+              return {
+                access: gitlabAuth.access,
+                refresh: gitlabAuth.refresh,
+                expires: gitlabAuth.expires,
+              }
+            }
+          } else if (gitlabAuth?.type === "api") {
+            return { access: gitlabAuth.key }
+          }
+
+          return undefined
+        } catch {
+          return undefined
+        }
+      }
+
+      // Try multiple auth sources (priority order)
+      const auth = await Auth.get(input.id)
+      const authData = await (async () => {
+        if (auth?.type === "oauth") {
+          return { access: auth.access, refresh: auth.refresh, expires: auth.expires }
+        }
+        if (auth?.type === "api") {
+          return { access: auth.key }
+        }
+
+        const stored = await loadOpenCodeAuth()
+        if (stored) return stored
+
+        const envToken = Env.get("GITLAB_TOKEN")
+        if (envToken) return { access: envToken }
+
+        return undefined
+      })()
+
+      // Get config for feature flags
+      const config = await Config.get()
+      const providerConfig = config.provider?.["gitlab"]
+
+      // Token refresh callback
+      const refreshApiKey = async () => {
+        log.info("refreshing gitlab token")
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "oauth" && auth.refresh) {
+          try {
+            const response = await fetch(`${instanceUrl}/oauth/token`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                grant_type: "refresh_token",
+                refresh_token: auth.refresh,
+              }),
+            })
+
+            if (response.ok) {
+              const tokens = await response.json()
+              await Auth.set(input.id, {
+                type: "oauth",
+                access: tokens.access_token,
+                refresh: tokens.refresh_token,
+                expires: Date.now() + tokens.expires_in * 1000,
+              })
+              log.info("gitlab token refreshed successfully")
+            } else {
+              log.error("failed to refresh gitlab token", { status: response.status })
+            }
+          } catch (error) {
+            log.error("gitlab token refresh error", { error })
+          }
+        }
+      }
+
+      return {
+        autoload: !!authData,
+        options: {
+          instanceUrl,
+          apiKey: authData?.access,
+          refreshToken: authData?.refresh,
+          featureFlags: {
+            duo_agent_platform_agentic_chat: true,
+            duo_agent_platform: true,
+            ...(providerConfig?.options?.featureFlags || {}),
+          },
+        },
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          const anthropicModel = options?.anthropicModel
+          return sdk.agenticChat(modelID, {
+            anthropicModel,
+            featureFlags: {
+              duo_agent_platform_agentic_chat: true,
+              duo_agent_platform: true,
+              ...(providerConfig?.options?.featureFlags || {}),
+            },
+          })
+        },
+      }
+    },
     "cloudflare-ai-gateway": async (input) => {
       const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
       const gateway = Env.get("CLOUDFLARE_GATEWAY_ID")
@@ -639,6 +763,173 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Add GitLab Duo provider with model metadata
+    // Will use models.dev data once PR #616 is merged
+    if (!database["gitlab"]) {
+      database["gitlab"] = {
+        id: "gitlab",
+        name: "GitLab Duo",
+        source: "custom",
+        env: ["GITLAB_TOKEN"],
+        options: {},
+        models: {
+          "duo-chat-haiku-4-5": {
+            id: "duo-chat-haiku-4-5",
+            providerID: "gitlab",
+            name: "Agentic Chat (Claude Haiku 4.5)",
+            family: "claude",
+            api: {
+              id: "duo-chat-haiku-4-5",
+              url: "https://gitlab.com",
+              npm: "@gitlab/gitlab-ai-provider",
+            },
+            status: "active",
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: false,
+              toolcall: true,
+              input: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              output: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              interleaved: false,
+            },
+            cost: {
+              input: 0,
+              output: 0,
+              cache: {
+                read: 0,
+                write: 0,
+              },
+            },
+            limit: {
+              context: 200000,
+              output: 8192,
+            },
+            options: {
+              anthropicModel: "claude-haiku-4-5-20251001",
+            },
+            headers: {},
+            release_date: "2026-01-08",
+            variants: {},
+          },
+          "duo-chat-sonnet-4-5": {
+            id: "duo-chat-sonnet-4-5",
+            providerID: "gitlab",
+            name: "Agentic Chat (Claude Sonnet 4.5)",
+            family: "claude",
+            api: {
+              id: "duo-chat-sonnet-4-5",
+              url: "https://gitlab.com",
+              npm: "@gitlab/gitlab-ai-provider",
+            },
+            status: "active",
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: false,
+              toolcall: true,
+              input: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              output: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              interleaved: false,
+            },
+            cost: {
+              input: 0,
+              output: 0,
+              cache: {
+                read: 0,
+                write: 0,
+              },
+            },
+            limit: {
+              context: 200000,
+              output: 8192,
+            },
+            options: {
+              anthropicModel: "claude-sonnet-4-5-20250929",
+            },
+            headers: {},
+            release_date: "2026-01-08",
+            variants: {},
+          },
+          "duo-chat-opus-4-5": {
+            id: "duo-chat-opus-4-5",
+            providerID: "gitlab",
+            name: "Agentic Chat (Claude Opus 4.5)",
+            family: "claude",
+            api: {
+              id: "duo-chat-opus-4-5",
+              url: "https://gitlab.com",
+              npm: "@gitlab/gitlab-ai-provider",
+            },
+            status: "active",
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: false,
+              toolcall: true,
+              input: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              output: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              interleaved: false,
+            },
+            cost: {
+              input: 0,
+              output: 0,
+              cache: {
+                read: 0,
+                write: 0,
+              },
+            },
+            limit: {
+              context: 200000,
+              output: 8192,
+            },
+            options: {
+              anthropicModel: "claude-opus-4-5-20251101",
+            },
+            headers: {},
+            release_date: "2026-01-08",
+            variants: {},
+          },
+        },
       }
     }
 
