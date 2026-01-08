@@ -30,7 +30,7 @@ function getNetworkIPs() {
 export const WebCommand = cmd({
   command: "web",
   builder: (yargs) => withNetworkOptions(yargs),
-  describe: "starts a headless opencode server",
+  describe: "start opencode server and open web interface",
   handler: async (args) => {
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
