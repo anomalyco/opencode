@@ -384,8 +384,6 @@ export namespace BrowserManager {
 
   /**
    * Get cursor position
-  /**
-   * Get cursor position
    */
   export function getCursorPosition(): { x: number; y: number } {
     return { ...cursorPosition }
@@ -405,8 +403,34 @@ export namespace BrowserManager {
     bounds: ElementBounds
   } | null> {
     await ensureInitialized()
-    // Simple implementation - in production would call Node server
-    return null
+
+    const params = new URLSearchParams({
+      x: String(x),
+      y: String(y),
+    })
+
+    try {
+      const response = await fetch(`http://localhost:9999/elementAt?${params}`, {
+        method: "GET",
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (!response.ok) {
+        return null
+      }
+
+      const data = (await response.json()) as {
+        tagName: string
+        id?: string
+        className?: string
+        text: string
+        bounds: ElementBounds
+      } | null
+
+      return data
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -445,8 +469,26 @@ export namespace BrowserManager {
    */
   export async function getElementBounds(selector: string): Promise<ElementBounds | null> {
     await ensureInitialized()
-    // Simplified - would call Node server in production
-    return null
+
+    const params = new URLSearchParams({
+      selector,
+    })
+
+    try {
+      const response = await fetch(`http://localhost:9999/elementBounds?${params}`, {
+        method: "GET",
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (!response.ok) {
+        return null
+      }
+
+      const data = (await response.json()) as ElementBounds | null
+      return data
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -549,14 +591,36 @@ export namespace BrowserManager {
    */
   export async function check(selector: string, checked: boolean = true): Promise<void> {
     await ensureInitialized()
-    // Stub implementation
+
+    const params = new URLSearchParams({
+      selector,
+      checked: String(checked),
+    })
+
+    const response = await fetch(`http://localhost:9999/check?${params}`, {
+      method: "GET",
+      signal: AbortSignal.timeout(5000),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Check failed: ${response.statusText}`)
+    }
   }
 
   /**
    * Close page (simplified)
    */
   export async function closePage(): Promise<void> {
-    // Stub implementation
+    await ensureInitialized()
+
+    const response = await fetch("http://localhost:9999/closePage", {
+      method: "GET",
+      signal: AbortSignal.timeout(5000),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Close page failed: ${response.statusText}`)
+    }
   }
 
   /**

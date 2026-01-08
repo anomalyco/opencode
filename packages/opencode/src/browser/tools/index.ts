@@ -29,6 +29,13 @@ export { BrowserResizeTool } from "./resize"
 export { BrowserRunCodeTool } from "./run-code"
 export { BrowserNavigateBackTool, BrowserNavigateForwardTool } from "./navigate-back"
 
+// New tools
+export { BrowserGetPageTool } from "./get-page"
+export { BrowserGetElementAtTool } from "./get-element-at"
+export { BrowserGetElementBoundsTool } from "./get-element-bounds"
+export { BrowserCheckTool } from "./check-element"
+export { BrowserClosePageTool } from "./close-page"
+
 // Testing assertions
 export { BrowserVerifyElementVisibleTool } from "./verify-element-visible"
 export { BrowserVerifyTextVisibleTool } from "./verify-text-visible"
@@ -60,6 +67,11 @@ import { BrowserFileUploadTool } from "./file-upload"
 import { BrowserResizeTool } from "./resize"
 import { BrowserRunCodeTool } from "./run-code"
 import { BrowserNavigateBackTool, BrowserNavigateForwardTool } from "./navigate-back"
+import { BrowserGetPageTool } from "./get-page"
+import { BrowserGetElementAtTool } from "./get-element-at"
+import { BrowserGetElementBoundsTool } from "./get-element-bounds"
+import { BrowserCheckTool } from "./check-element"
+import { BrowserClosePageTool } from "./close-page"
 import { BrowserVerifyElementVisibleTool } from "./verify-element-visible"
 import { BrowserVerifyTextVisibleTool } from "./verify-text-visible"
 import { BrowserGenerateLocatorTool } from "./generate-locator"
@@ -68,10 +80,12 @@ import { BrowserGenerateLocatorTool } from "./generate-locator"
  * All browser tools for the registry
  */
 export const BrowserTools = [
-  // Core navigation
+  // Core navigation & page management
+  BrowserInitTool,
   BrowserNavigateTool,
   BrowserNavigateBackTool,
   BrowserNavigateForwardTool,
+  BrowserGetPageTool,
 
   // Visual/Screenshot
   BrowserScreenshotTool,
@@ -85,6 +99,11 @@ export const BrowserTools = [
   BrowserDragTool,
   BrowserScrollTool,
   BrowserPressKeyTool,
+  BrowserCheckTool,
+
+  // Element inspection
+  BrowserGetElementAtTool,
+  BrowserGetElementBoundsTool,
 
   // Forms
   BrowserFillFormTool,
@@ -105,8 +124,8 @@ export const BrowserTools = [
   // Window/Tab management
   BrowserTabsTool,
   BrowserResizeTool,
-  BrowserInitTool,
   BrowserCloseTool,
+  BrowserClosePageTool,
 
   // Testing assertions
   BrowserVerifyElementVisibleTool,

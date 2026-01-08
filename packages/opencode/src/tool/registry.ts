@@ -109,7 +109,7 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-      ...(Flag.OPENCODE_ENABLE_BROWSER ? BrowserTools : []),
+      ...(Flag.OPENCODE_ENABLE_BROWSER || config.experimental?.browser === true ? BrowserTools : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...custom,
     ]
