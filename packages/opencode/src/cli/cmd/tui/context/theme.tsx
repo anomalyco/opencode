@@ -104,15 +104,16 @@ type Theme = ThemeColors & {
 
 export type ColorScheme = "dark" | "light" | "system"
 
-export function selectedForeground(theme: Theme): RGBA {
+export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
   if (theme._hasSelectedListItemText) {
     return theme.selectedListItemText
   }
 
-  // For transparent backgrounds, calculate contrast based on primary color
+  // For transparent backgrounds, calculate contrast based on the actual bg (or fallback to primary)
   if (theme.background.a === 0) {
-    const { r, g, b } = theme.primary
+    const targetColor = bg ?? theme.primary
+    const { r, g, b } = targetColor
     const luminance = 0.299 * r + 0.587 * g + 0.114 * b
     return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
   }
@@ -357,7 +358,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       }
     })
 
-    createEffect(() => {
+    function init() {
+      resolveSystemTheme()
       getCustomThemes()
         .then((custom) => {
           setStore(
@@ -374,15 +376,18 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             setStore("ready", true)
           }
         })
-    })
+    }
+
+    onMount(init)
 
     function resolveSystemTheme() {
-      console.log("resolved system theme")
+      console.log("resolveSystemTheme")
       renderer
         .getPalette({
           size: 16,
         })
         .then((colors) => {
+          console.log(colors.palette)
           if (!colors.palette[0]) {
             if (store.active === "system") {
               setStore(
@@ -406,11 +411,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     const renderer = useRenderer()
-    resolveSystemTheme()
-
-    const sdk = useSDK()
-    sdk.event.on("server.instance.disposed", () => {
-      resolveSystemTheme()
+    process.on("SIGUSR2", async () => {
+      renderer.clearPaletteCache()
+      init()
     })
 
     // Poll terminal background for real-time system theme detection
