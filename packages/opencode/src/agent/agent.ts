@@ -51,6 +51,7 @@ export namespace Agent {
         "*": "ask",
         [Truncate.DIR]: "allow",
       },
+      question: "deny",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
@@ -65,7 +66,13 @@ export namespace Agent {
       build: {
         name: "build",
         options: {},
-        permission: PermissionNext.merge(defaults, user),
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+          }),
+          user,
+        ),
         mode: "primary",
         native: true,
       },
@@ -75,6 +82,7 @@ export namespace Agent {
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
+            question: "allow",
             edit: {
               "*": "deny",
               ".opencode/plan/*.md": "allow",
