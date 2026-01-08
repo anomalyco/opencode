@@ -778,6 +778,10 @@ export namespace Config {
             .describe(
               "Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.",
             ),
+          store: z
+            .boolean()
+            .optional()
+            .describe("Set store option for all models of this provider (OpenAI only). Default is true."),
         })
         .catchall(z.any())
         .optional(),
