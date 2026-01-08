@@ -10,6 +10,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { Wildcard } from "@/util/wildcard"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -27,11 +28,11 @@ const parameters = z.object({
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
 
-  // Filter agents by permissions if agent provided
+  // Filter agents by permissions and subagents list if agent provided
   const caller = ctx?.agent
-  const accessibleAgents = caller
-    ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
-    : agents
+  const accessibleAgents = agents
+    .filter((a) => !caller || PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
+    .filter((a) => !caller?.subagents?.length || caller.subagents.some((pattern) => Wildcard.match(a.name, pattern)))
 
   const description = DESCRIPTION.replace(
     "{agents}",
