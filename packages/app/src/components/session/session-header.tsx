@@ -6,6 +6,7 @@ import { useServer } from "@/context/server"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useI18n } from "@/i18n"
 import { getFilename } from "@opencode-ai/util/path"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
 import { iife } from "@opencode-ai/util/iife"
@@ -31,6 +32,7 @@ export function SessionHeader() {
   const server = useServer()
   const dialog = useDialog()
   const sync = useSync()
+  const { t } = useI18n()
 
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
 
@@ -93,7 +95,7 @@ export function SessionHeader() {
                   <Select
                     options={sessions()}
                     current={currentSession()}
-                    placeholder="New session"
+                    placeholder={t().session.newSession}
                     label={(x) => x.title}
                     value={(x) => x.id}
                     onSelect={navigateToSession}
@@ -107,7 +109,7 @@ export function SessionHeader() {
                 <Select
                   options={sessions()}
                   current={parentSession()}
-                  placeholder="Back to parent session"
+                  placeholder={t().session.backToParent}
                   label={(x) => x.title}
                   value={(x) => x.id}
                   onSelect={(session) => {
@@ -122,7 +124,7 @@ export function SessionHeader() {
                 />
                 <div class="text-text-weaker">/</div>
                 <div class="flex items-center gap-1.5 min-w-0">
-                  <Tooltip value="Back to parent session">
+                  <Tooltip value={t().session.backToParent}>
                     <button
                       type="button"
                       class="flex items-center justify-center gap-1 p-1 rounded hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors flex-shrink-0"
@@ -136,7 +138,7 @@ export function SessionHeader() {
             </Show>
           </div>
           <Show when={currentSession() && !parentSession()}>
-            <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
+            <TooltipKeybind class="hidden xl:block" title={t().session.newSession} keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
             </TooltipKeybind>
           </Show>
@@ -220,9 +222,9 @@ export function SessionHeader() {
           </div>
           <Show when={shareEnabled() && currentSession()}>
             <Popover
-              title="Share session"
+              title={t().session.share}
               trigger={
-                <Tooltip class="shrink-0" value="Share session">
+                <Tooltip class="shrink-0" value={t().session.share}>
                   <IconButton icon="share" variant="ghost" class="" />
                 </Tooltip>
               }

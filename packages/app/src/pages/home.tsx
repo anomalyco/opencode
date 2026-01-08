@@ -12,6 +12,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
+import { useI18n } from "@/i18n"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -20,6 +21,7 @@ export default function Home() {
   const dialog = useDialog()
   const navigate = useNavigate()
   const server = useServer()
+  const { t } = useI18n()
   const homedir = createMemo(() => sync.data.path.home)
 
   function openProject(directory: string) {
@@ -40,7 +42,7 @@ export default function Home() {
 
     if (platform.openDirectoryPickerDialog && server.isLocal()) {
       const result = await platform.openDirectoryPickerDialog?.({
-        title: "Open project",
+        title: t().home.openProject,
         multiple: true,
       })
       resolve(result)
@@ -75,9 +77,9 @@ export default function Home() {
         <Match when={sync.data.project.length > 0}>
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
-              <div class="text-14-medium text-text-strong">Recent projects</div>
+              <div class="text-14-medium text-text-strong">{t().home.recentProjects}</div>
               <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
-                Open project
+                {t().home.openProject}
               </Button>
             </div>
             <ul class="flex flex-col gap-2">
@@ -107,12 +109,12 @@ export default function Home() {
           <div class="mt-30 mx-auto flex flex-col items-center gap-3">
             <Icon name="folder-add-left" size="large" />
             <div class="flex flex-col gap-1 items-center justify-center">
-              <div class="text-14-medium text-text-strong">No recent projects</div>
-              <div class="text-12-regular text-text-weak">Get started by opening a local project</div>
+              <div class="text-14-medium text-text-strong">{t().home.noRecentProjects}</div>
+              <div class="text-12-regular text-text-weak">{t().home.getStarted}</div>
             </div>
             <div />
             <Button class="px-3" onClick={chooseProject}>
-              Open project
+              {t().home.openProject}
             </Button>
           </div>
         </Match>

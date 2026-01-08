@@ -21,6 +21,7 @@ import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { Logo } from "@opencode-ai/ui/logo"
+import { I18nProvider } from "@/i18n"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
@@ -53,17 +54,19 @@ export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
       <Font />
-      <ThemeProvider>
-        <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-          <DialogProvider>
-            <MarkedProvider>
-              <DiffComponentProvider component={Diff}>
-                <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
-              </DiffComponentProvider>
-            </MarkedProvider>
-          </DialogProvider>
-        </ErrorBoundary>
-      </ThemeProvider>
+      <I18nProvider>
+        <ThemeProvider>
+          <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+            <DialogProvider>
+              <MarkedProvider>
+                <DiffComponentProvider component={Diff}>
+                  <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
+                </DiffComponentProvider>
+              </MarkedProvider>
+            </DialogProvider>
+          </ErrorBoundary>
+        </ThemeProvider>
+      </I18nProvider>
     </MetaProvider>
   )
 }

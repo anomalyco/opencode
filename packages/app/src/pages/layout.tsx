@@ -53,10 +53,12 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogSelectLanguage } from "@/components/dialog-select-language"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { useServer } from "@/context/server"
+import { useI18n } from "@/i18n"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -91,6 +93,7 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
+  const { t } = useI18n()
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeLabel: Record<ColorScheme, string> = {
@@ -176,7 +179,7 @@ export default function Layout(props: ParentProps) {
       const session = store.session.find((s) => s.id === perm.sessionID)
       const sessionKey = `${directory}:${perm.sessionID}`
 
-      const sessionTitle = session?.title ?? "New session"
+      const sessionTitle = session?.title ?? t().session.newSession
       const projectName = getFilename(directory)
       const description = `${sessionTitle} in ${projectName} needs permission`
       const href = `/${base64Encode(directory)}/session/${perm.sessionID}`
@@ -359,21 +362,21 @@ export default function Layout(props: ParentProps) {
     const commands: CommandOption[] = [
       {
         id: "sidebar.toggle",
-        title: "Toggle sidebar",
+        title: t().sidebar.toggle,
         category: "View",
         keybind: "mod+b",
         onSelect: () => layout.sidebar.toggle(),
       },
       {
         id: "project.open",
-        title: "Open project",
+        title: t().home.openProject,
         category: "Project",
         keybind: "mod+o",
         onSelect: () => chooseProject(),
       },
       {
         id: "provider.connect",
-        title: "Connect provider",
+        title: t().sidebar.connectProvider,
         category: "Provider",
         onSelect: () => connectProvider(),
       },
@@ -398,8 +401,18 @@ export default function Layout(props: ParentProps) {
         onSelect: () => navigateSessionByOffset(1),
       },
       {
+        id: "session.new",
+        title: t().session.newSession,
+        category: "Session",
+        keybind: "mod+n",
+        onSelect: () => {
+          const current = params.dir ? base64Decode(params.dir) : undefined
+          if (current) navigate(`/${params.dir}/session`)
+        },
+      },
+      {
         id: "session.archive",
-        title: "Archive session",
+        title: t().session.archive,
         category: "Session",
         keybind: "mod+shift+backspace",
         disabled: !params.dir || !params.id,
@@ -732,7 +745,7 @@ export default function Layout(props: ParentProps) {
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
             <TooltipKeybind
               placement={props.mobile ? "bottom" : "right"}
-              title="Archive session"
+              title={t().session.archive}
               keybind={command.keybind("session.archive")}
             >
               <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
@@ -810,15 +823,15 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Item
                           onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}
                         >
-                          <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>{t().layout.editProject}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item onSelect={() => closeProject(props.project.worktree)}>
-                          <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
+                          <DropdownMenu.ItemLabel>{t().layout.closeProject}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
                   </DropdownMenu>
-                  <TooltipKeybind placement="top" title="New session" keybind={command.keybind("session.new")}>
+                  <TooltipKeybind placement="top" title={t().sidebar.newSession} keybind={command.keybind("session.new")}>
                     <IconButton as={A} href={`${defaultWorktree()}/session`} icon="plus-small" variant="ghost" />
                   </TooltipKeybind>
                 </div>
@@ -842,14 +855,14 @@ export default function Layout(props: ParentProps) {
                     >
                       <div class="flex items-center self-stretch w-full">
                         <div class="flex-1 min-w-0">
-                          <Tooltip placement={props.mobile ? "bottom" : "right"} value="New session">
+                          <Tooltip placement={props.mobile ? "bottom" : "right"} value={t().sidebar.newSession}>
                             <A
                               href={`${defaultWorktree()}/session`}
                               class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
                                 <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                                  New session
+                                  {t().sidebar.newSession}
                                 </span>
                               </div>
                             </A>
@@ -866,7 +879,7 @@ export default function Layout(props: ParentProps) {
                         size="large"
                         onClick={loadMoreSessions}
                       >
-                        Load more
+                        {t().sidebar.loadMore}
                       </Button>
                     </div>
                   </Show>
@@ -918,8 +931,7 @@ export default function Layout(props: ParentProps) {
             <Show when={!sidebarProps.mobile}>
               <TooltipKeybind
                 class="shrink-0"
-                placement="right"
-                title="Toggle sidebar"
+                title={t().sidebar.toggle}
                 keybind={command.keybind("sidebar.toggle")}
                 inactive={expanded()}
               >
@@ -948,7 +960,7 @@ export default function Layout(props: ParentProps) {
                   </div>
                   <Show when={layout.sidebar.opened()}>
                     <div class="hidden group-hover/sidebar-toggle:block group-active/sidebar-toggle:block text-text-base">
-                      Toggle sidebar
+                      {t().sidebar.toggle}
                     </div>
                   </Show>
                 </Button>
@@ -985,24 +997,24 @@ export default function Layout(props: ParentProps) {
             <Match when={providers.all().length > 0 && !providers.paid().length && expanded()}>
               <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                 <div class="p-3 flex flex-col gap-2">
-                  <div class="text-12-medium text-text-strong">Getting started</div>
-                  <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
-                  <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                  <div class="text-12-medium text-text-strong">{t().sidebar.gettingStarted}</div>
+                  <div class="text-text-base">{t().sidebar.gettingStartedDesc1}</div>
+                  <div class="text-text-base">{t().sidebar.gettingStartedDesc2}</div>
                 </div>
-                <Tooltip placement="right" value="Connect provider" inactive={expanded()}>
+                <Tooltip placement="right" value={t().sidebar.connectProvider} inactive={expanded()}>
                   <Button
                     class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-lg rounded-t-none shadow-none border-t border-border-weak-base pl-2.25 pb-px"
                     size="large"
                     icon="plus"
                     onClick={connectProvider}
                   >
-                    Connect provider
+                    {t().sidebar.connectProvider}
                   </Button>
                 </Tooltip>
               </div>
             </Match>
             <Match when={providers.all().length > 0}>
-              <Tooltip placement="right" value="Connect provider" inactive={expanded()}>
+              <Tooltip placement="right" value={t().sidebar.connectProvider} inactive={expanded()}>
                 <Button
                   class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
                   variant="ghost"
@@ -1010,7 +1022,7 @@ export default function Layout(props: ParentProps) {
                   icon="plus"
                   onClick={connectProvider}
                 >
-                  <Show when={expanded()}>Connect provider</Show>
+                  <Show when={expanded()}>{t().sidebar.connectProvider}</Show>
                 </Button>
               </Tooltip>
             </Match>
@@ -1019,7 +1031,7 @@ export default function Layout(props: ParentProps) {
             placement="right"
             value={
               <div class="flex items-center gap-2">
-                <span>Open project</span>
+                <span>{t().home.openProject}</span>
                 <Show when={!sidebarProps.mobile}>
                   <span class="text-icon-base text-12-medium">{command.keybind("project.open")}</span>
                 </Show>
@@ -1034,10 +1046,10 @@ export default function Layout(props: ParentProps) {
               icon="folder-add-left"
               onClick={chooseProject}
             >
-              <Show when={expanded()}>Open project</Show>
+              <Show when={expanded()}>{t().home.openProject}</Show>
             </Button>
           </Tooltip>
-          <Tooltip placement="right" value="Share feedback" inactive={expanded()}>
+          <Tooltip placement="right" value={t().sidebar.shareFeedback} inactive={expanded()}>
             <Button
               as={"a"}
               href="https://opencode.ai/desktop-feedback"
@@ -1047,7 +1059,18 @@ export default function Layout(props: ParentProps) {
               size="large"
               icon="bubble-5"
             >
-              <Show when={expanded()}>Share feedback</Show>
+              <Show when={expanded()}>{t().sidebar.shareFeedback}</Show>
+            </Button>
+          </Tooltip>
+          <Tooltip placement="right" value={t().sidebar.changeLanguage} inactive={expanded()}>
+            <Button
+              class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
+              variant="ghost"
+              size="large"
+              icon="settings-gear"
+              onClick={() => dialog.show(() => <DialogSelectLanguage />)}
+            >
+              <Show when={expanded()}>{t().sidebar.changeLanguage}</Show>
             </Button>
           </Tooltip>
         </div>
