@@ -348,7 +348,7 @@ export const rustfmt: Info = {
 }
 
 export const cargofmt: Info = {
-  name: "cargo fmt",
+  name: "cargofmt",
   command: ["cargo", "fmt", "--", "$FILE"],
   extensions: [".rs"],
   async enabled() {
