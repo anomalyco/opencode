@@ -1,5 +1,5 @@
 import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, createSignal, For, type JSX, on, Show } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
@@ -116,6 +116,33 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     setScrollRef,
   })
 
+  function GroupHeader(props: { category: string }): JSX.Element {
+    const [stuck, setStuck] = createSignal(false)
+    const [header, setHeader] = createSignal<HTMLDivElement | undefined>(undefined)
+
+    createEffect(() => {
+      const scroll = scrollRef()
+      const node = header()
+      if (!scroll || !node) return
+
+      const handler = () => {
+        const rect = node.getBoundingClientRect()
+        const scrollRect = scroll.getBoundingClientRect()
+        setStuck(rect.top <= scrollRect.top + 1 && scroll.scrollTop > 0)
+      }
+
+      scroll.addEventListener("scroll", handler, { passive: true })
+      handler()
+      onCleanup(() => scroll.removeEventListener("scroll", handler))
+    })
+
+    return (
+      <div data-slot="list-header" data-stuck={stuck()} ref={setHeader}>
+        {props.category}
+      </div>
+    )
+  }
+
   return (
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
@@ -148,40 +175,17 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           fallback={
             <div data-slot="list-empty-state">
               <div data-slot="list-message">
-                {props.emptyMessage ?? "No results"} for <span data-slot="list-filter">&quot;{filter()}&quot;</span>
+                {props.emptyMessage ?? (grouped.loading ? "Loading" : "No results")} for{" "}
+                <span data-slot="list-filter">&quot;{filter()}&quot;</span>
               </div>
             </div>
           }
         >
-          <For each={grouped()}>
+          <For each={grouped.latest}>
             {(group) => (
               <div data-slot="list-group">
                 <Show when={group.category}>
-                  {(() => {
-                    const [stuck, setStuck] = createSignal(false)
-                    return (
-                      <div
-                        data-slot="list-header"
-                        data-stuck={stuck()}
-                        ref={(el) => {
-                          createEffect(() => {
-                            const scroll = scrollRef()
-                            if (!scroll) return
-                            const handler = () => {
-                              const rect = el.getBoundingClientRect()
-                              const scrollRect = scroll.getBoundingClientRect()
-                              setStuck(rect.top <= scrollRect.top + 1 && scroll.scrollTop > 0)
-                            }
-                            scroll.addEventListener("scroll", handler, { passive: true })
-                            handler()
-                            return () => scroll.removeEventListener("scroll", handler)
-                          })
-                        }}
-                      >
-                        {group.category}
-                      </div>
-                    )
-                  })()}
+                  <GroupHeader category={group.category} />
                 </Show>
                 <div data-slot="list-items">
                   <For each={group.items}>
@@ -203,10 +207,16 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                       >
                         {props.children(item)}
                         <Show when={item === props.current}>
-                          <Icon data-slot="list-item-selected-icon" name="check-small" />
+                          <span data-slot="list-item-selected-icon">
+                            <Icon name="check-small" />
+                          </span>
                         </Show>
                         <Show when={props.activeIcon}>
-                          {(icon) => <Icon data-slot="list-item-active-icon" name={icon()} />}
+                          {(icon) => (
+                            <span data-slot="list-item-active-icon">
+                              <Icon name={icon()} />
+                            </span>
+                          )}
                         </Show>
                       </button>
                     )}

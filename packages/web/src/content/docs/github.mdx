@@ -58,12 +58,12 @@ Or you can set it up manually.
          id-token: write
        steps:
          - name: Checkout repository
-           uses: actions/checkout@v4
+           uses: actions/checkout@v6
            with:
              fetch-depth: 1
 
          - name: Run OpenCode
-           uses: sst/opencode/github@latest
+           uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -134,10 +134,10 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Run OpenCode
-        uses: sst/opencode/github@latest
+        uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -171,8 +171,8 @@ jobs:
       pull-requests: read
       issues: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: sst/opencode/github@latest
+      - uses: actions/checkout@v6
+      - uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -221,10 +221,10 @@ jobs:
             return days >= 30;
           result-encoding: string
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.check.outputs.result == 'true'
 
-      - uses: sst/opencode/github@latest
+      - uses: anomalyco/opencode/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -246,7 +246,7 @@ For `issues` events, the `prompt` input is **required** since there's no comment
 Override the default prompt to customize OpenCode's behavior for your workflow.
 
 ```yaml title=".github/workflows/opencode.yml"
-- uses: sst/opencode/github@latest
+- uses: anomalyco/opencode/github@latest
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |

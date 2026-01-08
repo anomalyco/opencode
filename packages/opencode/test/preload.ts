@@ -11,6 +11,12 @@ await fs.mkdir(dir, { recursive: true })
 afterAll(() => {
   fsSync.rmSync(dir, { recursive: true, force: true })
 })
+// Set test home directory to isolate tests from user's actual home directory
+// This prevents tests from picking up real user configs/skills from ~/.claude/skills
+const testHome = path.join(dir, "home")
+await fs.mkdir(testHome, { recursive: true })
+process.env["OPENCODE_TEST_HOME"] = testHome
+
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
@@ -36,6 +42,8 @@ delete process.env["GOOGLE_GENERATIVE_AI_API_KEY"]
 delete process.env["AZURE_OPENAI_API_KEY"]
 delete process.env["AWS_ACCESS_KEY_ID"]
 delete process.env["AWS_PROFILE"]
+delete process.env["AWS_REGION"]
+delete process.env["AWS_BEARER_TOKEN_BEDROCK"]
 delete process.env["OPENROUTER_API_KEY"]
 delete process.env["GROQ_API_KEY"]
 delete process.env["MISTRAL_API_KEY"]

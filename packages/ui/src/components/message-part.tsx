@@ -1,6 +1,18 @@
-import { Component, createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
+import {
+  Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  Show,
+  Switch,
+  onCleanup,
+  type JSX,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import {
+  AgentPart,
   AssistantMessage,
   FilePart,
   Message as MessageType,
@@ -14,6 +26,7 @@ import {
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { useCodeComponent } from "../context/code"
+import { useDialog } from "../context/dialog"
 import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
@@ -22,6 +35,7 @@ import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
+import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createAutoScroll } from "../hooks"
@@ -79,6 +93,47 @@ export interface MessagePartProps {
 export type PartComponent = Component<MessagePartProps>
 
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
+
+const TEXT_RENDER_THROTTLE_MS = 100
+
+function same<T>(a: readonly T[], b: readonly T[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
+function createThrottledValue(getValue: () => string) {
+  const [value, setValue] = createSignal(getValue())
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  let last = 0
+
+  createEffect(() => {
+    const next = getValue()
+    const now = Date.now()
+    const remaining = TEXT_RENDER_THROTTLE_MS - (now - last)
+    if (remaining <= 0) {
+      if (timeout) {
+        clearTimeout(timeout)
+        timeout = undefined
+      }
+      last = now
+      setValue(next)
+      return
+    }
+    if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(() => {
+      last = Date.now()
+      setValue(next)
+      timeout = undefined
+    }, remaining)
+  })
+
+  onCleanup(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+
+  return value
+}
 
 function relativizeProjectPaths(text: string, directory?: string) {
   if (!text) return ""
@@ -209,15 +264,21 @@ export function Message(props: MessageProps) {
 }
 
 export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
-  const filteredParts = createMemo(() => {
-    return props.parts?.filter((x) => {
-      return x.type !== "tool" || (x as ToolPart).tool !== "todoread"
-    })
-  })
+  const emptyParts: PartType[] = []
+  const filteredParts = createMemo(
+    () =>
+      props.parts.filter((x) => {
+        return x.type !== "tool" || (x as ToolPart).tool !== "todoread"
+      }),
+    emptyParts,
+    { equals: same },
+  )
   return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
+  const dialog = useDialog()
+
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
@@ -240,13 +301,28 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     }),
   )
 
+  const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
+
+  const openImagePreview = (url: string, alt?: string) => {
+    dialog.show(() => <ImagePreview src={url} alt={alt} />)
+  }
+
   return (
     <div data-component="user-message">
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
             {(file) => (
-              <div data-slot="user-message-attachment" data-type={file.mime.startsWith("image/") ? "image" : "file"}>
+              <div
+                data-slot="user-message-attachment"
+                data-type={file.mime.startsWith("image/") ? "image" : "file"}
+                data-clickable={file.mime.startsWith("image/") && !!file.url}
+                onClick={() => {
+                  if (file.mime.startsWith("image/") && file.url) {
+                    openImagePreview(file.url, file.filename)
+                  }
+                }}
+              >
                 <Show
                   when={file.mime.startsWith("image/") && file.url}
                   fallback={
@@ -264,33 +340,40 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       </Show>
       <Show when={text()}>
         <div data-slot="user-message-text">
-          <HighlightedText text={text()} references={inlineFiles()} />
+          <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
         </div>
       </Show>
     </div>
   )
 }
 
-function HighlightedText(props: { text: string; references: FilePart[] }) {
+type HighlightSegment = { text: string; type?: "file" | "agent" }
+
+function HighlightedText(props: { text: string; references: FilePart[]; agents: AgentPart[] }) {
   const segments = createMemo(() => {
     const text = props.text
-    const refs = [...props.references].sort((a, b) => (a.source?.text?.start ?? 0) - (b.source?.text?.start ?? 0))
 
-    const result: { text: string; highlight?: boolean }[] = []
+    const allRefs: { start: number; end: number; type: "file" | "agent" }[] = [
+      ...props.references
+        .filter((r) => r.source?.text?.start !== undefined && r.source?.text?.end !== undefined)
+        .map((r) => ({ start: r.source!.text!.start, end: r.source!.text!.end, type: "file" as const })),
+      ...props.agents
+        .filter((a) => a.source?.start !== undefined && a.source?.end !== undefined)
+        .map((a) => ({ start: a.source!.start, end: a.source!.end, type: "agent" as const })),
+    ].sort((a, b) => a.start - b.start)
+
+    const result: HighlightSegment[] = []
     let lastIndex = 0
 
-    for (const ref of refs) {
-      const start = ref.source?.text?.start
-      const end = ref.source?.text?.end
+    for (const ref of allRefs) {
+      if (ref.start < lastIndex) continue
 
-      if (start === undefined || end === undefined || start < lastIndex) continue
-
-      if (start > lastIndex) {
-        result.push({ text: text.slice(lastIndex, start) })
+      if (ref.start > lastIndex) {
+        result.push({ text: text.slice(lastIndex, ref.start) })
       }
 
-      result.push({ text: text.slice(start, end), highlight: true })
-      lastIndex = end
+      result.push({ text: text.slice(ref.start, ref.end), type: ref.type })
+      lastIndex = ref.end
     }
 
     if (lastIndex < text.length) {
@@ -302,7 +385,16 @@ function HighlightedText(props: { text: string; references: FilePart[] }) {
 
   return (
     <For each={segments()}>
-      {(segment) => <span classList={{ "text-text-strong font-medium": segment.highlight }}>{segment.text}</span>}
+      {(segment) => (
+        <span
+          classList={{
+            "text-syntax-property": segment.type === "file",
+            "text-syntax-type": segment.type === "agent",
+          }}
+        >
+          {segment.text}
+        </span>
+      )}
     </For>
   )
 }
@@ -362,9 +454,22 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const part = props.part as ToolPart
 
   const permission = createMemo(() => {
-    const sessionID = props.message.sessionID
-    const permissions = data.store.permission?.[sessionID] ?? []
-    return permissions.find((p) => p.callID === part.callID)
+    const next = data.store.permission?.[props.message.sessionID]?.[0]
+    if (!next || !next.tool) return undefined
+    if (next.tool!.callID !== part.callID) return undefined
+    return next
+  })
+
+  const [showPermission, setShowPermission] = createSignal(false)
+
+  createEffect(() => {
+    const perm = permission()
+    if (perm) {
+      const timeout = setTimeout(() => setShowPermission(true), 50)
+      onCleanup(() => clearTimeout(timeout))
+    } else {
+      setShowPermission(false)
+    }
   })
 
   const [forceOpen, setForceOpen] = createSignal(false)
@@ -382,13 +487,17 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     })
   }
 
-  const component = createMemo(() => {
-    const render = ToolRegistry.render(part.tool) ?? GenericTool
-    // @ts-expect-error
-    const metadata = part.state?.metadata ?? {}
-    const input = part.state?.input ?? {}
+  const emptyInput: Record<string, any> = {}
+  const emptyMetadata: Record<string, any> = {}
 
-    return (
+  const input = () => part.state?.input ?? emptyInput
+  // @ts-expect-error
+  const metadata = () => part.state?.metadata ?? emptyMetadata
+
+  const render = ToolRegistry.render(part.tool) ?? GenericTool
+
+  return (
+    <div data-component="tool-part-wrapper" data-permission={showPermission()}>
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
@@ -417,9 +526,9 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         <Match when={true}>
           <Dynamic
             component={render}
-            input={input}
+            input={input()}
             tool={part.tool}
-            metadata={metadata}
+            metadata={metadata()}
             // @ts-expect-error
             output={part.state.output}
             status={part.state.status}
@@ -429,29 +538,20 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           />
         </Match>
       </Switch>
-    )
-  })
-
-  return (
-    <div data-component="tool-part-wrapper" data-permission={!!permission()}>
-      <Show when={component()}>{component()}</Show>
-      <Show when={permission()}>
-        {(perm) => (
-          <div data-component="permission-prompt">
-            <div data-slot="permission-message">{perm().title}</div>
-            <div data-slot="permission-actions">
-              <Button variant="ghost" size="small" onClick={() => respond("reject")}>
-                Deny
-              </Button>
-              <Button variant="secondary" size="small" onClick={() => respond("always")}>
-                Allow always
-              </Button>
-              <Button variant="primary" size="small" onClick={() => respond("once")}>
-                Allow once
-              </Button>
-            </div>
+      <Show when={showPermission() && permission()}>
+        <div data-component="permission-prompt">
+          <div data-slot="permission-actions">
+            <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+              Deny
+            </Button>
+            <Button variant="secondary" size="small" onClick={() => respond("always")}>
+              Allow always
+            </Button>
+            <Button variant="primary" size="small" onClick={() => respond("once")}>
+              Allow once
+            </Button>
           </div>
-        )}
+        </div>
       </Show>
     </div>
   )
@@ -461,11 +561,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const data = useData()
   const part = props.part as TextPart
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
+  const throttledText = createThrottledValue(displayText)
 
   return (
-    <Show when={displayText()}>
+    <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={displayText()} />
+        <Markdown text={throttledText()} />
       </div>
     </Show>
   )
@@ -473,10 +574,13 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const part = props.part as ReasoningPart
+  const text = () => part.text.trim()
+  const throttledText = createThrottledValue(text)
+
   return (
-    <Show when={part.text.trim()}>
+    <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={part.text.trim()} />
+        <Markdown text={throttledText()} />
       </div>
     </Show>
   )
@@ -551,7 +655,7 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "grep",
   render(props) {
-    const args = []
+    const args: string[] = []
     if (props.input.pattern) args.push("pattern=" + props.input.pattern)
     if (props.input.include) args.push("include=" + props.input.include)
     return (
@@ -623,24 +727,25 @@ ToolRegistry.register({
       const sessionId = childSessionId()
       if (!sessionId) return undefined
       const permissions = data.store.permission?.[sessionId] ?? []
-      return permissions.toSorted((a, b) => a.id.localeCompare(b.id))[0]
+      return permissions[0]
     })
 
     const childToolPart = createMemo(() => {
       const perm = childPermission()
-      if (!perm) return undefined
+      if (!perm || !perm.tool) return undefined
       const sessionId = childSessionId()
       if (!sessionId) return undefined
       // Find the tool part that matches the permission's callID
       const messages = data.store.message[sessionId] ?? []
-      for (const msg of messages) {
-        const parts = data.store.part[msg.id] ?? []
-        for (const part of parts) {
-          if (part.type === "tool" && (part as ToolPart).callID === perm.callID) {
-            return { part: part as ToolPart, message: msg }
-          }
+      const message = messages.findLast((m) => m.id === perm.tool!.messageID)
+      if (!message) return undefined
+      const parts = data.store.part[message.id] ?? []
+      for (const part of parts) {
+        if (part.type === "tool" && (part as ToolPart).callID === perm.tool!.callID) {
+          return { part: part as ToolPart, message }
         }
       }
+
       return undefined
     })
 
@@ -652,6 +757,13 @@ ToolRegistry.register({
         permissionID: perm.id,
         response,
       })
+    }
+
+    const handleSubtitleClick = () => {
+      const sessionId = childSessionId()
+      if (sessionId && data.navigateToSession) {
+        data.navigateToSession(sessionId)
+      }
     }
 
     const renderChildToolPart = () => {
@@ -680,40 +792,38 @@ ToolRegistry.register({
       <div data-component="tool-part-wrapper" data-permission={!!childPermission()}>
         <Switch>
           <Match when={childPermission()}>
-            {(perm) => (
-              <>
-                <Show
-                  when={childToolPart()}
-                  fallback={
-                    <BasicTool
-                      icon="task"
-                      defaultOpen={true}
-                      trigger={{
-                        title: `${props.input.subagent_type || props.tool} Agent`,
-                        titleClass: "capitalize",
-                        subtitle: props.input.description,
-                      }}
-                    />
-                  }
-                >
-                  {renderChildToolPart()}
-                </Show>
-                <div data-component="permission-prompt">
-                  <div data-slot="permission-message">{perm().title}</div>
-                  <div data-slot="permission-actions">
-                    <Button variant="ghost" size="small" onClick={() => respond("reject")}>
-                      Deny
-                    </Button>
-                    <Button variant="secondary" size="small" onClick={() => respond("always")}>
-                      Allow always
-                    </Button>
-                    <Button variant="primary" size="small" onClick={() => respond("once")}>
-                      Allow once
-                    </Button>
-                  </div>
+            <>
+              <Show
+                when={childToolPart()}
+                fallback={
+                  <BasicTool
+                    icon="task"
+                    defaultOpen={true}
+                    trigger={{
+                      title: `${props.input.subagent_type || props.tool} Agent`,
+                      titleClass: "capitalize",
+                      subtitle: props.input.description,
+                    }}
+                    onSubtitleClick={handleSubtitleClick}
+                  />
+                }
+              >
+                {renderChildToolPart()}
+              </Show>
+              <div data-component="permission-prompt">
+                <div data-slot="permission-actions">
+                  <Button variant="ghost" size="small" onClick={() => respond("reject")}>
+                    Deny
+                  </Button>
+                  <Button variant="secondary" size="small" onClick={() => respond("always")}>
+                    Allow always
+                  </Button>
+                  <Button variant="primary" size="small" onClick={() => respond("once")}>
+                    Allow once
+                  </Button>
                 </div>
-              </>
-            )}
+              </div>
+            </>
           </Match>
           <Match when={true}>
             <BasicTool
@@ -724,6 +834,7 @@ ToolRegistry.register({
                 titleClass: "capitalize",
                 subtitle: props.input.description,
               }}
+              onSubtitleClick={handleSubtitleClick}
             >
               <div
                 ref={autoScroll.scrollRef}
@@ -786,7 +897,6 @@ ToolRegistry.register({
     return (
       <BasicTool
         {...props}
-        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="edit-trigger">
@@ -807,19 +917,17 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={props.metadata.filediff}>
+        <Show when={props.metadata.filediff?.path || props.input.filePath}>
           <div data-component="edit-content">
             <Dynamic
               component={diffComponent}
               before={{
-                name: props.metadata.filediff.path,
-                contents: props.metadata.filediff.before,
-                cacheKey: checksum(props.metadata.filediff.before),
+                name: props.metadata?.filediff?.file || props.input.filePath,
+                contents: props.metadata?.filediff?.before || props.input.oldString,
               }}
               after={{
-                name: props.metadata.filediff.path,
-                contents: props.metadata.filediff.after,
-                cacheKey: checksum(props.metadata.filediff.after),
+                name: props.metadata?.filediff?.file || props.input.filePath,
+                contents: props.metadata?.filediff?.after || props.input.newString,
               }}
             />
           </div>
@@ -838,7 +946,6 @@ ToolRegistry.register({
     return (
       <BasicTool
         {...props}
-        defaultOpen
         icon="code-lines"
         trigger={
           <div data-component="write-trigger">

@@ -3,7 +3,7 @@ import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 
 export type Platform = {
   /** Platform discriminator */
-  platform: "web" | "tauri"
+  platform: "web" | "desktop"
 
   /** App version */
   version?: string
@@ -14,7 +14,10 @@ export type Platform = {
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Open native directory picker dialog (Tauri only) */
+  /** Send a system notification (optional deep link) */
+  notify(title: string, description?: string, href?: string): Promise<void>
+
+  /** Open directory picker dialog (native on Tauri, server-backed on web) */
   openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
   /** Open native file picker dialog (Tauri only) */

@@ -91,6 +91,10 @@ export const RunCommand = cmd({
         type: "string",
         describe: "project directory to run in (defaults to current working directory)",
       })
+      .option("variant", {
+        type: "string",
+        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
+      })
   },
   handler: async (args) => {
     // Use --project-dir if provided, otherwise fall back to cwd
@@ -209,14 +213,14 @@ export const RunCommand = cmd({
             break
           }
 
-          if (event.type === "permission.updated") {
+          if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
             const result = await select({
-              message: `Permission required to run: ${permission.title}`,
+              message: `Permission required: ${permission.permission} (${permission.patterns.join(", ")})`,
               options: [
                 { value: "once", label: "Allow once" },
-                { value: "always", label: "Always allow" },
+                { value: "always", label: "Always allow: " + permission.always.join(", ") },
                 { value: "reject", label: "Reject" },
               ],
               initialValue: "once",
@@ -261,6 +265,7 @@ export const RunCommand = cmd({
           model: args.model,
           command: args.command,
           arguments: message,
+          variant: args.variant,
         })
       } else {
         const modelParam = args.model ? Provider.parseModel(args.model) : undefined
@@ -268,6 +273,7 @@ export const RunCommand = cmd({
           sessionID,
           agent: resolvedAgent,
           model: modelParam,
+          variant: args.variant,
           parts: [...fileParts, { type: "text", text: message }],
         })
       }
@@ -293,7 +299,28 @@ export const RunCommand = cmd({
               : args.title
             : undefined
 
-        const result = await sdk.session.create(title ? { title } : {})
+        const result = await sdk.session.create(
+          title
+            ? {
+                title,
+                permission: [
+                  {
+                    permission: "question",
+                    action: "deny",
+                    pattern: "*",
+                  },
+                ],
+              }
+            : {
+                permission: [
+                  {
+                    permission: "question",
+                    action: "deny",
+                    pattern: "*",
+                  },
+                ],
+              },
+        )
         return result.data?.id
       })()
 

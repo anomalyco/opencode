@@ -3,7 +3,6 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
-import { useTheme } from "@opencode-ai/ui/theme"
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
@@ -27,6 +26,7 @@ export interface CommandOption {
   suggested?: boolean
   disabled?: boolean
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
+  onHighlight?: () => (() => void) | void
 }
 
 export function parseKeybind(config: string): Keybind[] {
@@ -116,24 +116,18 @@ export function formatKeybind(config: string): string {
 
 function DialogCommand(props: { options: CommandOption[] }) {
   const dialog = useDialog()
-  const theme = useTheme()
+  let cleanup: (() => void) | void
   let committed = false
 
   const handleMove = (option: CommandOption | undefined) => {
-    if (!option) return
-    if (option.id.startsWith("theme.set.")) {
-      const id = option.id.replace("theme.set.", "")
-      theme.previewTheme(id)
-    } else if (option.id.startsWith("theme.scheme.") && !option.id.includes("cycle")) {
-      const scheme = option.id.replace("theme.scheme.", "") as "light" | "dark" | "system"
-      theme.previewColorScheme(scheme)
-    }
+    cleanup?.()
+    cleanup = option?.onHighlight?.()
   }
 
   const handleSelect = (option: CommandOption | undefined) => {
     if (option) {
-      theme.commitPreview()
       committed = true
+      cleanup = undefined
       dialog.close()
       option.onSelect?.("palette")
     }
@@ -141,7 +135,7 @@ function DialogCommand(props: { options: CommandOption[] }) {
 
   onCleanup(() => {
     if (!committed) {
-      theme.cancelPreview()
+      cleanup?.()
     }
   })
 
@@ -183,8 +177,19 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const dialog = useDialog()
 
     const options = createMemo(() => {
-      const all = registrations().flatMap((x) => x())
+      const seen = new Set<string>()
+      const all: CommandOption[] = []
+
+      for (const reg of registrations()) {
+        for (const opt of reg()) {
+          if (seen.has(opt.id)) continue
+          seen.add(opt.id)
+          all.push(opt)
+        }
+      }
+
       const suggested = all.filter((x) => x.suggested && !x.disabled)
+
       return [
         ...suggested.map((x) => ({
           ...x,

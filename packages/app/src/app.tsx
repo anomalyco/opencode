@@ -1,5 +1,5 @@
 import "@/index.css"
-import { ErrorBoundary, Show } from "solid-js"
+import { ErrorBoundary, Show, lazy, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { Font } from "@opencode-ai/ui/font"
@@ -10,27 +10,34 @@ import { Diff } from "@opencode-ai/ui/diff"
 import { Code } from "@opencode-ai/ui/code"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
+import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
+import { ServerProvider, useServer } from "@/context/server"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
+import { FileProvider } from "@/context/file"
 import { NotificationProvider } from "@/context/notification"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
+import { Logo } from "@opencode-ai/ui/logo"
 import Layout from "@/pages/layout"
-import Home from "@/pages/home"
 import DirectoryLayout from "@/pages/directory-layout"
-import Session from "@/pages/session"
 import { ErrorPage } from "./pages/error"
 import { iife } from "@opencode-ai/util/iife"
+import { Suspense } from "solid-js"
+
+const Home = lazy(() => import("@/pages/home"))
+const Session = lazy(() => import("@/pages/session"))
+const Loading = () => <div class="size-full flex items-center justify-center text-text-weak">Loading...</div>
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; port?: number }
+    __OPENCODE__?: { updaterEnabled?: boolean; port?: number; serverReady?: boolean }
   }
 }
 
-const url = iife(() => {
+const defaultServerUrl = iife(() => {
   const param = new URLSearchParams(document.location.search).get("url")
   if (param) return param
 
@@ -42,7 +49,7 @@ const url = iife(() => {
   return window.location.origin
 })
 
-export function App() {
+export function AppBaseProviders(props: ParentProps) {
   return (
     <MetaProvider>
       <Font />
@@ -51,45 +58,75 @@ export function App() {
           <DialogProvider>
             <MarkedProvider>
               <DiffComponentProvider component={Diff}>
-                <CodeComponentProvider component={Code}>
-                  <GlobalSDKProvider url={url}>
-                    <GlobalSyncProvider>
-                      <LayoutProvider>
-                        <NotificationProvider>
-                          <Router
-                            root={(props) => (
-                              <CommandProvider>
-                                <Layout>{props.children}</Layout>
-                              </CommandProvider>
-                            )}
-                          >
-                            <Route path="/" component={Home} />
-                            <Route path="/:dir" component={DirectoryLayout}>
-                              <Route path="/" component={() => <Navigate href="session" />} />
-                              <Route
-                                path="/session/:id?"
-                                component={(p) => (
-                                  <Show when={p.params.id || true} keyed>
-                                    <TerminalProvider>
-                                      <PromptProvider>
-                                        <Session />
-                                      </PromptProvider>
-                                    </TerminalProvider>
-                                  </Show>
-                                )}
-                              />
-                            </Route>
-                          </Router>
-                        </NotificationProvider>
-                      </LayoutProvider>
-                    </GlobalSyncProvider>
-                  </GlobalSDKProvider>
-                </CodeComponentProvider>
+                <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
               </DiffComponentProvider>
             </MarkedProvider>
           </DialogProvider>
         </ErrorBoundary>
       </ThemeProvider>
     </MetaProvider>
+  )
+}
+
+function ServerKey(props: ParentProps) {
+  const server = useServer()
+  return (
+    <Show when={server.url} keyed>
+      {props.children}
+    </Show>
+  )
+}
+
+export function AppInterface() {
+  return (
+    <ServerProvider defaultUrl={defaultServerUrl}>
+      <ServerKey>
+        <GlobalSDKProvider>
+          <GlobalSyncProvider>
+            <Router
+              root={(props) => (
+                <PermissionProvider>
+                  <LayoutProvider>
+                    <NotificationProvider>
+                      <CommandProvider>
+                        <Layout>{props.children}</Layout>
+                      </CommandProvider>
+                    </NotificationProvider>
+                  </LayoutProvider>
+                </PermissionProvider>
+              )}
+            >
+              <Route
+                path="/"
+                component={() => (
+                  <Suspense fallback={<Loading />}>
+                    <Home />
+                  </Suspense>
+                )}
+              />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route path="/" component={() => <Navigate href="session" />} />
+                <Route
+                  path="/session/:id?"
+                  component={(p) => (
+                    <Show when={p.params.id ?? "new"} keyed>
+                      <TerminalProvider>
+                        <FileProvider>
+                          <PromptProvider>
+                            <Suspense fallback={<Loading />}>
+                              <Session />
+                            </Suspense>
+                          </PromptProvider>
+                        </FileProvider>
+                      </TerminalProvider>
+                    </Show>
+                  )}
+                />
+              </Route>
+            </Router>
+          </GlobalSyncProvider>
+        </GlobalSDKProvider>
+      </ServerKey>
+    </ServerProvider>
   )
 }

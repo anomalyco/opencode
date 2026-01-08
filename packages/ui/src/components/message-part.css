@@ -40,6 +40,10 @@
       border-color: var(--border-strong-base);
     }
 
+    &[data-clickable="true"] {
+      cursor: pointer;
+    }
+
     &[data-type="image"] {
       width: 48px;
       height: 48px;
@@ -73,11 +77,11 @@
 
   [data-slot="user-message-text"] {
     white-space: pre-wrap;
+    word-break: break-all;
     overflow: hidden;
-    background: var(--surface-inset-base);
-    padding: 6px 12px;
+    background: var(--surface-base);
+    padding: 8px 12px;
     border-radius: 4px;
-    border: 0.5px solid var(--border-weak-base);
   }
 
   .text-text-strong {
@@ -245,6 +249,14 @@
 
 [data-component="edit-content"] {
   border-top: 1px solid var(--border-weaker-base);
+  max-height: 420px;
+  overflow-y: auto;
+
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 [data-component="write-content"] {
@@ -365,14 +377,27 @@
   }
 }
 
+[data-component="user-message"] [data-slot="user-message-text"],
+[data-component="text-part"],
+[data-component="reasoning-part"],
+[data-component="tool-error"],
+[data-component="tool-output"],
+[data-component="edit-content"],
+[data-component="write-content"],
+[data-component="todos"],
+[data-component="diagnostics"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 [data-component="tool-part-wrapper"] {
   width: 100%;
 
   &[data-permission="true"] {
     position: sticky;
-    top: var(--sticky-header-height, 80px);
+    top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
-    z-index: 10;
+    z-index: 20;
     border-radius: 6px;
     border: none;
     box-shadow: var(--shadow-xs-border-base);
@@ -383,6 +408,7 @@
       content: "";
       position: absolute;
       inset: -1.5px;
+      top: -5px;
       border-radius: 7.5px;
       border: 1.5px solid transparent;
       background:
@@ -390,12 +416,12 @@
         conic-gradient(
             from var(--border-angle),
             transparent 0deg,
-            transparent 270deg,
+            transparent 0deg,
             var(--border-warning-strong, var(--border-warning-selected)) 300deg,
             var(--border-warning-base) 360deg
           )
           border-box;
-      animation: chase-border 1.5s linear infinite;
+      animation: chase-border 2.5s linear infinite;
       pointer-events: none;
       z-index: -1;
     }
@@ -443,14 +469,6 @@
   padding: 8px 12px;
   background-color: var(--surface-raised-strong);
   border-radius: 0 0 6px 6px;
-
-  [data-slot="permission-message"] {
-    display: none;
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-  }
 
   [data-slot="permission-actions"] {
     display: flex;

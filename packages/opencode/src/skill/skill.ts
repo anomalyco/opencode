@@ -4,6 +4,10 @@ import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
 import { ConfigMarkdown } from "../config/markdown"
 import { Log } from "../util/log"
+import { Global } from "@/global"
+import { Filesystem } from "@/util/filesystem"
+import { exists } from "fs/promises"
+import { Flag } from "@/flag/flag"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -32,41 +36,81 @@ export namespace Skill {
     }),
   )
 
-  const SKILL_GLOB = new Bun.Glob("skill/**/SKILL.md")
+  const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
+  const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
 
   export const state = Instance.state(async () => {
-    const directories = await Config.directories()
     const skills: Record<string, Info> = {}
 
-    for (const dir of directories) {
-      for await (const match of SKILL_GLOB.scan({
+    const addSkill = async (match: string) => {
+      const md = await ConfigMarkdown.parse(match)
+      if (!md) {
+        return
+      }
+
+      const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
+      if (!parsed.success) return
+
+      // Warn on duplicate skill names
+      if (skills[parsed.data.name]) {
+        log.warn("duplicate skill name", {
+          name: parsed.data.name,
+          existing: skills[parsed.data.name].location,
+          duplicate: match,
+        })
+      }
+
+      skills[parsed.data.name] = {
+        name: parsed.data.name,
+        description: parsed.data.description,
+        location: match,
+      }
+    }
+
+    // Scan .claude/skills/ directories (project-level)
+    const claudeDirs = await Array.fromAsync(
+      Filesystem.up({
+        targets: [".claude"],
+        start: Instance.directory,
+        stop: Instance.worktree,
+      }),
+    )
+    // Also include global ~/.claude/skills/
+    const globalClaude = `${Global.Path.home}/.claude`
+    if (await exists(globalClaude)) {
+      claudeDirs.push(globalClaude)
+    }
+
+    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS) {
+      for (const dir of claudeDirs) {
+        const matches = await Array.fromAsync(
+          CLAUDE_SKILL_GLOB.scan({
+            cwd: dir,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+            dot: true,
+          }),
+        ).catch((error) => {
+          log.error("failed .claude directory scan for skills", { dir, error })
+          return []
+        })
+
+        for (const match of matches) {
+          await addSkill(match)
+        }
+      }
+    }
+
+    // Scan .opencode/skill/ directories
+    for (const dir of await Config.directories()) {
+      for await (const match of OPENCODE_SKILL_GLOB.scan({
         cwd: dir,
         absolute: true,
         onlyFiles: true,
         followSymlinks: true,
       })) {
-        const md = await ConfigMarkdown.parse(match)
-        if (!md) {
-          continue
-        }
-
-        const parsed = Info.pick({ name: true, description: true }).safeParse(md.data)
-        if (!parsed.success) continue
-
-        // Warn on duplicate skill names
-        if (skills[parsed.data.name]) {
-          log.warn("duplicate skill name", {
-            name: parsed.data.name,
-            existing: skills[parsed.data.name].location,
-            duplicate: match,
-          })
-        }
-
-        skills[parsed.data.name] = {
-          name: parsed.data.name,
-          description: parsed.data.description,
-          location: match,
-        }
+        await addSkill(match)
       }
     }
 
