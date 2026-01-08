@@ -16,6 +16,10 @@ export namespace Flag {
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
   export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
 
+  // Browser automation
+  export const OPENCODE_ENABLE_BROWSER = truthy("OPENCODE_ENABLE_BROWSER")
+  export const OPENCODE_BROWSER_PROFILE_PATH = process.env["OPENCODE_BROWSER_PROFILE_PATH"]
+
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
   export const OPENCODE_EXPERIMENTAL_FILEWATCHER = truthy("OPENCODE_EXPERIMENTAL_FILEWATCHER")
