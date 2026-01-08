@@ -94,7 +94,7 @@ describe("ACP.Agent session cleanup", () => {
     expect(controller3.signal.aborted).toBe(true)
   })
 
-  test("setupEventSubscriptions replaces existing subscription for same session", () => {
+  test("setupEventSubscriptions replaces existing subscription for same session", async () => {
     const mockConnection = {
       closed: new Promise(() => {}), // Never resolves during test
     }
@@ -153,7 +153,12 @@ describe("ACP.Agent session cleanup", () => {
     expect(newController).not.toBe(existingController)
     expect(newController?.signal.aborted).toBe(false)
 
-    // Cleanup
+    // Cleanup - dispose the agent and abort all active generators
     agent.dispose()
+    for (const genController of activeGenerators) {
+      genController.abort()
+    }
+    // Give generators time to exit cleanly
+    await new Promise((r) => setTimeout(r, 50))
   })
 })

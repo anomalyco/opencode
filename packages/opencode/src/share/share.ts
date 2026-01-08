@@ -12,6 +12,8 @@ export namespace Share {
     queue: Promise<void>
     pending: Map<string, any>
     subscriptions: (() => void)[]
+    abortController: AbortController
+    disposed: boolean
   }
 
   const state = Instance.state<ShareState>(
@@ -19,15 +21,29 @@ export namespace Share {
       queue: Promise.resolve(),
       pending: new Map(),
       subscriptions: [],
+      abortController: new AbortController(),
+      disposed: false,
     }),
-    async () => {
-      // Delegate to the exported dispose function to keep cleanup logic centralized
-      dispose()
+    async (s) => {
+      // Perform cleanup inline to avoid calling state() during Instance disposal.
+      // Calling state() here could reinitialize after the Instance has been disposed.
+      s.disposed = true
+      s.abortController.abort()
+      for (const unsub of s.subscriptions) {
+        unsub()
+      }
+      s.subscriptions.length = 0
+      s.pending.clear()
+      s.queue = Promise.resolve()
+      log.info("disposed share subscriptions (via Instance)")
     },
   )
 
   export async function sync(key: string, content: any) {
     const s = state()
+    // Skip if already disposed
+    if (s.disposed) return
+    const signal = s.abortController.signal
     const [root, ...splits] = key.split("/")
     if (root !== "session") return
     const [sub, sessionID] = splits
@@ -38,6 +54,8 @@ export namespace Share {
     s.pending.set(key, content)
     s.queue = s.queue
       .then(async () => {
+        // Check if disposed before starting fetch
+        if (signal.aborted) return
         const content = s.pending.get(key)
         if (content === undefined) return
         s.pending.delete(key)
@@ -50,6 +68,7 @@ export namespace Share {
             key: key,
             content,
           }),
+          signal,
         })
       })
       .then((x) => {
@@ -60,10 +79,16 @@ export namespace Share {
           })
         }
       })
+      .catch((err) => {
+        // Ignore abort errors during disposal
+        if (err.name === "AbortError") return
+        log.error("sync error", { key, error: err })
+      })
   }
 
   export function init() {
-    // Clean up any existing subscriptions to prevent duplicates on re-init
+    // Fully dispose existing share state (subscriptions, pending map, queue, abort controller)
+    // before re-init to prevent duplicates and orphaned requests
     dispose()
     const s = state()
     s.subscriptions.push(
@@ -96,6 +121,11 @@ export namespace Share {
 
   export function dispose() {
     const s = state()
+    // Abort any in-flight fetch requests
+    s.abortController.abort()
+    // Create a new controller for potential re-init
+    s.abortController = new AbortController()
+    s.disposed = false
     for (const unsub of s.subscriptions) {
       unsub()
     }

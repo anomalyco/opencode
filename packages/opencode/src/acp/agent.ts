@@ -87,11 +87,12 @@ export namespace ACP {
         { optionId: "always", kind: "allow_always", name: "Always allow" },
         { optionId: "reject", kind: "reject_once", name: "Reject" },
       ]
+      // Pass the abort signal to the SDK so it can cancel the underlying HTTP connection
       this.config.sdk.event
-        .subscribe({ directory })
+        .subscribe({ directory }, { signal: controller.signal })
         .then(async (events) => {
           for await (const event of events.stream) {
-            // Check if subscription was aborted
+            // Check if subscription was aborted (belt and suspenders with signal)
             if (controller.signal.aborted) {
               log.info("event subscription aborted", { sessionId })
               break

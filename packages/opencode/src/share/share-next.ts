@@ -14,17 +14,30 @@ export namespace ShareNext {
 
   interface ShareNextState {
     subscriptions: (() => void)[]
-    queue: Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>
+    queue: Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data>; abortController: AbortController }>
+    disposed: boolean
   }
 
   const state = Instance.state<ShareNextState>(
     () => ({
       subscriptions: [],
       queue: new Map(),
+      disposed: false,
     }),
-    async () => {
-      // Delegate to the exported dispose function to keep cleanup logic centralized
-      dispose()
+    async (s) => {
+      // Perform cleanup inline to avoid calling state() during Instance disposal.
+      // Calling state() here could reinitialize after the Instance has been disposed.
+      s.disposed = true
+      for (const unsub of s.subscriptions) {
+        unsub()
+      }
+      s.subscriptions.length = 0
+      for (const entry of s.queue.values()) {
+        clearTimeout(entry.timeout)
+        entry.abortController.abort()
+      }
+      s.queue.clear()
+      log.info("disposed share-next subscriptions (via Instance)")
     },
   )
 
@@ -33,7 +46,7 @@ export namespace ShareNext {
   }
 
   export async function init() {
-    // Clean up any existing subscriptions to prevent duplicates on re-init
+    // Fully dispose existing state (subscriptions, queue, pending timeouts) to prevent duplicates on re-init
     dispose()
     const s = state()
     s.subscriptions.push(
@@ -92,12 +105,14 @@ export namespace ShareNext {
 
   export function dispose() {
     const s = state()
+    s.disposed = false
     for (const unsub of s.subscriptions) {
       unsub()
     }
     s.subscriptions.length = 0
     for (const entry of s.queue.values()) {
       clearTimeout(entry.timeout)
+      entry.abortController.abort()
     }
     s.queue.clear()
     log.info("disposed share-next subscriptions")
@@ -112,7 +127,7 @@ export namespace ShareNext {
   export function _addToQueueForTesting(sessionID: string) {
     const s = state()
     const timeout = setTimeout(() => {}, 10000)
-    s.queue.set(sessionID, { timeout, data: new Map() })
+    s.queue.set(sessionID, { timeout, data: new Map(), abortController: new AbortController() })
   }
 
   export async function create(sessionID: string) {
@@ -163,6 +178,8 @@ export namespace ShareNext {
 
   async function sync(sessionID: string, data: Data[]) {
     const s = state()
+    // Skip if already disposed
+    if (s.disposed) return
     const existing = s.queue.get(sessionID)
     if (existing) {
       for (const item of data) {
@@ -176,9 +193,12 @@ export namespace ShareNext {
       dataMap.set("id" in item ? (item.id as string) : ulid(), item)
     }
 
+    const abortController = new AbortController()
     const timeout = setTimeout(async () => {
       const queued = s.queue.get(sessionID)
       if (!queued) return
+      // Check if aborted before starting fetch
+      if (queued.abortController.signal.aborted) return
       s.queue.delete(sessionID)
       const share = await get(sessionID).catch(() => undefined)
       if (!share) return
@@ -192,9 +212,14 @@ export namespace ShareNext {
           secret: share.secret,
           data: Array.from(queued.data.values()),
         }),
+        signal: queued.abortController.signal,
+      }).catch((err) => {
+        // Ignore abort errors during disposal
+        if (err.name === "AbortError") return
+        log.error("sync error", { sessionID, error: err })
       })
     }, 1000)
-    s.queue.set(sessionID, { timeout, data: dataMap })
+    s.queue.set(sessionID, { timeout, data: dataMap, abortController })
   }
 
   export async function remove(sessionID: string) {
