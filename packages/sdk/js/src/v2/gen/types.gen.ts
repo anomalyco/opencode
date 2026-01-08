@@ -541,6 +541,10 @@ export type QuestionInfo = {
    * Available choices
    */
   options: Array<QuestionOption>
+  /**
+   * Allow selecting multiple choices
+   */
+  multiple?: boolean
 }
 
 export type QuestionRequest = {
@@ -561,12 +565,14 @@ export type EventQuestionAsked = {
   properties: QuestionRequest
 }
 
+export type QuestionAnswer = Array<string>
+
 export type EventQuestionReplied = {
   type: "question.replied"
   properties: {
     sessionID: string
     requestID: string
-    answers: Array<string>
+    answers: Array<QuestionAnswer>
   }
 }
 
@@ -3630,7 +3636,10 @@ export type QuestionListResponse = QuestionListResponses[keyof QuestionListRespo
 
 export type QuestionReplyData = {
   body?: {
-    answers: Array<string>
+    /**
+     * User answers in order of questions (each answer is an array of selected labels)
+     */
+    answers: Array<QuestionAnswer>
   }
   path: {
     requestID: string
