@@ -196,7 +196,7 @@ function App() {
       .catch(toast.error)
     renderer.clearSelection()
   }
-  const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [terminalTitleEnabled, setTerminalTitleEnabled] = kv.signal("terminal_title_enabled", true)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -517,7 +517,6 @@ function App() {
       onSelect: (dialog) => {
         setTerminalTitleEnabled((prev) => {
           const next = !prev
-          kv.set("terminal_title_enabled", next)
           if (!next) renderer.setTerminalTitle("")
           return next
         })
