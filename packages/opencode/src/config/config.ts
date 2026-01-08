@@ -90,35 +90,6 @@ export const state = Instance.state(async () => {
       result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
-
-    // Global user config overrides remote config
-    const globalResult = await global()
-    result = mergeConfigConcatArrays(result, globalResult.config)
-    allUnknownKeybinds.push(...globalResult.unknownKeybinds)
-
-    // Custom config path overrides global
-    if (Flag.OPENCODE_CONFIG) {
-      const loaded = await loadFile(Flag.OPENCODE_CONFIG)
-      result = mergeConfigConcatArrays(result, loaded.config)
-      allUnknownKeybinds.push(...loaded.unknownKeybinds)
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
-    }
-
-    // Project config has highest precedence (overrides global and remote)
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        const loaded = await loadFile(resolved)
-        result = mergeConfigConcatArrays(result, loaded.config)
-        allUnknownKeybinds.push(...loaded.unknownKeybinds)
-      }
-    }
-
-    // Inline config content has highest precedence
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-    }
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
