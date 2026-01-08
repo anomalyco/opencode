@@ -1,5 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Session } from "."
 import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
@@ -327,6 +328,12 @@ ${p.output.slice(0, 8000)}${p.output.length > 8000 ? "\n... (truncated)" : ""}
       return
     }
 
+    Bus.publish(TuiEvent.ToastShow, {
+      message: "Smart pruning started...",
+      variant: "info",
+      duration: 2000,
+    })
+
     // Generate summaries for content tools being pruned (if enabled)
     let summaries = new Map<string, string>()
     if (pruningConfig.summarizationEnabled) {
@@ -342,12 +349,15 @@ ${p.output.slice(0, 8000)}${p.output.length > 8000 ? "\n... (truncated)" : ""}
       summaries = await summarizeToolOutputs(partsToSummarize, providerID, pruningConfig.summarizationModel)
     }
 
+    let savedTokens = totalToPrune
+
     // Apply pruning - content tools get summaries
     for (const { part } of contentToPrune.parts) {
       if (part.state.status === "completed") {
         const summary = summaries.get(part.id)
         if (summary) {
           part.state.summary = summary
+          savedTokens -= Token.estimate(summary)
         }
         part.state.time.compacted = Date.now()
         await Session.updatePart(part)
@@ -359,10 +369,17 @@ ${p.output.slice(0, 8000)}${p.output.length > 8000 ? "\n... (truncated)" : ""}
       if (part.state.status === "completed") {
         const compressed = compressNavigationOutput(part.tool, part.state.output)
         part.state.summary = compressed
+        savedTokens -= Token.estimate(compressed)
         part.state.time.compacted = Date.now()
         await Session.updatePart(part)
       }
     }
+
+    Bus.publish(TuiEvent.ToastShow, {
+      title: "Smart Pruning",
+      message: `Saved ${Math.round(savedTokens)} tokens`,
+      variant: "success",
+    })
 
     log.info("pruned", {
       contentCount: contentToPrune.parts.length,
