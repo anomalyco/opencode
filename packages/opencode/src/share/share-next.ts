@@ -105,7 +105,8 @@ export namespace ShareNext {
 
   export function dispose() {
     const s = state()
-    s.disposed = false
+    // Mark as disposed to prevent new sync operations during cleanup
+    s.disposed = true
     for (const unsub of s.subscriptions) {
       unsub()
     }
@@ -115,6 +116,8 @@ export namespace ShareNext {
       entry.abortController.abort()
     }
     s.queue.clear()
+    // Reset disposed flag to allow operations after re-init via init()
+    s.disposed = false
     log.info("disposed share-next subscriptions")
   }
 

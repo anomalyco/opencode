@@ -121,10 +121,13 @@ export namespace Share {
 
   export function dispose() {
     const s = state()
+    // Mark as disposed to prevent new sync operations during cleanup
+    s.disposed = true
     // Abort any in-flight fetch requests
     s.abortController.abort()
     // Create a new controller for potential re-init
     s.abortController = new AbortController()
+    // Reset disposed flag to allow operations after re-init via init()
     s.disposed = false
     for (const unsub of s.subscriptions) {
       unsub()
