@@ -73,12 +73,25 @@ export namespace Provider {
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
+      // Add advanced tool use beta if feature flag is enabled
+      const advancedToolUseEnabled = Env.all()["OPENCODE_ADVANCED_TOOL_USE"] === "true"
+      
+      const betaFeatures = [
+        "claude-code-20250219",
+        "interleaved-thinking-2025-05-14",
+        "fine-grained-tool-streaming-2025-05-14",
+      ]
+      
+      // Add advanced tool use beta if enabled
+      if (advancedToolUseEnabled) {
+        betaFeatures.push("advanced-tool-use-2025-11-20")
+      }
+      
       return {
         autoload: false,
         options: {
           headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+            "anthropic-beta": betaFeatures.join(","),
           },
         },
       }
