@@ -6,7 +6,10 @@ import { createSimpleContext } from "./helper"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
+import catppuccinFrappe from "./theme/catppuccin-frappe.json" with { type: "json" }
+import catppuccinMacchiato from "./theme/catppuccin-macchiato.json" with { type: "json" }
 import cobalt2 from "./theme/cobalt2.json" with { type: "json" }
+import cursor from "./theme/cursor.json" with { type: "json" }
 import dracula from "./theme/dracula.json" with { type: "json" }
 import everforest from "./theme/everforest.json" with { type: "json" }
 import flexoki from "./theme/flexoki.json" with { type: "json" }
@@ -15,16 +18,21 @@ import gruvbox from "./theme/gruvbox.json" with { type: "json" }
 import kanagawa from "./theme/kanagawa.json" with { type: "json" }
 import material from "./theme/material.json" with { type: "json" }
 import matrix from "./theme/matrix.json" with { type: "json" }
+import mercury from "./theme/mercury.json" with { type: "json" }
 import monokai from "./theme/monokai.json" with { type: "json" }
 import nightowl from "./theme/nightowl.json" with { type: "json" }
 import nord from "./theme/nord.json" with { type: "json" }
+import osakaJade from "./theme/osaka-jade.json" with { type: "json" }
 import onedark from "./theme/one-dark.json" with { type: "json" }
 import opencode from "./theme/opencode.json" with { type: "json" }
+import orng from "./theme/orng.json" with { type: "json" }
+import lucentOrng from "./theme/lucent-orng.json" with { type: "json" }
 import palenight from "./theme/palenight.json" with { type: "json" }
 import rosepine from "./theme/rosepine.json" with { type: "json" }
 import solarized from "./theme/solarized.json" with { type: "json" }
 import synthwave84 from "./theme/synthwave84.json" with { type: "json" }
 import tokyonight from "./theme/tokyonight.json" with { type: "json" }
+import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import { useKV } from "./kv"
@@ -32,6 +40,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
+import { useSDK } from "./sdk"
 
 type ThemeColors = {
   primary: RGBA
@@ -90,17 +99,19 @@ type ThemeColors = {
 
 type Theme = ThemeColors & {
   _hasSelectedListItemText: boolean
+  thinkingOpacity: number
 }
 
-export function selectedForeground(theme: Theme): RGBA {
+export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   // If theme explicitly defines selectedListItemText, use it
   if (theme._hasSelectedListItemText) {
     return theme.selectedListItemText
   }
 
-  // For transparent backgrounds, calculate contrast based on primary color
+  // For transparent backgrounds, calculate contrast based on the actual bg (or fallback to primary)
   if (theme.background.a === 0) {
-    const { r, g, b } = theme.primary
+    const targetColor = bg ?? theme.primary
+    const { r, g, b } = targetColor
     const luminance = 0.299 * r + 0.587 * g + 0.114 * b
     return luminance > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
   }
@@ -122,6 +133,7 @@ type ThemeJson = {
   theme: Omit<Record<keyof ThemeColors, ColorValue>, "selectedListItemText" | "backgroundMenu"> & {
     selectedListItemText?: ColorValue
     backgroundMenu?: ColorValue
+    thinkingOpacity?: number
   }
 }
 
@@ -129,7 +141,10 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   aura,
   ayu,
   catppuccin,
+  ["catppuccin-frappe"]: catppuccinFrappe,
+  ["catppuccin-macchiato"]: catppuccinMacchiato,
   cobalt2,
+  cursor,
   dracula,
   everforest,
   flexoki,
@@ -138,17 +153,22 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   kanagawa,
   material,
   matrix,
+  mercury,
   monokai,
   nightowl,
   nord,
   ["one-dark"]: onedark,
+  ["osaka-jade"]: osakaJade,
   opencode,
+  orng,
+  ["lucent-orng"]: lucentOrng,
   palenight,
   rosepine,
   solarized,
   synthwave84,
   tokyonight,
   vesper,
+  vercel,
   zenburn,
 }
 
@@ -161,7 +181,7 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
 
       if (c.startsWith("#")) return RGBA.fromHex(c)
 
-      if (defs[c]) {
+      if (defs[c] != null) {
         return resolveColor(defs[c])
       } else if (theme.theme[c as keyof ThemeColors] !== undefined) {
         return resolveColor(theme.theme[c as keyof ThemeColors]!)
@@ -169,14 +189,17 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
         throw new Error(`Color reference "${c}" not found in defs or theme`)
       }
     }
+    if (typeof c === "number") {
+      return ansiToRgba(c)
+    }
     return resolveColor(c[mode])
   }
 
   const resolved = Object.fromEntries(
     Object.entries(theme.theme)
-      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu")
+      .filter(([key]) => key !== "selectedListItemText" && key !== "backgroundMenu" && key !== "thinkingOpacity")
       .map(([key, value]) => {
-        return [key, resolveColor(value)]
+        return [key, resolveColor(value as ColorValue)]
       }),
   ) as Partial<ThemeColors>
 
@@ -197,10 +220,59 @@ function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
     resolved.backgroundMenu = resolved.backgroundElement
   }
 
+  // Handle thinkingOpacity - optional with default of 0.6
+  const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
+
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
+    thinkingOpacity,
   } as Theme
+}
+
+function ansiToRgba(code: number): RGBA {
+  // Standard ANSI colors (0-15)
+  if (code < 16) {
+    const ansiColors = [
+      "#000000", // Black
+      "#800000", // Red
+      "#008000", // Green
+      "#808000", // Yellow
+      "#000080", // Blue
+      "#800080", // Magenta
+      "#008080", // Cyan
+      "#c0c0c0", // White
+      "#808080", // Bright Black
+      "#ff0000", // Bright Red
+      "#00ff00", // Bright Green
+      "#ffff00", // Bright Yellow
+      "#0000ff", // Bright Blue
+      "#ff00ff", // Bright Magenta
+      "#00ffff", // Bright Cyan
+      "#ffffff", // Bright White
+    ]
+    return RGBA.fromHex(ansiColors[code] ?? "#000000")
+  }
+
+  // 6x6x6 Color Cube (16-231)
+  if (code < 232) {
+    const index = code - 16
+    const b = index % 6
+    const g = Math.floor(index / 6) % 6
+    const r = Math.floor(index / 36)
+
+    const val = (x: number) => (x === 0 ? 0 : x * 40 + 55)
+    return RGBA.fromInts(val(r), val(g), val(b))
+  }
+
+  // Grayscale Ramp (232-255)
+  if (code < 256) {
+    const gray = (code - 232) * 10 + 8
+    return RGBA.fromInts(gray, gray, gray)
+  }
+
+  // Fallback for invalid codes
+  return RGBA.fromInts(0, 0, 0)
 }
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
@@ -215,25 +287,68 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       ready: false,
     })
 
-    createEffect(async () => {
-      const custom = await getCustomThemes()
-      setStore(
-        produce((draft) => {
-          Object.assign(draft.themes, custom)
-          draft.ready = true
-        }),
-      )
+    createEffect(() => {
+      const theme = sync.data.config.theme
+      if (theme) setStore("active", theme)
     })
 
+    function init() {
+      resolveSystemTheme()
+      getCustomThemes()
+        .then((custom) => {
+          setStore(
+            produce((draft) => {
+              Object.assign(draft.themes, custom)
+            }),
+          )
+        })
+        .catch(() => {
+          setStore("active", "opencode")
+        })
+        .finally(() => {
+          if (store.active !== "system") {
+            setStore("ready", true)
+          }
+        })
+    }
+
+    onMount(init)
+
+    function resolveSystemTheme() {
+      console.log("resolveSystemTheme")
+      renderer
+        .getPalette({
+          size: 16,
+        })
+        .then((colors) => {
+          console.log(colors.palette)
+          if (!colors.palette[0]) {
+            if (store.active === "system") {
+              setStore(
+                produce((draft) => {
+                  draft.active = "opencode"
+                  draft.ready = true
+                }),
+              )
+            }
+            return
+          }
+          setStore(
+            produce((draft) => {
+              draft.themes.system = generateSystem(colors, store.mode)
+              if (store.active === "system") {
+                draft.ready = true
+              }
+            }),
+          )
+        })
+    }
+
     const renderer = useRenderer()
-    renderer
-      .getPalette({
-        size: 16,
-      })
-      .then((colors) => {
-        if (!colors.palette[0]) return
-        setStore("themes", "system", generateSystem(colors, store.mode))
-      })
+    process.on("SIGUSR2", async () => {
+      renderer.clearPaletteCache()
+      init()
+    })
 
     const values = createMemo(() => {
       return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
@@ -305,8 +420,20 @@ async function getCustomThemes() {
 function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
   const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const palette = colors.palette.filter((x) => x !== null).map((x) => RGBA.fromHex(x))
   const isDark = mode == "dark"
+
+  const col = (i: number) => {
+    const value = colors.palette[i]
+    if (value) return RGBA.fromHex(value)
+    return ansiToRgba(i)
+  }
+
+  const tint = (base: RGBA, overlay: RGBA, alpha: number) => {
+    const r = base.r + (overlay.r - base.r) * alpha
+    const g = base.g + (overlay.g - base.g) * alpha
+    const b = base.b + (overlay.b - base.b) * alpha
+    return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
+  }
 
   // Generate gray scale based on terminal background
   const grays = generateGrayScale(bg, isDark)
@@ -314,15 +441,23 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
 
   // ANSI color references
   const ansiColors = {
-    black: palette[0],
-    red: palette[1],
-    green: palette[2],
-    yellow: palette[3],
-    blue: palette[4],
-    magenta: palette[5],
-    cyan: palette[6],
-    white: palette[7],
+    black: col(0),
+    red: col(1),
+    green: col(2),
+    yellow: col(3),
+    blue: col(4),
+    magenta: col(5),
+    cyan: col(6),
+    white: col(7),
+    redBright: col(9),
+    greenBright: col(10),
   }
+
+  const diffAlpha = isDark ? 0.22 : 0.14
+  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
+  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
+  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
+  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
 
   return {
     theme: {
@@ -358,14 +493,14 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       diffRemoved: ansiColors.red,
       diffContext: grays[7],
       diffHunkHeader: grays[7],
-      diffHighlightAdded: ansiColors.green,
-      diffHighlightRemoved: ansiColors.red,
-      diffAddedBg: grays[2],
-      diffRemovedBg: grays[2],
+      diffHighlightAdded: ansiColors.greenBright,
+      diffHighlightRemoved: ansiColors.redBright,
+      diffAddedBg,
+      diffRemovedBg,
       diffContextBg: grays[1],
       diffLineNumber: grays[6],
-      diffAddedLineNumberBg: grays[3],
-      diffRemovedLineNumberBg: grays[3],
+      diffAddedLineNumberBg,
+      diffRemovedLineNumberBg,
 
       // Markdown colors
       markdownText: fg,
@@ -500,7 +635,7 @@ function generateSubtleSyntax(theme: Theme) {
               Math.round(fg.r * 255),
               Math.round(fg.g * 255),
               Math.round(fg.b * 255),
-              Math.round(0.6 * 255),
+              Math.round(theme.thinkingOpacity * 255),
             ),
           },
         }
@@ -512,6 +647,12 @@ function generateSubtleSyntax(theme: Theme) {
 
 function getSyntaxRules(theme: Theme) {
   return [
+    {
+      scope: ["default"],
+      style: {
+        foreground: theme.text,
+      },
+    },
     {
       scope: ["prompt"],
       style: {

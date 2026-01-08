@@ -1,9 +1,10 @@
+import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import z from "zod"
 
 export const TuiEvent = {
-  PromptAppend: Bus.event("tui.prompt.append", z.object({ text: z.string() })),
-  CommandExecute: Bus.event(
+  PromptAppend: BusEvent.define("tui.prompt.append", z.object({ text: z.string() })),
+  CommandExecute: BusEvent.define(
     "tui.command.execute",
     z.object({
       command: z.union([
@@ -27,13 +28,19 @@ export const TuiEvent = {
       ]),
     }),
   ),
-  ToastShow: Bus.event(
+  ToastShow: BusEvent.define(
     "tui.toast.show",
     z.object({
       title: z.string().optional(),
       message: z.string(),
       variant: z.enum(["info", "success", "warning", "error"]),
       duration: z.number().default(5000).optional().describe("Duration in milliseconds"),
+    }),
+  ),
+  SessionSelect: BusEvent.define(
+    "tui.session.select",
+    z.object({
+      sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
     }),
   ),
 }

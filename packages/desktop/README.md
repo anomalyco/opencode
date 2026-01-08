@@ -1,34 +1,32 @@
-## Usage
+# OpenCode Desktop
 
-Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
+Native OpenCode desktop app, built with Tauri v2.
 
-This is the reason you see a `pnpm-lock.yaml`. That being said, any package manager will work. This file can be safely be removed once you clone a template.
+## Development
+
+From the repo root:
 
 ```bash
-$ npm install # or pnpm install or yarn install
+bun install
+bun run --cwd packages/desktop tauri dev
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+This starts the Vite dev server on http://localhost:1420 and opens the native window.
 
-## Available Scripts
+If you only want the web dev server (no native shell):
 
-In the project directory, you can run:
+```bash
+bun run --cwd packages/desktop dev
+```
 
-### `npm run dev` or `npm start`
+## Build
 
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+To create a production `dist/` and build the native app bundle:
 
-The page will reload if you make edits.<br>
+```bash
+bun run --cwd packages/desktop tauri build
+```
 
-### `npm run build`
+## Prerequisites
 
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
-
-## Deployment
-
-You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)
+Running the desktop app requires additional Tauri dependencies (Rust toolchain, platform-specific libraries). See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for setup instructions.

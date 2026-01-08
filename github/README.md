@@ -6,7 +6,7 @@ Mention `/opencode` in your comment, and opencode will execute tasks within your
 
 ## Features
 
-#### Explain an issues
+#### Explain an issue
 
 Leave the following comment on a GitHub issue. `opencode` will read the entire thread, including all comments, and reply with a clear explanation.
 
@@ -14,7 +14,7 @@ Leave the following comment on a GitHub issue. `opencode` will read the entire t
 /opencode explain this issue
 ```
 
-#### Fix an issues
+#### Fix an issue
 
 Leave the following comment on a GitHub issue. opencode will create a new branch, implement the changes, and open a PR with the changes.
 
@@ -82,12 +82,12 @@ This will walk you through installing the GitHub app, creating the workflow, and
          id-token: write
        steps:
          - name: Checkout repository
-           uses: actions/checkout@v4
+           uses: actions/checkout@v6
            with:
              fetch-depth: 1
 
          - name: Run opencode
-           uses: sst/opencode/github@latest
+           uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -98,7 +98,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/sst/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/anomalyco/opencode/issues.
 
 ## Development
 

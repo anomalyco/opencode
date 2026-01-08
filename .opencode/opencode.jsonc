@@ -1,20 +1,23 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-openai-codex-auth"],
+  // "plugin": ["opencode-openai-codex-auth"],
   // "enterprise": {
   //   "url": "https://enterprise.dev.opencode.ai",
   // },
+  "instructions": ["STYLE_GUIDE.md"],
   "provider": {
     "opencode": {
-      "options": {
-        // "baseURL": "http://localhost:8080",
-      },
+      "options": {},
     },
   },
   "mcp": {
-    "exa": {
+    "context7": {
       "type": "remote",
-      "url": "https://mcp.exa.ai/mcp",
+      "url": "https://mcp.context7.com/mcp",
     },
+  },
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false,
   },
 }

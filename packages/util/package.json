@@ -1,8 +1,9 @@
 {
   "name": "@opencode-ai/util",
-  "version": "1.0.119",
+  "version": "1.1.7",
   "private": true,
   "type": "module",
+  "license": "MIT",
   "exports": {
     "./*": "./src/*.ts"
   },
@@ -13,6 +14,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
   }
 }
