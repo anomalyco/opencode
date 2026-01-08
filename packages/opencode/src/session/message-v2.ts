@@ -763,7 +763,7 @@ export namespace MessageV2 {
             if (errMsg && typeof errMsg === "string") {
               return `${msg}: ${errMsg}`
             }
-          } catch { }
+          } catch {}
 
           return `${msg}: ${e.responseBody}`
         }).trim()
