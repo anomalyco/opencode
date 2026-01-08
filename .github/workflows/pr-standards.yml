@@ -70,20 +70,23 @@ jobs:
             }
 
             // Step 1: Check title format
-            const validPrefixes = ['feat:', 'fix:', 'docs:', 'chore:', 'refactor:', 'test:'];
-            const hasValidTitle = validPrefixes.some(prefix => title.startsWith(prefix));
+            // Matches: feat:, feat(scope):, feat (scope):, etc.
+            const titlePattern = /^(feat|fix|docs|chore|refactor|test)\s*(\([a-zA-Z0-9-]+\))?\s*:/;
+            const hasValidTitle = titlePattern.test(title);
 
             if (!hasValidTitle) {
               await addLabel('needs:title');
               await comment('title', `Hey! Your PR title \`${title}\` doesn't follow conventional commit format.
 
             Please update it to start with one of:
-            - \`feat:\` new feature
-            - \`fix:\` bug fix
-            - \`docs:\` documentation changes
-            - \`chore:\` maintenance tasks
-            - \`refactor:\` code refactoring
-            - \`test:\` adding or updating tests
+            - \`feat:\` or \`feat(scope):\` new feature
+            - \`fix:\` or \`fix(scope):\` bug fix
+            - \`docs:\` or \`docs(scope):\` documentation changes
+            - \`chore:\` or \`chore(scope):\` maintenance tasks
+            - \`refactor:\` or \`refactor(scope):\` code refactoring
+            - \`test:\` or \`test(scope):\` adding or updating tests
+
+            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`opencode\`).
 
             See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#pr-titles) for details.`);
               return;
@@ -92,7 +95,7 @@ jobs:
             await removeLabel('needs:title');
 
             // Step 2: Check for linked issue (skip for docs/refactor PRs)
-            const skipIssueCheck = title.startsWith('docs:') || title.startsWith('refactor:');
+            const skipIssueCheck = /^(docs|refactor)\s*(\([a-zA-Z0-9-]+\))?\s*:/.test(title);
             if (skipIssueCheck) {
               await removeLabel('needs:issue');
               console.log('Skipping issue check for docs/refactor PR');
