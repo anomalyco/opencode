@@ -155,6 +155,24 @@ With that said, you may want to try these methods, as they might work for you.
 - Avoid having verbose LLM generated PR descriptions
 - Before adding new functions or functionality, ensure that such behavior doesn't already exist elsewhere in the codebase.
 
+### PR Titles
+
+PR titles should follow conventional commit standards:
+
+- `feat:` new feature or functionality
+- `fix:` bug fix
+- `docs:` documentation or README changes
+- `chore:` maintenance tasks, dependency updates, etc.
+- `refactor:` code refactoring without changing behavior
+- `test:` adding or updating tests
+
+Examples:
+
+- `docs: update contributing guidelines`
+- `fix: resolve crash on startup`
+- `feat: add dark mode support`
+- `chore: bump dependency versions`
+
 ### Style Preferences
 
 These are not strictly enforced, they are just general guidelines:
