@@ -309,10 +309,19 @@ export default function Page() {
     activeTerminalDraggable: undefined as string | undefined,
     expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
+    turnStart: 0,
     mobileTab: "session" as "session" | "review",
     newSessionWorktree: "main",
     promptHeight: 0,
   })
+
+  const renderedUserMessages = createMemo(() => {
+    const msgs = visibleUserMessages()
+    const start = store.turnStart
+    if (start <= 0) return msgs
+    if (start >= msgs.length) return emptyUserMessages
+    return msgs.slice(start)
+  }, emptyUserMessages)
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -758,6 +767,88 @@ export default function Page() {
     autoScroll.scrollRef(el)
   }
 
+  const turnInit = 20
+  const turnBatch = 20
+  let turnHandle: number | undefined
+  let turnIdle = false
+
+  function cancelTurnBackfill() {
+    const handle = turnHandle
+    if (handle === undefined) return
+    turnHandle = undefined
+
+    if (turnIdle && window.cancelIdleCallback) {
+      window.cancelIdleCallback(handle)
+      return
+    }
+
+    clearTimeout(handle)
+  }
+
+  function scheduleTurnBackfill() {
+    if (turnHandle !== undefined) return
+    if (store.turnStart <= 0) return
+
+    if (window.requestIdleCallback) {
+      turnIdle = true
+      turnHandle = window.requestIdleCallback(() => {
+        turnHandle = undefined
+        backfillTurns()
+      })
+      return
+    }
+
+    turnIdle = false
+    turnHandle = window.setTimeout(() => {
+      turnHandle = undefined
+      backfillTurns()
+    }, 0)
+  }
+
+  function backfillTurns() {
+    const start = store.turnStart
+    if (start <= 0) return
+
+    const next = start - turnBatch
+    const nextStart = next > 0 ? next : 0
+
+    const el = scroller
+    if (!el) {
+      setStore("turnStart", nextStart)
+      scheduleTurnBackfill()
+      return
+    }
+
+    const beforeTop = el.scrollTop
+    const beforeHeight = el.scrollHeight
+
+    setStore("turnStart", nextStart)
+
+    requestAnimationFrame(() => {
+      const delta = el.scrollHeight - beforeHeight
+      if (delta) el.scrollTop = beforeTop + delta
+    })
+
+    scheduleTurnBackfill()
+  }
+
+  createEffect(
+    on(
+      () => [params.id, messagesReady()] as const,
+      ([id, ready]) => {
+        cancelTurnBackfill()
+        setStore("turnStart", 0)
+        if (!id || !ready) return
+
+        const len = visibleUserMessages().length
+        const start = len > turnInit ? len - turnInit : 0
+        setStore("turnStart", start)
+        scheduleTurnBackfill()
+      },
+      { defer: true },
+    ),
+  )
+
   createResizeObserver(
     () => promptDock,
     ({ height }) => {
@@ -784,6 +875,21 @@ export default function Page() {
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     setActiveMessage(message)
+
+    const msgs = visibleUserMessages()
+    const index = msgs.findIndex((m) => m.id === message.id)
+    if (index !== -1 && index < store.turnStart) {
+      setStore("turnStart", index)
+      scheduleTurnBackfill()
+
+      requestAnimationFrame(() => {
+        const el = document.getElementById(anchor(message.id))
+        if (el) el.scrollIntoView({ behavior, block: "start" })
+      })
+
+      updateHash(message.id)
+      return
+    }
 
     const el = document.getElementById(anchor(message.id))
     if (el) el.scrollIntoView({ behavior, block: "start" })
@@ -830,12 +936,27 @@ export default function Page() {
     if (!sessionID || !ready) return
 
     requestAnimationFrame(() => {
-      const id = window.location.hash.slice(1)
-      const hashTarget = id ? document.getElementById(id) : undefined
+      const hash = window.location.hash.slice(1)
+      if (!hash) {
+        autoScroll.forceScrollToBottom()
+        return
+      }
+
+      const hashTarget = document.getElementById(hash)
       if (hashTarget) {
         hashTarget.scrollIntoView({ behavior: "auto", block: "start" })
         return
       }
+
+      const match = hash.match(/^message-(.+)$/)
+      if (match) {
+        const msg = visibleUserMessages().find((m) => m.id === match[1])
+        if (msg) {
+          scrollToMessage(msg, "auto")
+          return
+        }
+      }
+
       autoScroll.forceScrollToBottom()
     })
   })
@@ -868,6 +989,7 @@ export default function Page() {
           return [[path, file.selectedLines(path) ?? null] as const]
         }),
     )
+    cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
   })
@@ -971,6 +1093,18 @@ export default function Page() {
                             "mt-0": showTabs(),
                           }}
                         >
+                          <Show when={store.turnStart > 0}>
+                            <div class="w-full flex justify-center">
+                              <Button
+                                variant="ghost"
+                                size="large"
+                                class="text-12-medium opacity-50"
+                                onClick={() => setStore("turnStart", 0)}
+                              >
+                                Render earlier messages
+                              </Button>
+                            </div>
+                          </Show>
                           <Show when={historyMore()}>
                             <div class="w-full flex justify-center">
                               <Button
@@ -981,6 +1115,7 @@ export default function Page() {
                                 onClick={() => {
                                   const id = params.id
                                   if (!id) return
+                                  setStore("turnStart", 0)
                                   sync.session.history.loadMore(id)
                                 }}
                               >
@@ -988,7 +1123,7 @@ export default function Page() {
                               </Button>
                             </div>
                           </Show>
-                          <For each={visibleUserMessages()}>
+                          <For each={renderedUserMessages()}>
                             {(message) => {
                               if (import.meta.env.DEV) {
                                 onMount(() => {
@@ -1173,36 +1308,40 @@ export default function Page() {
                 </div>
                 <Show when={reviewTab()}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                    <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <Show
-                        when={diffsReady()}
-                        fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
-                      >
-                        <SessionReviewTab
-                          diffs={diffs}
-                          view={view}
-                          diffStyle={layout.review.diffStyle()}
-                          onDiffStyleChange={layout.review.setDiffStyle}
-                          onViewFile={(path) => {
-                            const value = file.tab(path)
-                            tabs().open(value)
-                            file.load(path)
-                          }}
-                        />
-                      </Show>
-                    </div>
+                    <Show when={activeTab() === "review"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <Show
+                          when={diffsReady()}
+                          fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                        >
+                          <SessionReviewTab
+                            diffs={diffs}
+                            view={view}
+                            diffStyle={layout.review.diffStyle()}
+                            onDiffStyleChange={layout.review.setDiffStyle}
+                            onViewFile={(path) => {
+                              const value = file.tab(path)
+                              tabs().open(value)
+                              file.load(path)
+                            }}
+                          />
+                        </Show>
+                      </div>
+                    </Show>
                   </Tabs.Content>
                 </Show>
                 <Show when={contextOpen()}>
                   <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
-                    <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <SessionContextTab
-                        messages={messages}
-                        visibleUserMessages={visibleUserMessages}
-                        view={view}
-                        info={info}
-                      />
-                    </div>
+                    <Show when={activeTab() === "context"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <SessionContextTab
+                          messages={messages}
+                          visibleUserMessages={visibleUserMessages}
+                          view={view}
+                          info={info}
+                        />
+                      </div>
+                    </Show>
                   </Tabs.Content>
                 </Show>
                 <For each={openedTabs()}>
@@ -1349,37 +1488,63 @@ export default function Page() {
                         }}
                         onScroll={handleScroll}
                       >
-                        <Show when={selection()}>
-                          {(sel) => (
-                            <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
-                              <button
-                                type="button"
-                                class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
-                                onClick={() => {
-                                  const p = path()
-                                  if (!p) return
-                                  prompt.context.add({ type: "file", path: p, selection: sel() })
-                                }}
-                              >
-                                <Icon name="plus-small" size="small" />
-                                <span>Add {selectionLabel()} to context</span>
-                              </button>
-                            </div>
-                          )}
-                        </Show>
-                        <Switch>
-                          <Match when={state()?.loaded && isImage()}>
-                            <div class="px-6 py-4 pb-40">
-                              <img src={imageDataUrl()} alt={path()} class="max-w-full" />
-                            </div>
-                          </Match>
-                          <Match when={state()?.loaded && isSvg()}>
-                            <div class="flex flex-col gap-4 px-6 py-4">
+                        <Show when={activeTab() === tab}>
+                          <Show when={selection()}>
+                            {(sel) => (
+                              <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
+                                <button
+                                  type="button"
+                                  class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
+                                  onClick={() => {
+                                    const p = path()
+                                    if (!p) return
+                                    prompt.context.add({ type: "file", path: p, selection: sel() })
+                                  }}
+                                >
+                                  <Icon name="plus-small" size="small" />
+                                  <span>Add {selectionLabel()} to context</span>
+                                </button>
+                              </div>
+                            )}
+                          </Show>
+                          <Switch>
+                            <Match when={state()?.loaded && isImage()}>
+                              <div class="px-6 py-4 pb-40">
+                                <img src={imageDataUrl()} alt={path()} class="max-w-full" />
+                              </div>
+                            </Match>
+                            <Match when={state()?.loaded && isSvg()}>
+                              <div class="flex flex-col gap-4 px-6 py-4">
+                                <Dynamic
+                                  component={codeComponent}
+                                  file={{
+                                    name: path() ?? "",
+                                    contents: svgContent() ?? "",
+                                    cacheKey: cacheKey(),
+                                  }}
+                                  enableLineSelection
+                                  selectedLines={selectedLines()}
+                                  onLineSelected={(range: SelectedLineRange | null) => {
+                                    const p = path()
+                                    if (!p) return
+                                    file.setSelectedLines(p, range)
+                                  }}
+                                  overflow="scroll"
+                                  class="select-text"
+                                />
+                                <Show when={svgPreviewUrl()}>
+                                  <div class="flex justify-center pb-40">
+                                    <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                  </div>
+                                </Show>
+                              </div>
+                            </Match>
+                            <Match when={state()?.loaded}>
                               <Dynamic
                                 component={codeComponent}
                                 file={{
                                   name: path() ?? "",
-                                  contents: svgContent() ?? "",
+                                  contents: contents(),
                                   cacheKey: cacheKey(),
                                 }}
                                 enableLineSelection
@@ -1390,41 +1555,17 @@ export default function Page() {
                                   file.setSelectedLines(p, range)
                                 }}
                                 overflow="scroll"
-                                class="select-text"
+                                class="select-text pb-40"
                               />
-                              <Show when={svgPreviewUrl()}>
-                                <div class="flex justify-center pb-40">
-                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                                </div>
-                              </Show>
-                            </div>
-                          </Match>
-                          <Match when={state()?.loaded}>
-                            <Dynamic
-                              component={codeComponent}
-                              file={{
-                                name: path() ?? "",
-                                contents: contents(),
-                                cacheKey: cacheKey(),
-                              }}
-                              enableLineSelection
-                              selectedLines={selectedLines()}
-                              onLineSelected={(range: SelectedLineRange | null) => {
-                                const p = path()
-                                if (!p) return
-                                file.setSelectedLines(p, range)
-                              }}
-                              overflow="scroll"
-                              class="select-text pb-40"
-                            />
-                          </Match>
-                          <Match when={state()?.loading}>
-                            <div class="px-6 py-4 text-text-weak">Loading...</div>
-                          </Match>
-                          <Match when={state()?.error}>
-                            {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
-                          </Match>
-                        </Switch>
+                            </Match>
+                            <Match when={state()?.loading}>
+                              <div class="px-6 py-4 text-text-weak">Loading...</div>
+                            </Match>
+                            <Match when={state()?.error}>
+                              {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
+                            </Match>
+                          </Switch>
+                        </Show>
                       </Tabs.Content>
                     )
                   }}

@@ -566,7 +566,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={throttledText()} />
+        <Markdown text={throttledText()} cacheKey={part.id} />
       </div>
     </Show>
   )
@@ -580,7 +580,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} />
+        <Markdown text={throttledText()} cacheKey={part.id} />
       </div>
     </Show>
   )
