@@ -198,6 +198,13 @@ export namespace Agent {
         }
       if (value.model) item.model = Provider.parseModel(value.model)
       item.prompt = value.prompt ?? item.prompt
+      if (value.prompt_append) {
+        if (item.prompt) {
+          item.prompt = item.prompt + "\n\n" + value.prompt_append
+        } else {
+          item.prompt = value.prompt_append
+        }
+      }
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
       item.topP = value.top_p ?? item.topP

@@ -446,3 +446,60 @@ test("legacy tools config maps write/edit/patch/multiedit to edit permission", a
     },
   })
 })
+
+test("agent prompt can be appended from config", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: { prompt_append: "Appended content" },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build?.prompt).toBe("Appended content")
+    },
+  })
+})
+
+test("agent prompt append adds to existing default prompt", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        explore: { prompt_append: "Appended content" },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const explore = await Agent.get("explore")
+      expect(explore?.prompt).toContain("Appended content")
+      expect(explore?.prompt?.endsWith("\n\nAppended content")).toBe(true)
+      // Verify it's longer than just the append
+      expect(explore?.prompt?.length).toBeGreaterThan(20)
+    },
+  })
+})
+
+test("agent prompt append works with prompt override", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        build: {
+          prompt: "Base prompt",
+          prompt_append: "Appended",
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const build = await Agent.get("build")
+      expect(build?.prompt).toBe("Base prompt\n\nAppended")
+    },
+  })
+})
