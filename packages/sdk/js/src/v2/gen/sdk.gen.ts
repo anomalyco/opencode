@@ -34,6 +34,8 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  InstanceCdErrors,
+  InstanceCdResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -664,6 +666,43 @@ export class Instance extends HeyApiClient {
       url: "/instance/dispose",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Change directory
+   *
+   * Change the working directory for the current instance. Optionally update a session's directory.
+   */
+  public cd<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      path?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "path" },
+            { in: "body", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<InstanceCdResponses, InstanceCdErrors, ThrowOnError>({
+      url: "/cd",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

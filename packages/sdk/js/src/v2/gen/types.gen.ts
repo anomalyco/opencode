@@ -40,6 +40,16 @@ export type EventProjectUpdated = {
   properties: Project
 }
 
+export type EventInstanceDirectoryChanged = {
+  type: "instance.directory.changed"
+  properties: {
+    directory: string
+    worktree: string
+    projectID: string
+    previousDirectory: string
+  }
+}
+
 export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
@@ -777,6 +787,7 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventProjectUpdated
+  | EventInstanceDirectoryChanged
   | EventServerInstanceDisposed
   | EventLspClientDiagnostics
   | EventLspUpdated
@@ -2440,6 +2451,51 @@ export type PathGetResponses = {
 }
 
 export type PathGetResponse = PathGetResponses[keyof PathGetResponses]
+
+export type InstanceCdData = {
+  body?: {
+    /**
+     * Target directory path (absolute or relative to current directory)
+     */
+    path: string
+    /**
+     * Session ID to update with the new directory
+     */
+    sessionID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/cd"
+}
+
+export type InstanceCdErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type InstanceCdError = InstanceCdErrors[keyof InstanceCdErrors]
+
+export type InstanceCdResponses = {
+  /**
+   * Directory changed
+   */
+  200: {
+    directory: string
+    worktree: string
+    projectID: string
+    previousDirectory: string
+  }
+}
+
+export type InstanceCdResponse = InstanceCdResponses[keyof InstanceCdResponses]
 
 export type WorktreeListData = {
   body?: never
