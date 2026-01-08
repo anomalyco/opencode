@@ -8,6 +8,7 @@ import { Log } from "../util/log"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import z from "zod"
 import type { LSPServer } from "./server"
+import { LSP } from "./index"
 import { NamedError } from "@opencode-ai/util/error"
 import { withTimeout } from "../util/timeout"
 import { Instance } from "../project/instance"
@@ -39,7 +40,7 @@ export namespace LSPClient {
     ),
   }
 
-  export async function create(input: { serverID: string; server: LSPServer.Handle; root: string }) {
+  export async function create(input: { serverID: string; server: LSPServer.Handle; root: string; timeout?: number }) {
     const l = log.clone().tag("serverID", input.serverID)
     l.info("starting client")
 
@@ -113,7 +114,7 @@ export namespace LSPClient {
           },
         },
       }),
-      45_000,
+      input.timeout ?? LSP.DEFAULT_LSP_TIMEOUT,
     ).catch((err) => {
       l.error("initialize error", { error: err })
       throw new InitializeError(

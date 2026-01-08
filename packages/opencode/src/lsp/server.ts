@@ -56,6 +56,7 @@ export namespace LSPServer {
     global?: boolean
     root: RootFunction
     spawn(root: string): Promise<Handle | undefined>
+    timeout?: number
   }
 
   export const Deno: Info = {

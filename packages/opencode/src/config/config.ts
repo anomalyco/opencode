@@ -904,18 +904,21 @@ export namespace Config {
           z.literal(false),
           z.record(
             z.string(),
-            z.union([
-              z.object({
-                disabled: z.literal(true),
-              }),
-              z.object({
-                command: z.array(z.string()),
-                extensions: z.array(z.string()).optional(),
-                disabled: z.boolean().optional(),
-                env: z.record(z.string(), z.string()).optional(),
-                initialization: z.record(z.string(), z.any()).optional(),
-              }),
-            ]),
+            z.object({
+              command: z.array(z.string()).optional(),
+              extensions: z.array(z.string()).optional(),
+              disabled: z.boolean().optional(),
+              env: z.record(z.string(), z.string()).optional(),
+              initialization: z.record(z.string(), z.any()).optional(),
+              timeout: z
+                .number()
+                .int()
+                .positive()
+                .optional()
+                .describe(
+                  "Timeout in milliseconds for this LSP server's initialization. Default is 45000 (45 seconds).",
+                ),
+            }),
           ),
         ])
         .optional()
@@ -927,12 +930,29 @@ export namespace Config {
 
             return Object.entries(data).every(([id, config]) => {
               if (config.disabled) return true
-              if (serverIds.has(id)) return true
-              return Boolean(config.extensions)
+
+              const hasCommand = Boolean(config.command)
+              const isBuiltIn = serverIds.has(id)
+
+              // Unknown servers must have command
+              if (!isBuiltIn && !hasCommand) return false
+
+              // Custom server with command must have extensions
+              if (hasCommand) {
+                return Boolean(config.extensions)
+              }
+
+              // Built-in server override does not allow these
+              if (config.env || config.initialization || config.extensions) {
+                return false
+              }
+
+              return true
             })
           },
           {
-            error: "For custom LSP servers, 'extensions' array is required.",
+            error:
+              "Invalid LSP configuration. Built-in servers can only override 'timeout' and 'disabled'. Custom servers require 'command' and 'extensions'.",
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),

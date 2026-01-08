@@ -14,6 +14,8 @@ import { Flag } from "@/flag/flag"
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
+  export const DEFAULT_LSP_TIMEOUT = 45_000
+
   export const Event = {
     Updated: BusEvent.define("lsp.updated", z.object({})),
   }
@@ -99,20 +101,39 @@ export namespace LSP {
       filterExperimentalServers(servers)
 
       for (const [name, item] of Object.entries(cfg.lsp ?? {})) {
+        if (typeof item !== "object") continue
         const existing = servers[name]
         if (item.disabled) {
           log.info(`LSP server ${name} is disabled`)
           delete servers[name]
           continue
         }
+
+        if (!item.command) {
+          // No command = built-in server override
+          if (!existing) {
+            log.error(`LSP server ${name} not found. Custom servers require 'command' array.`)
+            continue
+          }
+
+          // Apply overrides to built-in server
+          servers[name] = {
+            ...existing,
+            ...(item.timeout !== undefined && { timeout: item.timeout }),
+          }
+          continue
+        }
+
+        const command = item.command
         servers[name] = {
           ...existing,
           id: name,
           root: existing?.root ?? (async () => Instance.directory),
           extensions: item.extensions ?? existing?.extensions ?? [],
+          timeout: item.timeout ?? existing?.timeout,
           spawn: async (root) => {
             return {
-              process: spawn(item.command[0], item.command.slice(1), {
+              process: spawn(command[0], command.slice(1), {
                 cwd: root,
                 env: {
                   ...process.env,
@@ -195,10 +216,20 @@ export namespace LSP {
       if (!handle) return undefined
       log.info("spawned lsp server", { serverID: server.id })
 
+      const timeout = server.timeout ?? DEFAULT_LSP_TIMEOUT
+      if (server.timeout !== undefined) {
+        log.info("LSP server timeout overridden", {
+          serverID: server.id,
+          timeout: server.timeout,
+          default: DEFAULT_LSP_TIMEOUT,
+        })
+      }
+
       const client = await LSPClient.create({
         serverID: server.id,
         server: handle,
         root,
+        timeout,
       }).catch((err) => {
         s.broken.add(key)
         handle.process.kill()
