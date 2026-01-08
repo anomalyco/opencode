@@ -572,9 +572,18 @@ export namespace ACP {
       try {
         const model = await defaultModel(this.config, directory)
 
-        // Store ACP session state
-        const state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
-        const sessionId = state.id
+        let state: ACPSessionState
+        let sessionId: string
+
+        // If sessionId is provided in config, use existing session
+        if (this.config.sessionId) {
+          sessionId = this.config.sessionId
+          state = await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
+        } else {
+          // Store ACP session state
+          state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+          sessionId = state.id
+        }
 
         log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
 

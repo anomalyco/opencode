@@ -22,4 +22,5 @@ export interface ACPConfig {
     modelID: ModelID
   }
   initialPrompt?: string
+  sessionId?: string
 }

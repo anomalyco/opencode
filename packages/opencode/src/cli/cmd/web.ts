@@ -8,6 +8,7 @@ import { networkInterfaces } from "os"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
+import { parseSessionUrl } from "@/util/parse-session-url"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -40,7 +41,7 @@ export const WebCommand = cmd({
         type: "string",
       })
       .option("attach", {
-        describe: "attach to an existing OpenCode server",
+        describe: "attach to an existing OpenCode server or session URL",
         type: "string",
       })
   },
@@ -50,9 +51,12 @@ export const WebCommand = cmd({
     let baseUrl: string
     let opts: Awaited<ReturnType<typeof resolveNetworkOptions>> | undefined
     let remoteUrl: string | undefined
+    let sessionId: string | undefined
 
     if (args.attach) {
-      remoteUrl = args.attach
+      const parsed = parseSessionUrl(args.attach)
+      remoteUrl = parsed.baseUrl
+      sessionId = parsed.sessionId
       opts = await resolveNetworkOptions(args)
 
       // Create a proxy server that forwards to the remote server
@@ -84,8 +88,8 @@ export const WebCommand = cmd({
     UI.println(UI.logo("  "))
     UI.empty()
 
-    // If prompt is provided, create a session and send the prompt
-    if (args.prompt) {
+    // If prompt is provided or sessionId is provided, create/use session
+    if (args.prompt || sessionId) {
       const sdk = createOpencodeClient({
         baseUrl: remoteUrl ?? baseUrl,
       })
@@ -98,23 +102,35 @@ export const WebCommand = cmd({
         )
       }
 
-      const session = await sdk.session.create({ directory: process.cwd() })
-      if (!session.data) throw new Error("Failed to create session")
-      const sessionUrl = `${baseUrl}/${session.data.id}/session/${session.data.id}`
+      let actualSessionId: string
 
-      // Send the prompt to the session (fire and forget)
-      sdk.session
-        .prompt({
-          sessionID: session.data.id,
-          directory: process.cwd(),
-          parts: [
-            {
-              type: "text",
-              text: args.prompt,
-            },
-          ],
-        })
-        .catch(() => {})
+      if (sessionId) {
+        // Use existing session from URL
+        actualSessionId = sessionId
+      } else {
+        // Create new session
+        const session = await sdk.session.create({ directory: process.cwd() })
+        if (!session.data) throw new Error("Failed to create session")
+        actualSessionId = session.data.id
+      }
+
+      const sessionUrl = `${baseUrl}/${actualSessionId}/session/${actualSessionId}`
+
+      // Send the prompt to the session if provided (fire and forget)
+      if (args.prompt) {
+        sdk.session
+          .prompt({
+            sessionID: actualSessionId,
+            directory: process.cwd(),
+            parts: [
+              {
+                type: "text",
+                text: args.prompt,
+              },
+            ],
+          })
+          .catch(() => {})
+      }
 
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Session URL:       ", UI.Style.TEXT_NORMAL, sessionUrl)
       UI.empty()

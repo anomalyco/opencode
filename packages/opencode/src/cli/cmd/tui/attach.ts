@@ -6,6 +6,7 @@ import { TuiConfig } from "@/config/tui"
 import { Instance } from "@/project/instance"
 import { existsSync } from "fs"
 import { iife } from "@/util/iife"
+import { parseSessionUrl } from "@/util/parse-session-url"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -14,7 +15,7 @@ export const AttachCommand = cmd({
     yargs
       .positional("url", {
         type: "string",
-        describe: "http://localhost:4096",
+        describe: "http://localhost:4096 or http://localhost:4096/ses_xxx/session/ses_xxx",
         demandOption: true,
       })
       .option("dir", {
@@ -82,12 +83,14 @@ export const AttachCommand = cmd({
         return piped ? piped + "\n" + args.prompt : args.prompt
       })
 
+      const { baseUrl, sessionId } = parseSessionUrl(args.url)
+
       await tui({
-        url: args.url,
+        url: baseUrl,
         config,
         args: {
           continue: args.continue,
-          sessionID: args.session,
+          sessionID: args.session ?? sessionId,
           fork: args.fork,
           prompt,
         },

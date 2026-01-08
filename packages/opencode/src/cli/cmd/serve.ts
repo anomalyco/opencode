@@ -8,6 +8,7 @@ import { Installation } from "../../installation"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Hono } from "hono"
 import { proxy } from "hono/proxy"
+import { parseSessionUrl } from "@/util/parse-session-url"
 
 export const ServeCommand = cmd({
   command: "serve",
@@ -18,7 +19,7 @@ export const ServeCommand = cmd({
         type: "string",
       })
       .option("attach", {
-        describe: "attach to an existing OpenCode server",
+        describe: "attach to an existing OpenCode server or session URL",
         type: "string",
       })
   },
@@ -27,9 +28,12 @@ export const ServeCommand = cmd({
     let server: ReturnType<typeof Server.listen> | Awaited<ReturnType<typeof Bun.serve>> | undefined
     let baseUrl: string
     let remoteUrl: string | undefined
+    let sessionId: string | undefined
 
     if (args.attach) {
-      remoteUrl = args.attach
+      const parsed = parseSessionUrl(args.attach)
+      remoteUrl = parsed.baseUrl
+      sessionId = parsed.sessionId
       const opts = await resolveNetworkOptions(args)
 
       // Create a proxy server that forwards to the remote server
@@ -58,31 +62,42 @@ export const ServeCommand = cmd({
       baseUrl = `http://${server.hostname}:${server.port}`
     }
 
-    // If prompt is provided, create a session and send the prompt
-    if (args.prompt) {
+    // If prompt is provided or sessionId is provided, create/use session
+    if (args.prompt || sessionId) {
       const sdk = createOpencodeClient({
         baseUrl: remoteUrl ?? baseUrl,
       })
 
-      const session = await sdk.session.create({ directory: process.cwd() })
-      if (!session.data) throw new Error("Failed to create session")
+      let actualSessionId: string
 
-      // Send the prompt to the session (fire and forget)
-      sdk.session
-        .prompt({
-          sessionID: session.data.id,
-          directory: process.cwd(),
-          parts: [
-            {
-              type: "text",
-              text: args.prompt,
-            },
-          ],
-        })
-        .catch(() => {})
+      if (sessionId) {
+        // Use existing session from URL
+        actualSessionId = sessionId
+      } else {
+        // Create new session
+        const session = await sdk.session.create({ directory: process.cwd() })
+        if (!session.data) throw new Error("Failed to create session")
+        actualSessionId = session.data.id
+      }
+
+      // Send the prompt to the session if provided (fire and forget)
+      if (args.prompt) {
+        sdk.session
+          .prompt({
+            sessionID: actualSessionId,
+            directory: process.cwd(),
+            parts: [
+              {
+                type: "text",
+                text: args.prompt,
+              },
+            ],
+          })
+          .catch(() => {})
+      }
 
       console.log(`opencode server listening on ${baseUrl}`)
-      console.log(`session created: ${baseUrl}/${session.data.id}/session/${session.data.id}`)
+      console.log(`session created: ${baseUrl}/${actualSessionId}/session/${actualSessionId}`)
     } else {
       console.log(`opencode server listening on ${baseUrl}`)
     }

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { parseSessionUrl } from "../../src/util/parse-session-url"
 
 describe("serve command with --prompt", () => {
   test("should generate correct base URL", () => {
@@ -116,5 +117,73 @@ describe("serve command with --attach", () => {
     const proxyUrl = `http://${localHostname}:${localPort}`
 
     expect(proxyUrl).toBe("http://localhost:9000")
+  })
+
+  test("should use existing session when session URL is provided in --attach", () => {
+    const attachUrl = "http://remote:4096/ses_existing/session/ses_existing"
+    const localPort = 8080
+
+    // Simulate serve command logic
+    const { baseUrl: remoteUrl, sessionId } = parseSessionUrl(attachUrl)
+    const localBaseUrl = `http://localhost:${localPort}`
+
+    const shouldCreateNewSession = !sessionId
+    let actualSessionId = sessionId ?? "would_create_new"
+
+    const output = `session created: ${localBaseUrl}/${actualSessionId}/session/${actualSessionId}`
+
+    expect(shouldCreateNewSession).toBe(false)
+    expect(actualSessionId).toBe("ses_existing")
+    expect(output).toBe("session created: http://localhost:8080/ses_existing/session/ses_existing")
+  })
+
+  test("should create new session when no session ID in attach URL", () => {
+    const attachUrl = "http://remote:4096"
+    const localPort = 8080
+
+    const { baseUrl: remoteUrl, sessionId } = parseSessionUrl(attachUrl)
+    const localBaseUrl = `http://localhost:${localPort}`
+
+    const shouldCreateNewSession = !sessionId
+
+    expect(shouldCreateNewSession).toBe(true)
+    expect(sessionId).toBeUndefined()
+  })
+
+  test("should send prompt to existing session from URL", () => {
+    const attachUrl = "http://localhost:4096/ses_existing"
+    const promptArg = "Continue work"
+
+    // Simulate serve command logic
+    const { baseUrl, sessionId } = parseSessionUrl(attachUrl)
+
+    let actualSessionId: string
+    if (sessionId) {
+      actualSessionId = sessionId
+    } else {
+      actualSessionId = "new_ses_123" // Would create new session
+    }
+
+    const shouldSendPrompt = !!promptArg
+    const targetSessionId = actualSessionId
+
+    expect(actualSessionId).toBe("ses_existing")
+    expect(shouldSendPrompt).toBe(true)
+    expect(targetSessionId).toBe("ses_existing")
+  })
+
+  test("should print session URL even when session already exists", () => {
+    const attachUrl = "http://remote:4096/ses_abc123"
+    const localPort = 8080
+
+    const { baseUrl: remoteUrl, sessionId } = parseSessionUrl(attachUrl)
+    const localBaseUrl = `http://localhost:${localPort}`
+
+    const actualSessionId = sessionId!
+    const output = `session created: ${localBaseUrl}/${actualSessionId}/session/${actualSessionId}`
+
+    expect(output).toBe("session created: http://localhost:8080/ses_abc123/session/ses_abc123")
+    expect(output).toContain("session created:")
+    expect(output).not.toContain("remote")
   })
 })

@@ -75,6 +75,7 @@ import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
 import { Global } from "@/global"
+import { useArgs } from "../../context/args"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -206,6 +207,7 @@ export function Session() {
 
   const toast = useToast()
   const sdk = useSDK()
+  const args = useArgs()
 
   // Handle initial prompt from fork
   createEffect(() => {
@@ -229,6 +231,18 @@ export function Session() {
       local.agent.set("plan")
       lastSwitch = part.id
     }
+  })
+
+  // Handle prompt from CLI args (--prompt with session URL)
+  // Only submit if we attached to an existing session (args.sessionID was provided)
+  let promptSubmitted = false
+  createEffect(() => {
+    if (promptSubmitted || !args.prompt || !args.sessionID || !prompt) return
+    if (!sync.session.get(route.sessionID)) return // Wait for session to load
+
+    promptSubmitted = true
+    prompt.set({ input: args.prompt, parts: [] })
+    prompt.submit()
   })
 
   let scroll: ScrollBoxRenderable
