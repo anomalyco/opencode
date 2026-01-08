@@ -28,6 +28,7 @@ import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
+import { Log } from "@/util/log"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
@@ -199,7 +200,7 @@ function App() {
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
-    console.log(JSON.stringify(route.data))
+    Log.Default.debug("route.data", route.data)
   })
 
   // Update terminal window title based on current route and session

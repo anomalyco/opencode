@@ -18,6 +18,7 @@ import { useCommandDialog } from "../dialog-command"
 import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
+import { Log } from "@/util/log"
 import { Clipboard } from "../../util/clipboard"
 import type { FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
@@ -546,7 +547,7 @@ export function Prompt(props: PromptProps) {
       inputText.startsWith("/") &&
       iife(() => {
         const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
+        Log.Default.debug("command", { command })
         return sync.data.command.some((x) => x.name === command)
       })
     ) {

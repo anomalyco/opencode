@@ -311,7 +311,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const args = useArgs()
 
     async function bootstrap() {
-      console.log("bootstrapping")
+      Log.Default.debug("bootstrapping sync context")
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })

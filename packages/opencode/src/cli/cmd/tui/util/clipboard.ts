@@ -4,6 +4,7 @@ import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
+import { Log } from "@/util/log"
 
 export namespace Clipboard {
   export interface Content {
@@ -62,7 +63,7 @@ export namespace Clipboard {
     const os = platform()
 
     if (os === "darwin" && Bun.which("osascript")) {
-      console.log("clipboard: using osascript")
+      Log.Default.debug("clipboard: using osascript")
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
         await $`osascript -e 'set the clipboard to "${escaped}"'`.nothrow().quiet()
@@ -71,8 +72,8 @@ export namespace Clipboard {
 
     if (os === "linux") {
       if (process.env["WAYLAND_DISPLAY"] && Bun.which("wl-copy")) {
-        console.log("clipboard: using wl-copy")
-        return async (text: string) => {
+      Log.Default.debug("clipboard: using wl-copy")
+      return async (text: string) => {
           const proc = Bun.spawn(["wl-copy"], { stdin: "pipe", stdout: "ignore", stderr: "ignore" })
           proc.stdin.write(text)
           proc.stdin.end()
@@ -80,8 +81,8 @@ export namespace Clipboard {
         }
       }
       if (Bun.which("xclip")) {
-        console.log("clipboard: using xclip")
-        return async (text: string) => {
+      Log.Default.debug("clipboard: using xclip")
+      return async (text: string) => {
           const proc = Bun.spawn(["xclip", "-selection", "clipboard"], {
             stdin: "pipe",
             stdout: "ignore",
@@ -108,7 +109,7 @@ export namespace Clipboard {
     }
 
     if (os === "win32") {
-      console.log("clipboard: using powershell")
+      Log.Default.debug("clipboard: using powershell")
       return async (text: string) => {
         // need to escape backticks because powershell uses them as escape code
         const escaped = text.replace(/"/g, '""').replace(/`/g, "``")
@@ -116,7 +117,7 @@ export namespace Clipboard {
       }
     }
 
-    console.log("clipboard: no native support")
+    Log.Default.debug("clipboard: no native support")
     return async (text: string) => {
       await clipboardy.write(text).catch(() => {})
     }
