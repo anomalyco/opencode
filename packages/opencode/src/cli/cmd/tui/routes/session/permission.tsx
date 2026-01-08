@@ -219,7 +219,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                 <TextBody icon="◇" title={`Exa Code Search "` + (input().query ?? "") + `"`} />
               </Match>
               <Match when={props.request.permission === "external_directory"}>
-                <TextBody icon="←" title={`Access external directory ` + normalizePath(input().path as string)} />
+                <TextBody
+                  icon="←"
+                  title={`Access external directory ` + path.resolve(props.request.metadata?.parentDir as string)}
+                />
               </Match>
               <Match when={props.request.permission === "doom_loop"}>
                 <TextBody icon="⟳" title="Continue after repeated failures" />

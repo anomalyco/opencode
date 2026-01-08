@@ -136,12 +136,15 @@ export const BashTool = Tool.define("bash", async () => {
         }
       }
 
-      if (directories.size > 0) {
+      for (const dir of directories) {
         await ctx.ask({
           permission: "external_directory",
-          patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
-          metadata: {},
+          patterns: [dir],
+          always: [dir + "/*"],
+          metadata: {
+            filepath: dir,
+            parentDir: dir,
+          },
         })
       }
 

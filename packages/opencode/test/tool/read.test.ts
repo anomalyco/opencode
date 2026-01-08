@@ -73,6 +73,7 @@ describe("tool.read external_directory permission", () => {
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns.some((p) => p.includes(outerTmp.path))).toBe(true)
+        expect(extDirReq!.metadata.parentDir).toBe(outerTmp.path)
       },
     })
   })
