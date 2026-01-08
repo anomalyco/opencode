@@ -36,13 +36,38 @@ export namespace Config {
     return merged
   }
 
-  export const state = Instance.state(async () => {
+export const state = Instance.state(async () => {
     const auth = await Auth.all()
-    const globalResult = await global()
-    let result = globalResult.config
-    const allUnknownKeybinds: Array<{ name: string; binding: string }> = [...globalResult.unknownKeybinds]
+    const allUnknownKeybinds: Array<{ name: string; binding: string }> = []
 
-    // Override with custom config if provided
+    // Load remote/well-known config first as the base layer (lowest precedence)
+    // This allows organizations to provide default configs that users can override
+    let result: Info = {}
+    for (const [key, value] of Object.entries(auth)) {
+      if (value.type === "wellknown") {
+        process.env[value.key] = value.token
+        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
+        const response = await fetch(`${key}/.well-known/opencode`)
+        if (!response.ok) {
+          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+        }
+        const wellknown = (await response.json()) as any
+        const remoteConfig = wellknown.config ?? {}
+        // Add $schema to prevent load() from trying to write back to a non-existent file
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+        const loaded = await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`)
+        result = mergeConfigConcatArrays(result, loaded.config)
+        allUnknownKeybinds.push(...loaded.unknownKeybinds)
+        log.debug("loaded remote config from well-known", { url: key })
+      }
+    }
+
+    // Global user config overrides remote config
+    const globalResult = await global()
+    result = mergeConfigConcatArrays(result, globalResult.config)
+    allUnknownKeybinds.push(...globalResult.unknownKeybinds)
+
+    // Custom config path overrides global
     if (Flag.OPENCODE_CONFIG) {
       const loaded = await loadFile(Flag.OPENCODE_CONFIG)
       result = mergeConfigConcatArrays(result, loaded.config)
@@ -50,6 +75,7 @@ export namespace Config {
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
+    // Project config has highest precedence (overrides global and remote)
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
@@ -59,11 +85,63 @@ export namespace Config {
       }
     }
 
+    // Inline config content has highest precedence
     if (Flag.OPENCODE_CONFIG_CONTENT) {
       result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
+    // Load remote/well-known config first as the base layer (lowest precedence)
+    // This allows organizations to provide default configs that users can override
+    let result: Info = {}
+    for (const [key, value] of Object.entries(auth)) {
+      if (value.type === "wellknown") {
+        process.env[value.key] = value.token
+        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
+        const response = await fetch(`${key}/.well-known/opencode`)
+        if (!response.ok) {
+          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+        }
+        const wellknown = (await response.json()) as any
+        const remoteConfig = wellknown.config ?? {}
+        // Add $schema to prevent load() from trying to write back to a non-existent file
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+        result = mergeConfigConcatArrays(
+          result,
+          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
+        )
+        log.debug("loaded remote config from well-known", { url: key })
+      }
+    }
+
+    // Global user config overrides remote config
+    result = mergeConfigConcatArrays(result, await global())
+
+    // Custom config path overrides global
+    if (Flag.OPENCODE_CONFIG) {
+      const loaded = await loadFile(Flag.OPENCODE_CONFIG)
+      result = mergeConfigConcatArrays(result, loaded.config)
+      allUnknownKeybinds.push(...loaded.unknownKeybinds)
+      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    }
+
+    // Project config has highest precedence (overrides global and remote)
+    for (const file of ["opencode.jsonc", "opencode.json"]) {
+      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+      for (const resolved of found.toReversed()) {
+        const loaded = await loadFile(resolved)
+        result = mergeConfigConcatArrays(result, loaded.config)
+        allUnknownKeybinds.push(...loaded.unknownKeybinds)
+      }
+    }
+
+    // Inline config content has highest precedence
+    if (Flag.OPENCODE_CONFIG_CONTENT) {
+      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
+    }
+
+<<<<<<< HEAD
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
@@ -74,6 +152,8 @@ export namespace Config {
       }
     }
 
+=======
+>>>>>>> dev
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []

@@ -12,35 +12,37 @@ import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 
-export { DESCRIPTION as TASK_DESCRIPTION }
+const parameters = z.object({
+  description: z.string().describe("A short (3-5 words) description of the task"),
+  prompt: z.string().describe("The task for the agent to perform"),
+  subagent_type: z.string().describe("The type of specialized agent to use for this task"),
+  session_id: z.string().describe("Existing Task session to continue").optional(),
+  command: z.string().describe("The command that triggered this task").optional(),
+})
 
-export function filterSubagents(agents: Agent.Info[], ruleset: PermissionNext.Ruleset) {
-  return agents.filter((a) => PermissionNext.evaluate("task", a.name, ruleset).action !== "deny")
-}
-
-export const TaskTool = Tool.define("task", async () => {
+export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
+
+  // Filter agents by permissions if agent provided
+  const caller = ctx?.agent
+  const accessibleAgents = caller
+    ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
+    : agents
+
   const description = DESCRIPTION.replace(
     "{agents}",
-    agents
+    accessibleAgents
       .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
       .join("\n"),
   )
   return {
     description,
-    parameters: z.object({
-      description: z.string().describe("A short (3-5 words) description of the task"),
-      prompt: z.string().describe("The task for the agent to perform"),
-      subagent_type: z.string().describe("The type of specialized agent to use for this task"),
-      session_id: z.string().describe("Existing Task session to continue").optional(),
-      command: z.string().describe("The command that triggered this task").optional(),
-    }),
-    async execute(params, ctx) {
+    parameters,
+    async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
 
-      const userInvokedAgents = (ctx.extra?.userInvokedAgents ?? []) as string[]
-      // Skip permission check when invoked from a command subtask (user already approved by invoking the command)
-      if (!ctx.extra?.bypassAgentCheck && !userInvokedAgents.includes(params.subagent_type)) {
+      // Skip permission check when user explicitly invoked via @ or command subtask
+      if (!ctx.extra?.bypassAgentCheck) {
         await ctx.ask({
           permission: "task",
           patterns: [params.subagent_type],
