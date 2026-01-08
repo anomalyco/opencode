@@ -1,5 +1,4 @@
 import { createContext, useContext, Accessor, Setter, createSignal, createRoot } from "solid-js"
-import { useStorage } from "@solid-primitives/storage"
 import { locales, type Locale, type Translation, defaultLocale, supportedLocales } from "./locales"
 
 type I18nContextValue = {
