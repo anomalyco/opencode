@@ -30,7 +30,7 @@ const MAX_LOG_ENTRIES: usize = 200;
 #[tauri::command]
 fn kill_sidecar(app: AppHandle) {
     let Some(server_state) = app.try_state::<ServerState>() else {
-        println!("Server not running");
+        println!("Server state not initialized (app closed before server started)");
         return;
     };
 
@@ -216,88 +216,94 @@ pub fn run() {
         .setup(move |app| {
             let app = app.handle().clone();
 
-            // Initialize log state
-            app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
+            {
+                app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
+                app.manage(ServerState(Arc::new(Mutex::new(None))));
+            }
 
             {
-              let app = app.clone();
-              tauri::async_runtime::spawn(async move {
-                  let port = get_sidecar_port();
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let port = get_sidecar_port();
 
-                  let should_spawn_sidecar = !is_server_running(port).await;
+                    let should_spawn_sidecar = !is_server_running(port).await;
 
-                  let child = if should_spawn_sidecar {
-                      let child = spawn_sidecar(&app, port);
+                    let child = if should_spawn_sidecar {
+                        let child = spawn_sidecar(&app, port);
 
-                      let timestamp = Instant::now();
-                      loop {
-                          if timestamp.elapsed() > Duration::from_secs(7) {
-                              let res = app.dialog()
-                                .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
-                                .title("Startup Failed")
-                                .buttons(MessageDialogButtons::OkCancelCustom("Copy Logs And Exit".to_string(), "Exit".to_string()))
-                                .blocking_show_with_result();
+                        let timestamp = Instant::now();
+                        loop {
+                            if timestamp.elapsed() > Duration::from_secs(7) {
+                                let res = app.dialog()
+                                  .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
+                                  .title("Startup Failed")
+                                  .buttons(MessageDialogButtons::OkCancelCustom("Copy Logs And Exit".to_string(), "Exit".to_string()))
+                                  .blocking_show_with_result();
 
-                              if matches!(&res, MessageDialogResult::Custom(name) if name == "Copy Logs And Exit") {
-                                  match copy_logs_to_clipboard(app.clone()).await {
-                                      Ok(()) => println!("Logs copied to clipboard successfully"),
-                                      Err(e) => println!("Failed to copy logs to clipboard: {}", e),
-                                  }
-                              }
+                                if matches!(&res, MessageDialogResult::Custom(name) if name == "Copy Logs And Exit") {
+                                    match copy_logs_to_clipboard(app.clone()).await {
+                                        Ok(()) => println!("Logs copied to clipboard successfully"),
+                                        Err(e) => println!("Failed to copy logs to clipboard: {}", e),
+                                    }
+                                }
 
-                              app.exit(1);
+                                app.exit(1);
 
-                              return;
-                          }
+                                return;
+                            }
 
-                          tokio::time::sleep(Duration::from_millis(10)).await;
+                            tokio::time::sleep(Duration::from_millis(10)).await;
 
-                          if is_server_running(port).await {
-                              // give the server a little bit more time to warm up
-                              tokio::time::sleep(Duration::from_millis(10)).await;
+                            if is_server_running(port).await {
+                                // give the server a little bit more time to warm up
+                                tokio::time::sleep(Duration::from_millis(10)).await;
 
-                              break;
-                          }
-                      }
+                                break;
+                            }
+                        }
 
-                      println!("Server ready after {:?}", timestamp.elapsed());
+                        println!("Server ready after {:?}", timestamp.elapsed());
 
-                      Some(child)
-                  } else {
-                      None
-                  };
+                        Some(child)
+                    } else {
+                        None
+                    };
 
-                  let primary_monitor = app.primary_monitor().ok().flatten();
-                  let size = primary_monitor
-                      .map(|m| m.size().to_logical(m.scale_factor()))
-                      .unwrap_or(LogicalSize::new(1920, 1080));
+                    let primary_monitor = app.primary_monitor().ok().flatten();
+                    let size = primary_monitor
+                        .map(|m| m.size().to_logical(m.scale_factor()))
+                        .unwrap_or(LogicalSize::new(1920, 1080));
 
-                  let mut window_builder =
-                      WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                          .title("OpenCode")
-                          .inner_size(size.width as f64, size.height as f64)
-                          .decorations(true)
-                          .zoom_hotkeys_enabled(true)
-                          .disable_drag_drop_handler()
-                          .initialization_script(format!(
-                              r#"
-                            window.__OPENCODE__ ??= {{}};
-                            window.__OPENCODE__.updaterEnabled = {updater_enabled};
-                            window.__OPENCODE__.port = {port};
-                          "#
-                          ));
+                    let window_builder =
+                        WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
+                            .title("OpenCode")
+                            .inner_size(size.width as f64, size.height as f64)
+                            .decorations(true)
+                            .zoom_hotkeys_enabled(true)
+                            .disable_drag_drop_handler()
+                            .initialization_script(format!(
+                                r#"
+                              window.__OPENCODE__ ??= {{}};
+                              window.__OPENCODE__.updaterEnabled = {updater_enabled};
+                              window.__OPENCODE__.port = {port};
+                            "#
+                            ));
 
-                  #[cfg(target_os = "macos")]
-                  {
-                      window_builder = window_builder
-                          .title_bar_style(tauri::TitleBarStyle::Overlay)
-                          .hidden_title(true);
-                  }
+                    #[cfg(target_os = "macos")]
+                    {
+                        window_builder = window_builder
+                            .title_bar_style(tauri::TitleBarStyle::Overlay)
+                            .hidden_title(true);
+                    }
 
-                  window_builder.build().expect("Failed to create window");
+                    window_builder.build().expect("Failed to create window");
 
-                  app.manage(ServerState(Arc::new(Mutex::new(child))));
-              });
+                    if let Some(child) = child {
+                        let server_state = app.state::<ServerState>();
+                        let mut state = server_state.0.lock().unwrap();
+                        *state = Some(child);
+                    }
+                });
             }
 
             {
