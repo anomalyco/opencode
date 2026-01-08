@@ -7,6 +7,7 @@ import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
+import { McpOAuthCallback } from "../../mcp/oauth-callback"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
@@ -598,6 +599,10 @@ export const McpDebugCommand = cmd({
 
             // Try to discover OAuth metadata
             const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
+
+            // Start callback server
+            await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
+
             const authProvider = new McpOAuthProvider(
               serverName,
               serverConfig.url,
@@ -605,6 +610,7 @@ export const McpDebugCommand = cmd({
                 clientId: oauthConfig?.clientId,
                 clientSecret: oauthConfig?.clientSecret,
                 scope: oauthConfig?.scope,
+                redirectUri: oauthConfig?.redirectUri,
               },
               {
                 onRedirect: async () => {},

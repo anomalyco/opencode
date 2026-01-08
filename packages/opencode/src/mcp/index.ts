@@ -294,6 +294,8 @@ export namespace MCP {
       let authProvider: McpOAuthProvider | undefined
 
       if (!oauthDisabled) {
+        await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
+
         authProvider = new McpOAuthProvider(
           key,
           mcp.url,
@@ -301,6 +303,7 @@ export namespace MCP {
             clientId: oauthConfig?.clientId,
             clientSecret: oauthConfig?.clientSecret,
             scope: oauthConfig?.scope,
+            redirectUri: oauthConfig?.redirectUri,
           },
           {
             onRedirect: async (url) => {
@@ -330,6 +333,7 @@ export namespace MCP {
 
       let lastError: Error | undefined
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+
       for (const { name, transport } of transports) {
         try {
           const client = new Client({
@@ -546,7 +550,8 @@ export namespace MCP {
 
     for (const [clientName, client] of Object.entries(clientsSnapshot)) {
       // Only include tools from connected MCPs (skip disabled ones)
-      if (s.status[clientName]?.status !== "connected") {
+      const clientStatus = s.status[clientName]?.status
+      if (clientStatus !== "connected") {
         continue
       }
 
@@ -693,8 +698,10 @@ export namespace MCP {
       throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
     }
 
-    // Start the callback server
-    await McpOAuthCallback.ensureRunning()
+    // OAuth config is optional - if not provided, we'll use auto-discovery
+    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
+
+    await McpOAuthCallback.ensureRunning(oauthConfig?.redirectUri)
 
     // Generate and store a cryptographically secure state parameter BEFORE creating the provider
     // The SDK will call provider.state() to read this value
@@ -704,8 +711,6 @@ export namespace MCP {
     await McpAuth.updateOAuthState(mcpName, oauthState)
 
     // Create a new auth provider for this flow
-    // OAuth config is optional - if not provided, we'll use auto-discovery
-    const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
     let capturedUrl: URL | undefined
     const authProvider = new McpOAuthProvider(
       mcpName,
@@ -714,6 +719,7 @@ export namespace MCP {
         clientId: oauthConfig?.clientId,
         clientSecret: oauthConfig?.clientSecret,
         scope: oauthConfig?.scope,
+        redirectUri: oauthConfig?.redirectUri,
       },
       {
         onRedirect: async (url) => {
@@ -742,6 +748,7 @@ export namespace MCP {
         pendingOAuthTransports.set(mcpName, transport)
         return { authorizationUrl: capturedUrl.toString() }
       }
+
       throw error
     }
   }
@@ -751,9 +758,9 @@ export namespace MCP {
    * Opens the browser and waits for callback.
    */
   export async function authenticate(mcpName: string): Promise<Status> {
-    const { authorizationUrl } = await startAuth(mcpName)
+    const result = await startAuth(mcpName)
 
-    if (!authorizationUrl) {
+    if (!result.authorizationUrl) {
       // Already authenticated
       const s = await state()
       return s.status[mcpName] ?? { status: "connected" }
@@ -767,8 +774,12 @@ export namespace MCP {
 
     // The SDK has already added the state parameter to the authorization URL
     // We just need to open the browser
-    log.info("opening browser for oauth", { mcpName, url: authorizationUrl, state: oauthState })
-    await open(authorizationUrl)
+    log.info("opening browser for oauth", {
+      mcpName,
+      url: result.authorizationUrl,
+      state: oauthState,
+    })
+    await open(result.authorizationUrl)
 
     // Wait for callback using the OAuth state parameter
     const code = await McpOAuthCallback.waitForCallback(oauthState)
