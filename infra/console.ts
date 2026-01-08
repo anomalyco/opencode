@@ -111,6 +111,16 @@ const zenPrice = new stripe.Price("ZenBlackPrice", {
   },
 })
 
+const zenSponsoredPrice = new stripe.Price("ZenBlackSponsoredPrice", {
+  product: zenProduct.id,
+  unitAmount: 0,
+  currency: "usd",
+  recurring: {
+    interval: "month",
+    intervalCount: 1,
+  },
+})
+
 const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS1"),
   new sst.Secret("ZEN_MODELS2"),
