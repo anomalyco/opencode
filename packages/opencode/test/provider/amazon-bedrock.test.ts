@@ -203,3 +203,103 @@ test("Bedrock: includes custom endpoint in options when specified", async () => 
     },
   })
 })
+
+test("Bedrock: custom AIP models with baseModel are loaded correctly", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "us-east-1",
+              },
+              models: {
+                "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/test-profile-id": {
+                  baseModel: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const bedrockProvider = providers["amazon-bedrock"]
+      expect(bedrockProvider).toBeDefined()
+
+      const aipModel = bedrockProvider.models["arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/test-profile-id"]
+      expect(aipModel).toBeDefined()
+
+      // Should use ARN as api.id (not the base model ID)
+      expect(aipModel.api.id).toBe("arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/test-profile-id")
+
+      // Should extract profile ID as display name when no explicit name is provided
+      expect(aipModel.name).toBe("test-profile-id")
+
+      // Should have model ID set to the ARN
+      expect(aipModel.id).toBe("arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/test-profile-id")
+    },
+  })
+})
+
+test("Bedrock: custom AIP models can override name and other fields", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "us-east-1",
+              },
+              models: {
+                "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/custom-aip": {
+                  baseModel: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+                  name: "My Custom AIP Model",
+                  limit: {
+                    context: 500000,
+                    output: 16000,
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const aipModel = providers["amazon-bedrock"].models["arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/custom-aip"]
+
+      expect(aipModel).toBeDefined()
+
+      // Should use custom name instead of extracted profile ID
+      expect(aipModel.name).toBe("My Custom AIP Model")
+
+      // Should use custom context and output limits
+      expect(aipModel.limit.context).toBe(500000)
+      expect(aipModel.limit.output).toBe(16000)
+
+      // Should use ARN as api.id
+      expect(aipModel.api.id).toBe("arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/custom-aip")
+    },
+  })
+})

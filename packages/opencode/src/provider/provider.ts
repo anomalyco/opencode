@@ -217,8 +217,8 @@ export namespace Provider {
         autoload: true,
         options: providerOptions,
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          // Skip region prefixing if model already has a cross-region inference profile prefix
-          if (modelID.startsWith("global.") || modelID.startsWith("jp.")) {
+          // Skip region prefixing if model already has a cross-region inference profile prefix or is an ARN
+          if (modelID.startsWith("global.") || modelID.startsWith("jp.") || modelID.startsWith("arn:aws:bedrock")) {
             return sdk.languageModel(modelID)
           }
 
@@ -668,16 +668,22 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existingModel = parsed.models[model.id ?? modelID]
+        const existingModel = model.baseModel
+          ? database[providerID]?.models[model.baseModel]
+          : parsed.models[model.id ?? modelID]
         const name = iife(() => {
           if (model.name) return model.name
           if (model.id && model.id !== modelID) return modelID
+          // For ARN models, extract the profile ID (last portion after /)
+          if (modelID.startsWith("arn:aws:bedrock") && modelID.includes("/")) {
+            return modelID.split("/").pop() ?? modelID
+          }
           return existingModel?.name ?? modelID
         })
         const parsedModel: Model = {
           id: modelID,
           api: {
-            id: model.id ?? existingModel?.api.id ?? modelID,
+            id: model.id ?? (model.baseModel ? modelID : existingModel?.api.id) ?? modelID,
             npm:
               model.provider?.npm ??
               provider.npm ??

@@ -797,6 +797,7 @@ export namespace Config {
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            baseModel: z.string().optional().describe("Base model ID to inherit metadata from"),
             variants: z
               .record(
                 z.string(),
