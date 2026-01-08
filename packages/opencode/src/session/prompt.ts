@@ -1642,12 +1642,16 @@ export namespace SessionPrompt {
       providerID: "system",
     }
     await Session.updateMessage(assistantMsg)
-    const textPart: MessageV2.Part = {
+    const textPart: MessageV2.TextPart = {
       type: "text",
       id: Identifier.ascending("part"),
       messageID: assistantMsg.id,
       sessionID: input.sessionID,
       text: `Changed working directory to: ${result.directory}`,
+      time: {
+        start: Date.now(),
+        end: Date.now(),
+      },
     }
     await Session.updatePart(textPart)
 
@@ -1664,6 +1668,9 @@ export namespace SessionPrompt {
       arguments: targetPath,
       messageID: assistantMsg.id,
     })
+
+    // Signal completion so `run` command knows we're done
+    SessionStatus.set(input.sessionID, { type: "idle" })
 
     return {
       info: assistantMsg,
