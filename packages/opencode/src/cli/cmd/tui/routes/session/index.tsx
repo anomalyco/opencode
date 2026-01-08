@@ -1042,6 +1042,10 @@ export function Session() {
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
+                  // Apply initial prompt when prompt component mounts (e.g., from fork)
+                  if (route.initialPrompt) {
+                    r.set(route.initialPrompt)
+                  }
                 }}
                 disabled={permissions().length > 0}
                 onSubmit={() => {
