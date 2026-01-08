@@ -213,24 +213,28 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 <box flexDirection="row" gap={1}>
                   <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                     <text fg={other() ? theme.secondary : input() ? theme.success : theme.text}>
-                      {options().length + 1}. Other
+                      {options().length + 1}. Type your own answer
                     </text>
                   </box>
                   <text fg={theme.success}>{input() ? "✓" : ""}</text>
                 </box>
                 <Show when={store.editing}>
-                  <textarea
-                    ref={(val: TextareaRenderable) => (textarea = val)}
-                    focused
-                    placeholder="Type your own answer"
-                    textColor={theme.text}
-                    focusedTextColor={theme.text}
-                    cursorColor={theme.primary}
-                    keyBindings={bindings()}
-                  />
+                  <box paddingLeft={3}>
+                    <textarea
+                      ref={(val: TextareaRenderable) => (textarea = val)}
+                      focused
+                      placeholder="Type your own answer"
+                      textColor={theme.text}
+                      focusedTextColor={theme.text}
+                      cursorColor={theme.primary}
+                      keyBindings={bindings()}
+                    />
+                  </box>
                 </Show>
                 <Show when={!store.editing && input()}>
-                  <text fg={theme.textMuted}>{input()}</text>
+                  <box paddingLeft={3}>
+                    <text fg={theme.textMuted}>{input()}</text>
+                  </box>
                 </Show>
               </box>
             </box>
