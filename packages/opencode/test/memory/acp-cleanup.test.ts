@@ -12,6 +12,7 @@ describe("ACP.Agent session cleanup", () => {
     const mockConnection = {
       requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "once" } }),
       sessionUpdate: async () => {},
+      closed: new Promise(() => {}), // Never resolves during test
     }
 
     const mockConfig = {
@@ -56,7 +57,9 @@ describe("ACP.Agent session cleanup", () => {
   })
 
   test("dispose cleans up all session controllers", () => {
-    const mockConnection = {}
+    const mockConnection = {
+      closed: new Promise(() => {}), // Never resolves during test
+    }
     const mockConfig = {
       sdk: {
         event: { subscribe: async () => ({ stream: (async function* () {})() }) },
@@ -92,7 +95,9 @@ describe("ACP.Agent session cleanup", () => {
   })
 
   test("setupEventSubscriptions replaces existing subscription for same session", () => {
-    const mockConnection = {}
+    const mockConnection = {
+      closed: new Promise(() => {}), // Never resolves during test
+    }
     const subscribeCallCount = { count: 0 }
     // Track active generators so we can verify they terminate
     const activeGenerators = new Set<AbortController>()

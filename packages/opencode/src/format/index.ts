@@ -11,7 +11,6 @@ import { Instance } from "../project/instance"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
-  const subscriptions: (() => void)[] = []
 
   export const Status = z
     .object({
@@ -64,6 +63,18 @@ export namespace Format {
     }
   })
 
+  // Separate state for subscriptions with dispose callback
+  const subscriptionState = Instance.state<(() => void)[]>(
+    () => [],
+    async (subscriptions) => {
+      for (const unsub of subscriptions) {
+        unsub()
+      }
+      subscriptions.length = 0
+      log.info("disposed format subscriptions")
+    },
+  )
+
   async function isEnabled(item: Formatter.Info) {
     const s = await state()
     let status = s.enabled[item.name]
@@ -103,6 +114,7 @@ export namespace Format {
 
   export function init() {
     log.info("init")
+    const subscriptions = subscriptionState()
     // Clean up any existing subscriptions to prevent duplicates on re-init
     dispose()
     subscriptions.push(
@@ -141,9 +153,11 @@ export namespace Format {
   }
 
   export function dispose() {
+    const subscriptions = subscriptionState()
     for (const unsub of subscriptions) {
       unsub()
     }
     subscriptions.length = 0
+    log.info("disposed format subscriptions")
   }
 }

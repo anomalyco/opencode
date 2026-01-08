@@ -11,7 +11,6 @@ import { CodexAuthPlugin } from "./codex"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
-  const subscriptions: (() => void)[] = []
 
   const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.8"]
 
@@ -82,6 +81,18 @@ export namespace Plugin {
     }
   })
 
+  // Separate state for subscriptions with dispose callback
+  const subscriptionState = Instance.state<(() => void)[]>(
+    () => [],
+    async (subscriptions) => {
+      for (const unsub of subscriptions) {
+        unsub()
+      }
+      subscriptions.length = 0
+      log.info("disposed plugin subscriptions")
+    },
+  )
+
   export async function trigger<
     Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
     Input = Parameters<Required<Hooks>[Name]>[0],
@@ -104,6 +115,7 @@ export namespace Plugin {
   }
 
   export async function init() {
+    const subscriptions = subscriptionState()
     // Clean up any existing subscriptions to prevent duplicates on re-init
     dispose()
     const hooks = await state().then((x) => x.hooks)
@@ -125,9 +137,11 @@ export namespace Plugin {
   }
 
   export function dispose() {
+    const subscriptions = subscriptionState()
     for (const unsub of subscriptions) {
       unsub()
     }
     subscriptions.length = 0
+    log.info("disposed plugin subscriptions")
   }
 }

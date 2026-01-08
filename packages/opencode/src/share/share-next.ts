@@ -2,6 +2,7 @@ import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { ulid } from "ulid"
 import { Provider } from "@/provider/provider"
+import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
@@ -10,16 +11,39 @@ import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
-  const subscriptions: (() => void)[] = []
+
+  interface ShareNextState {
+    subscriptions: (() => void)[]
+    queue: Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>
+  }
+
+  const state = Instance.state<ShareNextState>(
+    () => ({
+      subscriptions: [],
+      queue: new Map(),
+    }),
+    async (s) => {
+      for (const unsub of s.subscriptions) {
+        unsub()
+      }
+      s.subscriptions.length = 0
+      for (const entry of s.queue.values()) {
+        clearTimeout(entry.timeout)
+      }
+      s.queue.clear()
+      log.info("disposed share-next subscriptions")
+    },
+  )
 
   async function url() {
     return Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
   }
 
   export async function init() {
+    const s = state()
     // Clean up any existing subscriptions to prevent duplicates on re-init
     dispose()
-    subscriptions.push(
+    s.subscriptions.push(
       Bus.subscribe(Session.Event.Updated, async (evt) => {
         await sync(evt.properties.info.id, [
           {
@@ -29,7 +53,7 @@ export namespace ShareNext {
         ])
       }),
     )
-    subscriptions.push(
+    s.subscriptions.push(
       Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
         await sync(evt.properties.info.sessionID, [
           {
@@ -51,7 +75,7 @@ export namespace ShareNext {
         }
       }),
     )
-    subscriptions.push(
+    s.subscriptions.push(
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
         await sync(evt.properties.part.sessionID, [
           {
@@ -61,7 +85,7 @@ export namespace ShareNext {
         ])
       }),
     )
-    subscriptions.push(
+    s.subscriptions.push(
       Bus.subscribe(Session.Event.Diff, async (evt) => {
         await sync(evt.properties.sessionID, [
           {
@@ -74,25 +98,28 @@ export namespace ShareNext {
   }
 
   export function dispose() {
-    for (const unsub of subscriptions) {
+    const s = state()
+    for (const unsub of s.subscriptions) {
       unsub()
     }
-    subscriptions.length = 0
-    for (const entry of queue.values()) {
+    s.subscriptions.length = 0
+    for (const entry of s.queue.values()) {
       clearTimeout(entry.timeout)
     }
-    queue.clear()
+    s.queue.clear()
+    log.info("disposed share-next subscriptions")
   }
 
   /** @internal Test helper to get queue size */
   export function _getQueueSize() {
-    return queue.size
+    return state().queue.size
   }
 
   /** @internal Test helper to add items to queue for testing dispose cleanup */
   export function _addToQueueForTesting(sessionID: string) {
+    const s = state()
     const timeout = setTimeout(() => {}, 10000)
-    queue.set(sessionID, { timeout, data: new Map() })
+    s.queue.set(sessionID, { timeout, data: new Map() })
   }
 
   export async function create(sessionID: string) {
@@ -141,9 +168,9 @@ export namespace ShareNext {
         data: SDK.Model[]
       }
 
-  const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
   async function sync(sessionID: string, data: Data[]) {
-    const existing = queue.get(sessionID)
+    const s = state()
+    const existing = s.queue.get(sessionID)
     if (existing) {
       for (const item of data) {
         existing.data.set("id" in item ? (item.id as string) : ulid(), item)
@@ -157,9 +184,9 @@ export namespace ShareNext {
     }
 
     const timeout = setTimeout(async () => {
-      const queued = queue.get(sessionID)
+      const queued = s.queue.get(sessionID)
       if (!queued) return
-      queue.delete(sessionID)
+      s.queue.delete(sessionID)
       const share = await get(sessionID).catch(() => undefined)
       if (!share) return
 
@@ -174,7 +201,7 @@ export namespace ShareNext {
         }),
       })
     }, 1000)
-    queue.set(sessionID, { timeout, data: dataMap })
+    s.queue.set(sessionID, { timeout, data: dataMap })
   }
 
   export async function remove(sessionID: string) {

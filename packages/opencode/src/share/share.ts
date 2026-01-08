@@ -1,5 +1,6 @@
 import { Bus } from "../bus"
 import { Installation } from "../installation"
+import { Instance } from "../project/instance"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
@@ -7,11 +8,31 @@ import { Log } from "../util/log"
 export namespace Share {
   const log = Log.create({ service: "share" })
 
-  let queue: Promise<void> = Promise.resolve()
-  const pending = new Map<string, any>()
-  const subscriptions: (() => void)[] = []
+  interface ShareState {
+    queue: Promise<void>
+    pending: Map<string, any>
+    subscriptions: (() => void)[]
+  }
+
+  const state = Instance.state<ShareState>(
+    () => ({
+      queue: Promise.resolve(),
+      pending: new Map(),
+      subscriptions: [],
+    }),
+    async (s) => {
+      for (const unsub of s.subscriptions) {
+        unsub()
+      }
+      s.subscriptions.length = 0
+      s.pending.clear()
+      s.queue = Promise.resolve()
+      log.info("disposed share subscriptions")
+    },
+  )
 
   export async function sync(key: string, content: any) {
+    const s = state()
     const [root, ...splits] = key.split("/")
     if (root !== "session") return
     const [sub, sessionID] = splits
@@ -19,12 +40,12 @@ export namespace Share {
     const share = await Session.getShare(sessionID).catch(() => {})
     if (!share) return
     const { secret } = share
-    pending.set(key, content)
-    queue = queue
+    s.pending.set(key, content)
+    s.queue = s.queue
       .then(async () => {
-        const content = pending.get(key)
+        const content = s.pending.get(key)
         if (content === undefined) return
-        pending.delete(key)
+        s.pending.delete(key)
 
         return fetch(`${URL}/share_sync`, {
           method: "POST",
@@ -47,14 +68,15 @@ export namespace Share {
   }
 
   export function init() {
+    const s = state()
     // Clean up any existing subscriptions to prevent duplicates on re-init
     dispose()
-    subscriptions.push(
+    s.subscriptions.push(
       Bus.subscribe(Session.Event.Updated, async (evt) => {
         await sync("session/info/" + evt.properties.info.id, evt.properties.info)
       }),
     )
-    subscriptions.push(
+    s.subscriptions.push(
       Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
         await sync(
           "session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id,
@@ -62,7 +84,7 @@ export namespace Share {
         )
       }),
     )
-    subscriptions.push(
+    s.subscriptions.push(
       Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
         await sync(
           "session/part/" +
@@ -78,12 +100,13 @@ export namespace Share {
   }
 
   export function dispose() {
-    for (const unsub of subscriptions) {
+    const s = state()
+    for (const unsub of s.subscriptions) {
       unsub()
     }
-    subscriptions.length = 0
-    pending.clear()
-    queue = Promise.resolve()
+    s.subscriptions.length = 0
+    s.pending.clear()
+    s.queue = Promise.resolve()
     log.info("disposed share subscriptions")
   }
 
