@@ -4,6 +4,7 @@ import { useSync } from "@/context/sync"
 import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
+import { useI18n } from "@/i18n"
 
 const MAIN_WORKTREE = "main"
 const CREATE_WORKTREE = "create"
@@ -15,6 +16,7 @@ interface NewSessionViewProps {
 
 export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
+  const { t } = useI18n()
 
   const sandboxes = createMemo(() => sync.project?.sandboxes ?? [])
   const options = createMemo(() => [MAIN_WORKTREE, ...sandboxes(), CREATE_WORKTREE])
@@ -32,13 +34,13 @@ export function NewSessionView(props: NewSessionViewProps) {
 
   const label = (value: string) => {
     if (value === MAIN_WORKTREE) {
-      if (isWorktree()) return "Main branch"
+      if (isWorktree()) return t().session.mainBranch
       const branch = sync.data.vcs?.branch
-      if (branch) return `Main branch (${branch})`
-      return "Main branch"
+      if (branch) return t().session.mainBranchWithName.replace("{branch}", branch)
+      return t().session.mainBranch
     }
 
-    if (value === CREATE_WORKTREE) return "Create new worktree"
+    if (value === CREATE_WORKTREE) return t().session.createWorktree
 
     return getFilename(value)
   }
@@ -48,7 +50,7 @@ export function NewSessionView(props: NewSessionViewProps) {
       class="size-full flex flex-col pb-45 justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6"
       style={{ "padding-bottom": "calc(var(--prompt-height, 11.25rem) + 64px)" }}
     >
-      <div class="text-20-medium text-text-weaker">New session</div>
+      <div class="text-20-medium text-text-weaker">{t().session.newSession}</div>
       <div class="flex justify-center items-center gap-3">
         <Icon name="folder" size="small" />
         <div class="text-12-medium text-text-weak">
@@ -76,7 +78,7 @@ export function NewSessionView(props: NewSessionViewProps) {
           <div class="flex justify-center items-center gap-3">
             <Icon name="pencil-line" size="small" />
             <div class="text-12-medium text-text-weak">
-              Last modified&nbsp;
+              {t().session.lastModified}&nbsp;
               <span class="text-text-strong">
                 {DateTime.fromMillis(project().time.updated ?? project().time.created).toRelative()}
               </span>
