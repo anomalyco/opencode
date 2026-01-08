@@ -30,6 +30,11 @@ export interface OpenaiCompatibleProviderSettings {
   headers?: Record<string, string>
 
   /**
+   * Custom query parameter to append to the requests
+   */
+  queryParams?: Record<string, string>
+
+  /**
    * Custom fetch implementation.
    */
   fetch?: FetchFunction
@@ -65,11 +70,21 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
 
   const getHeaders = () => withUserAgentSuffix(headers, `ai-sdk/openai-compatible/${VERSION}`)
 
+  const getUrl = ({ path }: { path: string }) => {
+    const url = new URL(`${baseURL}${path}`)
+    if (options.queryParams) {
+      for (const [key, value] of Object.entries(options.queryParams)) {
+        url.searchParams.set(key, value)
+      }
+    }
+    return url.toString()
+  }
+
   const createChatModel = (modelId: OpenaiCompatibleModelId) => {
     return new OpenAICompatibleChatLanguageModel(modelId, {
       provider: `${options.name ?? "openai-compatible"}.chat`,
       headers: getHeaders,
-      url: ({ path }) => `${baseURL}${path}`,
+      url: getUrl,
       fetch: options.fetch,
     })
   }
@@ -78,7 +93,7 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
     return new OpenAIResponsesLanguageModel(modelId, {
       provider: `${options.name ?? "openai-compatible"}.responses`,
       headers: getHeaders,
-      url: ({ path }) => `${baseURL}${path}`,
+      url: getUrl,
       fetch: options.fetch,
     })
   }
