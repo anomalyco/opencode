@@ -1,7 +1,6 @@
 import { cmd } from "./cmd"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
@@ -366,133 +365,188 @@ export const McpLogoutCommand = cmd({
   },
 })
 
+async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, scope: "global" | "project") {
+  const configPath =
+    scope === "global" ? path.join(Global.Path.config, "opencode.json") : path.join(Instance.worktree, "opencode.json")
+
+  const file = Bun.file(configPath)
+  let config: Record<string, unknown> = {}
+
+  if (await file.exists()) {
+    const text = await file.text()
+    try {
+      config = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      // If parsing fails, start with empty config
+    }
+  }
+
+  if (!config.mcp || typeof config.mcp !== "object") {
+    config.mcp = {}
+  }
+
+  ;(config.mcp as Record<string, unknown>)[name] = mcpConfig
+
+  await Bun.write(configPath, JSON.stringify(config, null, 2))
+
+  return configPath
+}
+
 export const McpAddCommand = cmd({
   command: "add",
   describe: "add an MCP server",
   async handler() {
-    UI.empty()
-    prompts.intro("Add MCP server")
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+        prompts.intro("Add MCP server")
 
-    const name = await prompts.text({
-      message: "Enter MCP server name",
-      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-    })
-    if (prompts.isCancel(name)) throw new UI.CancelledError()
+        const project = Instance.project
 
-    const type = await prompts.select({
-      message: "Select MCP server type",
-      options: [
-        {
-          label: "Local",
-          value: "local",
-          hint: "Run a local command",
-        },
-        {
-          label: "Remote",
-          value: "remote",
-          hint: "Connect to a remote URL",
-        },
-      ],
-    })
-    if (prompts.isCancel(type)) throw new UI.CancelledError()
+        // Determine scope
+        let scope: "global" | "project" = "global"
+        if (project.vcs === "git") {
+          const scopeResult = await prompts.select({
+            message: "Location",
+            options: [
+              {
+                label: "Current project",
+                value: "project" as const,
+                hint: path.join(Instance.worktree, "opencode.json"),
+              },
+              {
+                label: "Global",
+                value: "global" as const,
+                hint: path.join(Global.Path.config, "opencode.json"),
+              },
+            ],
+          })
+          if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
+          scope = scopeResult
+        }
 
-    if (type === "local") {
-      const command = await prompts.text({
-        message: "Enter command to run",
-        placeholder: "e.g., opencode x @modelcontextprotocol/server-filesystem",
-        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-      })
-      if (prompts.isCancel(command)) throw new UI.CancelledError()
-
-      prompts.log.info(`Local MCP server "${name}" configured with command: ${command}`)
-      prompts.outro("MCP server added successfully")
-      return
-    }
-
-    if (type === "remote") {
-      const url = await prompts.text({
-        message: "Enter MCP server URL",
-        placeholder: "e.g., https://example.com/mcp",
-        validate: (x) => {
-          if (!x) return "Required"
-          if (x.length === 0) return "Required"
-          const isValid = URL.canParse(x)
-          return isValid ? undefined : "Invalid URL"
-        },
-      })
-      if (prompts.isCancel(url)) throw new UI.CancelledError()
-
-      const useOAuth = await prompts.confirm({
-        message: "Does this server require OAuth authentication?",
-        initialValue: false,
-      })
-      if (prompts.isCancel(useOAuth)) throw new UI.CancelledError()
-
-      if (useOAuth) {
-        const hasClientId = await prompts.confirm({
-          message: "Do you have a pre-registered client ID?",
-          initialValue: false,
+        const name = await prompts.text({
+          message: "Enter MCP server name",
+          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
-        if (prompts.isCancel(hasClientId)) throw new UI.CancelledError()
+        if (prompts.isCancel(name)) throw new UI.CancelledError()
 
-        if (hasClientId) {
-          const clientId = await prompts.text({
-            message: "Enter client ID",
+        const type = await prompts.select({
+          message: "Select MCP server type",
+          options: [
+            {
+              label: "Local",
+              value: "local",
+              hint: "Run a local command",
+            },
+            {
+              label: "Remote",
+              value: "remote",
+              hint: "Connect to a remote URL",
+            },
+          ],
+        })
+        if (prompts.isCancel(type)) throw new UI.CancelledError()
+
+        if (type === "local") {
+          const command = await prompts.text({
+            message: "Enter command to run",
+            placeholder: "e.g., opencode x @modelcontextprotocol/server-filesystem",
             validate: (x) => (x && x.length > 0 ? undefined : "Required"),
           })
-          if (prompts.isCancel(clientId)) throw new UI.CancelledError()
+          if (prompts.isCancel(command)) throw new UI.CancelledError()
 
-          const hasSecret = await prompts.confirm({
-            message: "Do you have a client secret?",
-            initialValue: false,
-          })
-          if (prompts.isCancel(hasSecret)) throw new UI.CancelledError()
-
-          let clientSecret: string | undefined
-          if (hasSecret) {
-            const secret = await prompts.password({
-              message: "Enter client secret",
-            })
-            if (prompts.isCancel(secret)) throw new UI.CancelledError()
-            clientSecret = secret
+          const mcpConfig: Config.Mcp = {
+            type: "local",
+            command: command.split(" "),
           }
 
-          prompts.log.info(`Remote MCP server "${name}" configured with OAuth (client ID: ${clientId})`)
-          prompts.log.info("Add this to your opencode.json:")
-          prompts.log.info(`
-  "mcp": {
-    "${name}": {
-      "type": "remote",
-      "url": "${url}",
-      "oauth": {
-        "clientId": "${clientId}"${clientSecret ? `,\n        "clientSecret": "${clientSecret}"` : ""}
-      }
-    }
-  }`)
-        } else {
-          prompts.log.info(`Remote MCP server "${name}" configured with OAuth (dynamic registration)`)
-          prompts.log.info("Add this to your opencode.json:")
-          prompts.log.info(`
-  "mcp": {
-    "${name}": {
-      "type": "remote",
-      "url": "${url}",
-      "oauth": {}
-    }
-  }`)
+          const configPath = await addMcpToConfig(name, mcpConfig, scope)
+          prompts.log.success(`MCP server "${name}" added to ${configPath}`)
+          prompts.outro("MCP server added successfully")
+          return
         }
-      } else {
-        const client = new Client({
-          name: "opencode",
-          version: "1.0.0",
-        })
-        const transport = new StreamableHTTPClientTransport(new URL(url))
-        await client.connect(transport)
-        prompts.log.info(`Remote MCP server "${name}" configured with URL: ${url}`)
-      }
-    }
 
-    prompts.outro("MCP server added successfully")
+        if (type === "remote") {
+          const url = await prompts.text({
+            message: "Enter MCP server URL",
+            placeholder: "e.g., https://example.com/mcp",
+            validate: (x) => {
+              if (!x) return "Required"
+              if (x.length === 0) return "Required"
+              const isValid = URL.canParse(x)
+              return isValid ? undefined : "Invalid URL"
+            },
+          })
+          if (prompts.isCancel(url)) throw new UI.CancelledError()
+
+          const useOAuth = await prompts.confirm({
+            message: "Does this server require OAuth authentication?",
+            initialValue: false,
+          })
+          if (prompts.isCancel(useOAuth)) throw new UI.CancelledError()
+
+          let mcpConfig: Config.Mcp
+
+          if (useOAuth) {
+            const hasClientId = await prompts.confirm({
+              message: "Do you have a pre-registered client ID?",
+              initialValue: false,
+            })
+            if (prompts.isCancel(hasClientId)) throw new UI.CancelledError()
+
+            if (hasClientId) {
+              const clientId = await prompts.text({
+                message: "Enter client ID",
+                validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+              })
+              if (prompts.isCancel(clientId)) throw new UI.CancelledError()
+
+              const hasSecret = await prompts.confirm({
+                message: "Do you have a client secret?",
+                initialValue: false,
+              })
+              if (prompts.isCancel(hasSecret)) throw new UI.CancelledError()
+
+              let clientSecret: string | undefined
+              if (hasSecret) {
+                const secret = await prompts.password({
+                  message: "Enter client secret",
+                })
+                if (prompts.isCancel(secret)) throw new UI.CancelledError()
+                clientSecret = secret
+              }
+
+              mcpConfig = {
+                type: "remote",
+                url,
+                oauth: {
+                  clientId,
+                  ...(clientSecret && { clientSecret }),
+                },
+              }
+            } else {
+              mcpConfig = {
+                type: "remote",
+                url,
+                oauth: {},
+              }
+            }
+          } else {
+            mcpConfig = {
+              type: "remote",
+              url,
+            }
+          }
+
+          const configPath = await addMcpToConfig(name, mcpConfig, scope)
+          prompts.log.success(`MCP server "${name}" added to ${configPath}`)
+        }
+
+        prompts.outro("MCP server added successfully")
+      },
+    })
   },
 })
 
