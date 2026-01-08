@@ -292,7 +292,28 @@ export const RunCommand = cmd({
               : args.title
             : undefined
 
-        const result = await sdk.session.create(title ? { title } : {})
+        const result = await sdk.session.create(
+          title
+            ? {
+                title,
+                permission: [
+                  {
+                    permission: "question",
+                    action: "deny",
+                    pattern: "*",
+                  },
+                ],
+              }
+            : {
+                permission: [
+                  {
+                    permission: "question",
+                    action: "deny",
+                    pattern: "*",
+                  },
+                ],
+              },
+        )
         return result.data?.id
       })()
 
