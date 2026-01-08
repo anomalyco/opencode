@@ -2,16 +2,21 @@ import { sortBy, pipe } from "remeda"
 
 export namespace Wildcard {
   export function match(str: string, pattern: string) {
+    // Normalize path separators to forward slashes for cross-platform compatibility
+    // This allows configs to use either / or \ and work on all platforms
+    const normalizedStr = str.replace(/\\/g, "/")
+    const normalizedPattern = pattern.replace(/\\/g, "/")
+
     const regex = new RegExp(
       "^" +
-        pattern
+        normalizedPattern
           .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
           .replace(/\*/g, ".*") // * becomes .*
           .replace(/\?/g, ".") + // ? becomes .
         "$",
       "s", // s flag enables multiline matching
     )
-    return regex.test(str)
+    return regex.test(normalizedStr)
   }
 
   export function all(input: string, patterns: Record<string, any>) {

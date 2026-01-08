@@ -44,7 +44,13 @@ export namespace PermissionNext {
         })
         continue
       }
-      ruleset.push(...Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern, action })))
+      ruleset.push(
+        ...Object.entries(value).map(([pattern, action]) => ({
+          permission: key,
+          pattern: pattern.replace(/\\/g, "/"), // Normalize to forward slashes for cross-platform compatibility
+          action,
+        })),
+      )
     }
     return ruleset
   }

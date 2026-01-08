@@ -650,3 +650,132 @@ test("ask - allows all patterns when all match allow rules", async () => {
     },
   })
 })
+
+// Cross-platform path separator tests for permission system
+test("fromConfig - normalizes backslashes to forward slashes", () => {
+  const result = PermissionNext.fromConfig({
+    edit: {
+      "*": "deny",
+      "openspec\\*": "allow",
+      "src\\main.ts": "deny",
+    },
+  })
+  expect(result).toEqual([
+    { permission: "edit", pattern: "*", action: "deny" },
+    { permission: "edit", pattern: "openspec/*", action: "allow" },
+    { permission: "edit", pattern: "src/main.ts", action: "deny" },
+  ])
+})
+
+test("fromConfig - handles mixed separators", () => {
+  const result = PermissionNext.fromConfig({
+    read: {
+      "openspec/*": "allow",
+      "src\\*": "deny",
+      "C:/Users/*": "allow",
+    },
+  })
+  expect(result).toEqual([
+    { permission: "read", pattern: "openspec/*", action: "allow" },
+    { permission: "read", pattern: "src/*", action: "deny" },
+    { permission: "read", pattern: "C:/Users/*", action: "allow" },
+  ])
+})
+
+test("evaluate - Windows paths with Unix config patterns", () => {
+  const ruleset = PermissionNext.fromConfig({
+    edit: {
+      "*": "deny",
+      "openspec/*": "allow",
+    },
+  })
+
+  // Windows path should match Unix pattern
+  expect(PermissionNext.evaluate("edit", "openspec\\api.yaml", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "openspec\\sub\\file.ts", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "src\\main.ts", ruleset).action).toBe("deny")
+})
+
+test("evaluate - Unix paths with Windows config patterns", () => {
+  const ruleset = PermissionNext.fromConfig({
+    edit: {
+      "*": "deny",
+      "openspec\\*": "allow",
+    },
+  })
+
+  // Unix path should match Windows pattern
+  expect(PermissionNext.evaluate("edit", "openspec/api.yaml", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "openspec/sub/file.ts", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "src/main.ts", ruleset).action).toBe("deny")
+})
+
+test("evaluate - Mixed separators in paths and patterns", () => {
+  const ruleset = PermissionNext.fromConfig({
+    edit: {
+      "openspec\\*": "allow",
+    },
+  })
+
+  // Mixed separators should work
+  expect(PermissionNext.evaluate("edit", "openspec/sub\\file.txt", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "openspec\\sub/file.txt", ruleset).action).toBe("allow")
+})
+
+test("evaluate - UNC paths", () => {
+  const ruleset = PermissionNext.fromConfig({
+    read: {
+      "//server/share/*": "allow",
+    },
+  })
+
+  // Windows UNC path should match
+  expect(PermissionNext.evaluate("read", "\\\\server\\share\\file.txt", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("read", "\\\\server\\share\\sub\\file.txt", ruleset).action).toBe("allow")
+})
+
+test("evaluate - Drive letters", () => {
+  const ruleset = PermissionNext.fromConfig({
+    edit: {
+      "C:/project/*": "allow",
+      "D:\\*": "deny",
+    },
+  })
+
+  expect(PermissionNext.evaluate("edit", "C:\\project\\src\\main.ts", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "C:/project/src/main.ts", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "D:\\file.txt", ruleset).action).toBe("deny")
+  expect(PermissionNext.evaluate("edit", "D:/file.txt", ruleset).action).toBe("deny")
+})
+
+test("evaluate - Complex Windows path patterns", () => {
+  const ruleset = PermissionNext.fromConfig({
+    edit: {
+      "*": "ask",
+      "src\\components\\*.tsx": "allow",
+      "openspec/**/*.yaml": "allow",
+    },
+  })
+
+  expect(PermissionNext.evaluate("edit", "src\\components\\Button.tsx", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "src\\components\\Button.js", ruleset).action).toBe("ask")
+  expect(PermissionNext.evaluate("edit", "openspec\\api\\v1\\schema.yaml", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "openspec\\api\\v1\\schema.json", ruleset).action).toBe("ask")
+})
+
+test("evaluate - Permission precedence with Windows paths", () => {
+  const ruleset = PermissionNext.fromConfig({
+    edit: {
+      "*": "deny",
+      "openspec/*": "allow",
+      "openspec/secret/*": "deny",
+      "openspec/secret/ok.ts": "allow",
+    },
+  })
+
+  // Last matching rule wins
+  expect(PermissionNext.evaluate("edit", "openspec\\api.yaml", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "openspec\\secret\\password.txt", ruleset).action).toBe("deny")
+  expect(PermissionNext.evaluate("edit", "openspec\\secret\\ok.ts", ruleset).action).toBe("allow")
+  expect(PermissionNext.evaluate("edit", "src\\main.ts", ruleset).action).toBe("deny")
+})
