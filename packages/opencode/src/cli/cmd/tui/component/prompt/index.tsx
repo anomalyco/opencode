@@ -15,7 +15,7 @@ import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
-import { useRenderer } from "@opentui/solid"
+import { useRenderer, useKeyboard } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
@@ -610,6 +610,33 @@ export function Prompt(props: PromptProps) {
     input.clear()
   }
   const exit = useExit()
+
+  let lastEscTime = 0
+  const DOUBLE_ESC_THRESHOLD = 300
+
+  // Global keyboard handler for double-ESC to clear input
+  useKeyboard((evt) => {
+    if (props.disabled) return
+    if (!input?.focused) return
+    if (evt.name !== "escape") return
+    if (store.prompt.input === "") return
+    if (dialog.stack.length > 0) return
+
+    const now = Date.now()
+    if (now - lastEscTime < DOUBLE_ESC_THRESHOLD) {
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+      lastEscTime = 0
+      evt.preventDefault()
+      return
+    }
+    lastEscTime = now
+  })
 
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.visualCursor.offset
