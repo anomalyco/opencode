@@ -977,9 +977,18 @@ export default function Page() {
       .join("")
       .trim()
 
-  onCleanup(() => {
+  createEffect(() => {
+    if (!prompt.ready()) return
     handoff.prompt = previewPrompt()
+  })
+
+  createEffect(() => {
+    if (!terminal.ready()) return
     handoff.terminals = terminal.all().map((t) => t.title)
+  })
+
+  createEffect(() => {
+    if (!file.ready()) return
     handoff.files = Object.fromEntries(
       tabs()
         .all()
@@ -989,6 +998,9 @@ export default function Page() {
           return [[path, file.selectedLines(path) ?? null] as const]
         }),
     )
+  })
+
+  onCleanup(() => {
     cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
