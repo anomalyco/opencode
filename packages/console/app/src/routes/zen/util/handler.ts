@@ -1,8 +1,9 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
-import { BillingTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { BillingTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
+import { getWeekBounds } from "@opencode-ai/console-core/util/date.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
@@ -415,11 +416,11 @@ export async function handler(
             timeMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
           },
           subscription: {
-            timeSubscribed: UserTable.timeSubscribed,
-            subIntervalUsage: UserTable.subIntervalUsage,
-            subMonthlyUsage: UserTable.subMonthlyUsage,
-            timeSubIntervalUsageUpdated: UserTable.timeSubIntervalUsageUpdated,
-            timeSubMonthlyUsageUpdated: UserTable.timeSubMonthlyUsageUpdated,
+            id: SubscriptionTable.id,
+            rollingUsage: SubscriptionTable.rollingUsage,
+            fixedUsage: SubscriptionTable.fixedUsage,
+            timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
+            timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
           },
           provider: {
             credentials: ProviderTable.credentials,
@@ -440,6 +441,14 @@ export async function handler(
               )
             : sql`false`,
         )
+        .leftJoin(
+          SubscriptionTable,
+          and(
+            eq(SubscriptionTable.workspaceID, KeyTable.workspaceID),
+            eq(SubscriptionTable.userID, KeyTable.userID),
+            isNull(SubscriptionTable.timeDeleted),
+          ),
+        )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
     )
@@ -448,7 +457,7 @@ export async function handler(
     logger.metric({
       api_key: data.apiKey,
       workspace: data.workspaceID,
-      isSubscription: data.subscription.timeSubscribed ? true : false,
+      isSubscription: data.subscription ? true : false,
     })
 
     return {
@@ -456,7 +465,7 @@ export async function handler(
       workspaceID: data.workspaceID,
       billing: data.billing,
       user: data.user,
-      subscription: data.subscription.timeSubscribed ? data.subscription : undefined,
+      subscription: data.subscription,
       provider: data.provider,
       isFree: FREE_WORKSPACES.includes(data.workspaceID),
       isDisabled: !!data.timeDisabled,
@@ -484,23 +493,11 @@ export async function handler(
         return `${minutes}min`
       }
 
-      // Check monthly limit (based on subscription billing cycle)
-      if (
-        sub.subMonthlyUsage &&
-        sub.timeSubMonthlyUsageUpdated &&
-        sub.subMonthlyUsage >= centsToMicroCents(black.monthlyLimit * 100)
-      ) {
-        const subscribeDay = sub.timeSubscribed!.getUTCDate()
-        const cycleStart = new Date(
-          Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCDate() >= subscribeDay ? now.getUTCMonth() : now.getUTCMonth() - 1,
-            subscribeDay,
-          ),
-        )
-        const cycleEnd = new Date(Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, subscribeDay))
-        if (sub.timeSubMonthlyUsageUpdated >= cycleStart && sub.timeSubMonthlyUsageUpdated < cycleEnd) {
-          const retryAfter = Math.ceil((cycleEnd.getTime() - now.getTime()) / 1000)
+      // Check weekly limit
+      if (sub.fixedUsage && sub.timeFixedUpdated) {
+        const week = getWeekBounds(now)
+        if (sub.timeFixedUpdated >= week.start && sub.fixedUsage >= centsToMicroCents(black.fixedLimit * 100)) {
+          const retryAfter = Math.ceil((week.end.getTime() - now.getTime()) / 1000)
           throw new SubscriptionError(
             `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
             retryAfter,
@@ -508,14 +505,12 @@ export async function handler(
         }
       }
 
-      // Check interval limit
-      const intervalMs = black.intervalLength * 3600 * 1000
-      if (sub.subIntervalUsage && sub.timeSubIntervalUsageUpdated) {
-        const currentInterval = Math.floor(now.getTime() / intervalMs)
-        const usageInterval = Math.floor(sub.timeSubIntervalUsageUpdated.getTime() / intervalMs)
-        if (currentInterval === usageInterval && sub.subIntervalUsage >= centsToMicroCents(black.intervalLimit * 100)) {
-          const nextInterval = (currentInterval + 1) * intervalMs
-          const retryAfter = Math.ceil((nextInterval - now.getTime()) / 1000)
+      // Check rolling limit
+      if (sub.rollingUsage && sub.timeRollingUpdated) {
+        const rollingWindowMs = black.rollingWindow * 3600 * 1000
+        const windowStart = new Date(now.getTime() - rollingWindowMs)
+        if (sub.timeRollingUpdated >= windowStart && sub.rollingUsage >= centsToMicroCents(black.rollingLimit * 100)) {
+          const retryAfter = Math.ceil((sub.timeRollingUpdated.getTime() + rollingWindowMs - now.getTime()) / 1000)
           throw new SubscriptionError(
             `Subscription quota exceeded. Retry in ${formatRetryTime(retryAfter)}.`,
             retryAfter,
@@ -661,38 +656,34 @@ export async function handler(
           .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
         ...(authInfo.subscription
           ? (() => {
-              const now = new Date()
-              const subscribeDay = authInfo.subscription.timeSubscribed!.getUTCDate()
-              const cycleStart = new Date(
-                Date.UTC(
-                  now.getUTCFullYear(),
-                  now.getUTCDate() >= subscribeDay ? now.getUTCMonth() : now.getUTCMonth() - 1,
-                  subscribeDay,
-                ),
-              )
-              const cycleEnd = new Date(
-                Date.UTC(cycleStart.getUTCFullYear(), cycleStart.getUTCMonth() + 1, subscribeDay),
-              )
+              const black = BlackData.get()
+              const week = getWeekBounds(new Date())
+              const rollingWindowSeconds = black.rollingWindow * 3600
               return [
                 db
-                  .update(UserTable)
+                  .update(SubscriptionTable)
                   .set({
-                    subMonthlyUsage: sql`
+                    fixedUsage: sql`
               CASE
-                WHEN ${UserTable.timeSubMonthlyUsageUpdated} >= ${cycleStart} AND ${UserTable.timeSubMonthlyUsageUpdated} < ${cycleEnd} THEN ${UserTable.subMonthlyUsage} + ${cost}
+                WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.start} THEN ${SubscriptionTable.fixedUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                    timeSubMonthlyUsageUpdated: sql`now()`,
-                    subIntervalUsage: sql`
+                    timeFixedUpdated: sql`now()`,
+                    rollingUsage: sql`
               CASE
-                WHEN FLOOR(UNIX_TIMESTAMP(${UserTable.timeSubIntervalUsageUpdated}) / (${BlackData.get().intervalLength} * 3600)) = FLOOR(UNIX_TIMESTAMP(now()) / (${BlackData.get().intervalLength} * 3600)) THEN ${UserTable.subIntervalUsage} + ${cost}
+                WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.rollingUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-                    timeSubIntervalUsageUpdated: sql`now()`,
+                    timeRollingUpdated: sql`now()`,
                   })
-                  .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+                  .where(
+                    and(
+                      eq(SubscriptionTable.workspaceID, authInfo.workspaceID),
+                      eq(SubscriptionTable.userID, authInfo.user.id),
+                    ),
+                  ),
               ]
             })()
           : [
