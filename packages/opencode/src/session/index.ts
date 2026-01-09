@@ -9,6 +9,7 @@ import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
+import { SessionRules } from "./rules"
 
 import { Storage } from "../storage/storage"
 import { Log } from "../util/log"
@@ -76,6 +77,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      rules: z.string().array().optional(),
     })
     .meta({
       ref: "Session",
@@ -341,6 +343,7 @@ export namespace Session {
       Bus.publish(Event.Deleted, {
         info: session,
       })
+      await SessionRules.clearSessionRules(sessionID)
     } catch (e) {
       log.error(e)
     }

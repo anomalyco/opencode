@@ -8,6 +8,7 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
+import { SessionRules } from "../session/rules"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -23,7 +24,7 @@ export const ReadTool = Tool.define("read", {
   async execute(params, ctx) {
     let filepath = params.filePath
     if (!path.isAbsolute(filepath)) {
-      filepath = path.join(process.cwd(), filepath)
+      filepath = path.join(Instance.directory, filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
 
@@ -132,6 +133,10 @@ export const ReadTool = Tool.define("read", {
     // just warms the lsp client
     LSP.touchFile(filepath, false)
     FileTime.read(ctx.sessionID, filepath)
+
+    if (ctx.callID) {
+      await SessionRules.notifyFileInContext(filepath, ctx.sessionID, ctx.callID)
+    }
 
     return {
       title,

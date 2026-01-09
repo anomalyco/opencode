@@ -27,7 +27,15 @@ import {
   RGBA,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Part,
+  ToolPart,
+  UserMessage,
+  TextPart,
+  ReasoningPart,
+  RulesPart,
+} from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -1150,6 +1158,7 @@ function UserMessage(props: {
   const local = useLocal()
   const text = createMemo(() => props.parts.flatMap((x) => (x.type === "text" && !x.synthetic ? [x] : []))[0])
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
+  const rules = createMemo(() => props.parts.filter((x) => x.type === "rules") as RulesPart[])
   const sync = useSync()
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
@@ -1203,6 +1212,7 @@ function UserMessage(props: {
                 </For>
               </box>
             </Show>
+            <For each={rules()}>{(part) => <RulesPart part={part} message={props.message} last={false} />}</For>
             <Show
               when={queued()}
               fallback={
@@ -1318,6 +1328,20 @@ const PART_MAPPING = {
   text: TextPart,
   tool: ToolPart,
   reasoning: ReasoningPart,
+  rules: RulesPart,
+}
+
+function RulesPart(props: { last: boolean; part: RulesPart; message: UserMessage | AssistantMessage }) {
+  const { theme } = useTheme()
+  const paths = () => (props.part.files ?? []).map((f) => normalizePath(f)).join(", ")
+
+  return (
+    <box paddingLeft={3} marginTop={1}>
+      <text fg={theme.textMuted}>
+        <span style={{ bold: true }}>✱</span> rules applied ({paths()})
+      </text>
+    </box>
+  )
 }
 
 function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {

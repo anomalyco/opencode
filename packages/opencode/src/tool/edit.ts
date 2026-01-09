@@ -16,6 +16,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { SessionRules } from "../session/rules"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -121,6 +122,11 @@ export const EditTool = Tool.define("edit", {
 
     let output = "Edit applied successfully."
     await LSP.touchFile(filePath, true)
+
+    if (ctx.callID) {
+      await SessionRules.notifyFileInContext(filePath, ctx.sessionID, ctx.callID)
+    }
+
     const diagnostics = await LSP.diagnostics()
     const normalizedFilePath = Filesystem.normalizePath(filePath)
     const issues = diagnostics[normalizedFilePath] ?? []

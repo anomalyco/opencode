@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { SessionRules } from "./rules"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -924,6 +925,9 @@ export namespace SessionPrompt {
           switch (url.protocol) {
             case "data:":
               if (part.mime === "text/plain") {
+                if (part.filename) {
+                  await SessionRules.notifyFileInContext(part.filename, input.sessionID, "user")
+                }
                 return [
                   {
                     id: Identifier.ascending("part"),
@@ -1022,6 +1026,7 @@ export namespace SessionPrompt {
                       ask: async () => {},
                     }
                     const result = await t.execute(args, readCtx)
+                    await SessionRules.notifyFileInContext(filepath, input.sessionID, "user")
                     pieces.push({
                       id: Identifier.ascending("part"),
                       messageID: info.id,
@@ -1111,6 +1116,7 @@ export namespace SessionPrompt {
 
               const file = Bun.file(filepath)
               FileTime.read(input.sessionID, filepath)
+              await SessionRules.notifyFileInContext(filepath, input.sessionID, "user")
               return [
                 {
                   id: Identifier.ascending("part"),
@@ -1190,6 +1196,20 @@ export namespace SessionPrompt {
     await Session.updateMessage(info)
     for (const part of parts) {
       await Session.updatePart(part)
+    }
+
+    const pendingRules = SessionRules.consumePendingRules(input.sessionID)
+    if (pendingRules.length > 0) {
+      const rulesPart: MessageV2.Part = {
+        id: Identifier.ascending("part"),
+        messageID: info.id,
+        sessionID: input.sessionID,
+        type: "rules",
+        rules: pendingRules.map((r) => r.content),
+        files: pendingRules.map((r) => r.filePath),
+      }
+      await Session.updatePart(rulesPart)
+      parts.push(rulesPart)
     }
 
     return {

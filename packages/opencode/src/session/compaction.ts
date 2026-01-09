@@ -14,6 +14,7 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { SessionRules } from "./rules"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -83,6 +84,7 @@ export namespace SessionCompaction {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()
           await Session.updatePart(part)
+          SessionRules.onCallPruned(input.sessionID, part.callID)
         }
       }
       log.info("pruned", { count: toPrune.length })

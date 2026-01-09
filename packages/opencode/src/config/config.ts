@@ -888,6 +888,22 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+      subdirectoryRules: z
+        .object({
+          enabled: z.boolean().optional().default(false),
+          patterns: z.string().array().optional().describe("List of glob patterns to match rule files"),
+          exact: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("If true, only load rules from the exact file directory"),
+        })
+        .strict()
+        .meta({
+          ref: "SubdirectoryRulesConfig",
+        })
+        .optional()
+        .describe("Configuration for subdirectory rule discovery"),
       watcher: z
         .object({
           ignore: z.array(z.string()).optional(),

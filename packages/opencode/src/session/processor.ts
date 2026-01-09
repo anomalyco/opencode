@@ -16,6 +16,8 @@ import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 
+import { SessionRules } from "./rules"
+
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
@@ -188,6 +190,18 @@ export namespace SessionProcessor {
                       },
                     })
 
+                    const pendingRules = SessionRules.consumePendingRules(input.sessionID)
+                    if (pendingRules.length > 0) {
+                      await Session.updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: input.assistantMessage.id,
+                        sessionID: input.sessionID,
+                        type: "rules",
+                        rules: pendingRules.map((r) => r.content),
+                        files: pendingRules.map((r) => r.filePath),
+                      })
+                    }
+
                     delete toolcalls[value.toolCallId]
                   }
                   break
@@ -208,6 +222,18 @@ export namespace SessionProcessor {
                         },
                       },
                     })
+
+                    const pendingRules = SessionRules.consumePendingRules(input.sessionID)
+                    if (pendingRules.length > 0) {
+                      await Session.updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: input.assistantMessage.id,
+                        sessionID: input.sessionID,
+                        type: "rules",
+                        rules: pendingRules.map((r) => r.content),
+                        files: pendingRules.map((r) => r.filePath),
+                      })
+                    }
 
                     if (
                       value.error instanceof PermissionNext.RejectedError ||
@@ -394,6 +420,19 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+
+          const pendingRules = SessionRules.consumePendingRules(input.sessionID)
+          if (pendingRules.length > 0) {
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              messageID: input.assistantMessage.id,
+              sessionID: input.sessionID,
+              type: "rules",
+              rules: pendingRules.map((r) => r.content),
+              files: pendingRules.map((r) => r.filePath),
+            })
+          }
+
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

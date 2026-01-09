@@ -12,6 +12,14 @@ import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 
+function normalizePath(input?: string) {
+  if (!input) return ""
+  if (path.isAbsolute(input)) {
+    return path.relative(process.cwd(), input) || "."
+  }
+  return input
+}
+
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
@@ -25,6 +33,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     diff: true,
     todo: true,
     lsp: true,
+    rules: true,
   })
 
   // Sort MCP servers alphabetically for consistent display order
@@ -253,6 +262,34 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                         </box>
                       )
                     }}
+                  </For>
+                </Show>
+              </box>
+            </Show>
+            <Show when={session().rules && session().rules!.length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => (session().rules?.length ?? 0) > 2 && setExpanded("rules", !expanded.rules)}
+                >
+                  <Show when={(session().rules?.length ?? 0) > 2}>
+                    <text fg={theme.text}>{expanded.rules ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Rules</b>
+                  </text>
+                </box>
+                <Show when={(session().rules?.length ?? 0) <= 2 || expanded.rules}>
+                  <For each={session().rules}>
+                    {(item) => (
+                      <text fg={theme.textMuted} wrapMode="none">
+                        •{" "}
+                        {item.startsWith(sync.data.path.directory)
+                          ? item.slice(sync.data.path.directory.length).replace(/^\//, "")
+                          : item}
+                      </text>
+                    )}
                   </For>
                 </Show>
               </box>

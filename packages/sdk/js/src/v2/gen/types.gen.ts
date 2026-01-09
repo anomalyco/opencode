@@ -433,6 +433,15 @@ export type RetryPart = {
   }
 }
 
+export type RulesPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "rules"
+  rules: Array<string>
+  files?: Array<string>
+}
+
 export type CompactionPart = {
   id: string
   sessionID: string
@@ -466,6 +475,7 @@ export type Part =
   | PatchPart
   | AgentPart
   | RetryPart
+  | RulesPart
   | CompactionPart
 
 export type EventMessagePartUpdated = {
@@ -775,6 +785,7 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  rules?: Array<string>
 }
 
 export type EventSessionCreated = {
@@ -1327,6 +1338,21 @@ export type ServerConfig = {
   cors?: Array<string>
 }
 
+/**
+ * Configuration for rule discovery
+ */
+export type RulesConfig = {
+  enabled?: boolean
+  /**
+   * List of regular expressions to match rule files
+   */
+  patterns?: Array<string>
+  /**
+   * If true, only load rules from the exact file directory
+   */
+  exact?: boolean
+}
+
 export type PermissionActionConfig = "ask" | "allow" | "deny"
 
 export type PermissionObjectConfig = {
@@ -1623,6 +1649,7 @@ export type Config = {
       subtask?: boolean
     }
   }
+  rules?: RulesConfig
   watcher?: {
     ignore?: Array<string>
   }

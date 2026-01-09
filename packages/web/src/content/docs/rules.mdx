@@ -96,6 +96,64 @@ The first matching file wins in each category. For example, if you have both `AG
 
 ---
 
+## Subdirectory Rules
+
+In addition to session-wide instructions, opencode can dynamically load rules whenever a file is read into context. This allows you to provide localized instructions for specific parts of your codebase.
+
+To enable this feature:
+
+```json title="opencode.json"
+{
+  "subdirectoryRules": {
+    "enabled": true
+  }
+}
+```
+
+By default, opencode traverses from the project root down to the file's directory, collecting all files matching the pattern `**/AGENTS.md` (excluding rule files in the project root that are already loaded).
+
+### Configuration
+
+You can customize the discovery behavior for subdirectory rules in your `opencode.json`:
+
+```json title="opencode.json"
+{
+  "subdirectoryRules": {
+    "enabled": true,
+    "patterns": ["**/*.AGENTS.md", "**/CLAUDE.md"],
+    "exact": false
+  }
+}
+```
+
+| Option     | Type       | Description                                                                                                                                       |
+| ---------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`  | `boolean`  | Enable or disable automatic rule discovery. Defaults to `false`.                                                                                  |
+| `patterns` | `string[]` | List of glob patterns to match rule files. Defaults to `["**/AGENTS.md"]`.                                                                        |
+| `exact`    | `boolean`  | If `true`, only load rules from the exact directory of the file being read. If `false`, searches upward to the project root. Defaults to `false`. |
+
+### Loading Order
+
+By default, rules are loaded in **top-down order** (root to leaf). This means a rule in `src/api/AGENTS.md` is inserted after any rules in parent directories, so the models see the more specific instruction last.
+
+### Path Filtering
+
+Hierarchical files support YAML frontmatter to further restrict their application:
+
+```markdown title="src/components/AGENTS.md"
+---
+paths: ["**/*.tsx"]
+---
+
+# Component Rules
+
+Only apply these rules to React components.
+```
+
+`paths` is a list of glob expressions to match when opencode attempts to apply a rule. If the globs do not match, the rule is not included.
+
+---
+
 ## Custom Instructions
 
 You can specify custom instruction files in your `opencode.json` or the global `~/.config/opencode/opencode.json`. This allows you and your team to reuse existing rules rather than having to duplicate them to AGENTS.md.

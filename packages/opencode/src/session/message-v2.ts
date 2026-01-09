@@ -163,6 +163,15 @@ export namespace MessageV2 {
   })
   export type CompactionPart = z.infer<typeof CompactionPart>
 
+  export const RulesPart = PartBase.extend({
+    type: z.literal("rules"),
+    rules: z.string().array(),
+    files: z.string().array().optional(),
+  }).meta({
+    ref: "RulesPart",
+  })
+  export type RulesPart = z.infer<typeof RulesPart>
+
   export const SubtaskPart = PartBase.extend({
     type: z.literal("subtask"),
     prompt: z.string(),
@@ -339,6 +348,7 @@ export namespace MessageV2 {
       PatchPart,
       AgentPart,
       RetryPart,
+      RulesPart,
       CompactionPart,
     ])
     .meta({
@@ -470,6 +480,12 @@ export namespace MessageV2 {
             userMessage.parts.push({
               type: "text",
               text: "The following tool was executed by the user",
+            })
+          }
+          if (part.type === "rules") {
+            userMessage.parts.push({
+              type: "text",
+              text: `<instructions>\n${part.rules.join("\n\n")}\n</instructions>`,
             })
           }
         }

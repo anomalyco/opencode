@@ -6,6 +6,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { SessionRules } from "../session/rules"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -113,6 +114,12 @@ export const GrepTool = Tool.define("grep", {
         title: params.pattern,
         metadata: { matches: 0, truncated: false },
         output: "No files found",
+      }
+    }
+
+    if (ctx.callID) {
+      for (const filePath of new Set(finalMatches.map((m) => m.path))) {
+        await SessionRules.notifyFileInContext(filePath, ctx.sessionID, ctx.callID)
       }
     }
 

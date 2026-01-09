@@ -61,7 +61,7 @@ export namespace SystemPrompt {
     ]
   }
 
-  const LOCAL_RULE_FILES = [
+  export const LOCAL_RULE_FILES = [
     "AGENTS.md",
     "CLAUDE.md",
     "CONTEXT.md", // deprecated
