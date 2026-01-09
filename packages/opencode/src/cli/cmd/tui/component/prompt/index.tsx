@@ -145,8 +145,12 @@ export function Prompt(props: PromptProps) {
       if (msg.agent && isPrimaryAgent) {
         local.agent.set(msg.agent)
       }
-      if (msg.model) local.model.set(msg.model)
-      if (msg.variant) local.model.variant.set(msg.variant)
+
+      const isolateModel = sync.data.config.isolate_subagent_model
+      if (!isolateModel) {
+        if (msg.model) local.model.set(msg.model)
+        if (msg.variant) local.model.variant.set(msg.variant)
+      }
     }
   })
 

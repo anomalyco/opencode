@@ -1591,6 +1591,10 @@ export type Config = {
    */
   autoshare?: boolean
   /**
+   * Prevent commands and subagents from persisting their model to the parent session
+   */
+  isolate_subagent_model?: boolean
+  /**
    * Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications
    */
   autoupdate?: boolean | "notify"

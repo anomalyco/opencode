@@ -871,6 +871,10 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
+      isolate_subagent_model: z
+        .boolean()
+        .optional()
+        .describe("Prevent commands and subagents from persisting their model to the parent session"),
       autoupdate: z
         .union([z.boolean(), z.literal("notify")])
         .optional()
