@@ -40,7 +40,10 @@ if (amountInCents !== 20000) {
 }
 
 const subscriptionData = await Billing.stripe().subscriptions.retrieve(subscription.id, { expand: ["discounts"] })
-const couponID = subscriptionData.discounts[0]?.coupon?.id
+const couponID =
+  typeof subscriptionData.discounts[0] === "string"
+    ? subscriptionData.discounts[0]
+    : subscriptionData.discounts[0]?.coupon?.id
 
 // Check if subscription is already tied to another workspace
 const existingSubscription = await Database.use((tx) =>
