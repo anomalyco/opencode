@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createMemo, Match, onMount, Show, Switch } from "solid-js"
+import { createEffect, createMemo, Match, on, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Logo } from "../component/logo"
 import { DidYouKnow, randomizeTip } from "../component/did-you-know"
@@ -13,6 +13,7 @@ import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
+import { useLocal } from "../context/local"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -76,6 +77,7 @@ export function Home() {
 
   let prompt: PromptRef
   const args = useArgs()
+  const local = useLocal()
   onMount(() => {
     randomizeTip()
     if (once) return
@@ -85,9 +87,21 @@ export function Home() {
     } else if (args.prompt) {
       prompt.set({ input: args.prompt, parts: [] })
       once = true
-      prompt.submit()
     }
   })
+
+  // Wait for sync and model store to be ready before auto-submitting --prompt
+  createEffect(
+    on(
+      () => sync.ready && local.model.ready,
+      (ready) => {
+        if (!ready) return
+        if (!args.prompt) return
+        if (prompt.current?.input !== args.prompt) return
+        prompt.submit()
+      },
+    ),
+  )
   const directory = useDirectory()
 
   return (
