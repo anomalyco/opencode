@@ -1,4 +1,4 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -8,6 +8,7 @@ import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
@@ -49,9 +50,16 @@ import {
   NewSessionView,
 } from "@/components/session"
 import { usePlatform } from "@/context/platform"
+import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 
 type DiffStyle = "unified" | "split"
+
+const handoff = {
+  prompt: "",
+  terminals: [] as string[],
+  files: {} as Record<string, SelectedLineRange | null>,
+}
 
 interface SessionReviewTabProps {
   diffs: () => FileDiff[]
@@ -162,6 +170,46 @@ export default function Page() {
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
 
+  if (import.meta.env.DEV) {
+    createEffect(
+      on(
+        () => [params.dir, params.id] as const,
+        ([dir, id], prev) => {
+          if (!id) return
+          navParams({ dir, from: prev?.[1], to: id })
+        },
+      ),
+    )
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (!prompt.ready()) return
+      navMark({ dir: params.dir, to: id, name: "storage:prompt-ready" })
+    })
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (!terminal.ready()) return
+      navMark({ dir: params.dir, to: id, name: "storage:terminal-ready" })
+    })
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (!file.ready()) return
+      navMark({ dir: params.dir, to: id, name: "storage:file-view-ready" })
+    })
+
+    createEffect(() => {
+      const id = params.id
+      if (!id) return
+      if (sync.data.message[id] === undefined) return
+      navMark({ dir: params.dir, to: id, name: "session:data-ready" })
+    })
+  }
+
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
   function normalizeTab(tab: string) {
@@ -216,12 +264,24 @@ export default function Page() {
   })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const reviewCount = createMemo(() => info()?.summary?.files ?? 0)
+  const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
     return sync.data.message[id] !== undefined
+  })
+  const historyMore = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return sync.session.history.more(id)
+  })
+  const historyLoading = createMemo(() => {
+    const id = params.id
+    if (!id) return false
+    return sync.session.history.loading(id)
   })
   const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(() => messages().filter((m) => m.role === "user") as UserMessage[], emptyUserMessages)
@@ -249,10 +309,19 @@ export default function Page() {
     activeTerminalDraggable: undefined as string | undefined,
     expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
+    turnStart: 0,
     mobileTab: "session" as "session" | "review",
     newSessionWorktree: "main",
     promptHeight: 0,
   })
+
+  const renderedUserMessages = createMemo(() => {
+    const msgs = visibleUserMessages()
+    const start = store.turnStart
+    if (start <= 0) return msgs
+    if (start >= msgs.length) return emptyUserMessages
+    return msgs.slice(start)
+  }, emptyUserMessages)
 
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
@@ -290,6 +359,12 @@ export default function Page() {
   }
 
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
+  const diffsReady = createMemo(() => {
+    const id = params.id
+    if (!id) return true
+    if (!hasReview()) return true
+    return sync.data.session_diff[id] !== undefined
+  })
 
   const idle = { type: "idle" as const }
   let inputRef!: HTMLDivElement
@@ -302,11 +377,10 @@ export default function Page() {
   })
 
   createEffect(() => {
-    if (layout.terminal.opened()) {
-      if (terminal.all().length === 0) {
-        terminal.new()
-      }
-    }
+    if (!view().terminal.opened()) return
+    if (!terminal.ready()) return
+    if (terminal.all().length !== 0) return
+    terminal.new()
   })
 
   createEffect(
@@ -366,7 +440,7 @@ export default function Page() {
       category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
-      onSelect: () => layout.terminal.toggle(),
+      onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
@@ -374,7 +448,7 @@ export default function Page() {
       description: "Show or hide the review panel",
       category: "View",
       keybind: "mod+shift+r",
-      onSelect: () => layout.review.toggle(),
+      onSelect: () => view().reviewPanel.toggle(),
     },
     {
       id: "terminal.new",
@@ -643,11 +717,11 @@ export default function Page() {
       .filter((tab) => tab !== "context"),
   )
 
-  const reviewTab = createMemo(() => diffs().length > 0 || tabs().active() === "review")
-  const mobileReview = createMemo(() => !isDesktop() && diffs().length > 0 && store.mobileTab === "review")
+  const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
+  const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
 
   const showTabs = createMemo(
-    () => layout.review.opened() && (diffs().length > 0 || tabs().all().length > 0 || contextOpen()),
+    () => view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
   )
 
   const activeTab = createMemo(() => {
@@ -664,8 +738,20 @@ export default function Page() {
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (diffs().length === 0 && openedTabs().length === 0 && !contextOpen()) return
+    if (!hasReview() && openedTabs().length === 0 && !contextOpen()) return
     tabs().setActive(activeTab())
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    if (!hasReview()) return
+
+    const wants = isDesktop() ? view().reviewPanel.opened() && activeTab() === "review" : store.mobileTab === "review"
+    if (!wants) return
+    if (diffsReady()) return
+
+    sync.session.diff(id)
   })
 
   const isWorking = createMemo(() => status().type !== "idle")
@@ -682,6 +768,88 @@ export default function Page() {
     scroller = el
     autoScroll.scrollRef(el)
   }
+
+  const turnInit = 20
+  const turnBatch = 20
+  let turnHandle: number | undefined
+  let turnIdle = false
+
+  function cancelTurnBackfill() {
+    const handle = turnHandle
+    if (handle === undefined) return
+    turnHandle = undefined
+
+    if (turnIdle && window.cancelIdleCallback) {
+      window.cancelIdleCallback(handle)
+      return
+    }
+
+    clearTimeout(handle)
+  }
+
+  function scheduleTurnBackfill() {
+    if (turnHandle !== undefined) return
+    if (store.turnStart <= 0) return
+
+    if (window.requestIdleCallback) {
+      turnIdle = true
+      turnHandle = window.requestIdleCallback(() => {
+        turnHandle = undefined
+        backfillTurns()
+      })
+      return
+    }
+
+    turnIdle = false
+    turnHandle = window.setTimeout(() => {
+      turnHandle = undefined
+      backfillTurns()
+    }, 0)
+  }
+
+  function backfillTurns() {
+    const start = store.turnStart
+    if (start <= 0) return
+
+    const next = start - turnBatch
+    const nextStart = next > 0 ? next : 0
+
+    const el = scroller
+    if (!el) {
+      setStore("turnStart", nextStart)
+      scheduleTurnBackfill()
+      return
+    }
+
+    const beforeTop = el.scrollTop
+    const beforeHeight = el.scrollHeight
+
+    setStore("turnStart", nextStart)
+
+    requestAnimationFrame(() => {
+      const delta = el.scrollHeight - beforeHeight
+      if (delta) el.scrollTop = beforeTop + delta
+    })
+
+    scheduleTurnBackfill()
+  }
+
+  createEffect(
+    on(
+      () => [params.id, messagesReady()] as const,
+      ([id, ready]) => {
+        cancelTurnBackfill()
+        setStore("turnStart", 0)
+        if (!id || !ready) return
+
+        const len = visibleUserMessages().length
+        const start = len > turnInit ? len - turnInit : 0
+        setStore("turnStart", start)
+        scheduleTurnBackfill()
+      },
+      { defer: true },
+    ),
+  )
 
   createResizeObserver(
     () => promptDock,
@@ -709,6 +877,21 @@ export default function Page() {
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     setActiveMessage(message)
+
+    const msgs = visibleUserMessages()
+    const index = msgs.findIndex((m) => m.id === message.id)
+    if (index !== -1 && index < store.turnStart) {
+      setStore("turnStart", index)
+      scheduleTurnBackfill()
+
+      requestAnimationFrame(() => {
+        const el = document.getElementById(anchor(message.id))
+        if (el) el.scrollIntoView({ behavior, block: "start" })
+      })
+
+      updateHash(message.id)
+      return
+    }
 
     const el = document.getElementById(anchor(message.id))
     if (el) el.scrollIntoView({ behavior, block: "start" })
@@ -755,12 +938,27 @@ export default function Page() {
     if (!sessionID || !ready) return
 
     requestAnimationFrame(() => {
-      const id = window.location.hash.slice(1)
-      const hashTarget = id ? document.getElementById(id) : undefined
+      const hash = window.location.hash.slice(1)
+      if (!hash) {
+        autoScroll.forceScrollToBottom()
+        return
+      }
+
+      const hashTarget = document.getElementById(hash)
       if (hashTarget) {
         hashTarget.scrollIntoView({ behavior: "auto", block: "start" })
         return
       }
+
+      const match = hash.match(/^message-(.+)$/)
+      if (match) {
+        const msg = visibleUserMessages().find((m) => m.id === match[1])
+        if (msg) {
+          scrollToMessage(msg, "auto")
+          return
+        }
+      }
+
       autoScroll.forceScrollToBottom()
     })
   })
@@ -769,7 +967,43 @@ export default function Page() {
     document.addEventListener("keydown", handleKeyDown)
   })
 
+  const previewPrompt = () =>
+    prompt
+      .current()
+      .map((part) => {
+        if (part.type === "file") return `[file:${part.path}]`
+        if (part.type === "agent") return `@${part.name}`
+        if (part.type === "image") return `[image:${part.filename}]`
+        return part.content
+      })
+      .join("")
+      .trim()
+
+  createEffect(() => {
+    if (!prompt.ready()) return
+    handoff.prompt = previewPrompt()
+  })
+
+  createEffect(() => {
+    if (!terminal.ready()) return
+    handoff.terminals = terminal.all().map((t) => t.title)
+  })
+
+  createEffect(() => {
+    if (!file.ready()) return
+    handoff.files = Object.fromEntries(
+      tabs()
+        .all()
+        .flatMap((tab) => {
+          const path = file.pathFromTab(tab)
+          if (!path) return []
+          return [[path, file.selectedLines(path) ?? null] as const]
+        }),
+    )
+  })
+
   onCleanup(() => {
+    cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
   })
@@ -779,7 +1013,7 @@ export default function Page() {
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Mobile tab bar - only shown on mobile when there are diffs */}
-        <Show when={!isDesktop() && diffs().length > 0}>
+        <Show when={!isDesktop() && hasReview()}>
           <Tabs class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -796,7 +1030,7 @@ export default function Page() {
                 classes={{ button: "w-full" }}
                 onClick={() => setStore("mobileTab", "review")}
               >
-                {diffs().length} Files Changed
+                {reviewCount()} Files Changed
               </Tabs.Trigger>
             </Tabs.List>
           </Tabs>
@@ -821,21 +1055,26 @@ export default function Page() {
                     when={!mobileReview()}
                     fallback={
                       <div class="relative h-full overflow-hidden">
-                        <SessionReviewTab
-                          diffs={diffs}
-                          view={view}
-                          diffStyle="unified"
-                          onViewFile={(path) => {
-                            const value = file.tab(path)
-                            tabs().open(value)
-                            file.load(path)
-                          }}
-                          classes={{
-                            root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                            header: "px-4",
-                            container: "px-4",
-                          }}
-                        />
+                        <Show
+                          when={diffsReady()}
+                          fallback={<div class="px-4 py-4 text-text-weak">Loading changes...</div>}
+                        >
+                          <SessionReviewTab
+                            diffs={diffs}
+                            view={view}
+                            diffStyle="unified"
+                            onViewFile={(path) => {
+                              const value = file.tab(path)
+                              tabs().open(value)
+                              file.load(path)
+                            }}
+                            classes={{
+                              root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                              header: "px-4",
+                              container: "px-4",
+                            }}
+                          />
+                        </Show>
                       </div>
                     }
                   >
@@ -868,42 +1107,82 @@ export default function Page() {
                             "mt-0": showTabs(),
                           }}
                         >
-                          <For each={visibleUserMessages()}>
-                            {(message) => (
-                              <div
-                                id={anchor(message.id)}
-                                data-message-id={message.id}
-                                classList={{
-                                  "min-w-0 w-full max-w-full": true,
-                                  "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
-                                    platform.platform !== "desktop",
-                                  "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
-                                    platform.platform === "desktop",
+                          <Show when={store.turnStart > 0}>
+                            <div class="w-full flex justify-center">
+                              <Button
+                                variant="ghost"
+                                size="large"
+                                class="text-12-medium opacity-50"
+                                onClick={() => setStore("turnStart", 0)}
+                              >
+                                Render earlier messages
+                              </Button>
+                            </div>
+                          </Show>
+                          <Show when={historyMore()}>
+                            <div class="w-full flex justify-center">
+                              <Button
+                                variant="ghost"
+                                size="large"
+                                class="text-12-medium opacity-50"
+                                disabled={historyLoading()}
+                                onClick={() => {
+                                  const id = params.id
+                                  if (!id) return
+                                  setStore("turnStart", 0)
+                                  sync.session.history.loadMore(id)
                                 }}
                               >
-                                <SessionTurn
-                                  sessionID={params.id!}
-                                  messageID={message.id}
-                                  lastUserMessageID={lastUserMessage()?.id}
-                                  stepsExpanded={store.expanded[message.id] ?? false}
-                                  onStepsExpandedToggle={() =>
-                                    setStore("expanded", message.id, (open: boolean | undefined) => !open)
-                                  }
-                                  classes={{
-                                    root: "min-w-0 w-full relative",
-                                    content:
-                                      "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
-                                    container:
-                                      "px-4 md:px-6 " +
-                                      (!showTabs()
-                                        ? "md:max-w-200 md:mx-auto"
-                                        : visibleUserMessages().length > 1
-                                          ? "md:pr-6 md:pl-18"
-                                          : ""),
+                                {historyLoading() ? "Loading earlier messages..." : "Load earlier messages"}
+                              </Button>
+                            </div>
+                          </Show>
+                          <For each={renderedUserMessages()}>
+                            {(message) => {
+                              if (import.meta.env.DEV) {
+                                onMount(() => {
+                                  const id = params.id
+                                  if (!id) return
+                                  navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
+                                })
+                              }
+
+                              return (
+                                <div
+                                  id={anchor(message.id)}
+                                  data-message-id={message.id}
+                                  classList={{
+                                    "min-w-0 w-full max-w-full": true,
+                                    "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
+                                      platform.platform !== "desktop",
+                                    "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
+                                      platform.platform === "desktop",
                                   }}
-                                />
-                              </div>
-                            )}
+                                >
+                                  <SessionTurn
+                                    sessionID={params.id!}
+                                    messageID={message.id}
+                                    lastUserMessageID={lastUserMessage()?.id}
+                                    stepsExpanded={store.expanded[message.id] ?? false}
+                                    onStepsExpandedToggle={() =>
+                                      setStore("expanded", message.id, (open: boolean | undefined) => !open)
+                                    }
+                                    classes={{
+                                      root: "min-w-0 w-full relative",
+                                      content:
+                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                      container:
+                                        "px-4 md:px-6 " +
+                                        (!showTabs()
+                                          ? "md:max-w-200 md:mx-auto"
+                                          : visibleUserMessages().length > 1
+                                            ? "md:pr-6 md:pl-18"
+                                            : ""),
+                                    }}
+                                  />
+                                </div>
+                              )
+                            }}
                           </For>
                         </div>
                       </div>
@@ -944,13 +1223,22 @@ export default function Page() {
                 "md:max-w-200": !showTabs(),
               }}
             >
-              <PromptInput
-                ref={(el) => {
-                  inputRef = el
-                }}
-                newSessionWorktree={newSessionWorktree()}
-                onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-              />
+              <Show
+                when={prompt.ready()}
+                fallback={
+                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                    {handoff.prompt || "Loading prompt..."}
+                  </div>
+                }
+              >
+                <PromptInput
+                  ref={(el) => {
+                    inputRef = el
+                  }}
+                  newSessionWorktree={newSessionWorktree()}
+                  onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                />
+              </Show>
             </div>
           </div>
 
@@ -1034,31 +1322,40 @@ export default function Page() {
                 </div>
                 <Show when={reviewTab()}>
                   <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
-                    <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <SessionReviewTab
-                        diffs={diffs}
-                        view={view}
-                        diffStyle={layout.review.diffStyle()}
-                        onDiffStyleChange={layout.review.setDiffStyle}
-                        onViewFile={(path) => {
-                          const value = file.tab(path)
-                          tabs().open(value)
-                          file.load(path)
-                        }}
-                      />
-                    </div>
+                    <Show when={activeTab() === "review"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <Show
+                          when={diffsReady()}
+                          fallback={<div class="px-6 py-4 text-text-weak">Loading changes...</div>}
+                        >
+                          <SessionReviewTab
+                            diffs={diffs}
+                            view={view}
+                            diffStyle={layout.review.diffStyle()}
+                            onDiffStyleChange={layout.review.setDiffStyle}
+                            onViewFile={(path) => {
+                              const value = file.tab(path)
+                              tabs().open(value)
+                              file.load(path)
+                            }}
+                          />
+                        </Show>
+                      </div>
+                    </Show>
                   </Tabs.Content>
                 </Show>
                 <Show when={contextOpen()}>
                   <Tabs.Content value="context" class="flex flex-col h-full overflow-hidden contain-strict">
-                    <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                      <SessionContextTab
-                        messages={messages}
-                        visibleUserMessages={visibleUserMessages}
-                        view={view}
-                        info={info}
-                      />
-                    </div>
+                    <Show when={activeTab() === "context"}>
+                      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                        <SessionContextTab
+                          messages={messages}
+                          visibleUserMessages={visibleUserMessages}
+                          view={view}
+                          info={info}
+                        />
+                      </div>
+                    </Show>
                   </Tabs.Content>
                 </Show>
                 <For each={openedTabs()}>
@@ -1107,7 +1404,8 @@ export default function Page() {
                     const selectedLines = createMemo(() => {
                       const p = path()
                       if (!p) return null
-                      return file.selectedLines(p) ?? null
+                      if (file.ready()) return file.selectedLines(p) ?? null
+                      return handoff.files[p] ?? null
                     })
                     const selection = createMemo(() => {
                       const range = selectedLines()
@@ -1204,37 +1502,63 @@ export default function Page() {
                         }}
                         onScroll={handleScroll}
                       >
-                        <Show when={selection()}>
-                          {(sel) => (
-                            <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
-                              <button
-                                type="button"
-                                class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
-                                onClick={() => {
-                                  const p = path()
-                                  if (!p) return
-                                  prompt.context.add({ type: "file", path: p, selection: sel() })
-                                }}
-                              >
-                                <Icon name="plus-small" size="small" />
-                                <span>Add {selectionLabel()} to context</span>
-                              </button>
-                            </div>
-                          )}
-                        </Show>
-                        <Switch>
-                          <Match when={state()?.loaded && isImage()}>
-                            <div class="px-6 py-4 pb-40">
-                              <img src={imageDataUrl()} alt={path()} class="max-w-full" />
-                            </div>
-                          </Match>
-                          <Match when={state()?.loaded && isSvg()}>
-                            <div class="flex flex-col gap-4 px-6 py-4">
+                        <Show when={activeTab() === tab}>
+                          <Show when={selection()}>
+                            {(sel) => (
+                              <div class="hidden sticky top-0 z-10 px-6 py-2 _flex justify-end bg-background-base border-b border-border-weak-base">
+                                <button
+                                  type="button"
+                                  class="flex items-center gap-2 px-2 py-1 rounded-md bg-surface-base border border-border-base text-12-regular text-text-strong hover:bg-surface-raised-base-hover"
+                                  onClick={() => {
+                                    const p = path()
+                                    if (!p) return
+                                    prompt.context.add({ type: "file", path: p, selection: sel() })
+                                  }}
+                                >
+                                  <Icon name="plus-small" size="small" />
+                                  <span>Add {selectionLabel()} to context</span>
+                                </button>
+                              </div>
+                            )}
+                          </Show>
+                          <Switch>
+                            <Match when={state()?.loaded && isImage()}>
+                              <div class="px-6 py-4 pb-40">
+                                <img src={imageDataUrl()} alt={path()} class="max-w-full" />
+                              </div>
+                            </Match>
+                            <Match when={state()?.loaded && isSvg()}>
+                              <div class="flex flex-col gap-4 px-6 py-4">
+                                <Dynamic
+                                  component={codeComponent}
+                                  file={{
+                                    name: path() ?? "",
+                                    contents: svgContent() ?? "",
+                                    cacheKey: cacheKey(),
+                                  }}
+                                  enableLineSelection
+                                  selectedLines={selectedLines()}
+                                  onLineSelected={(range: SelectedLineRange | null) => {
+                                    const p = path()
+                                    if (!p) return
+                                    file.setSelectedLines(p, range)
+                                  }}
+                                  overflow="scroll"
+                                  class="select-text"
+                                />
+                                <Show when={svgPreviewUrl()}>
+                                  <div class="flex justify-center pb-40">
+                                    <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
+                                  </div>
+                                </Show>
+                              </div>
+                            </Match>
+                            <Match when={state()?.loaded}>
                               <Dynamic
                                 component={codeComponent}
                                 file={{
                                   name: path() ?? "",
-                                  contents: svgContent() ?? "",
+                                  contents: contents(),
                                   cacheKey: cacheKey(),
                                 }}
                                 enableLineSelection
@@ -1245,41 +1569,17 @@ export default function Page() {
                                   file.setSelectedLines(p, range)
                                 }}
                                 overflow="scroll"
-                                class="select-text"
+                                class="select-text pb-40"
                               />
-                              <Show when={svgPreviewUrl()}>
-                                <div class="flex justify-center pb-40">
-                                  <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
-                                </div>
-                              </Show>
-                            </div>
-                          </Match>
-                          <Match when={state()?.loaded}>
-                            <Dynamic
-                              component={codeComponent}
-                              file={{
-                                name: path() ?? "",
-                                contents: contents(),
-                                cacheKey: cacheKey(),
-                              }}
-                              enableLineSelection
-                              selectedLines={selectedLines()}
-                              onLineSelected={(range: SelectedLineRange | null) => {
-                                const p = path()
-                                if (!p) return
-                                file.setSelectedLines(p, range)
-                              }}
-                              overflow="scroll"
-                              class="select-text pb-40"
-                            />
-                          </Match>
-                          <Match when={state()?.loading}>
-                            <div class="px-6 py-4 text-text-weak">Loading...</div>
-                          </Match>
-                          <Match when={state()?.error}>
-                            {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
-                          </Match>
-                        </Switch>
+                            </Match>
+                            <Match when={state()?.loading}>
+                              <div class="px-6 py-4 text-text-weak">Loading...</div>
+                            </Match>
+                            <Match when={state()?.error}>
+                              {(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}
+                            </Match>
+                          </Switch>
+                        </Show>
                       </Tabs.Content>
                     )
                   }}
@@ -1302,7 +1602,7 @@ export default function Page() {
         </Show>
       </div>
 
-      <Show when={isDesktop() && layout.terminal.opened()}>
+      <Show when={isDesktop() && view().terminal.opened()}>
         <div
           class="relative w-full flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
@@ -1314,56 +1614,76 @@ export default function Page() {
             max={window.innerHeight * 0.6}
             collapseThreshold={50}
             onResize={layout.terminal.resize}
-            onCollapse={layout.terminal.close}
+            onCollapse={view().terminal.close}
           />
-          <DragDropProvider
-            onDragStart={handleTerminalDragStart}
-            onDragEnd={handleTerminalDragEnd}
-            onDragOver={handleTerminalDragOver}
-            collisionDetector={closestCenter}
-          >
-            <DragDropSensors />
-            <ConstrainDragYAxis />
-            <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
-              <Tabs.List class="h-10">
-                <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                  <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
-                </SortableProvider>
-                <div class="h-full flex items-center justify-center">
-                  <TooltipKeybind
-                    title="New terminal"
-                    keybind={command.keybind("terminal.new")}
-                    class="flex items-center"
-                  >
-                    <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
-                  </TooltipKeybind>
+          <Show
+            when={terminal.ready()}
+            fallback={
+              <div class="flex flex-col h-full pointer-events-none">
+                <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger overflow-hidden">
+                  <For each={handoff.terminals}>
+                    {(title) => (
+                      <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
+                        {title}
+                      </div>
+                    )}
+                  </For>
+                  <div class="flex-1" />
+                  <div class="text-text-weak pr-2">Loading...</div>
                 </div>
-              </Tabs.List>
-              <For each={terminal.all()}>
-                {(pty) => (
-                  <Tabs.Content value={pty.id}>
-                    <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
-                  </Tabs.Content>
-                )}
-              </For>
-            </Tabs>
-            <DragOverlay>
-              <Show when={store.activeTerminalDraggable}>
-                {(draggedId) => {
-                  const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
-                  return (
-                    <Show when={pty()}>
-                      {(t) => (
-                        <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                          {t().title}
-                        </div>
-                      )}
-                    </Show>
-                  )
-                }}
-              </Show>
-            </DragOverlay>
-          </DragDropProvider>
+                <div class="flex-1 flex items-center justify-center text-text-weak">Loading terminal...</div>
+              </div>
+            }
+          >
+            <DragDropProvider
+              onDragStart={handleTerminalDragStart}
+              onDragEnd={handleTerminalDragEnd}
+              onDragOver={handleTerminalDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragYAxis />
+              <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
+                <Tabs.List class="h-10">
+                  <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
+                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
+                  </SortableProvider>
+                  <div class="h-full flex items-center justify-center">
+                    <TooltipKeybind
+                      title="New terminal"
+                      keybind={command.keybind("terminal.new")}
+                      class="flex items-center"
+                    >
+                      <IconButton icon="plus-small" variant="ghost" iconSize="large" onClick={terminal.new} />
+                    </TooltipKeybind>
+                  </div>
+                </Tabs.List>
+                <For each={terminal.all()}>
+                  {(pty) => (
+                    <Tabs.Content value={pty.id}>
+                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
+                    </Tabs.Content>
+                  )}
+                </For>
+              </Tabs>
+              <DragOverlay>
+                <Show when={store.activeTerminalDraggable}>
+                  {(draggedId) => {
+                    const pty = createMemo(() => terminal.all().find((t: LocalPTY) => t.id === draggedId()))
+                    return (
+                      <Show when={pty()}>
+                        {(t) => (
+                          <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                            {t().title}
+                          </div>
+                        )}
+                      </Show>
+                    )
+                  }}
+                </Show>
+              </DragOverlay>
+            </DragDropProvider>
+          </Show>
         </div>
       </Show>
     </div>

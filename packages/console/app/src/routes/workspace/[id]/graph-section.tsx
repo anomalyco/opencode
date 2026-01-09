@@ -44,6 +44,7 @@ async function getCosts(workspaceID: string, year: number, month: number) {
             eq(UsageTable.workspaceID, workspaceID),
             gte(UsageTable.timeCreated, startDate),
             lte(UsageTable.timeCreated, endDate),
+            or(isNull(UsageTable.enrichment), sql`JSON_EXTRACT(${UsageTable.enrichment}, '$.plan') != 'sub'`),
           ),
         )
         .groupBy(sql`DATE(${UsageTable.timeCreated})`, UsageTable.model, UsageTable.keyID)
