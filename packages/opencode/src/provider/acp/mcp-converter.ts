@@ -92,11 +92,19 @@ function convertRemoteMcp(name: string, mcp: Extract<Config.Mcp, { type: "remote
 
 /**
  * Convert all MCPs from OpenCode config to ACP format
+ * Note: Config may include entries like { enabled: boolean } to disable MCPs
  */
-export function convertAllMcps(mcpConfig: Record<string, Config.Mcp>): McpServer[] {
+export function convertAllMcps(mcpConfig: Record<string, Config.Mcp | { enabled: boolean }>): McpServer[] {
   const result: McpServer[] = []
 
   for (const [name, mcp] of Object.entries(mcpConfig)) {
+    // Skip entries that only have { enabled: boolean } - they're used to disable MCPs
+    if (!("type" in mcp)) {
+      if (mcp.enabled === false) {
+        log.info("Skipping disabled MCP (no type)", { name })
+      }
+      continue
+    }
     const converted = convertMcpToAcp(name, mcp)
     result.push(...converted)
   }

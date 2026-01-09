@@ -21,9 +21,9 @@ import { Log } from "../../util/log"
 import { Config } from "../../config/config"
 import { convertAllMcps } from "./mcp-converter"
 import { Agent as OpencodeAgent } from "../../agent/agent"
-import { Wildcard } from "../../util/wildcard"
 import { Filesystem } from "../../util/filesystem"
 import { Permission } from "../../permission/index"
+import { PermissionNext } from "../../permission/next"
 import { Instance } from "../../project/instance"
 import { Bus } from "../../bus"
 import { File } from "../../file"
@@ -137,33 +137,19 @@ export class ACPClient {
             if (!permType) {
               return await promptUserPermission(params, updateHandlers, sessionContext, {
                 type: "acp_unknown",
-                title: `Unknown ACP tool: ${toolKind}`,
+                message: `Unknown ACP tool: ${toolKind}`,
                 metadata: { toolKind, rawInput },
               })
             }
 
             if (permType.type === "bash") {
               const command = (rawInput.command as string) || ""
-              const bashPerms = permissionConfig?.bash
+              const bashRule = PermissionNext.evaluate("bash", command, permissionConfig ?? [])
 
-              if (!bashPerms) {
-                return await promptUserPermission(params, updateHandlers, sessionContext, {
-                  type: "bash",
-                  pattern: [command],
-                  title: `Execute: ${command}`,
-                  metadata: { command },
-                })
-              }
-
-              const parts = command.trim().split(/\s+/)
-              const head = parts[0]
-              const tail = parts.slice(1)
-              const action = Wildcard.allStructured({ head, tail }, bashPerms)
-
-              return await handlePermissionAction(action, params, updateHandlers, sessionContext, {
+              return await handlePermissionAction(bashRule.action, params, updateHandlers, sessionContext, {
                 type: "bash",
                 pattern: [command],
-                title: `Execute: ${command}`,
+                message: `Execute: ${command}`,
                 metadata: { command },
               })
             }
@@ -176,28 +162,24 @@ export class ACPClient {
               const isExternal = !Filesystem.contains(Instance.directory, absolutePath)
 
               if (isExternal) {
-                const externalDirPerm = permissionConfig?.external_directory || "ask"
                 const parentDir = path.dirname(absolutePath)
+                const externalRule = PermissionNext.evaluate("external_directory", parentDir, permissionConfig ?? [])
 
-                return await handlePermissionAction(externalDirPerm, params, updateHandlers, sessionContext, {
+                return await handlePermissionAction(externalRule.action, params, updateHandlers, sessionContext, {
                   type: "external_directory",
                   pattern: [parentDir, path.join(parentDir, "*")],
-                  title: `Access external file: ${permType.filePath}`,
+                  message: `Access external file: ${permType.filePath}`,
                   metadata: { filepath: permType.filePath, parentDir },
                 })
               }
             }
 
-            const configKey = permType.type as keyof OpencodeAgent.Info["permission"]
-            const permModeLookup = permissionConfig?.[configKey]
-            const permMode =
-              typeof permModeLookup === "string" || typeof permModeLookup === "undefined"
-                ? permModeLookup || "ask"
-                : "ask"
+            // For other permission types, evaluate against the ruleset
+            const permRule = PermissionNext.evaluate(permType.type, "*", permissionConfig ?? [])
 
-            return await handlePermissionAction(permMode, params, updateHandlers, sessionContext, {
+            return await handlePermissionAction(permRule.action, params, updateHandlers, sessionContext, {
               type: permType.type,
-              title: `${toolKind} tool`,
+              message: `${toolKind} tool`,
               metadata: { toolKind, rawInput },
             })
           },
@@ -208,12 +190,12 @@ export class ACPClient {
 
             const isExternal = !Filesystem.contains(Instance.directory, filePath)
             if (isExternal) {
-              const externalDirPerm = permissionConfig?.external_directory || "ask"
               const parentDir = path.dirname(filePath)
+              const externalRule = PermissionNext.evaluate("external_directory", parentDir, permissionConfig ?? [])
 
-              if (externalDirPerm === "deny") {
+              if (externalRule.action === "deny") {
                 throw new Error(`Permission denied: cannot read external file ${params.path}`)
-              } else if (externalDirPerm === "ask" && sessionContext) {
+              } else if (externalRule.action === "ask" && sessionContext) {
                 const callID = `acp-read-${Date.now()}`
                 await Permission.ask({
                   type: "external_directory",
@@ -221,7 +203,7 @@ export class ACPClient {
                   sessionID: sessionContext.sessionID,
                   messageID: sessionContext.messageID,
                   callID,
-                  title: `Read external file: ${params.path}`,
+                  message: `Read external file: ${params.path}`,
                   metadata: { filepath: params.path, parentDir },
                 })
               }
@@ -251,12 +233,12 @@ export class ACPClient {
             const isExternal = !Filesystem.contains(Instance.directory, filePath)
 
             if (isExternal) {
-              const externalDirPerm = permissionConfig?.external_directory || "ask"
               const parentDir = path.dirname(filePath)
+              const externalRule = PermissionNext.evaluate("external_directory", parentDir, permissionConfig ?? [])
 
-              if (externalDirPerm === "deny") {
+              if (externalRule.action === "deny") {
                 throw new Error(`Permission denied: cannot write to external file ${params.path}`)
-              } else if (externalDirPerm === "ask" && sessionContext) {
+              } else if (externalRule.action === "ask" && sessionContext) {
                 const callID = `acp-write-${Date.now()}`
                 await Permission.ask({
                   type: "external_directory",
@@ -264,23 +246,23 @@ export class ACPClient {
                   sessionID: sessionContext.sessionID,
                   messageID: sessionContext.messageID,
                   callID,
-                  title: `Write to external file: ${params.path}`,
+                  message: `Write to external file: ${params.path}`,
                   metadata: { filepath: params.path, parentDir },
                 })
               }
             } else {
-              const editPerm = permissionConfig?.edit || "ask"
+              const editRule = PermissionNext.evaluate("edit", params.path, permissionConfig ?? [])
 
-              if (editPerm === "deny") {
+              if (editRule.action === "deny") {
                 throw new Error(`Permission denied: cannot write to file ${params.path}`)
-              } else if (editPerm === "ask" && sessionContext) {
+              } else if (editRule.action === "ask" && sessionContext) {
                 const callID = `acp-write-${Date.now()}`
                 await Permission.ask({
                   type: "write",
                   sessionID: sessionContext.sessionID,
                   messageID: sessionContext.messageID,
                   callID,
-                  title: exists ? `Overwrite file: ${params.path}` : `Create file: ${params.path}`,
+                  message: exists ? `Overwrite file: ${params.path}` : `Create file: ${params.path}`,
                   metadata: {
                     filePath: params.path,
                     content: params.content,
@@ -472,7 +454,7 @@ function getPermissionType(
 }
 
 async function handlePermissionAction(
-  action: Config.Permission,
+  action: PermissionNext.Action,
   params: RequestPermissionRequest,
   updateHandlers: Set<SessionUpdateHandler>,
   sessionContext:
@@ -485,7 +467,7 @@ async function handlePermissionAction(
   permissionInfo: {
     type: string
     pattern?: string[]
-    title: string
+    message: string
     metadata: Record<string, any>
   },
 ): Promise<RequestPermissionResponse> {
@@ -514,7 +496,7 @@ async function promptUserPermission(
   permissionInfo: {
     type: string
     pattern?: string[]
-    title: string
+    message: string
     metadata: Record<string, any>
   },
 ): Promise<RequestPermissionResponse> {
@@ -531,7 +513,7 @@ async function promptUserPermission(
       sessionID: sessionContext.sessionID,
       messageID: sessionContext.messageID,
       callID,
-      title: permissionInfo.title,
+      message: permissionInfo.message,
       metadata: permissionInfo.metadata,
     })
 
