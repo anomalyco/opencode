@@ -2901,6 +2901,20 @@ window.__OPENCODE_BASE_PATH__="${_basePath}";
             })
           }
 
+          // For CSS files, rewrite absolute URLs to include basePath
+          if (_basePath && (contentType.includes("text/css") || path.endsWith(".css"))) {
+            let css = await response.text()
+
+            // Rewrite url(/assets/...) to url(/basePath/assets/...)
+            css = css.replace(/url\(\/(?!\/)/g, `url(${_basePath}/`)
+
+            return new Response(css, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          }
+
           return response
         }) as unknown as Hono,
   )
