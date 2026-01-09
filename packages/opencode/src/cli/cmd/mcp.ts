@@ -12,6 +12,7 @@ import { Instance } from "../../project/instance"
 import { Installation } from "../../installation"
 import path from "path"
 import { Global } from "../../global"
+import { modify, applyEdits } from "jsonc-parser"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {
@@ -366,28 +367,34 @@ export const McpLogoutCommand = cmd({
 })
 
 async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, scope: "global" | "project") {
-  const configPath =
-    scope === "global" ? path.join(Global.Path.config, "opencode.json") : path.join(Instance.worktree, "opencode.json")
+  const baseDir = scope === "global" ? Global.Path.config : Instance.worktree
 
-  const file = Bun.file(configPath)
-  let config: Record<string, unknown> = {}
+  // Check for existing config files (prefer .jsonc over .json)
+  const jsoncPath = path.join(baseDir, "opencode.jsonc")
+  const jsonPath = path.join(baseDir, "opencode.json")
 
-  if (await file.exists()) {
-    const text = await file.text()
-    try {
-      config = JSON.parse(text) as Record<string, unknown>
-    } catch {
-      // If parsing fails, start with empty config
-    }
+  const jsoncFile = Bun.file(jsoncPath)
+  const jsonFile = Bun.file(jsonPath)
+
+  const jsoncExists = await jsoncFile.exists()
+  const jsonExists = await jsonFile.exists()
+
+  // Use existing file, or create .json if neither exists
+  const configPath = jsoncExists ? jsoncPath : jsonExists ? jsonPath : jsonPath
+  const file = jsoncExists ? jsoncFile : jsonExists ? jsonFile : jsonFile
+
+  let text = "{}"
+  if (jsoncExists || jsonExists) {
+    text = await file.text()
   }
 
-  if (!config.mcp || typeof config.mcp !== "object") {
-    config.mcp = {}
-  }
+  // Use jsonc-parser to modify while preserving comments
+  const edits = modify(text, ["mcp", name], mcpConfig, {
+    formattingOptions: { tabSize: 2, insertSpaces: true },
+  })
+  const result = applyEdits(text, edits)
 
-  ;(config.mcp as Record<string, unknown>)[name] = mcpConfig
-
-  await Bun.write(configPath, JSON.stringify(config, null, 2))
+  await Bun.write(configPath, result)
 
   return configPath
 }
