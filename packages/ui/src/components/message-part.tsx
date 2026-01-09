@@ -984,6 +984,22 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "todowrite",
   render(props) {
+    const todos = createMemo(() => {
+      const meta = props.metadata?.todos
+      if (Array.isArray(meta)) return meta
+
+      const input = props.input.todos
+      if (Array.isArray(input)) return input
+
+      return []
+    })
+
+    const subtitle = createMemo(() => {
+      const list = todos()
+      if (list.length === 0) return ""
+      return `${list.filter((t: Todo) => t.status === "completed").length}/${list.length}`
+    })
+
     return (
       <BasicTool
         {...props}
@@ -991,14 +1007,12 @@ ToolRegistry.register({
         icon="checklist"
         trigger={{
           title: "To-dos",
-          subtitle: props.input.todos
-            ? `${props.input.todos.filter((t: Todo) => t.status === "completed").length}/${props.input.todos.length}`
-            : "",
+          subtitle: subtitle(),
         }}
       >
-        <Show when={props.input.todos?.length}>
+        <Show when={todos().length}>
           <div data-component="todos">
-            <For each={props.input.todos}>
+            <For each={todos()}>
               {(todo: Todo) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
                   <div data-slot="message-part-todo-content" data-completed={todo.status === "completed"}>
