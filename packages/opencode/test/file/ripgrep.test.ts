@@ -36,9 +36,9 @@ describe("Ripgrep", () => {
     await fs.rm(testDir, { recursive: true, force: true })
   })
 
-  describe("filepath", () => {
+  describe("rg", () => {
     test("returns path to rg binary", async () => {
-      const rgPath = await Ripgrep.filepath()
+      const rgPath = await Ripgrep.rg()
       expect(rgPath).toBeString()
       expect(rgPath.length).toBeGreaterThan(0)
       // Should end with 'rg' or 'rg.exe'
@@ -46,7 +46,7 @@ describe("Ripgrep", () => {
     })
 
     test("binary exists at returned path", async () => {
-      const rgPath = await Ripgrep.filepath()
+      const rgPath = await Ripgrep.rg()
       const exists = await fs.stat(rgPath).then(() => true).catch(() => false)
       expect(exists).toBe(true)
     })
