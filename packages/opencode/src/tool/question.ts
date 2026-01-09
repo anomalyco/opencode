@@ -15,7 +15,9 @@ export const QuestionTool = Tool.define("question", {
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
     })
 
-    function format(answer: Question.Answer | undefined) {
+    // backward compat: old sessions stored answers as strings
+    function format(answer: string | Question.Answer | undefined) {
+      if (typeof answer === "string") return answer || "Unanswered"
       if (!answer?.length) return "Unanswered"
       return answer.join(", ")
     }
