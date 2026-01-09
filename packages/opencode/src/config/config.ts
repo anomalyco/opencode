@@ -19,6 +19,7 @@ import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { existsSync } from "fs"
+import { MarketplaceSchema } from "../marketplace/schema"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -1048,6 +1049,9 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      marketplace: MarketplaceSchema.Config.optional().describe(
+        "Marketplace configuration for discovering and installing agents from GitHub repositories",
+      ),
     })
     .strict()
     .meta({
