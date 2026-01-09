@@ -15,6 +15,7 @@ import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
+import { ProjectsCommand } from "./cli/cmd/projects"
 import { McpCommand } from "./cli/cmd/mcp"
 import { GithubCommand } from "./cli/cmd/github"
 import { ExportCommand } from "./cli/cmd/export"
@@ -94,6 +95,7 @@ const cli = yargs(hideBin(process.argv))
   .command(WebCommand)
   .command(ModelsCommand)
   .command(StatsCommand)
+  .command(ProjectsCommand)
   .command(ExportCommand)
   .command(ImportCommand)
   .command(GithubCommand)
