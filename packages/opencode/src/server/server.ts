@@ -60,10 +60,19 @@ export namespace Server {
   const log = Log.create({ service: "server" })
 
   let _url: URL | undefined
+  let _basePath: string = ""
   let _corsWhitelist: string[] = []
 
   export function url(): URL {
-    return _url ?? new URL("http://localhost:4096")
+    const base = _url ?? new URL("http://localhost:4096")
+    if (_basePath) {
+      return new URL(_basePath + "/", base)
+    }
+    return base
+  }
+
+  export function basePath(): string {
+    return _basePath
   }
 
   export const Event = {
@@ -2845,13 +2854,37 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[]; basePath?: string }) {
     _corsWhitelist = opts.cors ?? []
+
+    // Normalize basePath: ensure leading slash, remove trailing slash
+    const rawBasePath = opts.basePath ?? "/"
+    _basePath =
+      rawBasePath === "/"
+        ? ""
+        : (rawBasePath.startsWith("/") ? rawBasePath : `/${rawBasePath}`).replace(/\/+$/, "")
+
+    // Create wrapper app for base path routing
+    const baseApp = new Hono()
+    const mainApp = App()
+
+    if (_basePath) {
+      // Mount the main app under the base path
+      baseApp.route(_basePath, mainApp)
+
+      // Redirect root to base path
+      baseApp.get("/", (c) => c.redirect(`${_basePath}/`))
+
+      // Return 404 for any other path not under base path
+      baseApp.all("/*", (c) => c.notFound())
+    }
+
+    const appToServe = _basePath ? baseApp : mainApp
 
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: App().fetch,
+      fetch: appToServe.fetch,
       websocket: websocket,
     } as const
     const tryServe = (port: number) => {
