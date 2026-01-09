@@ -73,21 +73,14 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await $`git rev-list --max-parents=0 --all`
+          const root = await $`git rev-list --max-parents=0 --all --max-count=1`
             .quiet()
             .nothrow()
             .cwd(sandbox)
             .text()
-            .then((x) =>
-              x
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
             .catch(() => undefined)
 
-          if (!roots) {
+          if (root === undefined) {
             return {
               id: "global",
               worktree: sandbox,
@@ -96,21 +89,18 @@ export namespace Project {
             }
           }
 
-          id = roots[0]
-          if (id) {
-            void Bun.file(path.join(git, "opencode"))
-              .write(id)
-              .catch(() => undefined)
+          id = root.trim()
+          if (!id) {
+            return {
+              id: "global",
+              worktree: sandbox,
+              sandbox: sandbox,
+              vcs: "git",
+            }
           }
-        }
-
-        if (!id) {
-          return {
-            id: "global",
-            worktree: sandbox,
-            sandbox: sandbox,
-            vcs: "git",
-          }
+          void Bun.file(path.join(git, "opencode"))
+            .write(id)
+            .catch(() => undefined)
         }
 
         const top = await $`git rev-parse --show-toplevel`
