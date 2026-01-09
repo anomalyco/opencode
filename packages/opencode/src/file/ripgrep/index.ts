@@ -1,23 +1,10 @@
 import fs from "fs/promises"
 import { $ } from "bun"
+import z from "zod"
 import { Log } from "@/util/log"
 
 import { rgBin } from "./binary"
 import { lazy } from "../../util/lazy"
-import {
-  Result as _Result,
-  Match as _Match,
-  Begin as _Begin,
-  End as _End,
-  Summary as _Summary,
-} from "./schema"
-import type {
-  Result as _ResultType,
-  Match as _MatchType,
-  Begin as _BeginType,
-  End as _EndType,
-  Summary as _SummaryType,
-} from "./schema"
 import { DEFAULT_TREE_LIMIT, buildTree, sortTreeInPlace, truncateBFS, renderTree } from "./tree"
 import { streamLines } from "./io"
 
@@ -34,16 +21,85 @@ export namespace Ripgrep {
     maxDepth?: number
   }
 
-  export const rg = lazy(rgBin)
+  // Schemas for parsing ripgrep JSON output
+  const Stats = z.object({
+    elapsed: z.object({
+      secs: z.number(),
+      nanos: z.number(),
+      human: z.string(),
+    }),
+    searches: z.number(),
+    searches_with_match: z.number(),
+    bytes_searched: z.number(),
+    bytes_printed: z.number(),
+    matched_lines: z.number(),
+    matches: z.number(),
+  })
 
-  // Re-export from schema.ts
-  export const Result = _Result
-  export const Match = _Match
-  export type Result = _ResultType
-  export type Match = _MatchType
-  export type Begin = _BeginType
-  export type End = _EndType
-  export type Summary = _SummaryType
+  const Begin = z.object({
+    type: z.literal("begin"),
+    data: z.object({
+      path: z.object({
+        text: z.string(),
+      }),
+    }),
+  })
+
+  export const Match = z.object({
+    type: z.literal("match"),
+    data: z.object({
+      path: z.object({
+        text: z.string(),
+      }),
+      lines: z.object({
+        text: z.string(),
+      }),
+      line_number: z.number(),
+      absolute_offset: z.number(),
+      submatches: z.array(
+        z.object({
+          match: z.object({
+            text: z.string(),
+          }),
+          start: z.number(),
+          end: z.number(),
+        }),
+      ),
+    }),
+  })
+
+  const End = z.object({
+    type: z.literal("end"),
+    data: z.object({
+      path: z.object({
+        text: z.string(),
+      }),
+      binary_offset: z.number().nullable(),
+      stats: Stats,
+    }),
+  })
+
+  const Summary = z.object({
+    type: z.literal("summary"),
+    data: z.object({
+      elapsed_total: z.object({
+        human: z.string(),
+        nanos: z.number(),
+        secs: z.number(),
+      }),
+      stats: Stats,
+    }),
+  })
+
+  export const Result = z.union([Begin, Match, End, Summary])
+
+  export type Result = z.infer<typeof Result>
+  export type Match = z.infer<typeof Match>
+  export type Begin = z.infer<typeof Begin>
+  export type End = z.infer<typeof End>
+  export type Summary = z.infer<typeof Summary>
+
+  export const rg = lazy(rgBin)
 
   export async function* files(input: FilesInput) {
     // Bun.spawn should throw this, but it incorrectly reports that the executable does not exist.
