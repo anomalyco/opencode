@@ -45,6 +45,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Todo } from "./todo"
+import { hasTodoKeywords, isTodoContinuationRequest } from "./todo-continuation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -231,8 +232,6 @@ export namespace SessionPrompt {
   }
 
   const FINAL_FALLBACK_METADATA = "finalFallback"
-  const TODO_CONTINUE_RE =
-    /\b(continue|resume|proceed|keep going|next step)\b|(?:\u043f\u0440\u043e\u0434\u043e\u043b\u0436|\u0434\u0430\u043b\u044c\u0448\u0435)/i
   const TODO_PAUSE_SYSTEM =
     "There is a pending todo list from earlier. Do not continue it unless the user explicitly asks to continue. Ask a brief clarification if needed."
 
@@ -266,7 +265,7 @@ export namespace SessionPrompt {
 
   function wantsTodoContinuation(text: string) {
     if (!text) return false
-    return TODO_CONTINUE_RE.test(text)
+    return isTodoContinuationRequest(text)
   }
 
   function hasPendingTodos(todos: Todo.Info[]) {
@@ -349,6 +348,7 @@ export namespace SessionPrompt {
       const todos = await Todo.get(sessionID)
       const pendingTodos = hasPendingTodos(todos)
       const userText = getUserText(lastUserMsg)
+      const userMentionsTodos = pendingTodos && hasTodoKeywords(userText)
       const wantsContinuation = pendingTodos && wantsTodoContinuation(userText)
       const todoState = pendingTodos ? await Todo.getState(sessionID) : { paused: false }
       if (pendingTodos && !wantsContinuation && !todoState.paused) {
@@ -615,7 +615,6 @@ export namespace SessionPrompt {
       })
 
       // Check if user explicitly invoked an agent via @ in this turn
-      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
       const tools = await resolveTools({
@@ -626,6 +625,10 @@ export namespace SessionPrompt {
         processor,
         bypassAgentCheck,
       })
+      if (pendingTodos && !userMentionsTodos) {
+        delete tools["todoread"]
+        delete tools["todowrite"]
+      }
 
       if (step === 1) {
         SessionSummary.summarize({

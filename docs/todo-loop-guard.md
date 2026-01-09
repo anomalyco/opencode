@@ -20,8 +20,8 @@ When a session has pending todos, the model can keep trying to continue them eve
 
 ## Continuation Detection
 Treat as explicit continuation if user text contains:
-- English: `continue`, `resume`, `proceed`, `keep going`, `next step`
-- Russian: `продолж`, `дальше`, `продолжай`
+- English: a continuation verb **and** an explicit reference to the todo list (e.g. `continue todos`, `resume the todo list`)
+- Russian: `продолж.../дальше` **and** an explicit reference to todo/tasks (e.g. `продолжай туду`, `дальше по списку задач`)
 
 ## Files
 - `packages/opencode/src/session/todo.ts`

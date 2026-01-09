@@ -2,7 +2,8 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
-import { data } from "./models-macro" with { type: "macro" }
+import { data as macroData } from "./models-macro" with { type: "macro" }
+import { data as runtimeData } from "./models-macro"
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 
@@ -80,7 +81,8 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const json = await data()
+    const dataFn = typeof macroData === "function" ? macroData : runtimeData
+    const json = await dataFn()
     return JSON.parse(json) as Record<string, Provider>
   }
 

@@ -627,6 +627,57 @@ export namespace Provider {
     log.info("init")
 
     const configProviders = Object.entries(config.provider ?? {})
+    const providersWithExplicitBaseURL = new Set<string>()
+    for (const [providerID, provider] of configProviders) {
+      // When baseURL is explicitly configured, prefer config over inherited env vars by default.
+      // Users can still opt-in to env override via OPENCODE_ALLOW_PROXY_ENV_OVERRIDE=1.
+      const baseURL = (provider as any)?.options?.baseURL
+      if (typeof baseURL === "string" && baseURL.length > 0) {
+        providersWithExplicitBaseURL.add(providerID)
+      }
+    }
+    const allowProxyEnvOverride = Env.get("OPENCODE_ALLOW_PROXY_ENV_OVERRIDE") === "1"
+
+    function overrideLocalProxyBaseURL(providerID: string, options: Record<string, any>) {
+      // Some setups run Anthropic/Google through a local proxy (e.g. Antigravity). If the proxy port is dynamic,
+      // allow env to override the host/port while preserving the configured path (/v1, /v1beta, etc).
+      if (providerID !== "anthropic" && providerID !== "google") return
+      if (providersWithExplicitBaseURL.has(providerID) && !allowProxyEnvOverride) return
+
+      const current = options?.baseURL
+      if (typeof current !== "string" || current.length === 0) return
+
+      const envProxy =
+        Env.get("ANTHROPIC_PROXY_URL") ??
+        (Env.get("ANTHROPIC_PROXY_PORT") ? `http://127.0.0.1:${Env.get("ANTHROPIC_PROXY_PORT")}` : undefined)
+      if (!envProxy) return
+
+      let currentURL: URL
+      let envURL: URL
+      try {
+        currentURL = new URL(current)
+        envURL = new URL(envProxy)
+      } catch {
+        return
+      }
+
+      const isLocal =
+        currentURL.hostname === "127.0.0.1" || currentURL.hostname === "localhost" || currentURL.hostname === "::1"
+      if (!isLocal) return
+
+      if (!envURL.port) return
+
+      const next = new URL(currentURL.toString())
+      next.protocol = envURL.protocol
+      next.hostname = envURL.hostname
+      next.port = envURL.port
+
+      const normalized = next.toString().replace(/\/$/, "")
+      if (normalized !== current) {
+        options.baseURL = normalized
+        log.debug("overrode local proxy baseURL from env", { providerID, baseURL: options.baseURL })
+      }
+    }
 
     // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
     if (database["github-copilot"]) {
@@ -647,12 +698,14 @@ export namespace Provider {
       if (existing) {
         // @ts-expect-error
         providers[providerID] = mergeDeep(existing, provider)
+        overrideLocalProxyBaseURL(providerID, providers[providerID].options ?? {})
         return
       }
       const match = database[providerID]
       if (!match) return
       // @ts-expect-error
       providers[providerID] = mergeDeep(match, provider)
+      overrideLocalProxyBaseURL(providerID, providers[providerID].options ?? {})
     }
 
     // extend database from config
@@ -666,6 +719,7 @@ export namespace Provider {
         source: "config",
         models: existing?.models ?? {},
       }
+      overrideLocalProxyBaseURL(providerID, parsed.options ?? {})
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
         const existingModel = parsed.models[model.id ?? modelID]

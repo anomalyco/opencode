@@ -633,6 +633,23 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      case (e as any)?.code === "ECONNREFUSED" || (e as any)?.code === "ConnectionRefused": {
+        const error = e as any
+        const target = typeof error.path === "string" && error.path.length > 0 ? error.path : undefined
+        return new MessageV2.APIError(
+          {
+            message: target ? `Unable to connect to ${target}` : "Connection refused",
+            isRetryable: true,
+            metadata: {
+              code: error.code ?? "",
+              syscall: error.syscall ?? "",
+              message: error.message ?? "",
+              path: target ?? "",
+            },
+          },
+          { cause: e as any },
+        ).toObject()
+      }
       case APICallError.isInstance(e):
         const message = iife(() => {
           let msg = e.message

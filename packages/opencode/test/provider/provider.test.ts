@@ -447,6 +447,71 @@ test("provider with baseURL from config", async () => {
   })
 })
 
+test("anthropic local proxy baseURL from config is not overridden by env by default", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              options: {
+                baseURL: "http://127.0.0.1:8045/v1",
+                apiKey: "config-api-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_PROXY_URL", "http://127.0.0.1:7187")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["anthropic"]).toBeDefined()
+      expect(providers["anthropic"].options.baseURL).toBe("http://127.0.0.1:8045/v1")
+    },
+  })
+})
+
+test("anthropic local proxy baseURL can be overridden via env when OPENCODE_ALLOW_PROXY_ENV_OVERRIDE=1", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              options: {
+                baseURL: "http://127.0.0.1:8045/v1",
+                apiKey: "config-api-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENCODE_ALLOW_PROXY_ENV_OVERRIDE", "1")
+      Env.set("ANTHROPIC_PROXY_URL", "http://127.0.0.1:7187")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["anthropic"]).toBeDefined()
+      expect(providers["anthropic"].options.baseURL).toBe("http://127.0.0.1:7187/v1")
+    },
+  })
+})
+
 test("model cost defaults to zero when not specified", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

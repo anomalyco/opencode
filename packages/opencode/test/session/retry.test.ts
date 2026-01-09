@@ -128,4 +128,17 @@ describe("session.message-v2.fromError", () => {
     expect(retryable).toBeDefined()
     expect(retryable).toBe("Connection reset by server")
   })
+
+  test("ConnectionRefused errors are converted to retryable APIError", () => {
+    const e = new Error("Unable to connect. Is the computer able to access the url?")
+    ;(e as any).code = "ConnectionRefused"
+    ;(e as any).path = "http://127.0.0.1:8045/v1/messages"
+
+    const result = MessageV2.fromError(e, { providerID: "test" })
+    expect(MessageV2.APIError.isInstance(result)).toBe(true)
+    expect((result as MessageV2.APIError).data.isRetryable).toBe(true)
+    expect((result as MessageV2.APIError).data.message).toBe("Unable to connect to http://127.0.0.1:8045/v1/messages")
+    expect((result as MessageV2.APIError).data.metadata?.code).toBe("ConnectionRefused")
+    expect((result as MessageV2.APIError).data.metadata?.path).toBe("http://127.0.0.1:8045/v1/messages")
+  })
 })
