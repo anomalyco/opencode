@@ -34,6 +34,7 @@ const Loading = () => <div class="size-full flex items-center justify-center tex
 declare global {
   interface Window {
     __OPENCODE__?: { updaterEnabled?: boolean; port?: number; serverReady?: boolean }
+    __OPENCODE_BASE_PATH__?: string
   }
 }
 
@@ -46,7 +47,10 @@ const defaultServerUrl = iife(() => {
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
-  return window.location.origin
+  // Support for reverse proxy with base path (e.g., Kubeflow NB_PREFIX)
+  // The server injects window.__OPENCODE_BASE_PATH__ when serving under a base path
+  const basePath = window.__OPENCODE_BASE_PATH__ || ""
+  return window.location.origin + basePath
 })
 
 export function AppBaseProviders(props: ParentProps) {
@@ -78,12 +82,15 @@ function ServerKey(props: ParentProps) {
 }
 
 export function AppInterface() {
+  const basePath = window.__OPENCODE_BASE_PATH__ || ""
+
   return (
     <ServerProvider defaultUrl={defaultServerUrl}>
       <ServerKey>
         <GlobalSDKProvider>
           <GlobalSyncProvider>
             <Router
+              base={basePath}
               root={(props) => (
                 <PermissionProvider>
                   <LayoutProvider>

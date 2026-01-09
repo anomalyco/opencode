@@ -150,14 +150,24 @@ export namespace Server {
                 description: "Health information",
                 content: {
                   "application/json": {
-                    schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
+                    schema: resolver(
+                      z.object({
+                        healthy: z.literal(true),
+                        version: z.string(),
+                        basePath: z.string().optional(),
+                      }),
+                    ),
                   },
                 },
               },
             },
           }),
           async (c) => {
-            return c.json({ healthy: true, version: Installation.VERSION })
+            return c.json({
+              healthy: true,
+              version: Installation.VERSION,
+              basePath: _basePath || undefined,
+            })
           },
         )
         .get(
@@ -2835,6 +2845,23 @@ export namespace Server {
               host: "app.opencode.ai",
             },
           })
+
+          // Inject basePath into HTML responses for reverse proxy support
+          const contentType = response.headers.get("content-type") || ""
+          if (_basePath && contentType.includes("text/html")) {
+            const html = await response.text()
+            // Inject basePath as a global variable before the closing </head> tag
+            const injectedHtml = html.replace(
+              "</head>",
+              `<script>window.__OPENCODE_BASE_PATH__="${_basePath}";</script></head>`,
+            )
+            return new Response(injectedHtml, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          }
+
           return response
         }) as unknown as Hono,
   )
