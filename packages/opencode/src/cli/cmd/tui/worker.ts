@@ -31,12 +31,12 @@ process.on("uncaughtException", (e) => {
 
 let server: Bun.Server<BunWebSocketData>
 export const rpc = {
-  async server(input: { port: number; hostname: string; mdns?: boolean }) {
+  async server(input: { port: number; hostname: string; mdns?: boolean; basePath?: string }) {
     if (server) await server.stop(true)
     try {
       server = Server.listen(input)
       return {
-        url: server.url.toString(),
+        url: Server.url().toString(),
       }
     } catch (e) {
       console.error(e)
