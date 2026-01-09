@@ -74,6 +74,7 @@ export namespace Server {
   const app = new Hono()
   export const App: () => Hono = lazy(
     () =>
+      // TODO: Break server.ts into smaller route files to fix type inference
       app
         .onError((err, c) => {
           log.error("failed", {
