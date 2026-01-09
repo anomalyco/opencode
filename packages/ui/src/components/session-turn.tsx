@@ -350,14 +350,30 @@ export function SessionTurn(
     onUserInteracted: props.onUserInteracted,
   })
 
+  const diffInit = 20
+  const diffBatch = 20
+
   const [store, setStore] = createStore({
     stickyTitleRef: undefined as HTMLDivElement | undefined,
     stickyTriggerRef: undefined as HTMLDivElement | undefined,
     stickyHeaderHeight: 0,
     retrySeconds: 0,
+    diffsOpen: [] as string[],
+    diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
   })
+
+  createEffect(
+    on(
+      () => message()?.id,
+      () => {
+        setStore("diffsOpen", [])
+        setStore("diffLimit", diffInit)
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => {
     const r = retry()
@@ -542,10 +558,23 @@ export function SessionTurn(
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">Response</h2>
-                          <Markdown data-slot="session-turn-markdown" data-diffs={hasDiffs()} text={response() ?? ""} />
+                          <Markdown
+                            data-slot="session-turn-markdown"
+                            data-diffs={hasDiffs()}
+                            text={response() ?? ""}
+                            cacheKey={responsePartId()}
+                          />
                         </div>
-                        <Accordion data-slot="session-turn-accordion" multiple>
-                          <For each={msg().summary?.diffs ?? []}>
+                        <Accordion
+                          data-slot="session-turn-accordion"
+                          multiple
+                          value={store.diffsOpen}
+                          onChange={(value) => {
+                            if (!Array.isArray(value)) return
+                            setStore("diffsOpen", value)
+                          }}
+                        >
+                          <For each={(msg().summary?.diffs ?? []).slice(0, store.diffLimit)}>
                             {(diff) => (
                               <Accordion.Item value={diff.file}>
                                 <StickyAccordionHeader>
@@ -573,22 +602,41 @@ export function SessionTurn(
                                   </Accordion.Trigger>
                                 </StickyAccordionHeader>
                                 <Accordion.Content data-slot="session-turn-accordion-content">
-                                  <Dynamic
-                                    component={diffComponent}
-                                    before={{
-                                      name: diff.file!,
-                                      contents: diff.before!,
-                                    }}
-                                    after={{
-                                      name: diff.file!,
-                                      contents: diff.after!,
-                                    }}
-                                  />
+                                  <Show when={store.diffsOpen.includes(diff.file!)}>
+                                    <Dynamic
+                                      component={diffComponent}
+                                      before={{
+                                        name: diff.file!,
+                                        contents: diff.before!,
+                                      }}
+                                      after={{
+                                        name: diff.file!,
+                                        contents: diff.after!,
+                                      }}
+                                    />
+                                  </Show>
                                 </Accordion.Content>
                               </Accordion.Item>
                             )}
                           </For>
                         </Accordion>
+                        <Show when={(msg().summary?.diffs?.length ?? 0) > store.diffLimit}>
+                          <Button
+                            data-slot="session-turn-accordion-more"
+                            variant="ghost"
+                            size="small"
+                            onClick={() => {
+                              const total = msg().summary?.diffs?.length ?? 0
+                              setStore("diffLimit", (limit) => {
+                                const next = limit + diffBatch
+                                if (next > total) return total
+                                return next
+                              })
+                            }}
+                          >
+                            Show more changes ({(msg().summary?.diffs?.length ?? 0) - store.diffLimit})
+                          </Button>
+                        </Show>
                       </div>
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>

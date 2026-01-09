@@ -103,9 +103,9 @@ const cli = yargs(hideBin(process.argv))
   .command(SnapshotCommand)
   .fail((msg) => {
     if (
-      msg.startsWith("Unknown argument") ||
-      msg.startsWith("Not enough non-option arguments") ||
-      msg.startsWith("Invalid values:")
+      msg?.startsWith("Unknown argument") ||
+      msg?.startsWith("Not enough non-option arguments") ||
+      msg?.startsWith("Invalid values:")
     ) {
       cli.showHelp("log")
     }
