@@ -5,6 +5,8 @@ import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
 
+const normalizePath = (value: string) => value.replaceAll("\\", "/")
+
 async function createGlobalSkill(homeDir: string) {
   const skillDir = path.join(homeDir, ".claude", "skills", "global-test-skill")
   await fs.mkdir(skillDir, { recursive: true })
@@ -49,8 +51,8 @@ Instructions here.
       expect(skills.length).toBe(1)
       const testSkill = skills.find((s) => s.name === "test-skill")
       expect(testSkill).toBeDefined()
-      expect(testSkill!.description).toBe("A test skill for verification.")
-      expect(testSkill!.location).toContain("skill/test-skill/SKILL.md")
+      expect(testSkill!.description).toBe("A test skill for verification.")     
+      expect(normalizePath(testSkill!.location)).toContain("skill/test-skill/SKILL.md")
     },
   })
 })
@@ -144,7 +146,7 @@ description: A skill in the .claude/skills directory.
       expect(skills.length).toBe(1)
       const claudeSkill = skills.find((s) => s.name === "claude-skill")
       expect(claudeSkill).toBeDefined()
-      expect(claudeSkill!.location).toContain(".claude/skills/claude-skill/SKILL.md")
+      expect(normalizePath(claudeSkill!.location)).toContain(".claude/skills/claude-skill/SKILL.md")
     },
   })
 })
@@ -164,7 +166,7 @@ test("discovers global skills from ~/.claude/skills/ directory", async () => {
         expect(skills.length).toBe(1)
         expect(skills[0].name).toBe("global-test-skill")
         expect(skills[0].description).toBe("A global skill from ~/.claude/skills for testing.")
-        expect(skills[0].location).toContain(".claude/skills/global-test-skill/SKILL.md")
+        expect(normalizePath(skills[0].location)).toContain(".claude/skills/global-test-skill/SKILL.md")
       },
     })
   } finally {
