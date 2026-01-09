@@ -26,11 +26,9 @@ export namespace Config {
 
   function resolvePluginSpecifier(plugin: string, configFilepath: string) {
     const baseUrl = pathToFileURL(configFilepath).href
-    if (import.meta.resolve) {
-      try {
-        return import.meta.resolve(plugin, baseUrl)
-      } catch {}
-    }
+    try {
+      return import.meta.resolve(plugin, baseUrl)
+    } catch {}
     try {
       const req = createRequire(configFilepath)
       return pathToFileURL(req.resolve(plugin)).href
