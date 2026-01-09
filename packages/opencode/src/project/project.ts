@@ -49,10 +49,24 @@ export namespace Project {
 
     const { id, sandbox, worktree, vcs } = await iife(async () => {
       const matches = Filesystem.up({ targets: [".git"], start: directory })
-      const git = await matches.next().then((x) => x.value)
+      let git = await matches.next().then((x) => x.value)
       await matches.return()
+
       if (git) {
         let sandbox = path.dirname(git)
+
+        const gitFile = Bun.file(git);
+        if (await gitFile.exists()) {
+          const content = await gitFile.text();
+          const gitDir = content.match(/^gitdir: (.*)/)?.at(1);
+          if (gitDir) {
+            const linkedDir = path.resolve(path.dirname(git), gitDir);
+            if (existsSync(linkedDir)) {
+              log.info("followGitFile", { linkedDir })
+              git = linkedDir;
+            }
+          }
+        }
 
         const gitBinary = Bun.which("git")
 
@@ -168,6 +182,7 @@ export namespace Project {
         vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
       }
     })
+    log.info('resolvedProject', {id, sandbox, worktree, vcs})
 
     let existing = await Storage.read<Info>(["project", id]).catch(() => undefined)
     if (!existing) {

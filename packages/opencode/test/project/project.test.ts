@@ -41,6 +41,63 @@ describe("Project.fromDirectory", () => {
   })
 })
 
+describe("Project.fromDirectory with .git file resolution", () => {
+  test("should follow .git file with gitdir: link", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    // Create a fake worktree by manually creating a .git file with gitdir: content
+    const fakeWorktreePath = path.join(tmp.path, "..", "fake-worktree")
+    await $`mkdir -p ${fakeWorktreePath}`.quiet()
+
+    // Create the .git file that points to the real git directory
+    const gitFilePath = path.join(fakeWorktreePath, ".git")
+    const gitDirPath = path.join(tmp.path, ".git")
+    await Bun.write(gitFilePath, `gitdir: ${gitDirPath}\n`)
+
+    const { project, sandbox } = await Project.fromDirectory(fakeWorktreePath)
+
+    expect(project).toBeDefined()
+    expect(project.id).not.toBe("global")
+    expect(project.vcs).toBe("git")
+    expect(project.worktree).toBe(tmp.path)
+    // sandbox is the directory where .git file was found
+    expect(sandbox).toBe(fakeWorktreePath)
+
+    await $`rm -rf ${fakeWorktreePath}`.quiet()
+  })
+
+  test("should handle .git file with relative gitdir path", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    // Create a fake worktree structure with relative path
+    const fakeWorktreePath = path.join(tmp.path, "..", "relative-worktree")
+    await $`mkdir -p ${fakeWorktreePath}`.quiet()
+
+    // Use a relative path in the gitdir: line
+    const gitFilePath = path.join(fakeWorktreePath, ".git")
+    await Bun.write(gitFilePath, `gitdir: ../opencode-test-${path.basename(tmp.path).split('-').pop()}/.git\n`)
+
+    const { project } = await Project.fromDirectory(fakeWorktreePath)
+
+    expect(project).toBeDefined()
+    expect(project.worktree).toBe(tmp.path)
+
+    await $`rm -rf ${fakeWorktreePath}`.quiet()
+  })
+
+  test("should handle .git file pointing to non-existent directory", async () => {
+    await using tmp = await tmpdir()
+
+    const gitFilePath = path.join(tmp.path, ".git")
+    await Bun.write(gitFilePath, `gitdir: /nonexistent/path/.git\n`)
+
+    const { project } = await Project.fromDirectory(tmp.path)
+
+    // Should fall back to global since the linked git dir doesn't exist
+    expect(project.id).toBe("global")
+  })
+})
+
 describe("Project.fromDirectory with worktrees", () => {
   test("should set worktree to root when called from root", async () => {
     await using tmp = await tmpdir({ git: true })
