@@ -121,6 +121,19 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
+    // Warn about potential context window issues for local models with tools
+    // See: https://github.com/anomalyco/opencode/issues/7185
+    const MINIMUM_CONTEXT_FOR_TOOLS = 16_384
+    const toolCount = Object.keys(tools).filter((x) => x !== "invalid").length
+    if (toolCount > 0 && input.model.limit.context > 0 && input.model.limit.context < MINIMUM_CONTEXT_FOR_TOOLS) {
+      l.warn("low context window for tool calling", {
+        contextLimit: input.model.limit.context,
+        minimumRecommended: MINIMUM_CONTEXT_FOR_TOOLS,
+        toolCount,
+        hint: "Tool calling may fail with context windows below 16K tokens. For vLLM/Ollama, increase max-model-len or num_ctx.",
+      })
+    }
+
     return streamText({
       onError(error) {
         l.error("stream error", {
