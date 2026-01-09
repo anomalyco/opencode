@@ -130,6 +130,10 @@ describe("Ripgrep", () => {
 
   describe("search", () => {
     test("finds matches for pattern", async () => {
+      // Verify test file exists and has expected content
+      const content = await fs.readFile(path.join(testDir, "src", "index.ts"), "utf-8")
+      expect(content).toContain("hello")
+
       const results = await Ripgrep.search({ cwd: testDir, pattern: "hello" })
 
       expect(results.length).toBeGreaterThan(0)
@@ -167,6 +171,10 @@ describe("Ripgrep", () => {
     })
 
     test("returns correct match structure", async () => {
+      // Verify test file exists
+      const content = await fs.readFile(path.join(testDir, "src", "index.ts"), "utf-8")
+      expect(content).toContain("hello")
+
       const results = await Ripgrep.search({ cwd: testDir, pattern: "hello" })
 
       expect(results.length).toBeGreaterThan(0)
