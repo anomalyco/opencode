@@ -13,7 +13,7 @@ export default createHandler(() => (
           <meta name="theme-color" content="#131010" media="(prefers-color-scheme: dark)" />
           {assets}
         </head>
-        <body class="antialiased overscroll-none select-none text-12-regular">
+        <body class="antialiased overscroll-none text-12-regular">
           <div id="app">{children}</div>
           {scripts}
         </body>

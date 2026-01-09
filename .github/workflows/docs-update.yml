@@ -1,0 +1,72 @@
+name: Docs Update
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+
+env:
+  LOOKBACK_HOURS: 4
+
+jobs:
+  update-docs:
+    if: github.repository == 'sst/opencode'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history to access commits
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Get recent commits
+        id: commits
+        run: |
+          COMMITS=$(git log --since="${{ env.LOOKBACK_HOURS }} hours ago" --pretty=format:"- %h %s" 2>/dev/null || echo "")
+          if [ -z "$COMMITS" ]; then
+            echo "No commits in the last ${{ env.LOOKBACK_HOURS }} hours"
+            echo "has_commits=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_commits=true" >> $GITHUB_OUTPUT
+            {
+              echo "list<<EOF"
+              echo "$COMMITS"
+              echo "EOF"
+            } >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run opencode
+        if: steps.commits.outputs.has_commits == 'true'
+        uses: sst/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode/gpt-5.2
+          agent: docs
+          prompt: |
+            Review the following commits from the last ${{ env.LOOKBACK_HOURS }} hours and identify any new features that may need documentation.
+
+            <recent_commits>
+            ${{ steps.commits.outputs.list }}
+            </recent_commits>
+
+            Steps:
+            1. For each commit that looks like a new feature or significant change:
+               - Read the changed files to understand what was added
+               - Check if the feature is already documented in packages/web/src/content/docs/*
+            2. If you find undocumented features:
+               - Update the relevant documentation files in packages/web/src/content/docs/*
+               - Follow the existing documentation style and structure
+               - Make sure to document the feature clearly with examples where appropriate
+            3. If all new features are already documented, report that no updates are needed
+            4. If you are creating a new documentation file be sure to update packages/web/astro.config.mjs too.
+
+            Focus on user-facing features and API changes. Skip internal refactors, bug fixes, and test updates unless they affect user-facing behavior.
+            Don't feel the need to document every little thing. It is perfectly okay to make 0 changes at all.
+            Try to keep documentation only for large features or changes that already have a good spot to be documented.

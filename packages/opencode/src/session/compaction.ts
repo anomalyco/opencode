@@ -7,13 +7,13 @@ import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
 import { SessionPrompt } from "./prompt"
-import { Flag } from "../flag/flag"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
+import { Config } from "@/config/config"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -27,8 +27,9 @@ export namespace SessionCompaction {
     ),
   }
 
-  export function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
-    if (Flag.OPENCODE_DISABLE_AUTOCOMPACT) return false
+  export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
+    const config = await Config.get()
+    if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
@@ -40,11 +41,14 @@ export namespace SessionCompaction {
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
 
+  const PRUNE_PROTECTED_TOOLS = ["skill"]
+
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
   // tool calls that are no longer relevant.
   export async function prune(input: { sessionID: string }) {
-    if (Flag.OPENCODE_DISABLE_PRUNE) return
+    const config = await Config.get()
+    if (config.compaction?.prune === false) return
     log.info("pruning")
     const msgs = await Session.messages({ sessionID: input.sessionID })
     let total = 0
@@ -61,6 +65,8 @@ export namespace SessionCompaction {
         const part = msg.parts[partIndex]
         if (part.type === "tool")
           if (part.state.status === "completed") {
+            if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
+
             if (part.state.time.compacted) break loop
             const estimate = Token.estimate(part.state.output)
             total += estimate
@@ -126,12 +132,15 @@ export namespace SessionCompaction {
       model,
       abort: input.abort,
     })
-    // Allow plugins to inject context for compaction
+    // Allow plugins to inject context or replace compaction prompt
     const compacting = await Plugin.trigger(
       "experimental.session.compacting",
       { sessionID: input.sessionID },
-      { context: [] },
+      { context: [], prompt: undefined },
     )
+    const defaultPrompt =
+      "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
+    const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -146,10 +155,7 @@ export namespace SessionCompaction {
           content: [
             {
               type: "text",
-              text: [
-                "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation.",
-                ...compacting.context,
-              ].join("\n\n"),
+              text: promptText,
             },
           ],
         },

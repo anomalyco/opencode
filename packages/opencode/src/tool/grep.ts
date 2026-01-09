@@ -14,10 +14,21 @@ export const GrepTool = Tool.define("grep", {
     path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
     include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
   }),
-  async execute(params) {
+  async execute(params, ctx) {
     if (!params.pattern) {
       throw new Error("pattern is required")
     }
+
+    await ctx.ask({
+      permission: "grep",
+      patterns: [params.pattern],
+      always: ["*"],
+      metadata: {
+        pattern: params.pattern,
+        path: params.path,
+        include: params.include,
+      },
+    })
 
     const searchPath = params.path || Instance.directory
 
@@ -49,7 +60,8 @@ export const GrepTool = Tool.define("grep", {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
 
-    const lines = output.trim().split("\n")
+    // Handle both Unix (\n) and Windows (\r\n) line endings
+    const lines = output.trim().split(/\r?\n/)
     const matches = []
 
     for (const line of lines) {

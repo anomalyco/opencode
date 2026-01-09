@@ -37,4 +37,10 @@ export const TuiEvent = {
       duration: z.number().default(5000).optional().describe("Duration in milliseconds"),
     }),
   ),
+  SessionSelect: BusEvent.define(
+    "tui.session.select",
+    z.object({
+      sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
+    }),
+  ),
 }

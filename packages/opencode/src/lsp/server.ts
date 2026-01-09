@@ -13,6 +13,11 @@ import { Archive } from "../util/archive"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
+  const pathExists = async (p: string) =>
+    fs
+      .stat(p)
+      .then(() => true)
+      .catch(() => false)
 
   export interface Handle {
     process: ChildProcessWithoutNullStreams
@@ -196,13 +201,14 @@ export namespace LSPServer {
         }
         await fs.rename(extractedPath, finalPath)
 
-        await $`npm install`.cwd(finalPath).quiet()
-        await $`npm run compile`.cwd(finalPath).quiet()
+        const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm"
+        await $`${npmCmd} install`.cwd(finalPath).quiet()
+        await $`${npmCmd} run compile`.cwd(finalPath).quiet()
 
         log.info("installed VS Code ESLint server", { serverPath })
       }
 
-      const proc = spawn(BunProc.which(), ["--max-old-space-size=8192", serverPath, "--stdio"], {
+      const proc = spawn(BunProc.which(), [serverPath, "--stdio"], {
         cwd: root,
         env: {
           ...process.env,
@@ -697,7 +703,7 @@ export namespace LSPServer {
             })
           if (!ok) return
         } else {
-          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await $`tar -xf ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
         }
 
         await fs.rm(tempPath, { force: true })
@@ -710,7 +716,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info(`installed zls`, { bin })
@@ -1003,7 +1009,7 @@ export namespace LSPServer {
         if (!ok) return
       }
       if (tar) {
-        await $`tar -xf ${archive}`.cwd(Global.Path.bin).nothrow()
+        await $`tar -xf ${archive}`.cwd(Global.Path.bin).quiet().nothrow()
       }
       await fs.rm(archive, { force: true })
 
@@ -1014,7 +1020,7 @@ export namespace LSPServer {
       }
 
       if (platform !== "win32") {
-        await $`chmod +x ${bin}`.nothrow()
+        await $`chmod +x ${bin}`.quiet().nothrow()
       }
 
       await fs.unlink(path.join(Global.Path.bin, "clangd")).catch(() => {})
@@ -1144,7 +1150,7 @@ export namespace LSPServer {
       }
       const distPath = path.join(Global.Path.bin, "jdtls")
       const launcherDir = path.join(distPath, "plugins")
-      const installed = await fs.exists(launcherDir)
+      const installed = await pathExists(launcherDir)
       if (!installed) {
         if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
         log.info("Downloading JDTLS LSP server.")
@@ -1162,7 +1168,7 @@ export namespace LSPServer {
         .nothrow()
         .then(({ stdout }) => stdout.toString().trim())
       const launcherJar = path.join(launcherDir, jarFileName)
-      if (!(await fs.exists(launcherJar))) {
+      if (!(await pathExists(launcherJar))) {
         log.error(`Failed to locate the JDTLS launcher module in the installed directory: ${distPath}.`)
         return
       }
@@ -1175,7 +1181,7 @@ export namespace LSPServer {
             case "linux":
               return "config_linux"
             case "win32":
-              return "config_windows"
+              return "config_win"
             default:
               return "config_linux"
           }
@@ -1204,6 +1210,97 @@ export namespace LSPServer {
             cwd: root,
           },
         ),
+      }
+    },
+  }
+
+  export const KotlinLS: Info = {
+    id: "kotlin-ls",
+    extensions: [".kt", ".kts"],
+    root: async (file) => {
+      // 1) Nearest Gradle root (multi-project or included build)
+      const settingsRoot = await NearestRoot(["settings.gradle.kts", "settings.gradle"])(file)
+      if (settingsRoot) return settingsRoot
+      // 2) Gradle wrapper (strong root signal)
+      const wrapperRoot = await NearestRoot(["gradlew", "gradlew.bat"])(file)
+      if (wrapperRoot) return wrapperRoot
+      // 3) Single-project or module-level build
+      const buildRoot = await NearestRoot(["build.gradle.kts", "build.gradle"])(file)
+      if (buildRoot) return buildRoot
+      // 4) Maven fallback
+      return NearestRoot(["pom.xml"])(file)
+    },
+    async spawn(root) {
+      const distPath = path.join(Global.Path.bin, "kotlin-ls")
+      const launcherScript =
+        process.platform === "win32" ? path.join(distPath, "kotlin-lsp.cmd") : path.join(distPath, "kotlin-lsp.sh")
+      const installed = await Bun.file(launcherScript).exists()
+      if (!installed) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("Downloading Kotlin Language Server from GitHub.")
+
+        const releaseResponse = await fetch("https://api.github.com/repos/Kotlin/kotlin-lsp/releases/latest")
+        if (!releaseResponse.ok) {
+          log.error("Failed to fetch kotlin-lsp release info")
+          return
+        }
+
+        const release = await releaseResponse.json()
+        const version = release.name?.replace(/^v/, "")
+
+        if (!version) {
+          log.error("Could not determine Kotlin LSP version from release")
+          return
+        }
+
+        const platform = process.platform
+        const arch = process.arch
+
+        let kotlinArch: string = arch
+        if (arch === "arm64") kotlinArch = "aarch64"
+        else if (arch === "x64") kotlinArch = "x64"
+
+        let kotlinPlatform: string = platform
+        if (platform === "darwin") kotlinPlatform = "mac"
+        else if (platform === "linux") kotlinPlatform = "linux"
+        else if (platform === "win32") kotlinPlatform = "win"
+
+        const supportedCombos = ["mac-x64", "mac-aarch64", "linux-x64", "linux-aarch64", "win-x64", "win-aarch64"]
+
+        const combo = `${kotlinPlatform}-${kotlinArch}`
+
+        if (!supportedCombos.includes(combo)) {
+          log.error(`Platform ${platform}/${arch} is not supported by Kotlin LSP`)
+          return
+        }
+
+        const assetName = `kotlin-lsp-${version}-${kotlinPlatform}-${kotlinArch}.zip`
+        const releaseURL = `https://download-cdn.jetbrains.com/kotlin-lsp/${version}/${assetName}`
+
+        await fs.mkdir(distPath, { recursive: true })
+        const archivePath = path.join(distPath, "kotlin-ls.zip")
+        await $`curl -L -o '${archivePath}' '${releaseURL}'`.quiet().nothrow()
+        const ok = await Archive.extractZip(archivePath, distPath)
+          .then(() => true)
+          .catch((error) => {
+            log.error("Failed to extract Kotlin LS archive", { error })
+            return false
+          })
+        if (!ok) return
+        await fs.rm(archivePath, { force: true })
+        if (process.platform !== "win32") {
+          await $`chmod +x ${launcherScript}`.quiet().nothrow()
+        }
+        log.info("Installed Kotlin Language Server", { path: launcherScript })
+      }
+      if (!(await Bun.file(launcherScript).exists())) {
+        log.error(`Failed to locate the Kotlin LS launcher script in the installed directory: ${distPath}.`)
+        return
+      }
+      return {
+        process: spawn(launcherScript, ["--stdio"], {
+          cwd: root,
+        }),
       }
     },
   }
@@ -1436,6 +1533,24 @@ export namespace LSPServer {
     },
   }
 
+  export const Prisma: Info = {
+    id: "prisma",
+    extensions: [".prisma"],
+    root: NearestRoot(["schema.prisma", "prisma/schema.prisma", "prisma"], ["package.json"]),
+    async spawn(root) {
+      const prisma = Bun.which("prisma")
+      if (!prisma) {
+        log.info("prisma not found, please install prisma")
+        return
+      }
+      return {
+        process: spawn(prisma, ["language-server"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
   export const Dart: Info = {
     id: "dart",
     extensions: [".dart"],
@@ -1580,7 +1695,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info(`installed terraform-ls`, { bin })
@@ -1663,7 +1778,7 @@ export namespace LSPServer {
           if (!ok) return
         }
         if (ext === "tar.gz") {
-          await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).nothrow()
+          await $`tar -xzf ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
         }
 
         await fs.rm(tempPath, { force: true })
@@ -1676,7 +1791,7 @@ export namespace LSPServer {
         }
 
         if (platform !== "win32") {
-          await $`chmod +x ${bin}`.nothrow()
+          await $`chmod +x ${bin}`.quiet().nothrow()
         }
 
         log.info("installed texlab", { bin })
@@ -1741,6 +1856,170 @@ export namespace LSPServer {
       }
       return {
         process: spawn(gleam, ["lsp"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Clojure: Info = {
+    id: "clojure-lsp",
+    extensions: [".clj", ".cljs", ".cljc", ".edn"],
+    root: NearestRoot(["deps.edn", "project.clj", "shadow-cljs.edn", "bb.edn", "build.boot"]),
+    async spawn(root) {
+      let bin = Bun.which("clojure-lsp")
+      if (!bin && process.platform === "win32") {
+        bin = Bun.which("clojure-lsp.exe")
+      }
+      if (!bin) {
+        log.info("clojure-lsp not found, please install clojure-lsp first")
+        return
+      }
+      return {
+        process: spawn(bin, ["listen"], {
+          cwd: root,
+        }),
+      }
+    },
+  }
+
+  export const Nixd: Info = {
+    id: "nixd",
+    extensions: [".nix"],
+    root: async (file) => {
+      // First, look for flake.nix - the most reliable Nix project root indicator
+      const flakeRoot = await NearestRoot(["flake.nix"])(file)
+      if (flakeRoot && flakeRoot !== Instance.directory) return flakeRoot
+
+      // If no flake.nix, fall back to git repository root
+      if (Instance.worktree && Instance.worktree !== Instance.directory) return Instance.worktree
+
+      // Finally, use the instance directory as fallback
+      return Instance.directory
+    },
+    async spawn(root) {
+      const nixd = Bun.which("nixd")
+      if (!nixd) {
+        log.info("nixd not found, please install nixd first")
+        return
+      }
+      return {
+        process: spawn(nixd, [], {
+          cwd: root,
+          env: {
+            ...process.env,
+          },
+        }),
+      }
+    },
+  }
+
+  export const Tinymist: Info = {
+    id: "tinymist",
+    extensions: [".typ", ".typc"],
+    root: NearestRoot(["typst.toml"]),
+    async spawn(root) {
+      let bin = Bun.which("tinymist", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
+      if (!bin) {
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("downloading tinymist from GitHub releases")
+
+        const response = await fetch("https://api.github.com/repos/Myriad-Dreamin/tinymist/releases/latest")
+        if (!response.ok) {
+          log.error("Failed to fetch tinymist release info")
+          return
+        }
+
+        const release = (await response.json()) as {
+          tag_name?: string
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+
+        const platform = process.platform
+        const arch = process.arch
+
+        const tinymistArch = arch === "arm64" ? "aarch64" : "x86_64"
+        let tinymistPlatform: string
+        let ext: string
+
+        if (platform === "darwin") {
+          tinymistPlatform = "apple-darwin"
+          ext = "tar.gz"
+        } else if (platform === "win32") {
+          tinymistPlatform = "pc-windows-msvc"
+          ext = "zip"
+        } else {
+          tinymistPlatform = "unknown-linux-gnu"
+          ext = "tar.gz"
+        }
+
+        const assetName = `tinymist-${tinymistArch}-${tinymistPlatform}.${ext}`
+
+        const assets = release.assets ?? []
+        const asset = assets.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) {
+          log.error(`Could not find asset ${assetName} in tinymist release`)
+          return
+        }
+
+        const downloadResponse = await fetch(asset.browser_download_url)
+        if (!downloadResponse.ok) {
+          log.error("Failed to download tinymist")
+          return
+        }
+
+        const tempPath = path.join(Global.Path.bin, assetName)
+        await Bun.file(tempPath).write(downloadResponse)
+
+        if (ext === "zip") {
+          const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+            .then(() => true)
+            .catch((error) => {
+              log.error("Failed to extract tinymist archive", { error })
+              return false
+            })
+          if (!ok) return
+        } else {
+          await $`tar -xzf ${tempPath} --strip-components=1`.cwd(Global.Path.bin).quiet().nothrow()
+        }
+
+        await fs.rm(tempPath, { force: true })
+
+        bin = path.join(Global.Path.bin, "tinymist" + (platform === "win32" ? ".exe" : ""))
+
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to extract tinymist binary")
+          return
+        }
+
+        if (platform !== "win32") {
+          await $`chmod +x ${bin}`.quiet().nothrow()
+        }
+
+        log.info("installed tinymist", { bin })
+      }
+
+      return {
+        process: spawn(bin, { cwd: root }),
+      }
+    },
+  }
+
+  export const HLS: Info = {
+    id: "haskell-language-server",
+    extensions: [".hs", ".lhs"],
+    root: NearestRoot(["stack.yaml", "cabal.project", "hie.yaml", "*.cabal"]),
+    async spawn(root) {
+      const bin = Bun.which("haskell-language-server-wrapper")
+      if (!bin) {
+        log.info("haskell-language-server-wrapper not found, please install haskell-language-server")
+        return
+      }
+      return {
+        process: spawn(bin, ["--lsp"], {
           cwd: root,
         }),
       }
