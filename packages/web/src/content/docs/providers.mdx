@@ -122,6 +122,9 @@ To use Amazon Bedrock with OpenCode:
 
    # Option 3: Using Bedrock bearer token
    AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+
+   # Option 4: Using AWS shared credentials file (default profile)
+   AWS_SHARED_CREDENTIALS_FILE=XXX opencode
    ```
 
    Or add them to your bash profile:
@@ -183,7 +186,7 @@ To use Amazon Bedrock with OpenCode:
 
    #### Authentication Methods
    - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console
-   - **`AWS_PROFILE`**: Use named profiles from `~/.aws/credentials`. First configure with `aws configure --profile my-profile` or `aws sso login`
+   - **`AWS_PROFILE`**: Use named profiles from `AWS_SHARED_CREDENTIALS_FILE` (default: `~/.aws/credentials`). First configure with `aws configure --profile my-profile` or `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: Generate long-term API keys from the Amazon Bedrock console
 
    #### Authentication Precedence
