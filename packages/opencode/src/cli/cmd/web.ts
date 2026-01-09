@@ -4,6 +4,7 @@ import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import open from "open"
 import { networkInterfaces } from "os"
+import { normalizeBasePath } from "../../util/base-path"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -34,13 +35,16 @@ export const WebCommand = cmd({
   handler: async (args) => {
     const opts = await resolveNetworkOptions(args)
     const server = Server.listen(opts)
+    const basePath = normalizeBasePath(opts.basePath)
+    const pathSuffix = basePath ? `${basePath}/` : ""
+
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
 
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
-      const localhostUrl = `http://localhost:${server.port}`
+      const localhostUrl = `http://localhost:${server.port}${pathSuffix}`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
       // Show network IPs for remote access
@@ -50,7 +54,7 @@ export const WebCommand = cmd({
           UI.println(
             UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
             UI.Style.TEXT_NORMAL,
-            `http://${ip}:${server.port}`,
+            `http://${ip}:${server.port}${pathSuffix}`,
           )
         }
       }
@@ -59,11 +63,18 @@ export const WebCommand = cmd({
         UI.println(UI.Style.TEXT_INFO_BOLD + "  mDNS:              ", UI.Style.TEXT_NORMAL, "opencode.local")
       }
 
+      if (basePath) {
+        UI.println(UI.Style.TEXT_INFO_BOLD + "  Base path:         ", UI.Style.TEXT_NORMAL, basePath)
+      }
+
       // Open localhost in browser
       open(localhostUrl.toString()).catch(() => {})
     } else {
-      const displayUrl = server.url.toString()
+      const displayUrl = Server.url().toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
+      if (basePath) {
+        UI.println(UI.Style.TEXT_INFO_BOLD + "  Base path:         ", UI.Style.TEXT_NORMAL, basePath)
+      }
       open(displayUrl).catch(() => {})
     }
 
