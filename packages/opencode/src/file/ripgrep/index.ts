@@ -1,12 +1,13 @@
 import fs from "fs/promises"
 import { $ } from "bun"
 import z from "zod"
+
+import { lazy } from "@/util/lazy.ts"
 import { Log } from "@/util/log"
 
 import { rgBin } from "./binary"
-import { lazy } from "../../util/lazy"
-import { DEFAULT_TREE_LIMIT, buildTree, sortTreeInPlace, truncateBFS, renderTree } from "./tree"
 import { streamLines } from "./io"
+import { DEFAULT_TREE_LIMIT, buildTree, sortTreeInPlace, truncateBFS, renderTree } from "./tree"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
