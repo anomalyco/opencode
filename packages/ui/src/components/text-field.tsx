@@ -1,5 +1,5 @@
 import { TextField as Kobalte } from "@kobalte/core/text-field"
-import { createSignal, Show, splitProps } from "solid-js"
+import { createEffect, createSignal, onCleanup, Show, splitProps } from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { IconButton } from "./icon-button"
 import { Tooltip } from "./tooltip"
@@ -51,11 +51,16 @@ export function TextField(props: TextFieldProps) {
   ])
   const [copied, setCopied] = createSignal(false)
 
+  createEffect(() => {
+    if (!copied()) return
+    const timeout = setTimeout(() => setCopied(false), 2000)
+    onCleanup(() => clearTimeout(timeout))
+  })
+
   async function handleCopy() {
     const value = local.value ?? local.defaultValue ?? ""
     await navigator.clipboard.writeText(value)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
   }
 
   function handleClick() {
