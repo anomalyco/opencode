@@ -11,6 +11,7 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
+import { useFrecency } from "./frecency"
 
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
@@ -52,10 +53,13 @@ export type AutocompleteRef = {
 
 export type AutocompleteOption = {
   display: string
+  value?: string
   aliases?: string[]
   disabled?: boolean
   description?: string
+  isDirectory?: boolean
   onSelect?: () => void
+  path?: string
 }
 
 export function Autocomplete(props: {
@@ -75,6 +79,7 @@ export function Autocomplete(props: {
   const command = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const frecency = useFrecency()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -167,6 +172,10 @@ export function Autocomplete(props: {
       draft.parts.push(part)
       props.setExtmark(partIndex, extmarkId)
     })
+
+    if (part.type === "file" && part.source && part.source.type === "file") {
+      frecency.updateFrecency(part.source.path)
+    }
   }
 
   const [files] = createResource(
@@ -185,9 +194,19 @@ export function Autocomplete(props: {
 
       // Add file options
       if (!result.error && result.data) {
+        const sortedFiles = result.data.sort((a, b) => {
+          const aScore = frecency.getFrecency(a)
+          const bScore = frecency.getFrecency(b)
+          if (aScore !== bScore) return bScore - aScore
+          const aDepth = a.split("/").length
+          const bDepth = b.split("/").length
+          if (aDepth !== bDepth) return aDepth - bDepth
+          return a.localeCompare(b)
+        })
+
         const width = props.anchor().width - 4
         options.push(
-          ...result.data.map((item): AutocompleteOption => {
+          ...sortedFiles.map((item): AutocompleteOption => {
             let url = `file://${process.cwd()}/${item}`
             let filename = item
             if (lineRange && !item.endsWith("/")) {
@@ -200,8 +219,12 @@ export function Autocomplete(props: {
               url = urlObj.toString()
             }
 
+            const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
+              value: filename,
+              isDirectory: isDir,
+              path: item,
               onSelect: () => {
                 insertPart(filename, {
                   type: "file",
@@ -238,8 +261,10 @@ export function Autocomplete(props: {
     const width = props.anchor().width - 4
 
     for (const res of Object.values(sync.data.mcp_resource)) {
+      const text = `${res.name} (${res.uri})`
       options.push({
-        display: Locale.truncateMiddle(`${res.name} (${res.uri})`, width),
+        display: Locale.truncateMiddle(text, width),
+        value: text,
         description: res.description,
         onSelect: () => {
           insertPart(res.name, {
@@ -464,14 +489,20 @@ export function Autocomplete(props: {
     }
 
     const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
-      keys: [(obj) => removeLineRange(obj.display.trimEnd()), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+      keys: [
+        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
+        "description",
+        (obj) => obj.aliases?.join(" ") ?? "",
+      ],
       limit: 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
+        let score = objResults.score
         if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
-          return objResults.score * 2
+          score *= 2
         }
-        return objResults.score
+        const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
+        return score * (1 + frecencyScore)
       },
     })
 
@@ -509,6 +540,27 @@ export function Autocomplete(props: {
     if (!selected) return
     hide()
     selected.onSelect?.()
+  }
+
+  function expandDirectory() {
+    const selected = options()[store.selected]
+    if (!selected) return
+
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const displayText = selected.display.trimEnd()
+    const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText("@" + path)
+
+    setStore("selected", 0)
   }
 
   function show(mode: "@" | "/") {
@@ -575,8 +627,18 @@ export function Autocomplete(props: {
             e.preventDefault()
             return
           }
-          if (name === "return" || name === "tab") {
+          if (name === "return") {
             select()
+            e.preventDefault()
+            return
+          }
+          if (name === "tab") {
+            const selected = options()[store.selected]
+            if (selected?.isDirectory) {
+              expandDirectory()
+            } else {
+              select()
+            }
             e.preventDefault()
             return
           }
@@ -599,8 +661,10 @@ export function Autocomplete(props: {
   })
 
   const height = createMemo(() => {
-    if (options().length) return Math.min(10, options().length)
-    return 1
+    const count = options().length || 1
+    if (!store.visible) return Math.min(10, count)
+    positionTick()
+    return Math.min(10, count, Math.max(1, props.anchor().y))
   })
 
   let scroll: ScrollBoxRenderable

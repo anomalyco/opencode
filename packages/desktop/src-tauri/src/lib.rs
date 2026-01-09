@@ -1,14 +1,18 @@
+mod cli;
 mod window_customizer;
 
+use cli::{get_sidecar_path, install_cli, sync_cli};
+use futures::FutureExt;
 use std::{
     collections::VecDeque,
     net::{SocketAddr, TcpListener},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewUrl, WebviewWindow, path::BaseDirectory};
-use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
+use tauri::{
+    path::BaseDirectory, AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl,
+    WebviewWindow,
+};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
@@ -16,7 +20,26 @@ use tokio::net::TcpSocket;
 use crate::window_customizer::PinchZoomDisablePlugin;
 
 #[derive(Clone)]
-struct ServerState(Arc<Mutex<Option<CommandChild>>>);
+struct ServerState {
+    child: Arc<Mutex<Option<CommandChild>>>,
+    status: futures::future::Shared<tokio::sync::oneshot::Receiver<Result<(), String>>>,
+}
+
+impl ServerState {
+    pub fn new(
+        child: Option<CommandChild>,
+        status: tokio::sync::oneshot::Receiver<Result<(), String>>,
+    ) -> Self {
+        Self {
+            child: Arc::new(Mutex::new(child)),
+            status: status.shared(),
+        }
+    }
+
+    pub fn set_child(&self, child: Option<CommandChild>) {
+        *self.child.lock().unwrap() = child;
+    }
+}
 
 #[derive(Clone)]
 struct LogState(Arc<Mutex<VecDeque<String>>>);
@@ -31,7 +54,7 @@ fn kill_sidecar(app: AppHandle) {
     };
 
     let Some(server_state) = server_state
-        .0
+        .child
         .lock()
         .expect("Failed to acquire mutex lock")
         .take()
@@ -45,25 +68,6 @@ fn kill_sidecar(app: AppHandle) {
     println!("Killed server");
 }
 
-#[tauri::command]
-async fn copy_logs_to_clipboard(app: AppHandle) -> Result<(), String> {
-    let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
-
-    let logs = log_state
-        .0
-        .lock()
-        .map_err(|_| "Failed to acquire log lock")?;
-
-    let log_text = logs.iter().cloned().collect::<Vec<_>>().join("");
-
-    app.clipboard()
-        .write_text(log_text)
-        .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
 async fn get_logs(app: AppHandle) -> Result<String, String> {
     let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
 
@@ -73,6 +77,15 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
         .map_err(|_| "Failed to acquire log lock")?;
 
     Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
+}
+
+#[tauri::command]
+async fn ensure_server_started(state: State<'_, ServerState>) -> Result<(), String> {
+    state
+        .status
+        .clone()
+        .await
+        .map_err(|_| "Failed to get server status".to_string())?
 }
 
 fn get_sidecar_port() -> u32 {
@@ -116,11 +129,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
 
     #[cfg(not(target_os = "windows"))]
     let (mut rx, child) = {
-        let sidecar_path = tauri::utils::platform::current_exe()
-            .expect("Failed to get current exe")
-            .parent()
-            .expect("Failed to get parent dir")
-            .join("opencode-cli");
+        let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
         app.shell()
             .command(&shell)
@@ -130,7 +139,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
             .args([
                 "-il",
                 "-c",
-                &format!("{} serve --port={}", sidecar_path.display(), port),
+                &format!("\"{}\" serve --port={}", sidecar.display(), port),
             ])
             .spawn()
             .expect("Failed to spawn opencode")
@@ -189,6 +198,13 @@ pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Focus existing window when another instance is launched
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+                let _ = window.unminimize();
+            }
+        }))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -202,8 +218,8 @@ pub fn run() {
         .plugin(PinchZoomDisablePlugin)
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
-            copy_logs_to_clipboard,
-            get_logs
+            install_cli,
+            ensure_server_started
         ])
         .setup(move |app| {
             let app = app.handle().clone();
@@ -211,83 +227,94 @@ pub fn run() {
             // Initialize log state
             app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
 
-            tauri::async_runtime::spawn(async move {
-                let port = get_sidecar_port();
+            // Get port and create window immediately for faster perceived startup
+            let port = get_sidecar_port();
 
-                let should_spawn_sidecar = !is_server_running(port).await;
+            let primary_monitor = app.primary_monitor().ok().flatten();
+            let size = primary_monitor
+                .map(|m| m.size().to_logical(m.scale_factor()))
+                .unwrap_or(LogicalSize::new(1920, 1080));
 
-                let child = if should_spawn_sidecar {
-                    let child = spawn_sidecar(&app, port);
+            // Create window immediately with serverReady = false
+            let mut window_builder =
+                WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
+                    .title("OpenCode")
+                    .inner_size(size.width as f64, size.height as f64)
+                    .decorations(true)
+                    .zoom_hotkeys_enabled(true)
+                    .disable_drag_drop_handler()
+                    .initialization_script(format!(
+                        r#"
+                      window.__OPENCODE__ ??= {{}};
+                      window.__OPENCODE__.updaterEnabled = {updater_enabled};
+                      window.__OPENCODE__.port = {port};
+                    "#
+                    ));
 
-                    let timestamp = Instant::now();
-                    loop {
-                        if timestamp.elapsed() > Duration::from_secs(7) {
-                            let res = app.dialog()
-                              .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
-                              .title("Startup Failed")
-                              .buttons(MessageDialogButtons::OkCancelCustom("Copy Logs And Exit".to_string(), "Exit".to_string()))
-                              .blocking_show_with_result();
+            #[cfg(target_os = "macos")]
+            {
+                window_builder = window_builder
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true);
+            }
 
-                            if matches!(&res, MessageDialogResult::Custom(name) if name == "Copy Logs And Exit") {
-                                match copy_logs_to_clipboard(app.clone()).await {
-                                    Ok(()) => println!("Logs copied to clipboard successfully"),
-                                    Err(e) => println!("Failed to copy logs to clipboard: {}", e),
-                                }
+            let window = window_builder.build().expect("Failed to create window");
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            app.manage(ServerState::new(None, rx));
+
+            {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let should_spawn_sidecar = !is_server_running(port).await;
+
+                    let (child, res) = if should_spawn_sidecar {
+                        let child = spawn_sidecar(&app, port);
+
+                        let timestamp = Instant::now();
+                        let res = loop {
+                            if timestamp.elapsed() > Duration::from_secs(7) {
+                                break Err(format!(
+                                    "Failed to spawn OpenCode Server. Logs:\n{}",
+                                    get_logs(app.clone()).await.unwrap()
+                                ));
                             }
 
-                            app.exit(1);
-
-                            return;
-                        }
-
-                        tokio::time::sleep(Duration::from_millis(10)).await;
-
-                        if is_server_running(port).await {
-                            // give the server a little bit more time to warm up
                             tokio::time::sleep(Duration::from_millis(10)).await;
 
-                            break;
-                        }
+                            if is_server_running(port).await {
+                                // give the server a little bit more time to warm up
+                                tokio::time::sleep(Duration::from_millis(10)).await;
+
+                                break Ok(());
+                            }
+                        };
+
+                        println!("Server ready after {:?}", timestamp.elapsed());
+
+                        (Some(child), res)
+                    } else {
+                        (None, Ok(()))
+                    };
+
+                    app.state::<ServerState>().set_child(child);
+
+                    if res.is_ok() {
+                        let _ = window.eval("window.__OPENCODE__.serverReady = true;");
                     }
 
-                    println!("Server ready after {:?}", timestamp.elapsed());
+                    let _ = tx.send(res);
+                });
+            }
 
-                    Some(child)
-                } else {
-                    None
-                };
-
-                let primary_monitor = app.primary_monitor().ok().flatten();
-                let size = primary_monitor
-                    .map(|m| m.size().to_logical(m.scale_factor()))
-                    .unwrap_or(LogicalSize::new(1920, 1080));
-
-                let mut window_builder =
-                    WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                        .title("OpenCode")
-                        .inner_size(size.width as f64, size.height as f64)
-                        .decorations(true)
-                        .zoom_hotkeys_enabled(true)
-                        .disable_drag_drop_handler()
-                        .initialization_script(format!(
-                            r#"
-                          window.__OPENCODE__ ??= {{}};
-                          window.__OPENCODE__.updaterEnabled = {updater_enabled};
-                          window.__OPENCODE__.port = {port};
-                        "#
-                        ));
-
-                #[cfg(target_os = "macos")]
-                {
-                    window_builder = window_builder
-                        .title_bar_style(tauri::TitleBarStyle::Overlay)
-                        .hidden_title(true);
-                }
-
-                window_builder.build().expect("Failed to create window");
-
-                app.manage(ServerState(Arc::new(Mutex::new(child))));
-            });
+            {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = sync_cli(app) {
+                        eprintln!("Failed to sync CLI: {e}");
+                    }
+                });
+            }
 
             Ok(())
         });
