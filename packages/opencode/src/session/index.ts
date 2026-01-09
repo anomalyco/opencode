@@ -151,12 +151,19 @@ export namespace Session {
         directory: Instance.directory,
       })
       const msgs = await messages({ sessionID: input.sessionID })
+      const idMap = new Map<string, string>()
+
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
+        const newID = Identifier.ascending("message")
+        idMap.set(msg.info.id, newID)
+
+        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
         const cloned = await updateMessage({
           ...msg.info,
           sessionID: session.id,
-          id: Identifier.ascending("message"),
+          id: newID,
+          ...(parentID && { parentID }),
         })
 
         for (const part of msg.parts) {
