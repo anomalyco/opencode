@@ -11,6 +11,39 @@ import { useCommandDialog } from "@tui/component/dialog-command"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "@/util/locale"
 import type { PromptInfo } from "./history"
+import { useFrecency } from "./frecency"
+
+function removeLineRange(input: string) {
+  const hashIndex = input.lastIndexOf("#")
+  return hashIndex !== -1 ? input.substring(0, hashIndex) : input
+}
+
+function extractLineRange(input: string) {
+  const hashIndex = input.lastIndexOf("#")
+  if (hashIndex === -1) {
+    return { baseQuery: input }
+  }
+
+  const baseName = input.substring(0, hashIndex)
+  const linePart = input.substring(hashIndex + 1)
+  const lineMatch = linePart.match(/^(\d+)(?:-(\d*))?$/)
+
+  if (!lineMatch) {
+    return { baseQuery: baseName }
+  }
+
+  const startLine = Number(lineMatch[1])
+  const endLine = lineMatch[2] && startLine < Number(lineMatch[2]) ? Number(lineMatch[2]) : undefined
+
+  return {
+    lineRange: {
+      baseName,
+      startLine,
+      endLine,
+    },
+    baseQuery: baseName,
+  }
+}
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
@@ -20,10 +53,13 @@ export type AutocompleteRef = {
 
 export type AutocompleteOption = {
   display: string
+  value?: string
   aliases?: string[]
   disabled?: boolean
   description?: string
+  isDirectory?: boolean
   onSelect?: () => void
+  path?: string
 }
 
 export function Autocomplete(props: {
@@ -43,6 +79,7 @@ export function Autocomplete(props: {
   const command = useCommandDialog()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const frecency = useFrecency()
 
   const [store, setStore] = createStore({
     index: 0,
@@ -135,6 +172,10 @@ export function Autocomplete(props: {
       draft.parts.push(part)
       props.setExtmark(partIndex, extmarkId)
     })
+
+    if (part.type === "file" && part.source && part.source.type === "file") {
+      frecency.updateFrecency(part.source.path)
+    }
   }
 
   const [files] = createResource(
@@ -142,26 +183,54 @@ export function Autocomplete(props: {
     async (query) => {
       if (!store.visible || store.visible === "/") return []
 
+      const { lineRange, baseQuery } = extractLineRange(query ?? "")
+
       // Get files from SDK
       const result = await sdk.client.find.files({
-        query: query ?? "",
+        query: baseQuery,
       })
 
       const options: AutocompleteOption[] = []
 
       // Add file options
       if (!result.error && result.data) {
+        const sortedFiles = result.data.sort((a, b) => {
+          const aScore = frecency.getFrecency(a)
+          const bScore = frecency.getFrecency(b)
+          if (aScore !== bScore) return bScore - aScore
+          const aDepth = a.split("/").length
+          const bDepth = b.split("/").length
+          if (aDepth !== bDepth) return aDepth - bDepth
+          return a.localeCompare(b)
+        })
+
         const width = props.anchor().width - 4
         options.push(
-          ...result.data.map(
-            (item): AutocompleteOption => ({
-              display: Locale.truncateMiddle(item, width),
+          ...sortedFiles.map((item): AutocompleteOption => {
+            let url = `file://${process.cwd()}/${item}`
+            let filename = item
+            if (lineRange && !item.endsWith("/")) {
+              filename = `${item}#${lineRange.startLine}${lineRange.endLine ? `-${lineRange.endLine}` : ""}`
+              const urlObj = new URL(url)
+              urlObj.searchParams.set("start", String(lineRange.startLine))
+              if (lineRange.endLine !== undefined) {
+                urlObj.searchParams.set("end", String(lineRange.endLine))
+              }
+              url = urlObj.toString()
+            }
+
+            const isDir = item.endsWith("/")
+            return {
+              display: Locale.truncateMiddle(filename, width),
+              value: filename,
+              isDirectory: isDir,
+              path: item,
               onSelect: () => {
-                insertPart(item, {
+                insertPart(filename, {
                   type: "file",
                   mime: "text/plain",
-                  filename: item,
-                  url: `file://${process.cwd()}/${item}`,
+                  filename,
+                  url,
                   source: {
                     type: "file",
                     text: {
@@ -173,8 +242,8 @@ export function Autocomplete(props: {
                   },
                 })
               },
-            }),
-          ),
+            }
+          }),
         )
       }
 
@@ -184,6 +253,42 @@ export function Autocomplete(props: {
       initialValue: [],
     },
   )
+
+  const mcpResources = createMemo(() => {
+    if (!store.visible || store.visible === "/") return []
+
+    const options: AutocompleteOption[] = []
+    const width = props.anchor().width - 4
+
+    for (const res of Object.values(sync.data.mcp_resource)) {
+      const text = `${res.name} (${res.uri})`
+      options.push({
+        display: Locale.truncateMiddle(text, width),
+        value: text,
+        description: res.description,
+        onSelect: () => {
+          insertPart(res.name, {
+            type: "file",
+            mime: res.mimeType ?? "text/plain",
+            filename: res.name,
+            url: res.uri,
+            source: {
+              type: "resource",
+              text: {
+                start: 0,
+                end: 0,
+                value: "",
+              },
+              clientName: res.client,
+              uri: res.uri,
+            },
+          })
+        },
+      })
+    }
+
+    return options
+  })
 
   const agents = createMemo(() => {
     const agents = sync.data.agent
@@ -213,7 +318,7 @@ export function Autocomplete(props: {
     const s = session()
     for (const command of sync.data.command) {
       results.push({
-        display: "/" + command.name,
+        display: "/" + command.name + (command.mcp ? " (MCP)" : ""),
         description: command.description,
         onSelect: () => {
           const newText = "/" + command.name + " "
@@ -364,23 +469,43 @@ export function Autocomplete(props: {
     }))
   })
 
-  const options = createMemo(() => {
+  const options = createMemo((prev: AutocompleteOption[] | undefined) => {
+    const filesValue = files()
+    const agentsValue = agents()
+    const commandsValue = commands()
+
     const mixed: AutocompleteOption[] = (
-      store.visible === "@" ? [...agents(), ...(files() || [])] : [...commands()]
+      store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
     ).filter((x) => x.disabled !== true)
+
     const currentFilter = filter()
-    if (!currentFilter) return mixed
-    const result = fuzzysort.go(currentFilter, mixed, {
-      keys: [(obj) => obj.display.trimEnd(), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+
+    if (!currentFilter) {
+      return mixed
+    }
+
+    if (files.loading && prev && prev.length > 0) {
+      return prev
+    }
+
+    const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
+      keys: [
+        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
+        "description",
+        (obj) => obj.aliases?.join(" ") ?? "",
+      ],
       limit: 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
+        let score = objResults.score
         if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
-          return objResults.score * 2
+          score *= 2
         }
-        return objResults.score
+        const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
+        return score * (1 + frecencyScore)
       },
     })
+
     return result.map((arr) => arr.obj)
   })
 
@@ -415,6 +540,27 @@ export function Autocomplete(props: {
     if (!selected) return
     hide()
     selected.onSelect?.()
+  }
+
+  function expandDirectory() {
+    const selected = options()[store.selected]
+    if (!selected) return
+
+    const input = props.input()
+    const currentCursorOffset = input.cursorOffset
+
+    const displayText = selected.display.trimEnd()
+    const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
+
+    input.cursorOffset = store.index
+    const startCursor = input.logicalCursor
+    input.cursorOffset = currentCursorOffset
+    const endCursor = input.logicalCursor
+
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText("@" + path)
+
+    setStore("selected", 0)
   }
 
   function show(mode: "@" | "/") {
@@ -481,8 +627,18 @@ export function Autocomplete(props: {
             e.preventDefault()
             return
           }
-          if (name === "return" || name === "tab") {
+          if (name === "return") {
             select()
+            e.preventDefault()
+            return
+          }
+          if (name === "tab") {
+            const selected = options()[store.selected]
+            if (selected?.isDirectory) {
+              expandDirectory()
+            } else {
+              select()
+            }
             e.preventDefault()
             return
           }
@@ -505,8 +661,10 @@ export function Autocomplete(props: {
   })
 
   const height = createMemo(() => {
-    if (options().length) return Math.min(10, options().length)
-    return 1
+    const count = options().length || 1
+    if (!store.visible) return Math.min(10, count)
+    positionTick()
+    return Math.min(10, count, Math.max(1, props.anchor().y))
   })
 
   let scroll: ScrollBoxRenderable

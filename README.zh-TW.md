@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/sst/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/sst/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
@@ -28,10 +28,11 @@ curl -fsSL https://opencode.ai/install | bash
 npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
 scoop bucket add extras; scoop install extras/opencode  # Windows
 choco install opencode             # Windows
-brew install opencode              # macOS 與 Linux
+brew install anomalyco/tap/opencode # macOS 與 Linux（推薦，始終保持最新）
+brew install opencode              # macOS 與 Linux（官方 brew formula，更新頻率較低）
 paru -S opencode-bin               # Arch Linux
-mise use -g github:sst/opencode    # 任何作業系統
-nix run nixpkgs#opencode           # 或使用 github:sst/opencode 以取得最新開發分支
+mise use -g github:anomalyco/opencode    # 任何作業系統
+nix run nixpkgs#opencode           # 或使用 github:anomalyco/opencode 以取得最新開發分支
 ```
 
 > [!TIP]
@@ -39,7 +40,7 @@ nix run nixpkgs#opencode           # 或使用 github:sst/opencode 以取得最�
 
 ### 桌面應用程式 (BETA)
 
-OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/sst/opencode/releases) 或 [opencode.ai/download](https://opencode.ai/download) 下載。
+OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (releases page)](https://github.com/anomalyco/opencode/releases) 或 [opencode.ai/download](https://opencode.ai/download) 下載。
 
 | 平台                  | 下載連結                              |
 | --------------------- | ------------------------------------- |

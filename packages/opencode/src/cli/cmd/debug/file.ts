@@ -6,6 +6,7 @@ import { Ripgrep } from "@/file/ripgrep"
 
 const FileSearchCommand = cmd({
   command: "search <query>",
+  describe: "search files by query",
   builder: (yargs) =>
     yargs.positional("query", {
       type: "string",
@@ -22,6 +23,7 @@ const FileSearchCommand = cmd({
 
 const FileReadCommand = cmd({
   command: "read <path>",
+  describe: "read file contents as JSON",
   builder: (yargs) =>
     yargs.positional("path", {
       type: "string",
@@ -38,6 +40,7 @@ const FileReadCommand = cmd({
 
 const FileStatusCommand = cmd({
   command: "status",
+  describe: "show file status information",
   builder: (yargs) => yargs,
   async handler() {
     await bootstrap(process.cwd(), async () => {
@@ -49,6 +52,7 @@ const FileStatusCommand = cmd({
 
 const FileListCommand = cmd({
   command: "list <path>",
+  describe: "list files in a directory",
   builder: (yargs) =>
     yargs.positional("path", {
       type: "string",
@@ -65,6 +69,7 @@ const FileListCommand = cmd({
 
 const FileTreeCommand = cmd({
   command: "tree [dir]",
+  describe: "show directory tree",
   builder: (yargs) =>
     yargs.positional("dir", {
       type: "string",
@@ -79,6 +84,7 @@ const FileTreeCommand = cmd({
 
 export const FileCommand = cmd({
   command: "file",
+  describe: "file system debugging utilities",
   builder: (yargs) =>
     yargs
       .command(FileReadCommand)

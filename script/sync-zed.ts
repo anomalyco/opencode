@@ -4,16 +4,19 @@ import { $ } from "bun"
 import { tmpdir } from "os"
 import { join } from "path"
 
-const FORK_REPO = "sst/zed-extensions"
+const FORK_REPO = "anomalyco/zed-extensions"
 const UPSTREAM_REPO = "zed-industries/extensions"
 const EXTENSION_NAME = "opencode"
 
 async function main() {
   const version = process.argv[2]
-  if (!version) throw new Error("Version argument required: bun script/sync-zed.ts v1.0.52")
+  if (!version) throw new Error("Version argument required, ex: bun script/sync-zed.ts v1.0.52")
 
-  const token = process.env.GITHUB_TOKEN
-  if (!token) throw new Error("GITHUB_TOKEN environment variable required")
+  const token = process.env.ZED_EXTENSIONS_PAT
+  if (!token) throw new Error("ZED_EXTENSIONS_PAT environment variable required")
+
+  const prToken = process.env.ZED_PR_PAT
+  if (!prToken) throw new Error("ZED_PR_PAT environment variable required")
 
   const cleanVersion = version.replace(/^v/, "")
   console.log(`📦 Syncing Zed extension for version ${cleanVersion}`)
@@ -39,17 +42,17 @@ async function main() {
   process.chdir(workDir)
 
   // Configure git identity
-  await $`git config user.name "Dax Raad"`
-  await $`git config user.email "d@ironbay.co"`
+  await $`git config user.name "Aiden Cline"`
+  await $`git config user.email "63023139+rekram1-node@users.noreply.github.com "`
 
-  // Sync fork with upstream
+  // Sync fork with upstream (force reset to match exactly)
   console.log(`🔄 Syncing fork with upstream...`)
   await $`git remote add upstream https://github.com/${UPSTREAM_REPO}.git`
   await $`git fetch upstream`
   await $`git checkout main`
-  await $`git merge upstream/main --ff-only`
-  await $`git push origin main`
-  console.log(`✅ Fork synced`)
+  await $`git reset --hard upstream/main`
+  await $`git push origin main --force`
+  console.log(`✅ Fork synced (force reset to upstream)`)
 
   // Create a new branch
   const branchName = `update-${EXTENSION_NAME}-${cleanVersion}`
@@ -106,9 +109,17 @@ async function main() {
   await $`git push https://x-access-token:${token}@github.com/${FORK_REPO}.git ${branchName}`
 
   console.log(`📬 Creating pull request...`)
-  const prUrl =
-    await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Updating OpenCode extension to v${cleanVersion}"`.text()
+  const prResult =
+    await $`gh pr create --repo ${UPSTREAM_REPO} --base main --head ${FORK_REPO.split("/")[0]}:${branchName} --title "Update ${EXTENSION_NAME} to v${cleanVersion}" --body "Updating OpenCode extension to v${cleanVersion}"`
+      .env({ ...process.env, GH_TOKEN: prToken })
+      .nothrow()
 
+  if (prResult.exitCode !== 0) {
+    console.error("stderr:", prResult.stderr.toString())
+    throw new Error(`Failed with exit code ${prResult.exitCode}`)
+  }
+
+  const prUrl = prResult.stdout.toString().trim()
   console.log(`✅ Pull request created: ${prUrl}`)
   console.log(`🎉 Done!`)
 }
