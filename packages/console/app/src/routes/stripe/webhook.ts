@@ -1,8 +1,7 @@
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import type { APIEvent } from "@solidjs/start/server"
 import { and, Database, eq, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { BillingTable, PaymentTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
+import { BillingTable, PaymentTable, SubscriptionTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
@@ -380,7 +379,7 @@ export async function POST(input: APIEvent) {
       await Database.transaction(async (tx) => {
         await tx.update(BillingTable).set({ subscriptionID: null }).where(eq(BillingTable.workspaceID, workspaceID))
 
-        await tx.update(UserTable).set({ timeSubscribed: null }).where(eq(UserTable.workspaceID, workspaceID))
+        await tx.delete(SubscriptionTable).where(eq(SubscriptionTable.workspaceID, workspaceID))
       })
     }
   })()

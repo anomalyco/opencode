@@ -30,6 +30,20 @@ export const BillingTable = mysqlTable(
   ],
 )
 
+export const SubscriptionTable = mysqlTable(
+  "subscription",
+  {
+    ...workspaceColumns,
+    ...timestamps,
+    userID: ulid("user_id").notNull(),
+    rollingUsage: bigint("rolling_usage", { mode: "number" }),
+    fixedUsage: bigint("fixed_usage", { mode: "number" }),
+    timeRollingUpdated: utc("time_rolling_updated"),
+    timeFixedUpdated: utc("time_fixed_updated"),
+  },
+  (table) => [...workspaceIndexes(table), uniqueIndex("workspace_user_id").on(table.workspaceID, table.userID)],
+)
+
 export const PaymentTable = mysqlTable(
   "payment",
   {

@@ -11,6 +11,7 @@ export namespace Identifier {
     model: "mod",
     payment: "pay",
     provider: "prv",
+    subscription: "sub",
     usage: "usg",
     user: "usr",
     workspace: "wrk",

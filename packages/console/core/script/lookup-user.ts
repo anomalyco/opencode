@@ -1,8 +1,11 @@
-import { Database, eq, sql, inArray } from "../src/drizzle/index.js"
+import { Database, and, eq, sql } from "../src/drizzle/index.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable, UsageTable } from "../src/schema/billing.sql.js"
+import { BillingTable, PaymentTable, SubscriptionTable, UsageTable } from "../src/schema/billing.sql.js"
 import { WorkspaceTable } from "../src/schema/workspace.sql.js"
+import { BlackData } from "../src/black.js"
+import { centsToMicroCents } from "../src/util/price.js"
+import { getWeekBounds } from "../src/util/date.js"
 
 // get input from command line
 const identifier = process.argv[2]
@@ -55,6 +58,44 @@ async function printWorkspace(workspaceID: string) {
   )
 
   printHeader(`Workspace "${workspace.name}" (${workspace.id})`)
+
+  await printTable("Users", (tx) =>
+    tx
+      .select({
+        authEmail: AuthTable.subject,
+        inviteEmail: UserTable.email,
+        role: UserTable.role,
+        timeSeen: UserTable.timeSeen,
+        monthlyLimit: UserTable.monthlyLimit,
+        monthlyUsage: UserTable.monthlyUsage,
+        timeDeleted: UserTable.timeDeleted,
+        fixedUsage: SubscriptionTable.fixedUsage,
+        rollingUsage: SubscriptionTable.rollingUsage,
+        timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
+        timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
+        timeSubscriptionCreated: SubscriptionTable.timeCreated,
+      })
+      .from(UserTable)
+      .leftJoin(AuthTable, and(eq(UserTable.accountID, AuthTable.accountID), eq(AuthTable.provider, "email")))
+      .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
+      .where(eq(UserTable.workspaceID, workspace.id))
+      .then((rows) =>
+        rows.map((row) => {
+          const subStatus = getSubscriptionStatus(row)
+          return {
+            email: (row.timeDeleted ? "❌ " : "") + (row.authEmail ?? row.inviteEmail),
+            role: row.role,
+            timeSeen: formatDate(row.timeSeen),
+            monthly: formatMonthlyUsage(row.monthlyUsage, row.monthlyLimit),
+            subscribed: formatDate(row.timeSubscriptionCreated),
+            subWeekly: subStatus.weekly,
+            subRolling: subStatus.rolling,
+            rateLimited: subStatus.rateLimited,
+            retryIn: subStatus.retryIn,
+          }
+        }),
+      ),
+  )
 
   await printTable("Billing", (tx) =>
     tx
@@ -122,6 +163,80 @@ async function printWorkspace(workspaceID: string) {
         })),
       ),
   )
+}
+
+function formatMicroCents(value: number | null | undefined) {
+  if (value === null || value === undefined) return null
+  return `$${(value / 100000000).toFixed(2)}`
+}
+
+function formatDate(value: Date | null | undefined) {
+  if (!value) return null
+  return value.toISOString().split("T")[0]
+}
+
+function formatMonthlyUsage(usage: number | null | undefined, limit: number | null | undefined) {
+  const usageText = formatMicroCents(usage) ?? "$0.00"
+  if (limit === null || limit === undefined) return `${usageText} / no limit`
+  return `${usageText} / $${limit.toFixed(2)}`
+}
+
+function formatRetryTime(seconds: number) {
+  const days = Math.floor(seconds / 86400)
+  if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.ceil((seconds % 3600) / 60)
+  if (hours >= 1) return `${hours}hr ${minutes}min`
+  return `${minutes}min`
+}
+
+function getSubscriptionStatus(row: {
+  timeSubscriptionCreated: Date | null
+  fixedUsage: number | null
+  rollingUsage: number | null
+  timeFixedUpdated: Date | null
+  timeRollingUpdated: Date | null
+}) {
+  if (!row.timeSubscriptionCreated) {
+    return { weekly: null, rolling: null, rateLimited: null, retryIn: null }
+  }
+
+  const black = BlackData.get()
+  const now = new Date()
+  const week = getWeekBounds(now)
+
+  const fixedLimit = black.fixedLimit ? centsToMicroCents(black.fixedLimit * 100) : null
+  const rollingLimit = black.rollingLimit ? centsToMicroCents(black.rollingLimit * 100) : null
+  const rollingWindowMs = (black.rollingWindow ?? 5) * 3600 * 1000
+
+  // Calculate current weekly usage (reset if outside current week)
+  const currentWeekly =
+    row.fixedUsage && row.timeFixedUpdated && row.timeFixedUpdated >= week.start ? row.fixedUsage : 0
+
+  // Calculate current rolling usage
+  const windowStart = new Date(now.getTime() - rollingWindowMs)
+  const currentRolling =
+    row.rollingUsage && row.timeRollingUpdated && row.timeRollingUpdated >= windowStart ? row.rollingUsage : 0
+
+  // Check rate limiting
+  const isWeeklyLimited = fixedLimit !== null && currentWeekly >= fixedLimit
+  const isRollingLimited = rollingLimit !== null && currentRolling >= rollingLimit
+
+  let retryIn: string | null = null
+  if (isWeeklyLimited) {
+    const retryAfter = Math.ceil((week.end.getTime() - now.getTime()) / 1000)
+    retryIn = formatRetryTime(retryAfter)
+  } else if (isRollingLimited && row.timeRollingUpdated) {
+    const retryAfter = Math.ceil((row.timeRollingUpdated.getTime() + rollingWindowMs - now.getTime()) / 1000)
+    retryIn = formatRetryTime(retryAfter)
+  }
+
+  return {
+    weekly: fixedLimit !== null ? `${formatMicroCents(currentWeekly)} / $${black.fixedLimit}` : null,
+    rolling: rollingLimit !== null ? `${formatMicroCents(currentRolling)} / $${black.rollingLimit}` : null,
+    rateLimited: isWeeklyLimited || isRollingLimited ? "yes" : "no",
+    retryIn,
+  }
 }
 
 function printHeader(title: string) {

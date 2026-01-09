@@ -1,13 +1,15 @@
 import { Billing } from "../src/billing.js"
-import { Database, eq, and, sql } from "../src/drizzle/index.js"
-import { AuthTable } from "../src/schema/auth.sql.js"
+import { and, Database, eq, isNull, sql } from "../src/drizzle/index.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable } from "../src/schema/billing.sql.js"
+import { BillingTable, PaymentTable, SubscriptionTable } from "../src/schema/billing.sql.js"
 import { Identifier } from "../src/identifier.js"
 import { centsToMicroCents } from "../src/util/price.js"
+import { AuthTable } from "../src/schema/auth.sql.js"
 
 const workspaceID = process.argv[2]
 const email = process.argv[3]
+
+console.log(`Onboarding workspace ${workspaceID} for email ${email}`)
 
 if (!workspaceID || !email) {
   console.error("Usage: bun onboard-zen-black.ts <workspaceID> <email>")
@@ -15,21 +17,19 @@ if (!workspaceID || !email) {
 }
 
 // Look up the Stripe customer by email
-const customers = await Billing.stripe().customers.list({ email, limit: 1 })
-const customer = customers.data[0]
-if (!customer) {
+const customers = await Billing.stripe().customers.list({ email, limit: 10, expand: ["data.subscriptions"] })
+if (!customers.data) {
   console.error(`Error: No Stripe customer found for email ${email}`)
   process.exit(1)
 }
-const customerID = customer.id
-
-// Get the subscription id
-const subscriptions = await Billing.stripe().subscriptions.list({ customer: customerID, limit: 1 })
-const subscription = subscriptions.data[0]
-if (!subscription) {
-  console.error(`Error: Customer ${customerID} does not have a subscription`)
+const customer = customers.data.find((c) => c.subscriptions?.data[0]?.items.data[0]?.price.unit_amount === 20000)
+if (!customer) {
+  console.error(`Error: No Stripe customer found for email ${email} with $200 subscription`)
   process.exit(1)
 }
+
+const customerID = customer.id
+const subscription = customer.subscriptions!.data[0]
 const subscriptionID = subscription.id
 
 // Validate the subscription is $200
@@ -90,29 +90,21 @@ const paymentMethod = paymentMethodID ? await Billing.stripe().paymentMethods.re
 const paymentMethodLast4 = paymentMethod?.card?.last4 ?? null
 const paymentMethodType = paymentMethod?.type ?? null
 
-// Look up the user by email via AuthTable
-const auth = await Database.use((tx) =>
+// Look up the user in the workspace
+const users = await Database.use((tx) =>
   tx
-    .select({ accountID: AuthTable.accountID })
-    .from(AuthTable)
-    .where(and(eq(AuthTable.provider, "email"), eq(AuthTable.subject, email)))
-    .then((rows) => rows[0]),
+    .select({ id: UserTable.id, email: AuthTable.subject })
+    .from(UserTable)
+    .innerJoin(AuthTable, and(eq(AuthTable.accountID, UserTable.accountID), eq(AuthTable.provider, "email")))
+    .where(and(eq(UserTable.workspaceID, workspaceID), isNull(UserTable.timeDeleted))),
 )
-if (!auth) {
-  console.error(`Error: No user found with email ${email}`)
+if (users.length === 0) {
+  console.error(`Error: No users found in workspace ${workspaceID}`)
   process.exit(1)
 }
-
-// Look up the user in the workspace
-const user = await Database.use((tx) =>
-  tx
-    .select({ id: UserTable.id })
-    .from(UserTable)
-    .where(and(eq(UserTable.workspaceID, workspaceID), eq(UserTable.accountID, auth.accountID)))
-    .then((rows) => rows[0]),
-)
+const user = users.length === 1 ? users[0] : users.find((u) => u.email === email)
 if (!user) {
-  console.error(`Error: User with email ${email} is not a member of workspace ${workspaceID}`)
+  console.error(`Error: User with email ${email} not found in workspace ${workspaceID}`)
   process.exit(1)
 }
 
@@ -136,13 +128,12 @@ await Database.transaction(async (tx) => {
     })
     .where(eq(BillingTable.workspaceID, workspaceID))
 
-  // Set current time as timeSubscribed on user
-  await tx
-    .update(UserTable)
-    .set({
-      timeSubscribed: sql`now()`,
-    })
-    .where(eq(UserTable.id, user.id))
+  // Create a row in subscription table
+  await tx.insert(SubscriptionTable).values({
+    workspaceID,
+    id: Identifier.create("subscription"),
+    userID: user.id,
+  })
 
   // Create a row in payments table
   await tx.insert(PaymentTable).values({
