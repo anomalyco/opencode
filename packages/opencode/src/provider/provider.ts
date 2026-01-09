@@ -36,6 +36,7 @@ import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { ProviderTransform } from "./transform"
+import { ClaudeCodeCLI } from "./claude-code-cli"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -438,6 +439,16 @@ export namespace Provider {
         },
       }
     },
+    [ClaudeCodeCLI.PROVIDER_ID]: async () => {
+      // Check if the claude CLI is available
+      const isAvailable = await ClaudeCodeCLI.isAvailable()
+      return {
+        autoload: isAvailable,
+        async getModel(_sdk: any, modelID: string, _options?: Record<string, any>) {
+          return ClaudeCodeCLI.createLanguageModel(modelID)
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -641,6 +652,96 @@ export namespace Provider {
         })),
       }
     }
+
+    // Add Claude Code CLI provider - uses the claude CLI binary for subscription auth
+    const claudeCodeCliProvider: Info = {
+      id: ClaudeCodeCLI.PROVIDER_ID,
+      name: "Claude Code CLI",
+      source: "custom",
+      env: [],
+      options: {},
+      models: {
+        sonnet: {
+          id: "sonnet",
+          providerID: ClaudeCodeCLI.PROVIDER_ID,
+          name: "Claude Sonnet (via CLI)",
+          family: "claude",
+          api: {
+            id: "sonnet",
+            url: "",
+            npm: "",
+          },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 3, output: 15, cache: { read: 0.3, write: 3.75 } },
+          limit: { context: 200000, output: 16384 },
+          release_date: "2025-05-14",
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: true,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: true },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+        opus: {
+          id: "opus",
+          providerID: ClaudeCodeCLI.PROVIDER_ID,
+          name: "Claude Opus (via CLI)",
+          family: "claude",
+          api: {
+            id: "opus",
+            url: "",
+            npm: "",
+          },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 15, output: 75, cache: { read: 1.5, write: 18.75 } },
+          limit: { context: 200000, output: 32768 },
+          release_date: "2025-11-01",
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: true,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: true },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+        haiku: {
+          id: "haiku",
+          providerID: ClaudeCodeCLI.PROVIDER_ID,
+          name: "Claude Haiku (via CLI)",
+          family: "claude",
+          api: {
+            id: "haiku",
+            url: "",
+            npm: "",
+          },
+          status: "active",
+          headers: {},
+          options: {},
+          cost: { input: 0.8, output: 4, cache: { read: 0.08, write: 1 } },
+          limit: { context: 200000, output: 8192 },
+          release_date: "2025-10-01",
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: true,
+            toolcall: true,
+            input: { text: true, audio: false, image: true, video: false, pdf: true },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+        },
+      },
+    }
+    database[ClaudeCodeCLI.PROVIDER_ID] = claudeCodeCliProvider
 
     function mergeProvider(providerID: string, provider: Partial<Info>) {
       const existing = providers[providerID]
