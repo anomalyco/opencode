@@ -1,6 +1,6 @@
 import { realpathSync } from "fs"
 import { exists } from "fs/promises"
-import { dirname, join, relative } from "path"
+import { basename, dirname, isAbsolute, join, relative, resolve } from "path"
 
 export namespace Filesystem {
   /**
@@ -23,7 +23,27 @@ export namespace Filesystem {
   }
 
   export function contains(parent: string, child: string) {
-    return !relative(parent, child).startsWith("..")
+    const realpath = (p: string) => {
+      try {
+        return realpathSync.native?.(p) ?? realpathSync(p)
+      } catch {
+        return resolve(p)
+      }
+    }
+
+    const parentReal = realpath(parent)
+    const childAbsolute = isAbsolute(child) ? child : resolve(parent, child)
+
+    let childReal: string
+    try {
+      childReal = realpath(childAbsolute)
+    } catch {
+      const dirReal = realpath(dirname(childAbsolute))
+      childReal = join(dirReal, basename(childAbsolute))
+    }
+
+    const rel = relative(parentReal, childReal)
+    return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))
   }
 
   export async function findUp(target: string, start: string, stop?: string) {

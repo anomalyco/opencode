@@ -1,4 +1,5 @@
 import { test, expect, describe } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Filesystem } from "../../src/util/filesystem"
 import { File } from "../../src/file"
@@ -27,6 +28,23 @@ describe("Filesystem.contains", () => {
   test("handles prefix collision edge cases", () => {
     expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
     expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
+  })
+
+  test("blocks symlinks escaping project", async () => {
+    if (process.platform === "win32") {
+      expect(true).toBe(true)
+      return
+    }
+
+    await using tmp = await tmpdir()
+    await using outside = await tmpdir()
+
+    const link = path.join(tmp.path, "link")
+    const target = path.join(outside.path, "outside.txt")
+    await fs.writeFile(target, "secret")
+    await fs.symlink(target, link)
+
+    expect(Filesystem.contains(tmp.path, link)).toBe(false)
   })
 })
 
@@ -80,6 +98,29 @@ describe("File.read path traversal protection", () => {
       fn: async () => {
         const result = await File.read("valid.txt")
         expect(result.content).toBe("valid content")
+      },
+    })
+  })
+
+  test("rejects symlink that points outside project", async () => {
+    if (process.platform === "win32") {
+      expect(true).toBe(true)
+      return
+    }
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await using external = await tmpdir()
+        const target = path.join(external.path, "outside.txt")
+        await fs.writeFile(target, "external")
+        await fs.symlink(target, path.join(dir, "link.txt"))
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await expect(File.read("link.txt")).rejects.toThrow("Access denied: path escapes project directory")
       },
     })
   })
