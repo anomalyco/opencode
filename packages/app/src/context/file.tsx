@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup } from "solid-js"
+import { createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { FileContent } from "@opencode-ai/sdk/v2"
@@ -82,8 +82,106 @@ function normalizeSelectedLines(range: SelectedLineRange): SelectedLineRange {
   }
 }
 
+const WORKSPACE_KEY = "__workspace__"
+const MAX_FILE_VIEW_SESSIONS = 20
+const MAX_VIEW_FILES = 500
+
+type ViewSession = ReturnType<typeof createViewSession>
+
+type ViewCacheEntry = {
+  value: ViewSession
+  dispose: VoidFunction
+}
+
+function createViewSession(dir: string, id: string | undefined) {
+  const legacyViewKey = `${dir}/file${id ? "/" + id : ""}.v1`
+
+  const [view, setView, _, ready] = persisted(
+    Persist.scoped(dir, id, "file-view", [legacyViewKey]),
+    createStore<{
+      file: Record<string, FileViewState>
+    }>({
+      file: {},
+    }),
+  )
+
+  const meta = { pruned: false }
+
+  const pruneView = (keep?: string) => {
+    const keys = Object.keys(view.file)
+    if (keys.length <= MAX_VIEW_FILES) return
+
+    const drop = keys.filter((key) => key !== keep).slice(0, keys.length - MAX_VIEW_FILES)
+    if (drop.length === 0) return
+
+    setView(
+      produce((draft) => {
+        for (const key of drop) {
+          delete draft.file[key]
+        }
+      }),
+    )
+  }
+
+  createEffect(() => {
+    if (!ready()) return
+    if (meta.pruned) return
+    meta.pruned = true
+    pruneView()
+  })
+
+  const scrollTop = (path: string) => view.file[path]?.scrollTop
+  const scrollLeft = (path: string) => view.file[path]?.scrollLeft
+  const selectedLines = (path: string) => view.file[path]?.selectedLines
+
+  const setScrollTop = (path: string, top: number) => {
+    setView("file", path, (current) => {
+      if (current?.scrollTop === top) return current
+      return {
+        ...(current ?? {}),
+        scrollTop: top,
+      }
+    })
+    pruneView(path)
+  }
+
+  const setScrollLeft = (path: string, left: number) => {
+    setView("file", path, (current) => {
+      if (current?.scrollLeft === left) return current
+      return {
+        ...(current ?? {}),
+        scrollLeft: left,
+      }
+    })
+    pruneView(path)
+  }
+
+  const setSelectedLines = (path: string, range: SelectedLineRange | null) => {
+    const next = range ? normalizeSelectedLines(range) : null
+    setView("file", path, (current) => {
+      if (current?.selectedLines === next) return current
+      return {
+        ...(current ?? {}),
+        selectedLines: next,
+      }
+    })
+    pruneView(path)
+  }
+
+  return {
+    ready,
+    scrollTop,
+    scrollLeft,
+    selectedLines,
+    setScrollTop,
+    setScrollLeft,
+    setSelectedLines,
+  }
+}
+
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
+  gate: false,
   init: () => {
     const sdk = useSDK()
     const sync = useSync()
@@ -134,42 +232,45 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       file: {},
     })
 
-    const legacyViewKey = createMemo(() => `${params.dir}/file${params.id ? "/" + params.id : ""}.v1`)
+    const viewCache = new Map<string, ViewCacheEntry>()
 
-    const [view, setView, _, ready] = persisted(
-      Persist.scoped(params.dir!, params.id, "file-view", [legacyViewKey()]),
-      createStore<{
-        file: Record<string, FileViewState>
-      }>({
-        file: {},
-      }),
-    )
-
-    const MAX_VIEW_FILES = 500
-    const viewMeta = { pruned: false }
-
-    const pruneView = (keep?: string) => {
-      const keys = Object.keys(view.file)
-      if (keys.length <= MAX_VIEW_FILES) return
-
-      const drop = keys.filter((key) => key !== keep).slice(0, keys.length - MAX_VIEW_FILES)
-      if (drop.length === 0) return
-
-      setView(
-        produce((draft) => {
-          for (const key of drop) {
-            delete draft.file[key]
-          }
-        }),
-      )
+    const disposeViews = () => {
+      for (const entry of viewCache.values()) {
+        entry.dispose()
+      }
+      viewCache.clear()
     }
 
-    createEffect(() => {
-      if (!ready()) return
-      if (viewMeta.pruned) return
-      viewMeta.pruned = true
-      pruneView()
-    })
+    const pruneViews = () => {
+      while (viewCache.size > MAX_FILE_VIEW_SESSIONS) {
+        const first = viewCache.keys().next().value
+        if (!first) return
+        const entry = viewCache.get(first)
+        entry?.dispose()
+        viewCache.delete(first)
+      }
+    }
+
+    const loadView = (dir: string, id: string | undefined) => {
+      const key = `${dir}:${id ?? WORKSPACE_KEY}`
+      const existing = viewCache.get(key)
+      if (existing) {
+        viewCache.delete(key)
+        viewCache.set(key, existing)
+        return existing.value
+      }
+
+      const entry = createRoot((dispose) => ({
+        value: createViewSession(dir, id),
+        dispose,
+      }))
+
+      viewCache.set(key, entry)
+      pruneViews()
+      return entry.value
+    }
+
+    const view = createMemo(() => loadView(params.dir!, params.id))
 
     function ensure(path: string) {
       if (!path) return
@@ -246,51 +347,32 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const get = (input: string) => store.file[normalize(input)]
 
-    const scrollTop = (input: string) => view.file[normalize(input)]?.scrollTop
-    const scrollLeft = (input: string) => view.file[normalize(input)]?.scrollLeft
-    const selectedLines = (input: string) => view.file[normalize(input)]?.selectedLines
+    const scrollTop = (input: string) => view().scrollTop(normalize(input))
+    const scrollLeft = (input: string) => view().scrollLeft(normalize(input))
+    const selectedLines = (input: string) => view().selectedLines(normalize(input))
 
     const setScrollTop = (input: string, top: number) => {
       const path = normalize(input)
-      setView("file", path, (current) => {
-        if (current?.scrollTop === top) return current
-        return {
-          ...(current ?? {}),
-          scrollTop: top,
-        }
-      })
-      pruneView(path)
+      view().setScrollTop(path, top)
     }
 
     const setScrollLeft = (input: string, left: number) => {
       const path = normalize(input)
-      setView("file", path, (current) => {
-        if (current?.scrollLeft === left) return current
-        return {
-          ...(current ?? {}),
-          scrollLeft: left,
-        }
-      })
-      pruneView(path)
+      view().setScrollLeft(path, left)
     }
 
     const setSelectedLines = (input: string, range: SelectedLineRange | null) => {
       const path = normalize(input)
-      const next = range ? normalizeSelectedLines(range) : null
-      setView("file", path, (current) => {
-        if (current?.selectedLines === next) return current
-        return {
-          ...(current ?? {}),
-          selectedLines: next,
-        }
-      })
-      pruneView(path)
+      view().setSelectedLines(path, range)
     }
 
-    onCleanup(() => stop())
+    onCleanup(() => {
+      stop()
+      disposeViews()
+    })
 
     return {
-      ready,
+      ready: () => view().ready(),
       normalize,
       tab,
       pathFromTab,

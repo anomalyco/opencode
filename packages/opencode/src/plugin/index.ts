@@ -15,7 +15,7 @@ import os from "os"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.9", "opencode-anthropic-auth@0.0.5"]
+  const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.5"]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({

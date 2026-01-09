@@ -52,7 +52,7 @@ export const QuestionRoute = new Hono()
         requestID: z.string(),
       }),
     ),
-    validator("json", z.object({ answers: z.array(z.string()) })),
+    validator("json", Question.Reply),
     async (c) => {
       const params = c.req.valid("param")
       const json = c.req.valid("json")
