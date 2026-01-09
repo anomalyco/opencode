@@ -75,7 +75,7 @@ export namespace Server {
   const app = new Hono()
   export const App: () => Hono = lazy(
     () =>
-      // TODO: Break server.ts into smaller route files to fix type inference
+      // @ts-expect-error TS2589: Route chain is too deep for TypeScript, but works at runtime
       app
         .onError((err, c) => {
           log.error("failed", {
@@ -2829,10 +2829,6 @@ export namespace Server {
               host: "app.opencode.ai",
             },
           })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
-          )
           return response
         }) as unknown as Hono,
   )
