@@ -44,18 +44,28 @@ export namespace Tool {
   export type InferParameters<T extends Info> = T extends Info<infer P> ? z.infer<P> : never
   export type InferMetadata<T extends Info> = T extends Info<any, infer M> ? M : never
 
-  function coerceJsonStrings(input: Record<string, unknown>): Record<string, unknown> {
+  function coerceStringValues(input: Record<string, unknown>): Record<string, unknown> {
     const result: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(input)) {
-      if (typeof value === "string" && /^[\[{]/.test(value)) {
+      if (typeof value !== "string") {
+        result[key] = value
+        continue
+      }
+      if (/^[\[{]/.test(value)) {
         try {
           result[key] = JSON.parse(value)
-        } catch {
-          result[key] = value
-        }
-      } else {
-        result[key] = value
+          continue
+        } catch {}
       }
+      if (/^-?\d+(\.\d+)?$/.test(value)) {
+        result[key] = Number(value)
+        continue
+      }
+      if (value === "true" || value === "false") {
+        result[key] = value === "true"
+        continue
+      }
+      result[key] = value
     }
     return result
   }
@@ -90,15 +100,14 @@ export namespace Tool {
             }
           }
 
-          const hasStringTypeError = firstTry.error.issues.some(
-            (issue) =>
-              issue.code === "invalid_type" &&
-              ((issue as { expected?: string }).expected === "array" ||
-                (issue as { expected?: string }).expected === "object"),
-          )
+          const hasCoercibleTypeError = firstTry.error.issues.some((issue) => {
+            if (issue.code !== "invalid_type") return false
+            const expected = (issue as { expected?: string }).expected
+            return expected === "array" || expected === "object" || expected === "number" || expected === "boolean"
+          })
 
-          if (hasStringTypeError) {
-            const coercedArgs = coerceJsonStrings(args as Record<string, unknown>)
+          if (hasCoercibleTypeError) {
+            const coercedArgs = coerceStringValues(args as Record<string, unknown>)
             const secondTry = toolInfo.parameters.safeParse(coercedArgs)
 
             if (secondTry.success) {
