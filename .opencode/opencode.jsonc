@@ -1,8 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": [
-    "STYLE_GUIDE.md"
-  ],
+  "instructions": ["STYLE_GUIDE.md"],
+  // Ralph Wiggum plugin for iterative development loops
+  "plugin": ["file:///Users/pavittra/suresh/opencode/packages/opencode/.opencode/plugins/ralph-wiggum.ts"],
   // Set DAG orchestrator as the default agent for automatic task decomposition
   "default_agent": "dag-orchestrator",
   "provider": {
@@ -10,12 +10,10 @@
       "name": "CLIProxyAPI (ChatGPT)",
       "api": "http://localhost:8317/v1",
       "npm": "@ai-sdk/openai-compatible",
-      "env": [
-        "CLIPROXY_API_KEY"
-      ],
+      "env": ["CLIPROXY_API_KEY"],
       "options": {
         "apiKey": "ABC-123456",
-        "baseURL": "http://localhost:8317/v1"
+        "baseURL": "http://localhost:8317/v1",
       },
       "models": {
         "gpt-5-codex": {
@@ -26,8 +24,8 @@
           "temperature": true,
           "limit": {
             "context": 128000,
-            "output": 16000
-          }
+            "output": 16000,
+          },
         },
         "gpt-5.1-codex": {
           "name": "GPT-5.1 Codex",
@@ -37,8 +35,8 @@
           "temperature": true,
           "limit": {
             "context": 128000,
-            "output": 16000
-          }
+            "output": 16000,
+          },
         },
         "gpt-5.2-codex": {
           "name": "GPT-5.2 Codex",
@@ -48,11 +46,11 @@
           "temperature": true,
           "limit": {
             "context": 128000,
-            "output": 32000
-          }
-        }
-      }
-    }
+            "output": 32000,
+          },
+        },
+      },
+    },
   },
   // Agent configurations
   "agent": {
@@ -61,66 +59,63 @@
       "description": "DAG-based task orchestrator with Hivemind parallel execution",
       "mode": "primary",
       "model": "cliproxyapi/gpt-5.2-codex",
-      "temperature": 0.2
-    }
+      "temperature": 0.2,
+    },
   },
   "permission": {
     "bash": {
-      "ls foo": "ask"
-    }
+      "ls foo": "ask",
+    },
   },
   "mcp": {
     "context7": {
       "type": "remote",
-      "url": "https://mcp.context7.com/mcp"
+      "url": "https://mcp.context7.com/mcp",
     },
     "obsidian-tools": {
       "type": "local",
-      "command": [
-        "node",
-        "/Users/suressan/github_manager/repos/obsidian-tools-mcp/dist/index.js"
-      ],
+      "command": ["node", "/Users/suressan/github_manager/repos/obsidian-tools-mcp/dist/index.js"],
       "environment": {
-        "OBSIDIAN_VAULT_PATH": "/Users/suressan/Library/CloudStorage/OneDrive-Cisco/Obsidian/suresh"
-      }
+        "OBSIDIAN_VAULT_PATH": "/Users/suressan/Library/CloudStorage/OneDrive-Cisco/Obsidian/suresh",
+      },
     },
     "browseros": {
       "type": "remote",
-      "url": "http://127.0.0.1:9101/mcp"
+      "url": "http://127.0.0.1:9101/mcp",
     },
     "hivemind": {
       "type": "local",
       "command": [
         "/Users/suressan/.nvm/versions/node/v22.21.1/bin/node",
-        "/Users/suressan/github_manager/repos/mcp-subagent-orchestrator/dist/bin/mcp-server.js"
+        "/Users/suressan/github_manager/repos/mcp-subagent-orchestrator/dist/bin/mcp-server.js",
       ],
       "environment": {
         "PATH": "/Users/suressan/.nvm/versions/node/v22.21.1/bin:/usr/local/bin:/usr/bin:/bin",
         "OTEL_ENABLED": "true",
-        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
-      }
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+      },
     },
     "jira-mcp": {
       "type": "remote",
-      "url": "http://mcp-servers.cisco.com/jira/"
+      "url": "http://mcp-servers.cisco.com/jira/",
     },
     "atlassian-mcp": {
       "type": "remote",
-      "url": "https://mcp.atlassian.com/v1/sse"
+      "url": "https://mcp.atlassian.com/v1/sse",
     },
     "openmemory": {
       "type": "remote",
-      "url": "http://127.0.0.1:8082/mcp"
+      "url": "http://127.0.0.1:8082/mcp",
     },
     "cass": {
       "type": "remote",
-      "url": "http://localhost:8888/sse"
-    }
+      "url": "http://localhost:8888/sse",
+    },
   },
   "tools": {
     "github-triage": false,
     // Enable the DAG analyzer tools
     "dag-analyzer_analyze": true,
-    "dag-analyzer_generateHivemindPlan": true
-  }
+    "dag-analyzer_generateHivemindPlan": true,
+  },
 }

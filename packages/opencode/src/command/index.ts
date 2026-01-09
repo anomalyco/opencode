@@ -6,6 +6,7 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { Plugin } from "../plugin"
 
 export namespace Command {
   export const Event = {
@@ -115,6 +116,25 @@ export namespace Command {
           })
         },
         hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+      }
+    }
+
+    // Load commands from plugins
+    const plugins = await Plugin.list()
+    for (const plugin of plugins) {
+      if (!plugin.command) continue
+      for (const [name, command] of Object.entries(plugin.command)) {
+        result[name] = {
+          name,
+          description: command.description,
+          agent: command.agent,
+          model: command.model,
+          subtask: command.subtask,
+          get template() {
+            return command.template
+          },
+          hints: hints(command.template),
+        }
       }
     }
 

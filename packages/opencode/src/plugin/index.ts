@@ -60,7 +60,7 @@ export namespace Plugin {
   })
 
   export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool" | "command" | "session.stop">,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
@@ -76,12 +76,35 @@ export namespace Plugin {
     return output
   }
 
+  // Cached hooks for synchronous access
+  let cachedHooks: Hooks[] | null = null
+
+  /**
+   * Synchronous trigger for hooks that don't require async operations.
+   * Must call init() first to cache hooks.
+   */
+  export function triggerSync<
+    Name extends "session.stop",
+    Input = Parameters<Required<Hooks>[Name]>[0],
+    Output = Parameters<Required<Hooks>[Name]>[1],
+  >(name: Name, input: Input, output: Output): Output {
+    if (!name || !cachedHooks) return output
+    for (const hook of cachedHooks) {
+      const fn = hook[name]
+      if (!fn) continue
+      // @ts-expect-error
+      fn(input, output)
+    }
+    return output
+  }
+
   export async function list() {
     return state().then((x) => x.hooks)
   }
 
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
+    cachedHooks = hooks // Cache hooks for synchronous access
     const config = await Config.get()
     for (const hook of hooks) {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2

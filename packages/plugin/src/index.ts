@@ -149,6 +149,15 @@ export interface Hooks {
   tool?: {
     [key: string]: ToolDefinition
   }
+  command?: {
+    [key: string]: {
+      description?: string
+      template: string
+      agent?: string
+      model?: string
+      subtask?: boolean
+    }
+  }
   auth?: AuthHook
   /**
    * Called when a new message is received
@@ -207,4 +216,23 @@ export interface Hooks {
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },
   ) => Promise<void>
+  /**
+   * Called just before the session loop exits. Plugins can set output.stop = false
+   * to continue the loop (e.g., for iterative development loops like Ralph Wiggum).
+   * This hook is SYNCHRONOUS - do not perform async operations here.
+   *
+   * Input:
+   * - sessionID: The session ID
+   * - step: Current iteration step
+   * - lastAssistantText: The text content of the last assistant message (for checking completion promises)
+   *
+   * Output:
+   * - stop: Set to false to continue the loop
+   * - prompt: Optional custom prompt to feed back (defaults to "Continue working on the task.")
+   * - systemMessage: Optional system message to prepend (e.g., iteration count)
+   */
+  "session.stop"?: (
+    input: { sessionID: string; step: number; lastAssistantText?: string },
+    output: { stop: boolean; prompt?: string; systemMessage?: string },
+  ) => void
 }
