@@ -1480,6 +1480,12 @@ export namespace SessionPrompt {
       arguments: input.arguments,
       messageID: result.info.id,
     })
+    Bus.publish(Command.Event.After, {
+      sessionID: input.sessionID,
+      command: input.command,
+      arguments: input.arguments,
+      messageID: result.info.id,
+    })
 
     return result
   }

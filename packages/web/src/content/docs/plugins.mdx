@@ -145,8 +145,9 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 #### Command Events
 
-- `command.executed`
+- `command.executed` (deprecated, use `command.execute.after`)
 - `command.execute.before`
+- `command.execute.after`
 
 #### File Events
 
@@ -391,3 +392,21 @@ The `command.execute.before` hook allows you to:
 :::note
 The `output` object is initialized with all values from `input`, so you only need to set the fields you want to change.
 :::
+
+Run code after a command completes:
+
+```ts title=".opencode/plugin/command-logging.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const CommandLoggingPlugin: Plugin = async (ctx) => {
+  return {
+    "command.execute.after": async (input) => {
+      // Log command execution for analytics or auditing
+      console.log(`Command executed: /${input.command} with args: "${input.arguments}"`)
+      // Could send to external service, write to file, etc.
+    },
+  }
+}
+```
+
+This hook fires after the command has been processed and sent to the LLM. Use it for logging, analytics, or triggering side effects.

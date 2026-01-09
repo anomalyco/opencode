@@ -183,6 +183,18 @@ export interface Hooks {
     },
   ) => Promise<void>
   /**
+   * Called after a command is executed and sent to the LLM.
+   * This is the preferred hook over `command.executed` event.
+   *
+   * - `command.executed` is deprecated but still supported for backward compatibility
+   */
+  "command.execute.after"?: (input: {
+    sessionID: string
+    command: string
+    arguments: string
+    messageID: string
+  }) => Promise<void>
+  /**
    * Modify parameters sent to LLM
    */
   "chat.params"?: (

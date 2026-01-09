@@ -9,11 +9,21 @@ import { MCP } from "../mcp"
 
 export namespace Command {
   export const Event = {
+    /** @deprecated Use `command.execute.after` hook instead */
     Executed: BusEvent.define(
       "command.executed",
       z.object({
         name: z.string(),
         sessionID: Identifier.schema("session"),
+        arguments: z.string(),
+        messageID: Identifier.schema("message"),
+      }),
+    ),
+    After: BusEvent.define(
+      "command.execute.after",
+      z.object({
+        sessionID: Identifier.schema("session"),
+        command: z.string(),
         arguments: z.string(),
         messageID: Identifier.schema("message"),
       }),
