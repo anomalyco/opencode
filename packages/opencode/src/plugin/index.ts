@@ -9,7 +9,6 @@ import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
-import fs from "fs"
 import path from "path"
 import os from "os"
 
@@ -39,32 +38,29 @@ export namespace Plugin {
       plugins.push(...BUILTIN)
     }
 
-    // Auto-load GitLab auth and tools plugins when GitLab is configured
     const shouldLoadGitLabPlugins = await (async () => {
-      // Check if GitLab provider is configured
       if (config.provider?.["gitlab"]) return true
 
-      // Check if GitLab auth exists
       const auth = await Auth.get("gitlab")
       if (auth) return true
 
-      // Check auth.json for GitLab OAuth
-      try {
-        const homeDir = os.homedir()
-        const xdgDataHome = process.env.XDG_DATA_HOME
-        const authPath = xdgDataHome
-          ? path.join(xdgDataHome, "opencode", "auth.json")
-          : process.platform !== "win32"
-            ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
-            : path.join(homeDir, ".opencode", "auth.json")
+      const homeDir = os.homedir()
+      const xdgDataHome = process.env.XDG_DATA_HOME
+      const authPath = xdgDataHome
+        ? path.join(xdgDataHome, "opencode", "auth.json")
+        : process.platform !== "win32"
+          ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
+          : path.join(homeDir, ".opencode", "auth.json")
 
-        if (fs.existsSync(authPath)) {
-          const authData = JSON.parse(fs.readFileSync(authPath, "utf-8"))
-          if (authData.gitlab) return true
-        }
-      } catch {}
+      const file = Bun.file(authPath)
+      if (await file.exists()) {
+        const authData = await file.json().catch((err) => {
+          log.debug("failed to parse auth.json for gitlab plugin check", { err })
+          return undefined
+        })
+        if (authData?.gitlab) return true
+      }
 
-      // Check environment variables
       if (Env.get("GITLAB_TOKEN")) return true
 
       return false

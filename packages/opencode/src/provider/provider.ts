@@ -1,5 +1,4 @@
 import z from "zod"
-import fs from "fs"
 import path from "path"
 import os from "os"
 import fuzzysort from "fuzzysort"
@@ -397,44 +396,48 @@ export namespace Provider {
     async gitlab(input) {
       const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
 
-      // Helper to load auth from OpenCode's auth.json
       const loadOpenCodeAuth = async () => {
-        try {
-          const homeDir = os.homedir()
-          const xdgDataHome = process.env.XDG_DATA_HOME
-          const authPath = xdgDataHome
-            ? path.join(xdgDataHome, "opencode", "auth.json")
-            : process.platform !== "win32"
-              ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
-              : path.join(homeDir, ".opencode", "auth.json")
+        const homeDir = os.homedir()
+        const xdgDataHome = process.env.XDG_DATA_HOME
+        const authPath = xdgDataHome
+          ? path.join(xdgDataHome, "opencode", "auth.json")
+          : process.platform !== "win32"
+            ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
+            : path.join(homeDir, ".opencode", "auth.json")
 
-          if (!fs.existsSync(authPath)) return undefined
+        const file = Bun.file(authPath)
+        if (!(await file.exists())) return undefined
 
-          const authData = JSON.parse(fs.readFileSync(authPath, "utf-8"))
-          const gitlabAuth = authData.gitlab
+        const authData = await file.json().catch((err) => {
+          log.debug("failed to parse auth.json", { err })
+          return undefined
+        })
+        if (!authData) return undefined
 
-          if (gitlabAuth?.type === "oauth") {
-            const authUrl = gitlabAuth.enterpriseUrl || "https://gitlab.com"
-            if (authUrl === instanceUrl || authUrl === instanceUrl.replace(/\/$/, "")) {
-              return {
-                access: gitlabAuth.access,
-                refresh: gitlabAuth.refresh,
-                expires: gitlabAuth.expires,
-              }
-            }
-          } else if (gitlabAuth?.type === "api") {
-            return { access: gitlabAuth.key }
+        const gitlabAuth = authData.gitlab
+        if (!gitlabAuth) return undefined
+
+        if (gitlabAuth.type === "oauth") {
+          const authUrl = gitlabAuth.enterpriseUrl || "https://gitlab.com"
+          if (authUrl !== instanceUrl && authUrl !== instanceUrl.replace(/\/$/, "")) {
+            return undefined
           }
-
-          return undefined
-        } catch {
-          return undefined
+          return {
+            access: gitlabAuth.access,
+            refresh: gitlabAuth.refresh,
+            expires: gitlabAuth.expires,
+          }
         }
+
+        if (gitlabAuth.type === "api") {
+          return { access: gitlabAuth.key }
+        }
+
+        return undefined
       }
 
-      // Try multiple auth sources (priority order)
       const auth = await Auth.get(input.id)
-      const authData = await (async () => {
+      const creds = await (async () => {
         if (auth?.type === "oauth") {
           return { access: auth.access, refresh: auth.refresh, expires: auth.expires }
         }
@@ -451,56 +454,22 @@ export namespace Provider {
         return undefined
       })()
 
-      // Get config for feature flags
       const config = await Config.get()
       const providerConfig = config.provider?.["gitlab"]
 
-      // Token refresh callback
-      const refreshApiKey = async () => {
-        log.info("refreshing gitlab token")
-        const auth = await Auth.get(input.id)
-        if (auth?.type === "oauth" && auth.refresh) {
-          try {
-            const response = await fetch(`${instanceUrl}/oauth/token`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                grant_type: "refresh_token",
-                refresh_token: auth.refresh,
-              }),
-            })
-
-            if (response.ok) {
-              const tokens = await response.json()
-              await Auth.set(input.id, {
-                type: "oauth",
-                access: tokens.access_token,
-                refresh: tokens.refresh_token,
-                expires: Date.now() + tokens.expires_in * 1000,
-              })
-              log.info("gitlab token refreshed successfully")
-            } else {
-              log.error("failed to refresh gitlab token", { status: response.status })
-            }
-          } catch (error) {
-            log.error("gitlab token refresh error", { error })
-          }
-        }
-      }
-
       return {
-        autoload: !!authData,
+        autoload: !!creds,
         options: {
           instanceUrl,
-          apiKey: authData?.access,
-          refreshToken: authData?.refresh,
+          apiKey: creds?.access,
+          refreshToken: creds?.refresh,
           featureFlags: {
             duo_agent_platform_agentic_chat: true,
             duo_agent_platform: true,
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string, options?: { anthropicModel?: string }) {
           const anthropicModel = options?.anthropicModel
           return sdk.agenticChat(modelID, {
             anthropicModel,
