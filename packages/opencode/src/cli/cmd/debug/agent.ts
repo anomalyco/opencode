@@ -6,6 +6,7 @@ import { cmd } from "../cmd"
 
 export const AgentCommand = cmd({
   command: "agent <name>",
+  describe: "show agent configuration details",
   builder: (yargs) =>
     yargs.positional("name", {
       type: "string",
