@@ -208,6 +208,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
 
           // Track pending notification processing
           let pendingNotifications = 0
+          let onDrained: (() => void) | null = null
 
           // Helper to complete last pending tool
           const completePendingTool = () => {
@@ -465,6 +466,10 @@ export class ACPLanguageModel implements LanguageModelV2 {
               controller.error(error)
             } finally {
               pendingNotifications--
+              if (pendingNotifications === 0 && onDrained) {
+                onDrained()
+                onDrained = null
+              }
             }
           })
 
@@ -472,20 +477,14 @@ export class ACPLanguageModel implements LanguageModelV2 {
           const result = await client.sendMessage(sessionId, acpMessages)
 
           // Wait for all pending notifications to be processed
-          const maxWaitMs = 5000
-          const checkIntervalMs = 10
-          const startTime = Date.now()
-
-          await new Promise<void>((resolve) => {
-            const check = () => {
-              if (pendingNotifications === 0 || Date.now() - startTime > maxWaitMs) {
-                resolve()
-              } else {
-                setTimeout(check, checkIntervalMs)
-              }
-            }
-            check()
-          })
+          if (pendingNotifications > 0) {
+            await Promise.race([
+              new Promise<void>((resolve) => {
+                onDrained = resolve
+              }),
+              new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+            ])
+          }
 
           // Complete any final pending tool
           completePendingTool()
