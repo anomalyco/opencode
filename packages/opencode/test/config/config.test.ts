@@ -6,6 +6,7 @@ import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
+import { createRequire } from "module"
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -400,9 +401,24 @@ test("resolves scoped npm plugins in config", async () => {
       const pluginEntries = config.plugin ?? []
 
       const baseUrl = pathToFileURL(path.join(tmp.path, "opencode.json")).href
-      const expected = import.meta.resolve("@scope/plugin", baseUrl)
+      let expected: string | null = null
+      try {
+        expected = import.meta.resolve("@scope/plugin", baseUrl)
+      } catch {}
+      if (!expected) {
+        try {
+          expected = pathToFileURL(createRequire(baseUrl).resolve("@scope/plugin")).href
+        } catch {}
+      }
+      if (!expected) {
+        try {
+          expected = pathToFileURL(Bun.resolveSync("@scope/plugin", path.join(tmp.path, "opencode.json"))).href
+        } catch {}
+      }
 
-      expect(pluginEntries.includes(expected)).toBe(true)
+      expect(expected).toBeTruthy()
+
+      expect(pluginEntries.includes(expected!)).toBe(true)
 
       const scopedEntry = pluginEntries.find((entry) => entry === expected)
       expect(scopedEntry).toBeDefined()

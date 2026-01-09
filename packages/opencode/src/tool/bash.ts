@@ -117,6 +117,7 @@ export const BashTool = Tool.define("bash", async () => {
               .nothrow()
               .text()
               .then((x) => x.trim())
+              .then((x) => (x ? x : path.resolve(cwd, arg)))
             log.info("resolved path", { arg, resolved })
             if (resolved) {
               // Git Bash on Windows returns Unix-style paths like /c/Users/...

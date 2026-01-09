@@ -76,25 +76,29 @@ export namespace Patch {
     startIdx: number,
   ): { filePath: string; movePath?: string; nextIdx: number } | null {
     const line = lines[startIdx]
+    const addPrefix = "*** Add File:"
+    const deletePrefix = "*** Delete File:"
+    const updatePrefix = "*** Update File:"
+    const movePrefix = "*** Move to:"
 
-    if (line.startsWith("*** Add File:")) {
-      const filePath = line.split(":", 2)[1]?.trim()
+    if (line.startsWith(addPrefix)) {
+      const filePath = line.slice(addPrefix.length).trim()
       return filePath ? { filePath, nextIdx: startIdx + 1 } : null
     }
 
-    if (line.startsWith("*** Delete File:")) {
-      const filePath = line.split(":", 2)[1]?.trim()
+    if (line.startsWith(deletePrefix)) {
+      const filePath = line.slice(deletePrefix.length).trim()
       return filePath ? { filePath, nextIdx: startIdx + 1 } : null
     }
 
-    if (line.startsWith("*** Update File:")) {
-      const filePath = line.split(":", 2)[1]?.trim()
+    if (line.startsWith(updatePrefix)) {
+      const filePath = line.slice(updatePrefix.length).trim()
       let movePath: string | undefined
       let nextIdx = startIdx + 1
 
       // Check for move directive
-      if (nextIdx < lines.length && lines[nextIdx].startsWith("*** Move to:")) {
-        movePath = lines[nextIdx].split(":", 2)[1]?.trim()
+      if (nextIdx < lines.length && lines[nextIdx].startsWith(movePrefix)) {
+        movePath = lines[nextIdx].slice(movePrefix.length).trim()
         nextIdx++
       }
 

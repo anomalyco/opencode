@@ -1,6 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
+import { createRequire } from "module"
 import os from "os"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
@@ -22,6 +23,26 @@ import { existsSync } from "fs"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
+
+  function resolvePluginSpecifier(plugin: string, configFilepath: string) {
+    const baseUrl = pathToFileURL(configFilepath).href
+    if (import.meta.resolve) {
+      try {
+        return import.meta.resolve(plugin, baseUrl)
+      } catch {}
+    }
+    try {
+      const req = createRequire(configFilepath)
+      return pathToFileURL(req.resolve(plugin)).href
+    } catch {}
+    try {
+      const resolved = Bun.resolveSync(plugin, configFilepath)
+      return resolved.startsWith("file://")
+        ? resolved
+        : pathToFileURL(resolved).href
+    } catch {}
+    return null
+  }
 
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
@@ -1116,9 +1137,8 @@ export namespace Config {
       if (data.plugin) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
-          try {
-            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          const resolved = resolvePluginSpecifier(plugin, configFilepath)
+          if (resolved) data.plugin[i] = resolved
         }
       }
       return data
