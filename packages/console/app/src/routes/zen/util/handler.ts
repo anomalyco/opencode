@@ -676,7 +676,12 @@ export async function handler(
                 ELSE ${cost}
               END
             `,
-                    timeRollingUpdated: sql`now()`,
+                    timeRollingUpdated: sql`
+              CASE
+                WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.timeRollingUpdated}
+                ELSE now()
+              END
+            `,
                   })
                   .where(
                     and(
