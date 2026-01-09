@@ -33,76 +33,82 @@ export function DialogModel(props: { providerID?: string }) {
 
   const options = createMemo(() => {
     const q = query()
-    const favorites = showExtra() ? local.model.favorite() : []
+    const needle = q.trim()
+    const showSections = showExtra() && needle.length === 0
+    const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
 
-    const recentList = showExtra()
+    const recentList = showSections
       ? recents.filter(
           (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
         )
       : []
 
-    const favoriteOptions = favorites.flatMap((item) => {
-      const provider = sync.data.provider.find((x) => x.id === item.providerID)
-      if (!provider) return []
-      const model = provider.models[item.modelID]
-      if (!model) return []
-      return [
-        {
-          key: item,
-          value: {
-            providerID: provider.id,
-            modelID: model.id,
-          },
-          title: model.name ?? item.modelID,
-          description: provider.name,
-          category: "Favorites",
-          disabled: provider.id === "opencode" && model.id.includes("-nano"),
-          footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-          onSelect: () => {
-            dialog.clear()
-            local.model.set(
-              {
+    const favoriteOptions = showSections
+      ? favorites.flatMap((item) => {
+          const provider = sync.data.provider.find((x) => x.id === item.providerID)
+          if (!provider) return []
+          const model = provider.models[item.modelID]
+          if (!model) return []
+          return [
+            {
+              key: item,
+              value: {
                 providerID: provider.id,
                 modelID: model.id,
               },
-              { recent: true },
-            )
-          },
-        },
-      ]
-    })
+              title: model.name ?? item.modelID,
+              description: provider.name,
+              category: "Favorites",
+              disabled: provider.id === "opencode" && model.id.includes("-nano"),
+              footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+              onSelect: () => {
+                dialog.clear()
+                local.model.set(
+                  {
+                    providerID: provider.id,
+                    modelID: model.id,
+                  },
+                  { recent: true },
+                )
+              },
+            },
+          ]
+        })
+      : []
 
-    const recentOptions = recentList.flatMap((item) => {
-      const provider = sync.data.provider.find((x) => x.id === item.providerID)
-      if (!provider) return []
-      const model = provider.models[item.modelID]
-      if (!model) return []
-      return [
-        {
-          key: item,
-          value: {
-            providerID: provider.id,
-            modelID: model.id,
-          },
-          title: model.name ?? item.modelID,
-          description: provider.name,
-          category: "Recent",
-          disabled: provider.id === "opencode" && model.id.includes("-nano"),
-          footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-          onSelect: () => {
-            dialog.clear()
-            local.model.set(
-              {
+    const recentOptions = showSections
+      ? recentList.flatMap((item) => {
+          const provider = sync.data.provider.find((x) => x.id === item.providerID)
+          if (!provider) return []
+          const model = provider.models[item.modelID]
+          if (!model) return []
+          return [
+            {
+              key: item,
+              value: {
                 providerID: provider.id,
                 modelID: model.id,
               },
-              { recent: true },
-            )
-          },
-        },
-      ]
-    })
+              title: model.name ?? item.modelID,
+              description: provider.name,
+              category: "Recent",
+              disabled: provider.id === "opencode" && model.id.includes("-nano"),
+              footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+              onSelect: () => {
+                dialog.clear()
+                local.model.set(
+                  {
+                    providerID: provider.id,
+                    modelID: model.id,
+                  },
+                  { recent: true },
+                )
+              },
+            },
+          ]
+        })
+      : []
 
     const providerOptions = pipe(
       sync.data.provider,
@@ -145,6 +151,7 @@ export function DialogModel(props: { providerID?: string }) {
             }
           }),
           filter((x) => {
+            if (!showSections) return true
             const value = x.value
             const inFavorites = favorites.some(
               (item) => item.providerID === value.providerID && item.modelID === value.modelID,
@@ -177,16 +184,11 @@ export function DialogModel(props: { providerID?: string }) {
         )
       : []
 
-    // Apply fuzzy filtering to each section separately, maintaining section order
-    if (q) {
-      const filteredFavorites = fuzzysort.go(q, favoriteOptions, { keys: ["title"] }).map((x) => x.obj)
-      const filteredRecents = fuzzysort
-        .go(q, recentOptions, { keys: ["title"] })
-        .map((x) => x.obj)
-        .slice(0, 5)
-      const filteredProviders = fuzzysort.go(q, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj)
-      const filteredPopular = fuzzysort.go(q, popularProviders, { keys: ["title"] }).map((x) => x.obj)
-      return [...filteredFavorites, ...filteredRecents, ...filteredProviders, ...filteredPopular]
+    // Search shows a single merged list (favorites inline)
+    if (needle) {
+      const filteredProviders = fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj)
+      const filteredPopular = fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj)
+      return [...filteredProviders, ...filteredPopular]
     }
 
     return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
