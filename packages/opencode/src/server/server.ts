@@ -2837,7 +2837,12 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const path = c.req.path
+          // Strip basePath from the request path before proxying
+          let path = c.req.path
+          if (_basePath && path.startsWith(_basePath)) {
+            path = path.slice(_basePath.length) || "/"
+          }
+
           const response = await proxy(`https://app.opencode.ai${path}`, {
             ...c.req,
             headers: {
@@ -2849,13 +2854,19 @@ export namespace Server {
           // Inject basePath into HTML responses for reverse proxy support
           const contentType = response.headers.get("content-type") || ""
           if (_basePath && contentType.includes("text/html")) {
-            const html = await response.text()
+            let html = await response.text()
+
+            // Rewrite absolute paths in HTML to include basePath
+            // Matches href="/...", src="/...", content="/..." but not href="//..." (protocol-relative) or href="http..."
+            html = html.replace(/(href|src|content)="\/(?!\/)/g, `$1="${_basePath}/`)
+
             // Inject basePath as a global variable before the closing </head> tag
-            const injectedHtml = html.replace(
+            html = html.replace(
               "</head>",
               `<script>window.__OPENCODE_BASE_PATH__="${_basePath}";</script></head>`,
             )
-            return new Response(injectedHtml, {
+
+            return new Response(html, {
               status: response.status,
               statusText: response.statusText,
               headers: response.headers,
@@ -2899,11 +2910,9 @@ export namespace Server {
       // Mount the main app under the base path
       baseApp.route(_basePath, mainApp)
 
-      // Redirect root to base path
-      baseApp.get("/", (c) => c.redirect(`${_basePath}/`))
-
-      // Return 404 for any other path not under base path
-      baseApp.all("/*", (c) => c.notFound())
+      // Also mount API routes at root level for backward compatibility
+      // This allows the frontend (which may not know about basePath yet) to still work
+      baseApp.route("/", mainApp)
     }
 
     const appToServe = _basePath ? baseApp : mainApp
