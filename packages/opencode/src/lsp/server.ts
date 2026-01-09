@@ -32,7 +32,7 @@ export namespace LSPServer {
         const excludedFiles = Filesystem.up({
           targets: excludePatterns,
           start: path.dirname(file),
-          stop: Instance.directory,
+          stop: Instance.worktree,
         })
         const excluded = await excludedFiles.next()
         await excludedFiles.return()
@@ -41,7 +41,7 @@ export namespace LSPServer {
       const files = Filesystem.up({
         targets: includePatterns,
         start: path.dirname(file),
-        stop: Instance.directory,
+        stop: Instance.worktree,
       })
       const first = await files.next()
       await files.return()
@@ -895,7 +895,14 @@ export namespace LSPServer {
     root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
     extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
     async spawn(root) {
-      const args = ["--background-index", "--clang-tidy"]
+      const args = [
+        "--background-index",
+        "--clang-tidy",
+        "--query-driver=**/clang++,**/clang,**/clang-cl,**/g++,**/gcc,**/ccache,**/sccache",
+      ]
+      if (await pathExists(path.join(root, "compile_commands.json"))) {
+        args.push(`--compile-commands-dir=${root}`)
+      }
       const fromPath = Bun.which("clangd")
       if (fromPath) {
         return {
