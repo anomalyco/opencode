@@ -2861,12 +2861,40 @@ export namespace Server {
             html = html.replace(/(href|src|content)="\/(?!\/)/g, `$1="${_basePath}/`)
 
             // Inject basePath as a global variable before the closing </head> tag
+            // Also override the default server URL logic to use basePath
             html = html.replace(
               "</head>",
-              `<script>window.__OPENCODE_BASE_PATH__="${_basePath}";</script></head>`,
+              `<script>
+window.__OPENCODE_BASE_PATH__="${_basePath}";
+// Override default server URL to include basePath for reverse proxy support
+(function() {
+  var origOrigin = window.location.origin;
+  Object.defineProperty(window.location, '__opencodeOriginWithBase', {
+    get: function() { return origOrigin + (window.__OPENCODE_BASE_PATH__ || ''); }
+  });
+})();
+</script></head>`,
             )
 
             return new Response(html, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            })
+          }
+
+          // For JavaScript files, patch window.location.origin references to include basePath
+          if (_basePath && (contentType.includes("javascript") || path.endsWith(".js"))) {
+            let js = await response.text()
+
+            // Replace the pattern where the app determines the server URL
+            // In minified code it appears as: :window.location.origin)
+            js = js.replace(
+              /:window\.location\.origin\)/g,
+              `:window.location.origin+(window.__OPENCODE_BASE_PATH__||""))`,
+            )
+
+            return new Response(js, {
               status: response.status,
               statusText: response.statusText,
               headers: response.headers,
