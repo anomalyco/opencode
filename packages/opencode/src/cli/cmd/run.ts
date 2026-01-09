@@ -188,6 +188,10 @@ export const RunCommand = cmd({
               process.stdout.write((isPiped ? part.text : UI.markdown(part.text)) + EOL)
               if (!isPiped) UI.println()
             }
+
+            if (part.type === "reasoning" && part.time?.end) {
+              if (outputJsonEvent("reasoning", { part })) continue
+            }
           }
 
           if (event.type === "session.error") {
