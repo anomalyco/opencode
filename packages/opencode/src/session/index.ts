@@ -281,7 +281,7 @@ export namespace Session {
         if (input.limit && result.length >= input.limit) break
         result.push(msg)
       }
-      result.reverse()
+      result.sort((a, b) => a.info.time.created - b.info.time.created)
       return result
     },
   )
