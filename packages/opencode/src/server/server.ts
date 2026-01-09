@@ -2866,12 +2866,30 @@ export namespace Server {
               "</head>",
               `<script>
 window.__OPENCODE_BASE_PATH__="${_basePath}";
-// Override default server URL to include basePath for reverse proxy support
+// Wrap history.pushState and replaceState to add basePath prefix
 (function() {
-  var origOrigin = window.location.origin;
-  Object.defineProperty(window.location, '__opencodeOriginWithBase', {
-    get: function() { return origOrigin + (window.__OPENCODE_BASE_PATH__ || ''); }
-  });
+  var basePath = window.__OPENCODE_BASE_PATH__ || "";
+  if (!basePath) return;
+  
+  var origPushState = history.pushState.bind(history);
+  var origReplaceState = history.replaceState.bind(history);
+  
+  function addBasePathIfNeeded(url) {
+    if (!url || typeof url !== "string") return url;
+    // If URL starts with / but not with basePath, add basePath
+    if (url.startsWith("/") && !url.startsWith(basePath)) {
+      return basePath + url;
+    }
+    return url;
+  }
+  
+  history.pushState = function(state, title, url) {
+    return origPushState(state, title, addBasePathIfNeeded(url));
+  };
+  
+  history.replaceState = function(state, title, url) {
+    return origReplaceState(state, title, addBasePathIfNeeded(url));
+  };
 })();
 </script></head>`,
             )
@@ -2897,6 +2915,10 @@ window.__OPENCODE_BASE_PATH__="${_basePath}";
             // Rewrite absolute asset paths in JavaScript strings
             // Matches "/assets/..." in JS strings
             js = js.replace(/"\/(assets\/[^"]*)"/g, `"${_basePath}/$1"`)
+
+            // Rewrite relative asset paths in JavaScript strings (for dynamic imports)
+            // Matches "assets/..." in JS strings (without leading slash)
+            js = js.replace(/"(assets\/[^"]*)"/g, `"${_basePath}/$1"`)
 
             return new Response(js, {
               status: response.status,
