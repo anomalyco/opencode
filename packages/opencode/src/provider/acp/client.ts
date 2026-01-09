@@ -198,15 +198,22 @@ export class ACPClient {
                 throw new Error(`Permission denied: cannot read external file ${params.path}`)
               } else if (externalRule.action === "ask" && sessionContext) {
                 const callID = `acp-read-${Date.now()}`
-                await Permission.ask({
-                  type: "external_directory",
-                  pattern: [parentDir, path.join(parentDir, "*")],
-                  sessionID: sessionContext.sessionID,
-                  messageID: sessionContext.messageID,
-                  callID,
-                  message: `Read external file: ${params.path}`,
-                  metadata: { filepath: params.path, parentDir },
-                })
+                try {
+                  await Permission.ask({
+                    type: "external_directory",
+                    pattern: [parentDir, path.join(parentDir, "*")],
+                    sessionID: sessionContext.sessionID,
+                    messageID: sessionContext.messageID,
+                    callID,
+                    message: `Read external file: ${params.path}`,
+                    metadata: { filepath: params.path, parentDir },
+                  })
+                } catch (error) {
+                  if (error instanceof Permission.RejectedError) {
+                    throw new Error(`Permission denied: cannot read external file ${params.path}`)
+                  }
+                  throw error
+                }
               }
             }
 
@@ -241,15 +248,22 @@ export class ACPClient {
                 throw new Error(`Permission denied: cannot write to external file ${params.path}`)
               } else if (externalRule.action === "ask" && sessionContext) {
                 const callID = `acp-write-${Date.now()}`
-                await Permission.ask({
-                  type: "external_directory",
-                  pattern: [parentDir, path.join(parentDir, "*")],
-                  sessionID: sessionContext.sessionID,
-                  messageID: sessionContext.messageID,
-                  callID,
-                  message: `Write to external file: ${params.path}`,
-                  metadata: { filepath: params.path, parentDir },
-                })
+                try {
+                  await Permission.ask({
+                    type: "external_directory",
+                    pattern: [parentDir, path.join(parentDir, "*")],
+                    sessionID: sessionContext.sessionID,
+                    messageID: sessionContext.messageID,
+                    callID,
+                    message: `Write to external file: ${params.path}`,
+                    metadata: { filepath: params.path, parentDir },
+                  })
+                } catch (error) {
+                  if (error instanceof Permission.RejectedError) {
+                    throw new Error(`Permission denied: cannot write to external file ${params.path}`)
+                  }
+                  throw error
+                }
               }
             } else {
               const editRule = PermissionNext.evaluate("edit", params.path, permissionConfig ?? [])
@@ -258,18 +272,25 @@ export class ACPClient {
                 throw new Error(`Permission denied: cannot write to file ${params.path}`)
               } else if (editRule.action === "ask" && sessionContext) {
                 const callID = `acp-write-${Date.now()}`
-                await Permission.ask({
-                  type: "write",
-                  sessionID: sessionContext.sessionID,
-                  messageID: sessionContext.messageID,
-                  callID,
-                  message: exists ? `Overwrite file: ${params.path}` : `Create file: ${params.path}`,
-                  metadata: {
-                    filePath: params.path,
-                    content: params.content,
-                    exists,
-                  },
-                })
+                try {
+                  await Permission.ask({
+                    type: "write",
+                    sessionID: sessionContext.sessionID,
+                    messageID: sessionContext.messageID,
+                    callID,
+                    message: exists ? `Overwrite file: ${params.path}` : `Create file: ${params.path}`,
+                    metadata: {
+                      filePath: params.path,
+                      content: params.content,
+                      exists,
+                    },
+                  })
+                } catch (error) {
+                  if (error instanceof Permission.RejectedError) {
+                    throw new Error(`Permission denied: cannot write to file ${params.path}`)
+                  }
+                  throw error
+                }
               }
             }
 
