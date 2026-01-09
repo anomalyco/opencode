@@ -55,7 +55,15 @@ export namespace ProviderTransform {
         return msg
       })
     }
-    if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
+    // Check if this is a Mistral model (including Devstral variants)
+    const isMistralModel =
+      model.providerID === "mistral" ||
+      model.api.id.toLowerCase().includes("mistral") ||
+      model.api.id.toLowerCase().includes("devstral") ||
+      model.id.toLowerCase().includes("mistral") ||
+      model.id.toLowerCase().includes("devstral")
+
+    if (isMistralModel) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
@@ -82,6 +90,7 @@ export namespace ProviderTransform {
         result.push(msg)
 
         // Fix message sequence: tool messages cannot be followed by user messages
+        // This is required by Mistral's strict message ordering protocol
         if (msg.role === "tool" && nextMsg?.role === "user") {
           result.push({
             role: "assistant",

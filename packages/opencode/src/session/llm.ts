@@ -182,9 +182,9 @@ export namespace LLM {
         middleware: [
           {
             async transformParams(args) {
-              if (args.type === "stream") {
-                // @ts-expect-error
-                args.params.prompt = ProviderTransform.message(args.params.prompt, input.model)
+              if (args.type === "stream" && args.params.messages) {
+                // @ts-expect-error - AI SDK types don't expose messages in transformParams
+                args.params.messages = ProviderTransform.message(args.params.messages, input.model)
               }
               return args.params
             },

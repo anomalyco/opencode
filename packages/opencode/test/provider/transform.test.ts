@@ -585,6 +585,285 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
   })
 })
 
+describe("ProviderTransform.message - Mistral tool→user ordering", () => {
+  const mistralModel = {
+    id: "mistral/mistral-large",
+    providerID: "mistral",
+    api: {
+      id: "mistral-large-latest",
+      url: "https://api.mistral.com",
+      npm: "@ai-sdk/mistral",
+    },
+    name: "Mistral Large",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.002,
+      output: 0.006,
+      cache: { read: 0.0002, write: 0.0006 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("inserts assistant message between tool and user messages", () => {
+    const msgs = [
+      { role: "user", content: "What is 2+2?" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call123",
+            toolName: "calculator",
+            args: { expression: "2+2" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call123",
+            toolName: "calculator",
+            result: "4",
+          },
+        ],
+      },
+      { role: "user", content: "Thanks!" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mistralModel)
+
+    // Should have 5 messages now (original 4 + 1 inserted assistant)
+    expect(result).toHaveLength(5)
+    expect(result[3].role).toBe("assistant")
+    expect(result[3].content).toEqual([{ type: "text", text: "Done." }])
+    expect(result[4].role).toBe("user")
+  })
+
+  test("normalizes Mistral tool call IDs to 9 alphanumeric characters", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_abc-123-def",
+            toolName: "bash",
+            args: { command: "ls" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mistralModel)
+
+    expect(result).toHaveLength(1)
+    const toolCall = result[0].content[0] as any
+    expect(toolCall.toolCallId).toHaveLength(9)
+    expect(toolCall.toolCallId).toMatch(/^[a-zA-Z0-9]{9}$/)
+    expect(toolCall.toolCallId).toBe("callabc12")
+  })
+
+  test("handles multiple consecutive tool results followed by user message", () => {
+    const msgs = [
+      { role: "user", content: "Run two commands" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call1",
+            toolName: "bash",
+            args: { command: "ls" },
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call2",
+            toolName: "bash",
+            args: { command: "pwd" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call1",
+            toolName: "bash",
+            result: "file1.txt\nfile2.txt",
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call2",
+            toolName: "bash",
+            result: "/home/user",
+          },
+        ],
+      },
+      { role: "user", content: "Great!" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mistralModel)
+
+    // Should insert assistant message only after the last tool message
+    expect(result).toHaveLength(6) // 5 original + 1 inserted
+    expect(result[4].role).toBe("assistant")
+    expect(result[4].content).toEqual([{ type: "text", text: "Done." }])
+    expect(result[5].role).toBe("user")
+  })
+
+  test("does not insert assistant message if already present", () => {
+    const msgs = [
+      { role: "user", content: "What is 2+2?" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call123",
+            toolName: "calculator",
+            args: { expression: "2+2" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call123",
+            toolName: "calculator",
+            result: "4",
+          },
+        ],
+      },
+      { role: "assistant", content: "The answer is 4" },
+      { role: "user", content: "Thanks!" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, mistralModel)
+
+    // Should NOT insert additional assistant message
+    expect(result).toHaveLength(5)
+    expect(result[3].role).toBe("assistant")
+    expect(result[3].content).toBe("The answer is 4")
+    expect(result[4].role).toBe("user")
+  })
+
+  test("does not affect non-Mistral providers", () => {
+    const openaiModel = {
+      ...mistralModel,
+      id: "openai/gpt-4",
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+    }
+
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call123",
+            toolName: "bash",
+            result: "output",
+          },
+        ],
+      },
+      { role: "user", content: "Thanks" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, openaiModel)
+
+    // Should NOT insert assistant message for non-Mistral
+    expect(result).toHaveLength(3)
+  })
+
+  test("detects Devstral models via openai-compatible provider", () => {
+    const devstralModel = {
+      id: "custom/Devstral-Small-2-24B-Instruct-2512",
+      providerID: "openai-compatible",
+      api: {
+        id: "Devstral-Small-2-24B-Instruct-2512",
+        url: "https://vllm-devstral-small-2.llm-1.m3-dev.services",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      name: "Devstral Small 2 24B",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: false,
+        toolcall: true,
+        input: { text: true, audio: false, image: false, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: {
+        input: 0.002,
+        output: 0.006,
+        cache: { read: 0.0002, write: 0.0006 },
+      },
+      limit: {
+        context: 262144,
+        output: 32768,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+    } as any
+
+    const msgs = [
+      { role: "user", content: "Hello" },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call123",
+            toolName: "bash",
+            result: "output",
+          },
+        ],
+      },
+      { role: "user", content: "Thanks" },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, devstralModel)
+
+    // SHOULD insert assistant message for Devstral (it's a Mistral variant)
+    expect(result).toHaveLength(4)
+    expect(result[2].role).toBe("assistant")
+    expect(result[2].content).toEqual([{ type: "text", text: "Done." }])
+    expect(result[3].role).toBe("user")
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
