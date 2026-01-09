@@ -2,35 +2,14 @@ import { test, expect, describe } from "bun:test"
 import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
-import { Filesystem } from "../../src/util/filesystem"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
-describe("Filesystem.contains", () => {
-  test("allows paths within project", () => {
-    expect(Filesystem.contains("/project", "/project/src")).toBe(true)
-    expect(Filesystem.contains("/project", "/project/src/file.ts")).toBe(true)
-    expect(Filesystem.contains("/project", "/project")).toBe(true)
-  })
-
-  test("blocks ../ traversal", () => {
-    expect(Filesystem.contains("/project", "/project/../etc")).toBe(false)
-    expect(Filesystem.contains("/project", "/project/src/../../etc")).toBe(false)
-    expect(Filesystem.contains("/project", "/etc/passwd")).toBe(false)
-  })
-
-  test("blocks absolute paths outside project", () => {
-    expect(Filesystem.contains("/project", "/etc/passwd")).toBe(false)
-    expect(Filesystem.contains("/project", "/tmp/file")).toBe(false)
-    expect(Filesystem.contains("/home/user/project", "/home/user/other")).toBe(false)
-  })
-
-  test("handles prefix collision edge cases", () => {
-    expect(Filesystem.contains("/project", "/project-other/file")).toBe(false)
-    expect(Filesystem.contains("/project", "/projectfile")).toBe(false)
-  })
-})
+/*
+ * NOTE: Filesystem.contains() and Filesystem.containsResolved() unit tests
+ * are in test/util/filesystem.test.ts - not duplicated here.
+ */
 
 /*
  * Integration tests for File.read() and File.list() path traversal protection.
