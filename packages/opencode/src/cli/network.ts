@@ -12,6 +12,11 @@ const options = {
     describe: "hostname to listen on",
     default: "127.0.0.1",
   },
+  "base-path": {
+    type: "string" as const,
+    describe: "base path prefix for all routes (e.g., /notebook/ns/name/ for Kubeflow)",
+    default: "/",
+  },
   mdns: {
     type: "boolean" as const,
     describe: "enable mDNS service discovery (defaults hostname to 0.0.0.0)",
@@ -35,6 +40,7 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const config = await Config.global()
   const portExplicitlySet = process.argv.includes("--port")
   const hostnameExplicitlySet = process.argv.includes("--hostname")
+  const basePathExplicitlySet = process.argv.includes("--base-path")
   const mdnsExplicitlySet = process.argv.includes("--mdns")
   const corsExplicitlySet = process.argv.includes("--cors")
 
@@ -49,5 +55,13 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
 
-  return { hostname, port, mdns, cors }
+  // Resolve base path: CLI arg > env var > config > default
+  const envBasePath = process.env.OPENCODE_BASE_PATH
+  const basePath = basePathExplicitlySet
+    ? args["base-path"]
+    : envBasePath
+      ? envBasePath
+      : (config?.server?.basePath ?? args["base-path"])
+
+  return { hostname, port, mdns, cors, basePath }
 }
