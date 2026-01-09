@@ -116,10 +116,17 @@ export const rpc = {
       body,
     }
   },
-  async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[]; basePath?: string }) {
     if (server) await server.stop(true)
-    server = Server.listen(input)
-    return { url: server.url.toString() }
+    try {
+      server = Server.listen(input)
+      return {
+        url: Server.url().toString(),
+      }
+    } catch (e) {
+      console.error(e)
+      throw e
+    }
   },
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
