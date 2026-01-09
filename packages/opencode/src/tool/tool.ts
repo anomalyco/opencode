@@ -44,42 +44,88 @@ export namespace Tool {
   export type InferParameters<T extends Info> = T extends Info<infer P> ? z.infer<P> : never
   export type InferMetadata<T extends Info> = T extends Info<any, infer M> ? M : never
 
+  function coerceJsonStrings(input: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(input)) {
+      if (typeof value === "string" && /^[\[{]/.test(value)) {
+        try {
+          result[key] = JSON.parse(value)
+        } catch {
+          result[key] = value
+        }
+      } else {
+        result[key] = value
+      }
+    }
+    return result
+  }
+
   export function define<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
     init: Info<Parameters, Result>["init"] | Awaited<ReturnType<Info<Parameters, Result>["init"]>>,
   ): Info<Parameters, Result> {
+    id = id.replace(/\w\S*/g, (text) => text.charAt(0).toUpperCase() + text.substring(1).toLowerCase())
     return {
       id,
       init: async (initCtx) => {
         const toolInfo = init instanceof Function ? await init(initCtx) : init
-        const execute = toolInfo.execute
+        const originalExecute = toolInfo.execute
         toolInfo.execute = async (args, ctx) => {
-          try {
-            toolInfo.parameters.parse(args)
-          } catch (error) {
-            if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-              throw new Error(toolInfo.formatValidationError(error), { cause: error })
+          const firstTry = toolInfo.parameters.safeParse(args)
+
+          if (firstTry.success) {
+            const result = await originalExecute(args, ctx)
+            if (result.metadata.truncated !== undefined) {
+              return result
             }
-            throw new Error(
-              `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-              { cause: error },
-            )
+            const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+            return {
+              ...result,
+              output: truncated.content,
+              metadata: {
+                ...result.metadata,
+                truncated: truncated.truncated,
+                ...(truncated.truncated && { outputPath: truncated.outputPath }),
+              },
+            }
           }
-          const result = await execute(args, ctx)
-          // skip truncation for tools that handle it themselves
-          if (result.metadata.truncated !== undefined) {
-            return result
+
+          const hasStringTypeError = firstTry.error.issues.some(
+            (issue) =>
+              issue.code === "invalid_type" &&
+              ((issue as { expected?: string }).expected === "array" ||
+                (issue as { expected?: string }).expected === "object"),
+          )
+
+          if (hasStringTypeError) {
+            const coercedArgs = coerceJsonStrings(args as Record<string, unknown>)
+            const secondTry = toolInfo.parameters.safeParse(coercedArgs)
+
+            if (secondTry.success) {
+              const result = await originalExecute(coercedArgs as z.infer<Parameters>, ctx)
+              if (result.metadata.truncated !== undefined) {
+                return result
+              }
+              const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+              return {
+                ...result,
+                output: truncated.content,
+                metadata: {
+                  ...result.metadata,
+                  truncated: truncated.truncated,
+                  ...(truncated.truncated && { outputPath: truncated.outputPath }),
+                },
+              }
+            }
           }
-          const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
-          return {
-            ...result,
-            output: truncated.content,
-            metadata: {
-              ...result.metadata,
-              truncated: truncated.truncated,
-              ...(truncated.truncated && { outputPath: truncated.outputPath }),
-            },
+
+          if (toolInfo.formatValidationError) {
+            throw new Error(toolInfo.formatValidationError(firstTry.error), { cause: firstTry.error })
           }
+          throw new Error(
+            `The ${id} tool was called with invalid arguments: ${firstTry.error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+            { cause: firstTry.error },
+          )
         }
         return toolInfo
       },
