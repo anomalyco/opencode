@@ -2894,6 +2894,10 @@ window.__OPENCODE_BASE_PATH__="${_basePath}";
               `:window.location.origin+(window.__OPENCODE_BASE_PATH__||""))`,
             )
 
+            // Rewrite absolute asset paths in JavaScript strings
+            // Matches "/assets/..." in JS strings
+            js = js.replace(/"\/(assets\/[^"]*)"/g, `"${_basePath}/$1"`)
+
             return new Response(js, {
               status: response.status,
               statusText: response.statusText,
