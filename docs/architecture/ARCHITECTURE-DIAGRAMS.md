@@ -12,6 +12,14 @@
 6. [权限系统流程图](#6-权限系统流程图)
 7. [消息与部件类型关系图](#7-消息与部件类型关系图)
 8. [Provider 与 Model 架构图](#8-provider-与-model-架构图)
+9. [SubAgent (Task) 执行流程图](#9-subagent-task-执行流程图)
+10. [数据流总览图](#10-数据流总览图)
+11. [Plugin 系统架构图](#11-plugin-系统架构图) ⭐ NEW
+12. [Tool 异常处理流程图](#12-tool-异常处理流程图) ⭐ NEW
+13. [LLM 重试机制流程图](#13-llm-重试机制流程图) ⭐ NEW
+14. [Doom Loop 检测机制](#14-doom-loop-检测机制) ⭐ NEW
+15. [关键代码文件索引](#15-关键代码文件索引)
+16. [架构设计原则](#16-架构设计原则)
 
 ---
 
@@ -698,7 +706,587 @@ flowchart LR
 
 ---
 
-## 11. 关键代码文件索引
+## 11. Plugin 系统架构图
+
+Plugin 系统是 OpenCode 的核心扩展机制，允许在关键执行点插入自定义逻辑。
+
+### 11.1 Plugin 加载流程
+
+```mermaid
+flowchart TB
+    subgraph "Plugin 初始化"
+        Start([Plugin.init]) --> LoadConfig["加载配置<br/>Config.get()"]
+        LoadConfig --> CheckBuiltin["加载内置插件<br/>opencode-copilot-auth<br/>opencode-anthropic-auth"]
+
+        CheckBuiltin --> LoadCustom["加载自定义插件<br/>config.plugin[]"]
+
+        LoadCustom --> ResolvePlugin{"解析插件路径"}
+
+        ResolvePlugin -->|file://| LocalFile["本地文件"]
+        ResolvePlugin -->|npm包| InstallPkg["BunProc.install()<br/>安装npm包"]
+
+        LocalFile --> ImportMod["动态导入模块<br/>import(plugin)"]
+        InstallPkg --> ImportMod
+
+        ImportMod --> InitPlugin["初始化插件<br/>fn(PluginInput)"]
+        InitPlugin --> RegisterHooks["注册 Hooks"]
+        RegisterHooks --> Done([完成])
+    end
+
+    subgraph "PluginInput 上下文"
+        Input["PluginInput"]
+        Client["client: OpencodeClient"]
+        Project["project: Project"]
+        Directory["directory: string"]
+        Worktree["worktree: string"]
+        ServerUrl["serverUrl: URL"]
+        Shell["$: BunShell"]
+
+        Input --> Client
+        Input --> Project
+        Input --> Directory
+        Input --> Worktree
+        Input --> ServerUrl
+        Input --> Shell
+    end
+
+    style Start fill:#e3f2fd
+    style RegisterHooks fill:#e8f5e9
+```
+
+### 11.2 Plugin Hooks 触发点
+
+```mermaid
+flowchart LR
+    subgraph "Chat Lifecycle Hooks"
+        ChatMsg["chat.message<br/>消息创建后"]
+        ChatParams["chat.params<br/>LLM参数调整"]
+        ChatSystem["experimental.chat.system.transform<br/>系统提示词转换"]
+        ChatMessages["experimental.chat.messages.transform<br/>消息历史转换"]
+    end
+
+    subgraph "Tool Lifecycle Hooks"
+        ToolBefore["tool.execute.before<br/>工具执行前"]
+        ToolAfter["tool.execute.after<br/>工具执行后"]
+    end
+
+    subgraph "Permission Hooks"
+        PermAsk["permission.ask<br/>权限请求时"]
+    end
+
+    subgraph "Session Hooks"
+        Compacting["experimental.session.compacting<br/>会话压缩时"]
+        TextComplete["experimental.text.complete<br/>文本完成时"]
+    end
+
+    subgraph "Event Hooks"
+        EventHook["event<br/>所有事件广播"]
+        ConfigHook["config<br/>配置初始化"]
+    end
+
+    style ToolBefore fill:#fff3e0
+    style ToolAfter fill:#fff3e0
+    style PermAsk fill:#ffebee
+```
+
+### 11.3 Plugin Hooks 时序图
+
+```mermaid
+sequenceDiagram
+    participant Agent as Agent Loop
+    participant Plugin as Plugin System
+    participant Hook as Plugin Hook
+    participant Tool as Tool
+
+    Note over Agent,Tool: 工具执行完整流程
+
+    Agent->>Plugin: Plugin.trigger("chat.params", ...)
+    Plugin->>Hook: 调用所有注册的 chat.params hooks
+    Hook-->>Plugin: 修改后的参数 {temperature, topP, ...}
+    Plugin-->>Agent: 返回修改后的参数
+
+    Agent->>Agent: LLM.stream() 流式调用
+
+    Agent->>Plugin: Plugin.trigger("chat.message", ...)
+    Plugin->>Hook: 调用 chat.message hooks
+    Hook-->>Agent: 消息处理完成
+
+    Note over Agent,Tool: 工具调用
+
+    Agent->>Plugin: Plugin.trigger("tool.execute.before", {tool, args})
+    Plugin->>Hook: 调用 tool.execute.before hooks
+    Hook->>Hook: 可修改 args
+    Hook-->>Plugin: 返回修改后的 args
+    Plugin-->>Agent: 继续执行
+
+    Agent->>Tool: tool.execute(args)
+    Tool-->>Agent: 返回结果 {title, output, metadata}
+
+    Agent->>Plugin: Plugin.trigger("tool.execute.after", {tool, result})
+    Plugin->>Hook: 调用 tool.execute.after hooks
+    Hook->>Hook: 可修改 output/metadata
+    Hook-->>Plugin: 返回修改后的结果
+    Plugin-->>Agent: 最终结果
+```
+
+### 11.4 Hooks 接口定义
+
+```typescript
+interface Hooks {
+  // 事件广播
+  event?: (input: { event: Event }) => Promise<void>
+
+  // 配置初始化
+  config?: (input: Config) => Promise<void>
+
+  // 自定义工具
+  tool?: { [key: string]: ToolDefinition }
+
+  // 认证扩展
+  auth?: AuthHook
+
+  // 消息创建后
+  "chat.message"?: (
+    input: { sessionID, agent?, model?, messageID?, variant? },
+    output: { message: UserMessage, parts: Part[] }
+  ) => Promise<void>
+
+  // LLM 参数调整
+  "chat.params"?: (
+    input: { sessionID, agent, model, provider, message },
+    output: { temperature, topP, topK, options }
+  ) => Promise<void>
+
+  // 权限请求
+  "permission.ask"?: (
+    input: Permission,
+    output: { status: "ask" | "deny" | "allow" }
+  ) => Promise<void>
+
+  // 工具执行前
+  "tool.execute.before"?: (
+    input: { tool, sessionID, callID },
+    output: { args: any }
+  ) => Promise<void>
+
+  // 工具执行后
+  "tool.execute.after"?: (
+    input: { tool, sessionID, callID },
+    output: { title, output, metadata }
+  ) => Promise<void>
+
+  // 实验性: 系统提示词转换
+  "experimental.chat.system.transform"?: (
+    input: {},
+    output: { system: string[] }
+  ) => Promise<void>
+
+  // 实验性: 消息历史转换
+  "experimental.chat.messages.transform"?: (
+    input: {},
+    output: { messages: { info: Message, parts: Part[] }[] }
+  ) => Promise<void>
+
+  // 实验性: 会话压缩
+  "experimental.session.compacting"?: (
+    input: { sessionID },
+    output: { context: string[], prompt?: string }
+  ) => Promise<void>
+
+  // 实验性: 文本完成
+  "experimental.text.complete"?: (
+    input: { sessionID, messageID, partID },
+    output: { text: string }
+  ) => Promise<void>
+}
+```
+
+---
+
+## 12. Tool 异常处理流程图
+
+### 12.1 Tool 执行异常分类
+
+```mermaid
+flowchart TB
+    subgraph "异常类型分类"
+        ToolExec([工具执行]) --> ExecResult{"执行结果"}
+
+        ExecResult -->|成功| Success["state: completed<br/>正常返回结果"]
+
+        ExecResult -->|参数验证失败| ValidationError["Zod ValidationError<br/>参数不符合 Schema"]
+
+        ExecResult -->|权限拒绝| PermissionError["RejectedError<br/>用户拒绝或规则禁止"]
+
+        ExecResult -->|执行超时| TimeoutError["AbortError<br/>操作被中断"]
+
+        ExecResult -->|运行时错误| RuntimeError["执行过程中抛出异常"]
+
+        ExecResult -->|外部服务错误| ExternalError["网络错误/API错误"]
+    end
+
+    subgraph "异常处理结果"
+        ValidationError --> ErrorState1["state: error<br/>error: 格式化的验证错误"]
+        PermissionError --> ErrorState2["state: error<br/>error: 'Permission denied'"]
+        TimeoutError --> ErrorState3["state: error<br/>error: 'Tool execution aborted'"]
+        RuntimeError --> ErrorState4["state: error<br/>error: exception.toString()"]
+        ExternalError --> ErrorState5["state: error<br/>error: 错误详情"]
+
+        ErrorState1 --> ReturnLLM["返回错误信息给 LLM"]
+        ErrorState2 --> BlockLoop["blocked = true<br/>终止当前 Loop"]
+        ErrorState3 --> ReturnLLM
+        ErrorState4 --> ReturnLLM
+        ErrorState5 --> ReturnLLM
+    end
+
+    style ToolExec fill:#e3f2fd
+    style Success fill:#e8f5e9
+    style BlockLoop fill:#ffebee
+```
+
+### 12.2 Tool Error 处理时序图
+
+```mermaid
+sequenceDiagram
+    participant Processor as SessionProcessor
+    participant Stream as LLM Stream
+    participant Tool as Tool Executor
+    participant Storage as Storage
+    participant Bus as Event Bus
+
+    Note over Processor,Bus: 正常 tool-call 流程
+
+    Stream->>Processor: tool-call event
+    Processor->>Storage: 创建 ToolPart (state: pending)
+
+    Processor->>Tool: 执行工具
+    Tool->>Tool: 参数验证
+
+    alt 参数验证失败
+        Tool-->>Processor: ValidationError
+        Processor->>Storage: 更新 ToolPart (state: error)
+        Processor->>Bus: 发布 Part.Updated
+        Processor-->>Stream: 返回错误信息
+    else 权限被拒绝
+        Tool-->>Processor: RejectedError
+        Processor->>Storage: 更新 ToolPart (state: error)
+        Processor->>Processor: blocked = true
+        Note over Processor: Loop 将在完成后停止
+    else 执行成功
+        Tool-->>Processor: 返回结果
+        Processor->>Storage: 更新 ToolPart (state: completed)
+        Processor->>Bus: 发布 Part.Updated
+    end
+
+    Note over Processor,Bus: tool-error 事件处理
+
+    Stream->>Processor: tool-error event
+    Processor->>Processor: 查找对应 toolcall
+    Processor->>Storage: 更新 ToolPart (state: error)
+
+    alt 是 RejectedError
+        Processor->>Processor: blocked = shouldBreak
+    end
+
+    Processor->>Bus: 发布 Part.Updated
+```
+
+### 12.3 Abort 处理流程
+
+```mermaid
+flowchart TB
+    subgraph "Abort 触发源"
+        UserCancel["用户取消操作"]
+        Timeout["操作超时"]
+        SessionEnd["会话结束"]
+    end
+
+    subgraph "Abort 传播"
+        Signal["AbortController.signal"]
+        Propagate["传播到所有异步操作"]
+    end
+
+    subgraph "清理流程"
+        CheckParts["检查所有 ToolPart"]
+        FindPending["查找非终态的 Parts<br/>pending / running"]
+        UpdateError["更新为 error 状态<br/>'Tool execution aborted'"]
+        SaveMessage["保存 AssistantMessage"]
+    end
+
+    UserCancel --> Signal
+    Timeout --> Signal
+    SessionEnd --> Signal
+
+    Signal --> Propagate
+    Propagate --> CheckParts
+    CheckParts --> FindPending
+    FindPending --> UpdateError
+    UpdateError --> SaveMessage
+
+    style Signal fill:#ffebee
+    style UpdateError fill:#fff3e0
+```
+
+### 12.4 Tool State 状态机
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: 创建 ToolPart
+
+    pending --> running: 开始执行
+    pending --> error: 验证失败/权限拒绝
+
+    running --> completed: 执行成功
+    running --> error: 执行失败/异常/中断
+
+    completed --> [*]
+    error --> [*]
+
+    note right of pending: 工具调用已识别<br/>等待执行
+    note right of running: 正在执行中<br/>可被中断
+    note right of completed: 执行成功<br/>有 output
+    note right of error: 执行失败<br/>有 error 信息
+```
+
+---
+
+## 13. LLM 重试机制流程图
+
+### 13.1 重试决策流程
+
+```mermaid
+flowchart TB
+    subgraph "错误捕获"
+        ProcessStart([processor.process]) --> TryCatch["try-catch 包裹流处理"]
+        TryCatch --> CatchError{"捕获异常"}
+    end
+
+    subgraph "错误分析"
+        CatchError --> ConvertError["MessageV2.fromError()<br/>转换为标准错误"]
+        ConvertError --> CheckRetryable["SessionRetry.retryable()<br/>判断是否可重试"]
+
+        CheckRetryable --> RetryResult{"可重试?"}
+
+        RetryResult -->|否| SetError["设置 message.error"]
+        SetError --> PublishError["Bus.publish(Session.Error)"]
+        PublishError --> StopLoop["返回 'stop'"]
+
+        RetryResult -->|是| GetReason["获取重试原因<br/>'Provider overloaded'<br/>'Too Many Requests'<br/>'Rate Limited'"]
+    end
+
+    subgraph "重试逻辑"
+        GetReason --> IncrAttempt["attempt++"]
+        IncrAttempt --> CalcDelay["SessionRetry.delay()<br/>计算延迟时间"]
+
+        CalcDelay --> SetStatus["设置状态<br/>SessionStatus.set('retry')"]
+        SetStatus --> Sleep["SessionRetry.sleep()<br/>等待延迟"]
+
+        Sleep --> CheckAbort{"被中断?"}
+        CheckAbort -->|是| StopLoop
+        CheckAbort -->|否| ContinueLoop["continue<br/>重新执行流处理"]
+    end
+
+    style ProcessStart fill:#e3f2fd
+    style StopLoop fill:#ffebee
+    style ContinueLoop fill:#e8f5e9
+```
+
+### 13.2 延迟计算逻辑
+
+```mermaid
+flowchart TB
+    subgraph "延迟计算 SessionRetry.delay()"
+        Start([开始计算]) --> CheckAPIError{"是 APIError?"}
+
+        CheckAPIError -->|是| CheckHeaders["检查响应头"]
+
+        CheckHeaders --> HasRetryMs{"有 retry-after-ms?"}
+        HasRetryMs -->|是| UseRetryMs["使用 retry-after-ms 毫秒值"]
+
+        HasRetryMs -->|否| HasRetryAfter{"有 retry-after?"}
+        HasRetryAfter -->|是| ParseRetryAfter["解析 retry-after<br/>秒数或HTTP日期"]
+        HasRetryAfter -->|否| UseBackoff["指数退避<br/>INITIAL_DELAY * 2^(attempt-1)"]
+
+        ParseRetryAfter --> UseRetryAfter["使用解析后的延迟"]
+
+        CheckAPIError -->|否| UseBackoffCapped["指数退避(有上限)<br/>min(2^attempt * 2s, 30s)"]
+    end
+
+    subgraph "延迟常量"
+        Initial["RETRY_INITIAL_DELAY = 2000ms"]
+        Factor["RETRY_BACKOFF_FACTOR = 2"]
+        MaxNoHeaders["RETRY_MAX_DELAY_NO_HEADERS = 30s"]
+        MaxDelay["RETRY_MAX_DELAY = 2147483647ms"]
+    end
+
+    UseRetryMs --> Return([返回延迟])
+    UseRetryAfter --> Return
+    UseBackoff --> Return
+    UseBackoffCapped --> Return
+
+    style Start fill:#e3f2fd
+    style Return fill:#e8f5e9
+```
+
+### 13.3 可重试错误类型
+
+```mermaid
+flowchart LR
+    subgraph "可重试错误 Retryable Errors"
+        APIError["APIError<br/>isRetryable=true"]
+        Overloaded["Overloaded<br/>Provider 过载"]
+        TooMany["too_many_requests<br/>请求过多"]
+        RateLimit["rate_limit<br/>速率限制"]
+        Exhausted["exhausted/unavailable<br/>资源耗尽"]
+        NoKVSpace["no_kv_space<br/>KV空间不足"]
+        ServerError["server_error<br/>服务端错误"]
+    end
+
+    subgraph "不可重试错误 Non-Retryable"
+        AuthError["认证错误"]
+        ValidationError["参数验证错误"]
+        PermissionError["权限错误"]
+        UnknownError["未知错误"]
+    end
+
+    APIError -->|"返回重试原因"| Retry[["重试"]]
+    Overloaded --> Retry
+    TooMany --> Retry
+    RateLimit --> Retry
+    Exhausted --> Retry
+    NoKVSpace --> Retry
+    ServerError --> Retry
+
+    AuthError -->|"返回 undefined"| NoRetry[["不重试"]]
+    ValidationError --> NoRetry
+    PermissionError --> NoRetry
+    UnknownError --> NoRetry
+
+    style Retry fill:#e8f5e9
+    style NoRetry fill:#ffebee
+```
+
+---
+
+## 14. Doom Loop 检测机制
+
+Doom Loop 是指 LLM 陷入重复调用相同工具的死循环，需要检测并阻止。
+
+### 14.1 Doom Loop 检测流程
+
+```mermaid
+flowchart TB
+    subgraph "检测逻辑 (processor.ts)"
+        ToolCall([tool-call 事件]) --> GetToolName["获取工具名称<br/>value.toolName"]
+        GetToolName --> CheckRepeat{"与上次相同?<br/>lastTool === toolName"}
+
+        CheckRepeat -->|否| ResetCount["repeatCount = 0<br/>lastTool = toolName"]
+        ResetCount --> Continue([继续执行])
+
+        CheckRepeat -->|是| IncrCount["repeatCount++"]
+        IncrCount --> CheckThreshold{"repeatCount >= 3?"}
+
+        CheckThreshold -->|否| Continue
+
+        CheckThreshold -->|是| DoomDetected["检测到 Doom Loop!"]
+    end
+
+    subgraph "Doom Loop 处理"
+        DoomDetected --> GetAgent["获取 Agent 配置"]
+        GetAgent --> AskPermission["PermissionNext.ask()<br/>permission: 'doom_loop'"]
+
+        AskPermission --> PermResult{"用户决定"}
+
+        PermResult -->|允许继续| AllowContinue["允许继续执行<br/>重置计数器"]
+        PermResult -->|拒绝| RejectStop["blocked = true<br/>终止 Loop"]
+    end
+
+    AllowContinue --> Continue
+    RejectStop --> Stop([返回 'stop'])
+
+    style DoomDetected fill:#ffebee
+    style AskPermission fill:#fff3e0
+```
+
+### 14.2 Doom Loop 检测时序图
+
+```mermaid
+sequenceDiagram
+    participant LLM as LLM Stream
+    participant Processor as SessionProcessor
+    participant Permission as PermissionNext
+    participant User as 用户
+
+    Note over LLM,User: 连续相同工具调用
+
+    LLM->>Processor: tool-call (bash)
+    Processor->>Processor: lastTool="bash", repeatCount=0
+    Processor->>Processor: 执行工具
+
+    LLM->>Processor: tool-call (bash)
+    Processor->>Processor: repeatCount=1
+    Processor->>Processor: 执行工具
+
+    LLM->>Processor: tool-call (bash)
+    Processor->>Processor: repeatCount=2
+    Processor->>Processor: 执行工具
+
+    LLM->>Processor: tool-call (bash)
+    Processor->>Processor: repeatCount=3 >= 3 ⚠️
+
+    Note over Processor: 检测到 Doom Loop!
+
+    Processor->>Permission: ask({permission: "doom_loop"})
+    Permission->>User: 提示: "检测到重复工具调用"
+
+    alt 用户允许继续
+        User-->>Permission: 允许
+        Permission-->>Processor: allow
+        Processor->>Processor: repeatCount=0
+        Processor->>Processor: 继续执行
+    else 用户拒绝
+        User-->>Permission: 拒绝
+        Permission-->>Processor: deny
+        Processor->>Processor: blocked=true
+        Note over Processor: Loop 将停止
+    end
+```
+
+### 14.3 Doom Loop 检测配置
+
+```typescript
+// 在 processor.ts 中的实现
+
+let lastTool: string | undefined
+let repeatCount = 0
+
+// 每次 tool-call 事件时
+case "tool-call":
+  if (lastTool === value.toolName) {
+    repeatCount++
+    if (repeatCount >= 3) {
+      // 触发 doom_loop 权限检查
+      await PermissionNext.ask({
+        permission: "doom_loop",
+        patterns: [value.toolName],
+        sessionID: input.assistantMessage.sessionID,
+        metadata: {
+          tool: value.toolName,
+          repeatCount,
+        },
+        ruleset: agent.permission,
+      })
+      repeatCount = 0 // 用户允许后重置
+    }
+  } else {
+    lastTool = value.toolName
+    repeatCount = 0
+  }
+```
+
+---
+
+## 15. 关键代码文件索引
 
 | 文件路径 | 职责描述 |
 |---------|---------|
@@ -706,40 +1294,52 @@ flowchart LR
 | `packages/opencode/src/session/processor.ts` | 流处理和工具执行 |
 | `packages/opencode/src/session/message-v2.ts` | 消息和 Part 类型定义 |
 | `packages/opencode/src/session/llm.ts` | LLM 流式调用封装 |
+| `packages/opencode/src/session/retry.ts` | 重试机制实现 |
 | `packages/opencode/src/session/index.ts` | 会话管理 |
 | `packages/opencode/src/tool/tool.ts` | 工具接口定义 |
 | `packages/opencode/src/tool/registry.ts` | 工具注册和解析 |
 | `packages/opencode/src/agent/agent.ts` | Agent 配置定义 |
 | `packages/opencode/src/provider/provider.ts` | Provider 管理 |
 | `packages/opencode/src/permission/next.ts` | 权限系统 |
+| `packages/opencode/src/plugin/index.ts` | Plugin 系统实现 |
+| `packages/plugin/src/index.ts` | Plugin Hooks 接口定义 |
 | `packages/opencode/src/storage/` | 持久化存储 |
 | `packages/opencode/src/bus/` | 事件总线 |
 
 ---
 
-## 12. 架构设计原则
+## 16. 架构设计原则
 
-### 12.1 消息驱动架构
+### 16.1 消息驱动架构
 - 所有状态变更通过事件总线广播
 - 使用异步生成器实现流式处理
 - 消息 Part 增量更新
 
-### 12.2 插件化设计
+### 16.2 插件化设计
 - Tool Hooks 系统（before/after）
 - 自定义工具注册
 - Provider 扩展机制
+- 实验性 Hooks 支持
 
-### 12.3 权限优先
+### 16.3 权限优先
 - 细粒度权限规则集
 - 工具调用时权限评估
 - 用户审批流程
+- Doom Loop 检测保护
 
-### 12.4 模块化工具系统
+### 16.4 模块化工具系统
 - 统一的 Tool 接口抽象
 - Zod Schema 参数验证
 - 元数据/上下文传递
+- 异常状态机管理
 
-### 12.5 状态隔离
+### 16.5 状态隔离
 - 每会话独立的 AbortController
 - 消息父子关系追踪
 - 会话级权限管理
+
+### 16.6 容错与重试
+- 可重试错误自动识别
+- 指数退避重试策略
+- 响应头优先延迟计算
+- Abort 信号传播机制
