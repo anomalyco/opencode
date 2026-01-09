@@ -129,7 +129,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
 
     #[cfg(not(target_os = "windows"))]
     let (mut rx, child) = {
-        let sidecar = get_sidecar_path();
+        let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
         app.shell()
             .command(&shell)
