@@ -254,6 +254,80 @@ function getSubscriptionStatus(row: {
   }
 }
 
+function formatMicroCents(value: number | null | undefined) {
+  if (value === null || value === undefined) return null
+  return `$${(value / 100000000).toFixed(2)}`
+}
+
+function formatDate(value: Date | null | undefined) {
+  if (!value) return null
+  return value.toISOString().split("T")[0]
+}
+
+function formatMonthlyUsage(usage: number | null | undefined, limit: number | null | undefined) {
+  const usageText = formatMicroCents(usage) ?? "$0.00"
+  if (limit === null || limit === undefined) return `${usageText} / no limit`
+  return `${usageText} / $${limit.toFixed(2)}`
+}
+
+function formatRetryTime(seconds: number) {
+  const days = Math.floor(seconds / 86400)
+  if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.ceil((seconds % 3600) / 60)
+  if (hours >= 1) return `${hours}hr ${minutes}min`
+  return `${minutes}min`
+}
+
+function getSubscriptionStatus(row: {
+  timeSubscriptionCreated: Date | null
+  fixedUsage: number | null
+  rollingUsage: number | null
+  timeFixedUpdated: Date | null
+  timeRollingUpdated: Date | null
+}) {
+  if (!row.timeSubscriptionCreated) {
+    return { weekly: null, rolling: null, rateLimited: null, retryIn: null }
+  }
+
+  const black = BlackData.get()
+  const now = new Date()
+  const week = getWeekBounds(now)
+
+  const fixedLimit = black.fixedLimit ? centsToMicroCents(black.fixedLimit * 100) : null
+  const rollingLimit = black.rollingLimit ? centsToMicroCents(black.rollingLimit * 100) : null
+  const rollingWindowMs = (black.rollingWindow ?? 5) * 3600 * 1000
+
+  // Calculate current weekly usage (reset if outside current week)
+  const currentWeekly =
+    row.fixedUsage && row.timeFixedUpdated && row.timeFixedUpdated >= week.start ? row.fixedUsage : 0
+
+  // Calculate current rolling usage
+  const windowStart = new Date(now.getTime() - rollingWindowMs)
+  const currentRolling =
+    row.rollingUsage && row.timeRollingUpdated && row.timeRollingUpdated >= windowStart ? row.rollingUsage : 0
+
+  // Check rate limiting
+  const isWeeklyLimited = fixedLimit !== null && currentWeekly >= fixedLimit
+  const isRollingLimited = rollingLimit !== null && currentRolling >= rollingLimit
+
+  let retryIn: string | null = null
+  if (isWeeklyLimited) {
+    const retryAfter = Math.ceil((week.end.getTime() - now.getTime()) / 1000)
+    retryIn = formatRetryTime(retryAfter)
+  } else if (isRollingLimited && row.timeRollingUpdated) {
+    const retryAfter = Math.ceil((row.timeRollingUpdated.getTime() + rollingWindowMs - now.getTime()) / 1000)
+    retryIn = formatRetryTime(retryAfter)
+  }
+
+  return {
+    weekly: fixedLimit !== null ? `${formatMicroCents(currentWeekly)} / $${black.fixedLimit}` : null,
+    rolling: rollingLimit !== null ? `${formatMicroCents(currentRolling)} / $${black.rollingLimit}` : null,
+    rateLimited: isWeeklyLimited || isRollingLimited ? "yes" : "no",
+    retryIn,
+  }
+}
+
 function printHeader(title: string) {
   console.log()
   console.log("─".repeat(title.length))
