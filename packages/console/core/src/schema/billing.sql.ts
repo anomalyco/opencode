@@ -22,6 +22,7 @@ export const BillingTable = mysqlTable(
     timeReloadError: utc("time_reload_error"),
     timeReloadLockedTill: utc("time_reload_locked_till"),
     subscriptionID: varchar("subscription_id", { length: 28 }),
+    subscriptionCouponID: varchar("subscription_coupon_id", { length: 28 }),
   },
   (table) => [
     ...workspaceIndexes(table),
@@ -54,6 +55,15 @@ export const PaymentTable = mysqlTable(
     paymentID: varchar("payment_id", { length: 255 }),
     amount: bigint("amount", { mode: "number" }).notNull(),
     timeRefunded: utc("time_refunded"),
+    enrichment: json("enrichment").$type<
+      | {
+          type: "subscription"
+          couponID?: string
+        }
+      | {
+          type: "credit"
+        }
+    >(),
   },
   (table) => [...workspaceIndexes(table)],
 )
