@@ -77,7 +77,7 @@
 
   [data-slot="user-message-text"] {
     white-space: pre-wrap;
-    word-break: break-all;
+    word-break: break-word;
     overflow: hidden;
     background: var(--surface-base);
     padding: 8px 12px;
@@ -254,6 +254,7 @@
 
   scrollbar-width: none;
   -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
@@ -271,6 +272,7 @@
   /* Hide scrollbar */
   scrollbar-width: none;
   -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
@@ -413,26 +415,23 @@
       border: 1.5px solid transparent;
       background:
         linear-gradient(var(--background-base) 0 0) padding-box,
-        conic-gradient(
-            from var(--border-angle),
-            transparent 0deg,
-            transparent 0deg,
-            var(--border-warning-strong, var(--border-warning-selected)) 300deg,
-            var(--border-warning-base) 360deg
-          )
-          border-box;
+        conic-gradient(from var(--border-angle),
+          transparent 0deg,
+          transparent 0deg,
+          var(--border-warning-strong, var(--border-warning-selected)) 300deg,
+          var(--border-warning-base) 360deg) border-box;
       animation: chase-border 2.5s linear infinite;
       pointer-events: none;
       z-index: -1;
     }
 
-    & > *:first-child {
+    &>*:first-child {
       border-top-left-radius: 6px;
       border-top-right-radius: 6px;
       overflow: hidden;
     }
 
-    & > *:last-child {
+    &>*:last-child {
       border-bottom-left-radius: 6px;
       border-bottom-right-radius: 6px;
       overflow: hidden;
@@ -458,6 +457,7 @@
   from {
     --border-angle: 0deg;
   }
+
   to {
     --border-angle: 360deg;
   }
