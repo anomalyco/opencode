@@ -96,6 +96,30 @@ If you're interested in contributing to OpenCode, please read our [contributing 
 
 If you are working on a project that's related to OpenCode and is using "opencode" as a part of its name; for example, "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
 
+### Running Behind a Reverse Proxy
+
+OpenCode supports running behind a reverse proxy with a base path prefix:
+
+```bash
+# CLI flag
+opencode web --base-path /my-prefix/
+
+# Environment variable
+OPENCODE_BASE_PATH=/my-prefix/ opencode web
+
+# Config file (opencode.json)
+{
+  "server": {
+    "basePath": "/my-prefix/"
+  }
+}
+```
+
+This is useful for:
+- Kubernetes Ingress with path-based routing
+- Kubeflow Notebooks (set `basePath` to `$NB_PREFIX`)
+- Running multiple instances behind nginx/traefik
+
 ### FAQ
 
 #### How is this different from Claude Code?
