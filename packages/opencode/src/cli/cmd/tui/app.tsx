@@ -1,6 +1,24 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
+
+let copyDebounceTimer: Timer | undefined
+let lastCopyTime = 0
+const COPY_DEBOUNCE_MS = 100
+
+function debouncedCopy(text: string, onSuccess?: () => void, onError?: (e: unknown) => void): void {
+  const now = Date.now()
+  if (now - lastCopyTime < COPY_DEBOUNCE_MS) {
+    if (copyDebounceTimer) clearTimeout(copyDebounceTimer)
+    copyDebounceTimer = setTimeout(() => {
+      lastCopyTime = Date.now()
+      Clipboard.copy(text).then(onSuccess).catch(onError)
+    }, COPY_DEBOUNCE_MS)
+    return
+  }
+  lastCopyTime = now
+  Clipboard.copy(text).then(onSuccess).catch(onError)
+}
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
@@ -156,9 +174,9 @@ export function tui(input: { url: string; args: Args; directory?: string; onExit
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
-            Clipboard.copy(text).catch((error) => {
-              console.error(`Failed to copy console selection to clipboard: ${error}`)
-            })
+            debouncedCopy(text, undefined, (error) =>
+              console.error(`Failed to copy console selection to clipboard: ${error}`),
+            )
           },
         },
       },
@@ -182,8 +200,7 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
-  // Wire up console copy-to-clipboard via opentui's onCopySelection callback
-  renderer.console.onCopySelection = async (text: string) => {
+  renderer.console.onCopySelection = (text: string) => {
     if (!text || text.length === 0) return
 
     const base64 = Buffer.from(text).toString("base64")
@@ -191,9 +208,7 @@ function App() {
     const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
     // @ts-expect-error writeOut is not in type definitions
     renderer.writeOut(finalOsc52)
-    await Clipboard.copy(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-      .catch(toast.error)
+    debouncedCopy(text, () => toast.show({ message: "Copied to clipboard", variant: "info" }), toast.error)
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
@@ -615,7 +630,7 @@ function App() {
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={theme.background}
-      onMouseUp={async () => {
+      onMouseUp={() => {
         if (Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
           renderer.clearSelection()
           return
@@ -627,9 +642,7 @@ function App() {
           const finalOsc52 = process.env["TMUX"] ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
           /* @ts-expect-error */
           renderer.writeOut(finalOsc52)
-          await Clipboard.copy(text)
-            .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
-            .catch(toast.error)
+          debouncedCopy(text, () => toast.show({ message: "Copied to clipboard", variant: "info" }), toast.error)
           renderer.clearSelection()
         }
       }}
@@ -693,9 +706,7 @@ function ErrorComponent(props: {
   issueURL.searchParams.set("opencode-version", Installation.VERSION)
 
   const copyIssueURL = () => {
-    Clipboard.copy(issueURL.toString()).then(() => {
-      setCopied(true)
-    })
+    debouncedCopy(issueURL.toString(), () => setCopied(true))
   }
 
   return (

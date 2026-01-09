@@ -49,13 +49,12 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
           const elapsed = Date.now() - last
 
           if (timer) continue
-          // If we just flushed recently (within 16ms), batch this with future events
-          // Otherwise, process immediately to avoid latency
           if (elapsed < 16) {
             timer = setTimeout(flush, 16)
             continue
           }
           flush()
+          await new Promise((r) => setTimeout(r, 0))
         }
 
         // Flush any remaining events
