@@ -146,6 +146,7 @@ export function Session() {
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
+  const headerEnabled = createMemo(() => sync.data.config.tui?.header_enabled ?? true)
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -905,7 +906,7 @@ export function Session() {
       <box flexDirection="row">
         <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
           <Show when={session()}>
-            <Show when={!sidebarVisible() || !wide()}>
+            <Show when={headerEnabled() && (!sidebarVisible() || !wide())}>
               <Header />
             </Show>
             <scrollbox

@@ -788,6 +788,7 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    header_enabled: z.boolean().optional().describe("Show header in session view"),
   })
 
   export const Server = z
