@@ -1,6 +1,6 @@
-import { realpathSync } from "fs"
+import { lstatSync, readlinkSync, realpathSync } from "fs"
 import { exists } from "fs/promises"
-import { dirname, join, relative } from "path"
+import { dirname, isAbsolute, join, relative, resolve } from "path"
 
 export namespace Filesystem {
   /**
@@ -22,8 +22,73 @@ export namespace Filesystem {
     return !relA || !relA.startsWith("..") || !relB || !relB.startsWith("..")
   }
 
+  /**
+   * Lexical containment check - does NOT resolve symlinks.
+   * Use containsResolved() when the child path may be a symlink pointing outside.
+   */
   export function contains(parent: string, child: string) {
     return !relative(parent, child).startsWith("..")
+  }
+
+  /**
+   * Containment check with symlink resolution.
+   * Returns true only if the resolved child path is within the resolved parent.
+   * Returns false if the path is a symlink pointing outside, even if broken.
+   *
+   * Note: There is an inherent TOCTOU (time-of-check-time-of-use) race condition
+   * between this check and actual file operations. This is acceptable for the
+   * threat model of protecting against malicious symlinks in user-controlled
+   * directories, but not against active attackers with concurrent write access.
+   */
+  export function containsResolved(parent: string, child: string): boolean {
+    try {
+      const resolvedParent = realpathSync(parent)
+
+      // First, check if the child path is a symlink
+      try {
+        const stats = lstatSync(child)
+        if (stats.isSymbolicLink()) {
+          // It's a symlink - check where it points
+          const linkTarget = readlinkSync(child)
+          const absoluteTarget = isAbsolute(linkTarget) ? linkTarget : resolve(dirname(child), linkTarget)
+
+          // Try to resolve the full path (handles symlink chains)
+          try {
+            const resolvedChild = realpathSync(child)
+            return !relative(resolvedParent, resolvedChild).startsWith("..")
+          } catch {
+            // Broken symlink - check if target would be inside parent.
+            // relative() normalizes paths, so traversal attempts like
+            // /project/../../../etc are correctly detected as escaping.
+            return !relative(resolvedParent, absoluteTarget).startsWith("..")
+          }
+        }
+      } catch {
+        // lstatSync failed - path doesn't exist at all (not even as broken symlink)
+      }
+
+      // Not a symlink - try to resolve normally
+      try {
+        const resolvedChild = realpathSync(child)
+        return !relative(resolvedParent, resolvedChild).startsWith("..")
+      } catch {
+        // Path doesn't exist - check parent directory
+        const childDir = dirname(child)
+        if (childDir === child) return false // root directory
+
+        try {
+          const resolvedChildDir = realpathSync(childDir)
+          return !relative(resolvedParent, resolvedChildDir).startsWith("..")
+        } catch {
+          // Parent directory also doesn't exist - fall back to lexical check.
+          // This is safe because symlinks can't exist if the parent doesn't.
+          return contains(parent, child)
+        }
+      }
+    } catch {
+      // Parent doesn't exist or can't be resolved - deny access
+      return false
+    }
   }
 
   export async function findUp(target: string, start: string, stop?: string) {

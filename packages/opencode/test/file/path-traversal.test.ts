@@ -1,4 +1,5 @@
 import { test, expect, describe } from "bun:test"
+import { $ } from "bun"
 import path from "path"
 import fs from "fs/promises"
 import { Filesystem } from "../../src/util/filesystem"
@@ -81,6 +82,43 @@ describe("File.read path traversal protection", () => {
       fn: async () => {
         const result = await File.read("valid.txt")
         expect(result.content).toBe("valid content")
+      },
+    })
+  })
+
+  test("rejects symlink pointing outside project", async () => {
+    await using tmp = await tmpdir()
+
+    // Create symlink inside project that points to /etc
+    const symlinkPath = path.join(tmp.path, "escape-link")
+    await $`ln -s /etc ${symlinkPath}`.quiet()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // The symlink "escape-link" exists inside the project lexically,
+        // but points to /etc which is outside - should be rejected
+        await expect(File.read("escape-link/passwd")).rejects.toThrow("Access denied: path escapes project directory")
+      },
+    })
+  })
+
+  test("allows symlink pointing within project", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "target.txt"), "symlink target content")
+      },
+    })
+
+    // Create symlink pointing to file within same project
+    const symlinkPath = path.join(tmp.path, "internal-link.txt")
+    await $`ln -s ${path.join(tmp.path, "target.txt")} ${symlinkPath}`.quiet()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const result = await File.read("internal-link.txt")
+        expect(result.content).toBe("symlink target content")
       },
     })
   })

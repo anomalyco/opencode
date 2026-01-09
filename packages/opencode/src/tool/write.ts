@@ -27,6 +27,20 @@ export const WriteTool = Tool.define("write", {
 
     const file = Bun.file(filepath)
     const exists = await file.exists()
+
+    // For existing files, also check resolved path to catch symlinks pointing outside
+    if (exists && !Filesystem.containsResolved(Instance.directory, filepath)) {
+      const parentDir = path.dirname(filepath)
+      await ctx.ask({
+        permission: "external_directory",
+        patterns: [parentDir],
+        always: [parentDir + "/*"],
+        metadata: {
+          filepath,
+          parentDir,
+        },
+      })
+    }
     const contentOld = exists ? await file.text() : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
