@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createResource, createEffect, createMemo, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -35,15 +35,8 @@ export function DialogSelectServer() {
     error: "",
     status: {} as Record<string, ServerStatus | undefined>,
   })
-  const [defaultUrl, setDefaultUrl] = createSignal<string | null>(null)
+  const [defaultUrl, defaultUrlActions] = createResource(() => platform.getDefaultServerUrl?.())
   const isDesktop = platform.platform === "desktop"
-
-  onMount(async () => {
-    if (platform.getDefaultServerUrl) {
-      const url = await platform.getDefaultServerUrl()
-      setDefaultUrl(url)
-    }
-  })
 
   const items = createMemo(() => {
     const current = server.url
@@ -204,7 +197,7 @@ export function DialogSelectServer() {
                       size="small"
                       onClick={async () => {
                         await platform.setDefaultServerUrl?.(server.url)
-                        setDefaultUrl(server.url)
+                        defaultUrlActions.refetch(server.url)
                       }}
                     >
                       Set current server as default
@@ -220,7 +213,7 @@ export function DialogSelectServer() {
                   size="small"
                   onClick={async () => {
                     await platform.setDefaultServerUrl?.(null)
-                    setDefaultUrl(null)
+                    defaultUrlActions.refetch()
                   }}
                 >
                   Clear

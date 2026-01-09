@@ -13,6 +13,7 @@ use tauri::{
     path::BaseDirectory, AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl,
     WebviewWindow,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_store::StoreExt;
@@ -315,46 +316,6 @@ fn get_configured_server_url(app: &AppHandle) -> Option<String> {
     value.as_str().map(String::from)
 }
 
-async fn spawn_and_wait_for_sidecar(app: &AppHandle, port: u32) -> Option<CommandChild> {
-    let child = spawn_sidecar(app, port);
-
-    let timestamp = Instant::now();
-    loop {
-        if timestamp.elapsed() > Duration::from_secs(7) {
-            let res = app
-                .dialog()
-                .message("Failed to spawn OpenCode Server. Copy logs using the button below and send them to the team for assistance.")
-                .title("Startup Failed")
-                .buttons(MessageDialogButtons::OkCancelCustom(
-                    "Copy Logs And Exit".to_string(),
-                    "Exit".to_string(),
-                ))
-                .blocking_show_with_result();
-
-            if matches!(&res, MessageDialogResult::Custom(name) if name == "Copy Logs And Exit") {
-                match copy_logs_to_clipboard(app.clone()).await {
-                    Ok(()) => println!("Logs copied to clipboard successfully"),
-                    Err(e) => println!("Failed to copy logs to clipboard: {}", e),
-                }
-            }
-
-            app.exit(1);
-            return None;
-        }
-
-        tokio::time::sleep(Duration::from_millis(10)).await;
-
-        if is_server_running(port).await {
-            // give the server a little bit more time to warm up
-            tokio::time::sleep(Duration::from_millis(10)).await;
-            break;
-        }
-    }
-
-    println!("Server ready after {:?}", timestamp.elapsed());
-    Some(child)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
@@ -380,8 +341,6 @@ pub fn run() {
         .plugin(PinchZoomDisablePlugin)
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
-            copy_logs_to_clipboard,
-            get_logs,
             install_cli,
             ensure_server_started,
             get_default_server_url,
@@ -475,7 +434,7 @@ pub fn run() {
                             match res {
                                 MessageDialogResult::Custom(name) if name == "Retry" => {
                                     continue;
-                                }
+                                },
                                 _ => {
                                     should_fallback = true;
                                     break;
@@ -553,9 +512,8 @@ pub fn run() {
                         // If using a configured server URL, inject it
                         if let Some(url) = server_url {
                             let escaped_url = url.replace('\\', "\\\\").replace('"', "\\\"");
-                            let _ = window.eval(&format!(
-                                "window.__OPENCODE__.serverUrl = \"{}\";",
-                                escaped_url
+                            let _ = window.eval(format!(
+                                "window.__OPENCODE__.serverUrl = \"{escaped_url}\";",
                             ));
                         }
                     }
