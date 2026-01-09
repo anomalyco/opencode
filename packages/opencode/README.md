@@ -1,15 +1,19 @@
-# js
+# OpenCode CLI Core
 
-To install dependencies:
+This is the core package of OpenCode, a high-performance AI coding agent built with Bun.
 
-```bash
-bun install
-```
+## Setup
 
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.2.12. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+1. **Install Bun**: This project requires [Bun](https://bun.sh/).
+   ```bash
+   curl -fsSL [https://bun.sh/install](https://bun.sh/install) | bash
+2. **Install Dependencies**:
+   ```bash
+   bun install
+3. **Run CLI**：
+   ```bash
+   bun src/index.ts --help
+## Development
+To start the development server:
+  ```bash
+  bun run dev
