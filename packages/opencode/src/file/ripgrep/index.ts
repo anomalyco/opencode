@@ -1,6 +1,5 @@
 import fs from "fs/promises"
 
-import { $ } from "bun"
 import z from "zod"
 
 import { lazy } from "@/util/lazy.ts"
@@ -142,7 +141,7 @@ export namespace Ripgrep {
   }
 
   export async function search(input: { cwd: string; pattern: string; glob?: string[]; limit?: number }) {
-    const args = [`${await rg()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    const args = ["--json", "--hidden", "--glob=!.git/*"]
 
     for (const g of input.glob ?? []) {
       args.push(`--glob=${g}`)
@@ -155,14 +154,22 @@ export namespace Ripgrep {
     args.push("--")
     args.push(input.pattern)
 
-    const command = args.join(" ")
-    const searchResult = await $`${{ raw: command }}`.cwd(input.cwd).quiet().nothrow()
-    if (searchResult.exitCode !== 0) {
+    const proc = Bun.spawn([await rg(), ...args], {
+      cwd: input.cwd,
+      stdout: "pipe",
+      stderr: "ignore",
+      maxBuffer: MAX_BUFFER_BYTES,
+    })
+
+    const output = await new Response(proc.stdout).text()
+    await proc.exited
+
+    if (proc.exitCode !== 0) {
       return []
     }
 
     // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = searchResult.text().trim().split(/\r?\n/).filter(Boolean)
+    const lines = output.trim().split(/\r?\n/).filter(Boolean)
 
     return lines
       .map((line) => JSON.parse(line))
