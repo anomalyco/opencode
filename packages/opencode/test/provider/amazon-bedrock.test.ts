@@ -203,3 +203,31 @@ test("Bedrock: includes custom endpoint in options when specified", async () => 
     },
   })
 })
+
+test("Bedrock: loads when AWS_SHARED_CREDENTIALS_FILE is set", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_SHARED_CREDENTIALS_FILE", "/custom/path/credentials")
+      Env.remove("AWS_REGION")
+      Env.remove("AWS_PROFILE")
+      Env.remove("AWS_ACCESS_KEY_ID")
+      Env.remove("AWS_BEARER_TOKEN_BEDROCK")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["amazon-bedrock"]).toBeDefined()
+      expect(providers["amazon-bedrock"].options?.region).toBe("us-east-1")
+    },
+  })
+})

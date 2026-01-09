@@ -195,7 +195,11 @@ export namespace Provider {
         return undefined
       })
 
-      if (!profile && !awsAccessKeyId && !awsBearerToken) return { autoload: false }
+      const awsSharedCredentialsFile = Env.get("AWS_SHARED_CREDENTIALS_FILE")
+
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsSharedCredentialsFile) {
+        return { autoload: false }
+      }
 
       const { fromNodeProviderChain } = await import(await BunProc.install("@aws-sdk/credential-providers"))
 
