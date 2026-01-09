@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { batch, createMemo } from "solid-js"
+import { batch, createMemo, onCleanup } from "solid-js"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import type { FileContent, FileNode, Model, Provider, File as FileStatus } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -8,7 +8,7 @@ import { useSync } from "./sync"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { DateTime } from "luxon"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 import { showToast } from "@opencode-ai/ui/toast"
 
 export type LocalFile = FileNode &
@@ -111,7 +111,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const model = (() => {
       const [store, setStore, _, modelReady] = persisted(
-        "model.v1",
+        Persist.global("model", ["model.v1"]),
         createStore<{
           user: (ModelKey & { visibility: "show" | "hide"; favorite?: boolean })[]
           recent: ModelKey[]
@@ -159,6 +159,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           flat(),
         ),
       )
+
+      const latestSet = createMemo(() => new Set(latest().map((x) => `${x.providerID}:${x.modelID}`)))
+
+      const userVisibilityMap = createMemo(() => {
+        const map = new Map<string, "show" | "hide">()
+        for (const item of store.user) {
+          map.set(`${item.providerID}:${item.modelID}`, item.visibility)
+        }
+        return map
+      })
 
       const list = createMemo(() =>
         available().map((m) => ({
@@ -264,12 +274,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         visible(model: ModelKey) {
-          const user = store.user.find((x) => x.modelID === model.modelID && x.providerID === model.providerID)
-          return (
-            user?.visibility !== "hide" &&
-            (latest().find((x) => x.modelID === model.modelID && x.providerID === model.providerID) ||
-              user?.visibility === "show")
-          )
+          const key = `${model.providerID}:${model.modelID}`
+          const visibility = userVisibilityMap().get(key)
+          if (visibility === "hide") return false
+          if (visibility === "show") return true
+          if (latestSet().has(key)) return true
+          // For models without valid release_date (e.g. custom models), show by default
+          const m = find(model)
+          if (!m?.release_date || !DateTime.fromISO(m.release_date).isValid) return true
+          return false
         },
         setVisibility(model: ModelKey, visible: boolean) {
           updateVisibility(model, visible ? "show" : "hide")
@@ -458,7 +471,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const searchFilesAndDirectories = (query: string) =>
         sdk.client.find.files({ query, dirs: "true" }).then((x) => x.data!)
 
-      sdk.event.listen((e) => {
+      const unsub = sdk.event.listen((e) => {
         const event = e.details
         switch (event.type) {
           case "file.watcher.updated":
@@ -468,6 +481,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             break
         }
       })
+      onCleanup(unsub)
 
       return {
         node: async (path: string) => {

@@ -23,6 +23,7 @@ import { ThemeProvider, useTheme } from "@tui/context/theme"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
+import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
@@ -124,11 +125,13 @@ export function tui(input: { url: string; args: Args; directory?: string; onExit
                                 <PromptStashProvider>
                                   <DialogProvider>
                                     <CommandProvider>
-                                      <PromptHistoryProvider>
-                                        <PromptRefProvider>
-                                          <App />
-                                        </PromptRefProvider>
-                                      </PromptHistoryProvider>
+                                      <FrecencyProvider>
+                                        <PromptHistoryProvider>
+                                          <PromptRefProvider>
+                                            <App />
+                                          </PromptRefProvider>
+                                        </PromptHistoryProvider>
+                                      </FrecencyProvider>
                                     </CommandProvider>
                                   </DialogProvider>
                                 </PromptStashProvider>
@@ -412,6 +415,7 @@ function App() {
     {
       title: "Switch theme",
       value: "theme.switch",
+      keybind: "theme_list",
       onSelect: () => {
         dialog.replace(() => <DialogThemeList />)
       },
@@ -568,6 +572,7 @@ function App() {
 
   sdk.event.on(SessionApi.Event.Error.type, (evt) => {
     const error = evt.properties.error
+    if (error && typeof error === "object" && error.name === "MessageAbortedError") return
     const message = (() => {
       if (!error) return "An error occurred"
 
@@ -648,9 +653,17 @@ function ErrorComponent(props: {
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
+  const renderer = useRenderer()
+
+  const handleExit = async () => {
+    renderer.setTerminalTitle("")
+    renderer.destroy()
+    props.onExit()
+  }
+
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      props.onExit()
+      handleExit()
     }
   })
   const [copied, setCopied] = createSignal(false)
@@ -703,7 +716,7 @@ function ErrorComponent(props: {
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={props.onExit} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>

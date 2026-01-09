@@ -27,6 +27,7 @@ export namespace Billing {
       tx
         .select({
           customerID: BillingTable.customerID,
+          subscriptionID: BillingTable.subscriptionID,
           paymentMethodID: BillingTable.paymentMethodID,
           paymentMethodType: BillingTable.paymentMethodType,
           paymentMethodLast4: BillingTable.paymentMethodLast4,
@@ -155,6 +156,27 @@ export namespace Billing {
         customerID,
       })
     })
+  }
+
+  export const grantCredit = async (workspaceID: string, dollarAmount: number) => {
+    const amountInMicroCents = centsToMicroCents(dollarAmount * 100)
+    await Database.transaction(async (tx) => {
+      await tx
+        .update(BillingTable)
+        .set({
+          balance: sql`${BillingTable.balance} + ${amountInMicroCents}`,
+        })
+        .where(eq(BillingTable.workspaceID, workspaceID))
+      await tx.insert(PaymentTable).values({
+        workspaceID,
+        id: Identifier.create("payment"),
+        amount: amountInMicroCents,
+        enrichment: {
+          type: "credit",
+        },
+      })
+    })
+    return amountInMicroCents
   }
 
   export const setMonthlyLimit = fn(z.number(), async (input) => {
