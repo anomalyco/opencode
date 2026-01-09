@@ -1,9 +1,12 @@
 import path from "path"
 import fs from "fs/promises"
+
 import z from "zod"
-import { Global } from "../../global"
-import { NamedError } from "@opencode-ai/util/error"
 import { ZipReader, BlobReader, BlobWriter } from "@zip.js/zip.js"
+
+import { NamedError } from "@opencode-ai/util/error"
+
+import { Global } from "@/global"
 
 const RG_VERSION = "14.1.1"
 
