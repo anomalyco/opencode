@@ -7,6 +7,7 @@ import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
+import { Filesystem } from "../util/filesystem"
 import { assertExternalDirectory } from "./external-directory"
 
 const DEFAULT_READ_LIMIT = 2000
@@ -39,7 +40,23 @@ export const ReadTool = Tool.define("read", {
     })
 
     const file = Bun.file(filepath)
-    if (!(await file.exists())) {
+    const exists = await file.exists()
+
+    // For existing files, also check resolved path to catch symlinks pointing outside
+    if (exists && !ctx.extra?.["bypassCwdCheck"] && !Filesystem.containsResolved(Instance.directory, filepath)) {
+      const parentDir = path.dirname(filepath)
+      await ctx.ask({
+        permission: "external_directory",
+        patterns: [parentDir],
+        always: [parentDir + "/*"],
+        metadata: {
+          filepath,
+          parentDir,
+        },
+      })
+    }
+
+    if (!exists) {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
