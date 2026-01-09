@@ -13,36 +13,7 @@
     <meta name="theme-color" content="#131010" media="(prefers-color-scheme: dark)" />
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
-    <script id="oc-theme-preload-script">
-      ;(function () {
-        var themeId = localStorage.getItem("opencode-theme-id")
-        if (!themeId) return
-
-        var scheme = localStorage.getItem("opencode-color-scheme") || "system"
-        var isDark = scheme === "dark" || (scheme === "system" && matchMedia("(prefers-color-scheme: dark)").matches)
-        var mode = isDark ? "dark" : "light"
-
-        document.documentElement.dataset.theme = themeId
-        document.documentElement.dataset.colorScheme = mode
-
-        if (themeId === "oc-1") return
-
-        var css = localStorage.getItem("opencode-theme-css-" + themeId + "-" + mode)
-        if (css) {
-          var style = document.createElement("style")
-          style.id = "oc-theme-preload"
-          style.textContent =
-            ":root{color-scheme:" +
-            mode +
-            ";--text-mix-blend-mode:" +
-            (isDark ? "plus-lighter" : "multiply") +
-            ";" +
-            css +
-            "}"
-          document.head.appendChild(style)
-        }
-      })()
-    </script>
+    <script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>
   </head>
   <body class="antialiased overscroll-none text-12-regular overflow-hidden">
     <noscript>You need to enable JavaScript to run this app.</noscript>
