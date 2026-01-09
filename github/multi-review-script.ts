@@ -1,0 +1,175 @@
+import { execSync, existsSync, readFileSync } from "fs"
+
+type ReviewResult = {
+  provider: string
+  output: string
+}
+
+const REVIEW_PROVIDERS = (process.env.REVIEW_PROVIDERS || "").split(",").map((p) => p.trim()).filter(Boolean)
+const PR_NUMBER = process.env.PR_NUMBER || ""
+const REPO = process.env.GITHUB_REPOSITORY || ""
+const PR_TITLE = process.env.PR_TITLE || ""
+const INCLUDE_AGENTS = process.env.INCLUDE_AGENTS === "true"
+
+async function buildPrompt(): Promise<string> {
+  const prBody = execSync("jq -r .body pr_data.json", { encoding: "utf8" }).trim()
+  
+  let agentsSection = ""
+  if (INCLUDE_AGENTS && existsSync("AGENTS.md")) {
+    const agentsContent = readFileSync("AGENTS.md", "utf8").substring(0, 2000)
+    agentsSection = `\n\n## Project Guidelines (from AGENTS.md)\n${agentsContent}`
+  }
+  
+  return `REPO: ${REPO}
+PR NUMBER: ${PR_NUMBER}
+PR TITLE: ${PR_TITLE}
+PR DESCRIPTION:
+${prBody}
+
+Please review this pull request and provide comprehensive code review focusing on:
+
+## Code Quality & Best Practices
+- Clean code principles and readability
+- Proper error handling and edge cases
+- TypeScript/JavaScript best practices
+- Consistent naming conventions
+
+## Bug Detection
+- Logic errors and edge cases
+- Unhandled error scenarios
+- Race conditions and concurrency issues
+- Input validation and sanitization
+
+## Performance
+- Inefficient algorithms or operations
+- Memory leaks and unnecessary allocations
+- Large file handling
+
+## Security
+- SQL injection, XSS, CSRF vulnerabilities
+- Authentication/authorization issues
+- Sensitive data exposure
+
+## Testing
+- Test coverage gaps
+- Missing edge case handling${agentsSection}
+
+## Output Format
+- Use \`gh pr comment\` to leave review comments on specific files
+- Include specific line numbers and code suggestions
+- Provide actionable recommendations
+- Summarize key findings at the end
+
+IMPORTANT: Only create comments for actual issues. If the code follows all guidelines, respond with 'lgtm' only.`
+}
+
+async function runReview(provider: string, prompt: string): Promise<ReviewResult> {
+  console.log(`Starting review with provider: ${provider}`)
+  
+  try {
+    const result = execSync(`opencode run -m ${provider} -- "${prompt.replace(/"/g, '\\"')}"`, {
+      encoding: "utf8",
+      timeout: 180000,
+    })
+    return { provider, output: result }
+  } catch (error) {
+    console.error(`Error with ${provider}:`, error)
+    return { provider, output: `Error: Review failed for ${provider}` }
+  }
+}
+
+async function synthesize(reviews: ReviewResult[]): Promise<string> {
+  const aggregated = reviews.map((r) => `## Review from ${r.provider}\n\n${r.output}`).join("\n\n---\n\n")
+  
+  const synthesisPrompt = `You are an expert code reviewer. Synthesize these reviews into one comprehensive review.
+
+Rules:
+- Combine overlapping feedback
+- Highlight unique insights from each review
+- Remove duplicates
+- Present a clear, actionable review
+- Maintain the tone and suggestions from the reviews
+
+Reviews to synthesize:
+${aggregated}
+
+Provide the synthesized review:`
+
+  try {
+    return execSync(`opencode run -m opencode/big-pickle -- "${synthesisPrompt.replace(/"/g, '\\"')}"`, {
+      encoding: "utf8",
+      timeout: 180000,
+    })
+  } catch (error) {
+    console.error("Synthesis error:", error)
+    return aggregated
+  }
+}
+
+async function postComment(body: string) {
+  const escaped = body.replace(/"/g, '\\"').replace(/\n/g, '\\n')
+  execSync(`gh api --method POST -H "Accept: application/vnd.github+json" /repos/${REPO}/issues/${PR_NUMBER}/comments -f "body=${escaped}"`, {
+    encoding: "utf8"
+  })
+}
+
+async function main() {
+  console.log(`Running reviews with ${REVIEW_PROVIDERS.length} providers`)
+  
+  const prompt = await buildPrompt()
+  console.log(`Prompt built (${prompt.length} chars), includes AGENTS.md: ${INCLUDE_AGENTS}`)
+  
+  const results = await Promise.all(REVIEW_PROVIDERS.map((provider) => runReview(provider, prompt)))
+  
+  console.log("\nAll reviews completed. Synthesizing...")
+  
+  const synthesis = await synthesize(results)
+  
+  console.log("\n=== SYNTHESIS ===\n")
+  console.log(synthesis)
+  
+  await postComment(synthesis)
+  console.log("\n✅ Review posted to PR!")
+}
+
+main().catch((error) => {
+  console.error("Error:", error)
+  process.exit(1)
+})
+  } catch (e) {
+    return `Error with ${provider}`
+  }
+}
+
+async function synthesize(reviews: string[]) {
+  const combined = reviews.join("\n\n---\n\n")
+  const synthesis = `Synthesize these code reviews into one comprehensive review. Combine overlapping feedback, highlight unique insights, remove duplicates:\n\n${combined}`
+  try {
+    return execSync(`opencode run -m opencode/big-pickle -- "${synthesis}"`, {
+      encoding: "utf8",
+      timeout: 180000,
+    })
+  } catch (e) {
+    return combined
+  }
+}
+
+async function main() {
+  console.log(`Running ${providers.length} parallel reviews...`)
+  const results = await Promise.all(providers.map(runReview))
+  console.log("Synthesizing results...")
+  const final = await synthesize(results)
+  console.log("\n=== SYNTHESIS ===\n" + final)
+
+  // Post as PR comment
+  const escaped = final.replace(/"/g, '\\"').replace(/\n/g, "\\n")
+  execSync(
+    `gh api --method POST -H "Accept: application/vnd.github+json" /repos/${repo}/issues/${prNumber}/comments -f "body=${escaped}"`,
+    { encoding: "utf8" },
+  )
+}
+
+main().catch((e) => {
+  console.error(e)
+  process.exit(1)
+})
