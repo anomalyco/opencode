@@ -377,7 +377,7 @@ export default function Page() {
   })
 
   createEffect(() => {
-    if (!layout.terminal.opened()) return
+    if (!view().terminal.opened()) return
     if (!terminal.ready()) return
     if (terminal.all().length !== 0) return
     terminal.new()
@@ -440,7 +440,7 @@ export default function Page() {
       category: "View",
       keybind: "ctrl+`",
       slash: "terminal",
-      onSelect: () => layout.terminal.toggle(),
+      onSelect: () => view().terminal.toggle(),
     },
     {
       id: "review.toggle",
@@ -448,7 +448,7 @@ export default function Page() {
       description: "Show or hide the review panel",
       category: "View",
       keybind: "mod+shift+r",
-      onSelect: () => layout.review.toggle(),
+      onSelect: () => view().reviewPanel.toggle(),
     },
     {
       id: "terminal.new",
@@ -720,7 +720,9 @@ export default function Page() {
   const reviewTab = createMemo(() => hasReview() || tabs().active() === "review")
   const mobileReview = createMemo(() => !isDesktop() && hasReview() && store.mobileTab === "review")
 
-  const showTabs = createMemo(() => layout.review.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()))
+  const showTabs = createMemo(
+    () => view().reviewPanel.opened() && (hasReview() || tabs().all().length > 0 || contextOpen()),
+  )
 
   const activeTab = createMemo(() => {
     const active = tabs().active()
@@ -745,7 +747,7 @@ export default function Page() {
     if (!id) return
     if (!hasReview()) return
 
-    const wants = isDesktop() ? layout.review.opened() && activeTab() === "review" : store.mobileTab === "review"
+    const wants = isDesktop() ? view().reviewPanel.opened() && activeTab() === "review" : store.mobileTab === "review"
     if (!wants) return
     if (diffsReady()) return
 
@@ -1600,7 +1602,7 @@ export default function Page() {
         </Show>
       </div>
 
-      <Show when={isDesktop() && layout.terminal.opened()}>
+      <Show when={isDesktop() && view().terminal.opened()}>
         <div
           class="relative w-full flex-col shrink-0 border-t border-border-weak-base"
           style={{ height: `${layout.terminal.height()}px` }}
@@ -1612,7 +1614,7 @@ export default function Page() {
             max={window.innerHeight * 0.6}
             collapseThreshold={50}
             onResize={layout.terminal.resize}
-            onCollapse={layout.terminal.close}
+            onCollapse={view().terminal.close}
           />
           <Show
             when={terminal.ready()}
