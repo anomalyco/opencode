@@ -105,7 +105,7 @@ jobs:
               query($owner: String!, $repo: String!, $number: Int!) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $number) {
-                    issuesReferences(first: 1) {
+                    closingIssuesReferences(first: 1) {
                       totalCount
                     }
                   }
@@ -119,7 +119,7 @@ jobs:
               number: pr.number
             });
 
-            const linkedIssues = result.repository.pullRequest.issuesReferences.totalCount;
+            const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
 
             if (linkedIssues === 0) {
               await addLabel('needs:issue');
