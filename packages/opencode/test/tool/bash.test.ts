@@ -36,6 +36,33 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  test("abort sends SIGINT before SIGKILL", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const controller = new AbortController()
+        const bash = await BashTool.init()
+        const promise = bash.execute(
+          {
+            command: "trap 'echo INT_CAUGHT; exit 0' INT; while true; do sleep 0.05; done",
+            description: "Loop until interrupted",
+            timeout: 60_000,
+          },
+          {
+            ...ctx,
+            abort: controller.signal,
+          },
+        )
+
+        await Bun.sleep(150)
+        controller.abort()
+
+        const result = await promise
+        expect(result.output).toContain("INT_CAUGHT")
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {

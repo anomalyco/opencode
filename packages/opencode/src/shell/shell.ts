@@ -4,6 +4,7 @@ import path from "path"
 import { spawn, type ChildProcess } from "child_process"
 
 const SIGKILL_TIMEOUT_MS = 200
+const SIGINT_TIMEOUT_MS = 250
 
 export namespace Shell {
   export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
@@ -19,18 +20,32 @@ export namespace Shell {
       return
     }
 
-    try {
+    const exited = () => opts?.exited?.() === true
+
+    const killGroup = async () => {
+      process.kill(-pid, "SIGINT")
+      await Bun.sleep(SIGINT_TIMEOUT_MS)
+      if (exited()) return
       process.kill(-pid, "SIGTERM")
       await Bun.sleep(SIGKILL_TIMEOUT_MS)
-      if (!opts?.exited?.()) {
-        process.kill(-pid, "SIGKILL")
-      }
-    } catch (_e) {
+      if (exited()) return
+      process.kill(-pid, "SIGKILL")
+    }
+
+    const killSingle = async () => {
+      proc.kill("SIGINT")
+      await Bun.sleep(SIGINT_TIMEOUT_MS)
+      if (exited()) return
       proc.kill("SIGTERM")
       await Bun.sleep(SIGKILL_TIMEOUT_MS)
-      if (!opts?.exited?.()) {
-        proc.kill("SIGKILL")
-      }
+      if (exited()) return
+      proc.kill("SIGKILL")
+    }
+
+    try {
+      await killGroup()
+    } catch (_e) {
+      await killSingle()
     }
   }
   const BLACKLIST = new Set(["fish", "nu"])
