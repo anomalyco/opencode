@@ -9,6 +9,13 @@ on:
       - "nix/**"
       - "packages/app/**"
       - "packages/desktop/**"
+  pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/app/**"
+      - "packages/desktop/**"
   workflow_dispatch:
 
 jobs:
