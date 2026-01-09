@@ -102,43 +102,46 @@ Add ACP providers to your `opencode.jsonc`:
 
 ## Tool Execution and Permissions
 
-When using ACP backends, tool execution happens on the ACP side, but OpenCode's permission system can still control which tools are allowed.
+> **Important Security Notice**: When using ACP as a backend provider (OpenCode → ACP), OpenCode's permission system **cannot enforce** tool execution restrictions. Tool execution is handled entirely by the ACP backend, which has direct filesystem and network access.
 
 ### How It Works
 
 - OpenCode disables its internal tool system for ACP providers (see `provider.ts`)
-- The ACP backend (cursor-agent, goose, etc.) has its own tool implementations
+- The ACP backend (cursor-agent, goose, etc.) has its own tool implementations that execute directly
 - OpenCode exposes permission callbacks (`requestPermission`, `readTextFile`, `writeTextFile`) via the ACP protocol
-- When the ACP backend calls `requestPermission`, OpenCode applies your permission config and returns `allow` or `cancelled`
-- Well-behaved ACP backends respect the `cancelled` response and don't execute the denied tool
+- **However**, whether the ACP backend calls these callbacks and respects the responses is entirely up to the backend implementation
+- OpenCode has no way to prevent tool execution if the ACP backend chooses to ignore permission responses
 
-### Cursor ACP Permissions
+### Security Implications
 
-**Verified via testing:** Cursor's ACP implementation **does** call the `requestPermission` callback and respects the response.
+**When using ACP backends, you are trusting the ACP backend completely:**
 
-Example configuration:
+- The ACP backend has direct access to your filesystem, network, and shell
+- OpenCode cannot intercept or block tool execution - it happens inside the ACP subprocess
+- Permission callbacks are advisory only - the backend may or may not respect them
+- The ACP backend controls which tools it exposes and how it names them
+
+**This is fundamentally different from using OpenCode with direct LLM providers**, where OpenCode controls tool execution and can enforce permissions.
+
+### Cursor ACP Behavior
+
+Based on testing, Cursor's ACP implementation **does** call the `requestPermission` callback and appears to respect the response. However, this is Cursor's implementation choice, not an enforced guarantee.
+
+Example:
 ```bash
 OPENCODE_PERMISSION='{"edit":"deny","bash":"deny"}' opencode run -m cursor-acp/auto "write to file.txt"
 ```
 
-What happens:
+Observed behavior:
 1. Cursor calls `requestPermission` with `kind: "edit"` → OpenCode returns `cancelled`
 2. Cursor may try alternative tools (e.g., bash/execute) → OpenCode returns `cancelled` if also denied
-3. If all tool paths are denied, the operation fails with "security restrictions"
+3. If all tool paths are denied, Cursor reports "security restrictions"
 
-**Important**: Cursor is smart about fallbacks. If you deny `edit` but allow `bash`, Cursor will use a shell command instead. To fully block file writes, deny both `edit` and `bash`.
+**Note**: Cursor is smart about fallbacks. If you deny `edit` but allow `bash`, Cursor may use a shell command instead.
 
 ### File Operation Callbacks
 
-Cursor's ACP implementation does **not** use the `readTextFile` and `writeTextFile` callbacks. It uses its own internal file tools that go through `requestPermission` instead. This is fine - the permission system still works via `requestPermission`.
-
-### Security Implications
-
-When using ACP backends, be aware that:
-
-- The ACP backend controls which tools it exposes and how it names them
-- OpenCode maps tool kinds (`edit`, `execute`, `read`, `fetch`) to permission types
-- Trust in the ACP backend is required - it has the same filesystem/network access as the subprocess
+Cursor's ACP implementation does **not** use the `readTextFile` and `writeTextFile` callbacks. It uses its own internal file tools instead.
 
 ## Implementation
 
@@ -175,8 +178,9 @@ opencode chat --model goose-acp/default
 
 ## Limitations
 
-- **Tool fallbacks**: ACP backends may try alternative tools when one is denied. To fully block file writes, deny both `edit` and `bash`.
-- **File callbacks not used by Cursor**: Cursor doesn't use `readTextFile`/`writeTextFile` callbacks, but permissions still work via `requestPermission`.
+- **Permissions are not enforceable**: OpenCode cannot enforce permissions when using ACP backends. Tool execution happens inside the ACP subprocess, and OpenCode can only request permission - the backend decides whether to comply.
+- **Tool fallbacks**: ACP backends may try alternative tools when one is denied.
+- **File callbacks not used by Cursor**: Cursor doesn't use `readTextFile`/`writeTextFile` callbacks.
 - Creates new subprocess per request (no connection pooling yet)
 - Sessions are stateless (new session per request)
 - ACP agent must be installed and available in PATH
