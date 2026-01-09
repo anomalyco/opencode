@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { $ } from "bun"
 import { Log } from "@/util/log"
 
-import { ensureInstalled } from "./binary"
+import { rg } from "./binary"
 import { lazy } from "../../util/lazy"
 import {
   Result as _Result,
@@ -19,6 +19,7 @@ import type {
   Summary as _SummaryType,
 } from "./schema"
 import { DEFAULT_TREE_LIMIT, buildTree, sortTreeInPlace, truncateBFS, renderTree } from "./tree"
+import { streamLines } from "./io"
 
 export namespace Ripgrep {
   const log = Log.create({ service: "ripgrep" })
@@ -33,41 +34,7 @@ export namespace Ripgrep {
     maxDepth?: number
   }
 
-  function buildFilesArgs(input: FilesInput): string[] {
-    const args = ["--files", "--glob=!.git/*"]
-    if (input.follow !== false) args.push("--follow")
-    if (input.hidden !== false) args.push("--hidden")
-    if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
-    for (const g of input.glob ?? []) args.push(`--glob=${g}`)
-    return args
-  }
-
-  async function* streamLines(stdout: ReadableStream<Uint8Array>): AsyncGenerator<string> {
-    const reader = stdout.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split(/\r?\n/)
-        buffer = lines.pop() || ""
-
-        for (const line of lines) {
-          if (line) yield line
-        }
-      }
-
-      if (buffer) yield buffer
-    } finally {
-      reader.releaseLock()
-    }
-  }
-
-  export const filepath = lazy(ensureInstalled)
+  export const filepath = lazy(rg)
 
   // Re-export from schema.ts
   export const Result = _Result
@@ -89,7 +56,13 @@ export namespace Ripgrep {
       })
     }
 
-    const proc = Bun.spawn([await filepath(), ...buildFilesArgs(input)], {
+    const args = ["--files", "--glob=!.git/*"]
+    if (input.follow !== false) args.push("--follow")
+    if (input.hidden !== false) args.push("--hidden")
+    if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
+    for (const g of input.glob ?? []) args.push(`--glob=${g}`)
+
+    const proc = Bun.spawn([await filepath(), ...args], {
       cwd: input.cwd,
       stdout: "pipe",
       stderr: "ignore",

@@ -118,7 +118,7 @@ async function extractWindows(archivePath: string, binRgPath: string): Promise<v
   await zipFileReader.close()
 }
 
-export async function ensureInstalled(): Promise<string> {
+export async function rg(): Promise<string> {
   const existing = await findExisting()
   if (existing) return existing
 
