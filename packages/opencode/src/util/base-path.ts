@@ -2,14 +2,14 @@
  * Normalizes a base path to ensure consistent format:
  * - Returns empty string for root path or undefined
  * - Ensures leading slash
- * - Removes trailing slash
+ * - Removes trailing slashes
  */
 export function normalizeBasePath(path?: string): string {
   if (!path || path === "/") return ""
 
-  // Ensure leading slash, remove trailing slash
+  // Ensure leading slash, remove trailing slashes
   let normalized = path.startsWith("/") ? path : `/${path}`
-  normalized = normalized.endsWith("/") ? normalized.slice(0, -1) : normalized
+  normalized = normalized.replace(/\/+$/, "")
 
   return normalized
 }
