@@ -8905,6 +8905,16 @@
             "default": "ctrl+v",
             "type": "string"
           },
+          "input_copy": {
+            "description": "Copy selected text from input",
+            "default": "ctrl+insert",
+            "type": "string"
+          },
+          "input_cut": {
+            "description": "Cut selected text from input",
+            "default": "shift+delete",
+            "type": "string"
+          },
           "input_submit": {
             "description": "Submit input",
             "default": "return",

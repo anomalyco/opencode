@@ -853,6 +853,35 @@ export function Prompt(props: PromptProps) {
                   }
                   // If no image, let the default paste behavior continue
                 }
+                // Handle copy (Ctrl+Shift+C) - copy selected text to clipboard
+                if (keybind.match("input_copy", e)) {
+                  if (input.hasSelection()) {
+                    const selectedText = input.getSelectedText()
+                    if (selectedText) {
+                      await Clipboard.copy(selectedText).catch((error) => {
+                        console.error(`Failed to copy selected text to clipboard: ${error}`)
+                      })
+                      e.preventDefault()
+                    }
+                  }
+                  return
+                }
+                // Handle cut (Ctrl+Shift+X) - copy selected text and delete it
+                if (keybind.match("input_cut", e)) {
+                  if (input.hasSelection()) {
+                    const selectedText = input.getSelectedText()
+                    if (selectedText) {
+                      await Clipboard.copy(selectedText).catch((error) => {
+                        console.error(`Failed to copy selected text to clipboard: ${error}`)
+                      })
+                      // Delete the selected text using the public deleteChar() method
+                      // which internally calls deleteSelectedText() when there's a selection
+                      input.deleteChar()
+                      e.preventDefault()
+                    }
+                  }
+                  return
+                }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
                   input.extmarks.clear()
