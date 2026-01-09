@@ -25,8 +25,9 @@ export namespace ShareNext {
       disposed: false,
     }),
     async (s) => {
-      // Perform cleanup inline to avoid calling state() during Instance disposal.
-      // Calling state() here could reinitialize after the Instance has been disposed.
+      // Perform cleanup inline using the provided state object.
+      // We cannot call the exported dispose() function here because it calls state(),
+      // which could reinitialize after the Instance has been disposed.
       s.disposed = true
       for (const unsub of s.subscriptions) {
         unsub()
