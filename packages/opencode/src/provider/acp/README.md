@@ -30,6 +30,7 @@ Add ACP providers to your `opencode.jsonc`:
 {
   "provider": {
     "my-acp-provider": {
+      "type": "acp",
       "name": "My ACP Provider",
       "options": {
         "command": "cursor-agent", // or "goose", "gemini-cli", etc.
@@ -48,6 +49,7 @@ Add ACP providers to your `opencode.jsonc`:
 
 ### Configuration Fields
 
+- **`type`** (required): Must be `"acp"` to identify this as an ACP provider
 - **`options.command`** (required): The command to spawn (e.g., `"cursor-agent"`, `"goose"`)
 - **`options.args`** (required): Arguments to pass to the command (e.g., `["acp"]`)
 - **`models`**: Map of model IDs to model configurations
@@ -63,6 +65,7 @@ Add ACP providers to your `opencode.jsonc`:
 {
   "provider": {
     "goose-acp": {
+      "type": "acp",
       "name": "Goose via ACP",
       "options": {
         "command": "goose",
@@ -85,6 +88,7 @@ Add ACP providers to your `opencode.jsonc`:
 {
   "provider": {
     "cursor-acp": {
+      "type": "acp",
       "name": "Cursor via ACP",
       "options": {
         "command": "cursor-agent",
