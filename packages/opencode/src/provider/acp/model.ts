@@ -16,6 +16,23 @@ import { Agent } from "../../agent/agent"
 
 const log = Log.create({ service: "acp-model" })
 
+/** Maximum time to wait for pending notifications to drain before proceeding */
+const NOTIFICATION_DRAIN_TIMEOUT_MS = 5000
+
+/** Extended tool-result type with provider execution flag */
+type ACPToolResultPart = {
+  type: "tool-result"
+  toolCallId: string
+  toolName: string
+  result: {
+    output: string
+    title: string
+    metadata: Record<string, unknown>
+  }
+  isError?: boolean
+  providerExecuted: true
+}
+
 /**
  * ACPLanguageModel implements LanguageModelV2 for ACP agents
  */
@@ -215,7 +232,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
             if (lastPendingToolCallId) {
               const tracked = toolCallsTracked.get(lastPendingToolCallId)
               if (tracked) {
-                log.info("ACP: completing pending tool on next chunk", {
+                log.debug("ACP: completing pending tool on next chunk", {
                   toolCallId: lastPendingToolCallId,
                   toolName: tracked.toolName,
                 })
@@ -229,7 +246,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                     metadata: {},
                   },
                   providerExecuted: true,
-                } as any)
+                } as ACPToolResultPart)
                 toolCallsTracked.delete(lastPendingToolCallId)
               }
               lastPendingToolCallId = null
@@ -300,7 +317,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                   const rawInput = (update.rawInput || {}) as Record<string, unknown>
                   const input = normalizeToolInput(toolName, rawInput)
 
-                  log.info("ACP: tool_call", {
+                  log.debug("ACP: tool_call", {
                     toolCallId,
                     kind,
                     mappedFromKind,
@@ -320,7 +337,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                     toolName,
                     providerExecuted: true,
                   }
-                  log.info("ACP: enqueuing tool-input-start", toolInputStart)
+                  log.debug("ACP: enqueuing tool-input-start", toolInputStart)
                   controller.enqueue(toolInputStart)
 
                   // Emit tool-input-start and tool-call for all statuses
@@ -331,7 +348,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                     input: JSON.stringify(input),
                     providerExecuted: true,
                   }
-                  log.info("ACP: enqueuing tool-call", { ...toolCall, input: JSON.stringify(input).substring(0, 100) })
+                  log.debug("ACP: enqueuing tool-call", { ...toolCall, input: JSON.stringify(input).substring(0, 100) })
                   controller.enqueue(toolCall)
 
                   // Only emit tool-result for completed/failed states
@@ -346,7 +363,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                         : typeof outputValue === "string"
                           ? outputValue
                           : JSON.stringify(outputValue)
-                    log.info(`ACP: enqueuing tool-result (completed)`, {
+                    log.debug("ACP: enqueuing tool-result (completed)", {
                       toolCallId,
                       toolName,
                       output: output.substring(0, 100),
@@ -361,7 +378,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                         metadata: {},
                       },
                       providerExecuted: true,
-                    } as any)
+                    } as ACPToolResultPart)
                     toolCallsTracked.delete(toolCallId)
                   } else if (update.status === "failed") {
                     const errorValue = update.rawOutput ?? update.title ?? "Tool failed"
@@ -382,7 +399,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                       },
                       isError: true,
                       providerExecuted: true,
-                    } as any)
+                    } as ACPToolResultPart)
                     toolCallsTracked.delete(toolCallId)
                   } else if (update.status === "pending") {
                     // Mark as last pending tool - will complete on next chunk
@@ -432,7 +449,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                         metadata: {},
                       },
                       providerExecuted: true,
-                    } as any)
+                    } as ACPToolResultPart)
                     toolCallsTracked.delete(toolCallId)
                     toolCallsTracked.delete(toolCallId + "_called")
                   } else if (update.status === "failed") {
@@ -454,7 +471,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
                       },
                       isError: true,
                       providerExecuted: true,
-                    } as any)
+                    } as ACPToolResultPart)
                     toolCallsTracked.delete(toolCallId)
                     toolCallsTracked.delete(toolCallId + "_called")
                   }
@@ -482,7 +499,7 @@ export class ACPLanguageModel implements LanguageModelV2 {
               new Promise<void>((resolve) => {
                 onDrained = resolve
               }),
-              new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+              new Promise<void>((resolve) => setTimeout(resolve, NOTIFICATION_DRAIN_TIMEOUT_MS)),
             ])
           }
 

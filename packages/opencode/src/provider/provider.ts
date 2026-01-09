@@ -885,8 +885,12 @@ export namespace Provider {
 
     // Load ACP providers
     for (const [providerID, providerConfig] of configProviders) {
-      // Check if this is an ACP provider by looking for command and args in options
-      if (providerConfig.options?.command && Array.isArray(providerConfig.options?.args)) {
+      if (providerConfig.type === "acp") {
+        if (!providerConfig.options?.command || !Array.isArray(providerConfig.options?.args)) {
+          log.warn("ACP provider missing required options.command or options.args", { providerID })
+          continue
+        }
+
         log.info("loading ACP provider", {
           providerID,
           command: providerConfig.options.command,
