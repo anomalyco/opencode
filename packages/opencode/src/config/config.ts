@@ -124,8 +124,9 @@ export namespace Config {
       }
 
       const exists = existsSync(path.join(dir, "node_modules"))
-      const installing = installDependencies(dir)
-      if (!exists && !Flag.OPENCODE_DISABLE_PLUGIN_INSTALL) await installing
+      if (!exists && !Flag.OPENCODE_DISABLE_PLUGIN_INSTALL) {
+        await installDependencies(dir)
+      }
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
