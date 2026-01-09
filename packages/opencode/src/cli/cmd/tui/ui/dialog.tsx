@@ -1,7 +1,7 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { Renderable, RGBA } from "@opentui/core"
+import { Renderable, RGBA, type KeyEvent } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
@@ -56,7 +56,7 @@ function init() {
     size: "medium" as "medium" | "large",
   })
 
-  useKeyboard((evt) => {
+  useKeyboard((evt: KeyEvent) => {
     if (evt.name === "escape" && store.stack.length > 0) {
       const current = store.stack.at(-1)!
       current.onClose?.()
