@@ -796,6 +796,10 @@ export namespace Config {
     .object({
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
+      basePath: z
+        .string()
+        .optional()
+        .describe("Base path prefix for all routes (e.g., /my-prefix/)"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
     })
