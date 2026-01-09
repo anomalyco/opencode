@@ -52,17 +52,25 @@ export namespace ClaudeCodeCLI {
     ]
 
     for (const cmd of paths) {
-      const proc = Bun.spawn(["which", cmd], { stdout: "pipe", stderr: "pipe" })
-      await proc.exited
-      if (proc.exitCode === 0) {
-        const result = await new Response(proc.stdout).text()
-        return result.trim() || cmd
+      try {
+        const proc = Bun.spawn(["which", cmd], { stdout: "pipe", stderr: "ignore" })
+        await proc.exited
+        if (proc.exitCode === 0) {
+          const result = await new Response(proc.stdout).text()
+          return result.trim() || cmd
+        }
+      } catch {
+        // Silently continue if which fails
       }
     }
 
-    const proc = Bun.spawn(["claude", "--version"], { stdout: "pipe", stderr: "pipe" })
-    await proc.exited
-    if (proc.exitCode === 0) return "claude"
+    try {
+      const proc = Bun.spawn(["claude", "--version"], { stdout: "pipe", stderr: "ignore" })
+      await proc.exited
+      if (proc.exitCode === 0) return "claude"
+    } catch {
+      // Silently continue if claude is not found
+    }
 
     return undefined
   }
