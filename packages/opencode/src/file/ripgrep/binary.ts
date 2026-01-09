@@ -118,21 +118,21 @@ async function extractWindows(archivePath: string, binRgPath: string): Promise<v
   await zipFileReader.close()
 }
 
-export async function rg(): Promise<string> {
+export async function rgBin(): Promise<string> {
   const existing = await findExisting()
   if (existing) return existing
 
-  const binRgPath = path.join(Global.Path.bin, `rg${Global.Platform.binExt}`)
+  const rgBinPath = path.join(Global.Path.bin, `rg${Global.Platform.binExt}`)
   const config = getPlatformConfig()
   const archivePath = await downloadRg(config)
 
   if (Global.Platform.isWindows) {
-    await extractWindows(archivePath, binRgPath)
+    await extractWindows(archivePath, rgBinPath)
   } else {
-    await extractPosix(archivePath, binRgPath)
+    await extractPosix(archivePath, rgBinPath)
   }
 
   await fs.unlink(archivePath)
 
-  return binRgPath
+  return rgBinPath
 }

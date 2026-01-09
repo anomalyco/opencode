@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { $ } from "bun"
 import { Log } from "@/util/log"
 
-import { rg } from "./binary"
+import { rgBin } from "./binary"
 import { lazy } from "../../util/lazy"
 import {
   Result as _Result,
@@ -34,7 +34,7 @@ export namespace Ripgrep {
     maxDepth?: number
   }
 
-  export const filepath = lazy(rg)
+  export const rg = lazy(rgBin)
 
   // Re-export from schema.ts
   export const Result = _Result
@@ -62,7 +62,7 @@ export namespace Ripgrep {
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
     for (const g of input.glob ?? []) args.push(`--glob=${g}`)
 
-    const proc = Bun.spawn([await filepath(), ...args], {
+    const proc = Bun.spawn([await rg(), ...args], {
       cwd: input.cwd,
       stdout: "pipe",
       stderr: "ignore",
@@ -76,20 +76,18 @@ export namespace Ripgrep {
 
   export async function tree(input: { cwd: string; limit?: number }) {
     log.info("tree", input)
-    const fileList = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
-    const root = buildTree(fileList)
+    const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
+    const root = buildTree(files)
     sortTreeInPlace(root)
     const truncated = truncateBFS(root, input.limit ?? DEFAULT_TREE_LIMIT)
     return renderTree(truncated)
   }
 
   export async function search(input: { cwd: string; pattern: string; glob?: string[]; limit?: number }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    const args = [`${await rg()}`, "--json", "--hidden", "--glob='!.git/*'"]
 
-    if (input.glob) {
-      for (const g of input.glob) {
-        args.push(`--glob=${g}`)
-      }
+    for (const g of input.glob ?? []) {
+      args.push(`--glob=${g}`)
     }
 
     if (input.limit) {
