@@ -38,9 +38,6 @@ declare global {
 }
 
 const defaultServerUrl = iife(() => {
-  const param = new URLSearchParams(document.location.search).get("url")
-  if (param) return param
-
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
   if (import.meta.env.DEV)
