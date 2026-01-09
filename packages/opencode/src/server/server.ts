@@ -2912,13 +2912,13 @@ window.__OPENCODE_BASE_PATH__="${_basePath}";
               `:window.location.origin+(window.__OPENCODE_BASE_PATH__||""))`,
             )
 
-            // Rewrite absolute asset paths in JavaScript strings
-            // Matches "/assets/..." in JS strings
-            js = js.replace(/"\/(assets\/[^"]*)"/g, `"${_basePath}/$1"`)
-
-            // Rewrite relative asset paths in JavaScript strings (for dynamic imports)
-            // Matches "assets/..." in JS strings (without leading slash)
-            js = js.replace(/"(assets\/[^"]*)"/g, `"${_basePath}/$1"`)
+            // Patch Vite's base path function to use our basePath instead of "/"
+            // The function looks like: function(t){return"/"+t}
+            // This handles all dynamic asset loading
+            js = js.replace(
+              /function\(t\)\{return"\/"\+t\}/g,
+              `function(t){return"${_basePath}/"+t}`,
+            )
 
             return new Response(js, {
               status: response.status,
