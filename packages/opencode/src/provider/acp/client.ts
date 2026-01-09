@@ -28,6 +28,7 @@ import { Instance } from "../../project/instance"
 import { Bus } from "../../bus"
 import { File } from "../../file"
 import { FileTime } from "../../file/time"
+import { Installation } from "../../installation"
 import path from "path"
 
 const log = Log.create({ service: "acp-client" })
@@ -297,7 +298,7 @@ export class ACPClient {
         protocolVersion: PROTOCOL_VERSION,
         clientInfo: {
           name: "opencode",
-          version: "1.0.0",
+          version: Installation.VERSION,
         },
         clientCapabilities: {
           fs: {
