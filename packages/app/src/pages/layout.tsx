@@ -1,4 +1,5 @@
 import {
+  batch,
   createEffect,
   createMemo,
   createSignal,
@@ -31,7 +32,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session } from "@opencode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import {
   DragDropProvider,
   DragDropSensors,
@@ -47,6 +48,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
+import { retry } from "@opencode-ai/util/retry"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -55,6 +57,7 @@ import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
+import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { useServer } from "@/context/server"
 
@@ -170,7 +173,7 @@ export default function Layout(props: ParentProps) {
       if (e.details?.type !== "permission.asked") return
       const directory = e.name
       const perm = e.details.properties
-      if (permission.autoResponds(perm)) return
+      if (permission.autoResponds(perm, directory)) return
 
       const [store] = globalSync.child(directory)
       const session = store.session.find((s) => s.id === perm.sessionID)
@@ -266,24 +269,170 @@ export default function Layout(props: ParentProps) {
     }
   }
 
-  function projectSessions(directory: string) {
-    if (!directory) return []
-    const sessions = globalSync.child(directory)[0].session.toSorted(sortSessions)
-    return (sessions ?? []).filter((s) => !s.parentID)
+  const currentProject = createMemo(() => {
+    const directory = params.dir ? base64Decode(params.dir) : undefined
+    if (!directory) return
+    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+  })
+
+  function projectSessions(project: LocalProject | undefined) {
+    if (!project) return []
+    const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+    const stores = dirs.map((dir) => globalSync.child(dir)[0])
+    const sessions = stores
+      .flatMap((store) => store.session.filter((session) => session.directory === store.path.directory))
+      .toSorted(sortSessions)
+    return sessions.filter((s) => !s.parentID)
   }
 
-  const currentSessions = createMemo(() => {
-    if (!params.dir) return []
-    const directory = base64Decode(params.dir)
-    return projectSessions(directory)
+  const currentSessions = createMemo(() => projectSessions(currentProject()))
+
+  type PrefetchQueue = {
+    inflight: Set<string>
+    pending: string[]
+    pendingSet: Set<string>
+    running: number
+  }
+
+  const prefetchChunk = 200
+  const prefetchConcurrency = 1
+  const prefetchPendingLimit = 6
+  const prefetchToken = { value: 0 }
+  const prefetchQueues = new Map<string, PrefetchQueue>()
+
+  createEffect(() => {
+    params.dir
+    globalSDK.url
+
+    prefetchToken.value += 1
+    for (const q of prefetchQueues.values()) {
+      q.pending.length = 0
+      q.pendingSet.clear()
+    }
+  })
+
+  const queueFor = (directory: string) => {
+    const existing = prefetchQueues.get(directory)
+    if (existing) return existing
+
+    const created: PrefetchQueue = {
+      inflight: new Set(),
+      pending: [],
+      pendingSet: new Set(),
+      running: 0,
+    }
+    prefetchQueues.set(directory, created)
+    return created
+  }
+
+  const prefetchMessages = (directory: string, sessionID: string, token: number) => {
+    const [, setStore] = globalSync.child(directory)
+
+    return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
+      .then((messages) => {
+        if (prefetchToken.value !== token) return
+
+        const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
+        const next = items
+          .map((x) => x.info)
+          .filter((m) => !!m?.id)
+          .slice()
+          .sort((a, b) => a.id.localeCompare(b.id))
+
+        batch(() => {
+          setStore("message", sessionID, reconcile(next, { key: "id" }))
+
+          for (const message of items) {
+            setStore(
+              "part",
+              message.info.id,
+              reconcile(
+                message.parts
+                  .filter((p) => !!p?.id)
+                  .slice()
+                  .sort((a, b) => a.id.localeCompare(b.id)),
+                { key: "id" },
+              ),
+            )
+          }
+        })
+      })
+      .catch(() => undefined)
+  }
+
+  const pumpPrefetch = (directory: string) => {
+    const q = queueFor(directory)
+    if (q.running >= prefetchConcurrency) return
+
+    const sessionID = q.pending.shift()
+    if (!sessionID) return
+
+    q.pendingSet.delete(sessionID)
+    q.inflight.add(sessionID)
+    q.running += 1
+
+    const token = prefetchToken.value
+
+    void prefetchMessages(directory, sessionID, token).finally(() => {
+      q.running -= 1
+      q.inflight.delete(sessionID)
+      pumpPrefetch(directory)
+    })
+  }
+
+  const prefetchSession = (session: Session, priority: "high" | "low" = "low") => {
+    const directory = session.directory
+    if (!directory) return
+
+    const [store] = globalSync.child(directory)
+    if (store.message[session.id] !== undefined) return
+
+    const q = queueFor(directory)
+    if (q.inflight.has(session.id)) return
+    if (q.pendingSet.has(session.id)) return
+
+    if (priority === "high") q.pending.unshift(session.id)
+    if (priority !== "high") q.pending.push(session.id)
+    q.pendingSet.add(session.id)
+
+    while (q.pending.length > prefetchPendingLimit) {
+      const dropped = q.pending.pop()
+      if (!dropped) continue
+      q.pendingSet.delete(dropped)
+    }
+
+    pumpPrefetch(directory)
+  }
+
+  createEffect(() => {
+    const sessions = currentSessions()
+    const id = params.id
+
+    if (!id) {
+      const first = sessions[0]
+      if (first) prefetchSession(first)
+
+      const second = sessions[1]
+      if (second) prefetchSession(second)
+      return
+    }
+
+    const index = sessions.findIndex((s) => s.id === id)
+    if (index === -1) return
+
+    const next = sessions[index + 1]
+    if (next) prefetchSession(next)
+
+    const prev = sessions[index - 1]
+    if (prev) prefetchSession(prev)
   })
 
   function navigateSessionByOffset(offset: number) {
     const projects = layout.projects.list()
     if (projects.length === 0) return
 
-    const currentDirectory = params.dir ? base64Decode(params.dir) : undefined
-    const projectIndex = currentDirectory ? projects.findIndex((p) => p.worktree === currentDirectory) : -1
+    const project = currentProject()
+    const projectIndex = project ? projects.findIndex((p) => p.worktree === project.worktree) : -1
 
     if (projectIndex === -1) {
       const targetProject = offset > 0 ? projects[0] : projects[projects.length - 1]
@@ -303,6 +452,27 @@ export default function Layout(props: ParentProps) {
 
     if (targetIndex >= 0 && targetIndex < sessions.length) {
       const session = sessions[targetIndex]
+      const next = sessions[targetIndex + 1]
+      const prev = sessions[targetIndex - 1]
+
+      if (offset > 0) {
+        if (next) prefetchSession(next, "high")
+        if (prev) prefetchSession(prev)
+      }
+
+      if (offset < 0) {
+        if (prev) prefetchSession(prev, "high")
+        if (next) prefetchSession(next)
+      }
+
+      if (import.meta.env.DEV) {
+        navStart({
+          dir: base64Encode(session.directory),
+          from: params.id,
+          to: session.id,
+          trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
+        })
+      }
       navigateToSession(session)
       queueMicrotask(() => scrollToSession(session.id))
       return
@@ -312,14 +482,34 @@ export default function Layout(props: ParentProps) {
     const nextProject = projects[nextProjectIndex]
     if (!nextProject) return
 
-    const nextProjectSessions = projectSessions(nextProject.worktree)
+    const nextProjectSessions = projectSessions(nextProject)
     if (nextProjectSessions.length === 0) {
       navigateToProject(nextProject.worktree)
       return
     }
 
-    const targetSession = offset > 0 ? nextProjectSessions[0] : nextProjectSessions[nextProjectSessions.length - 1]
-    navigate(`/${base64Encode(nextProject.worktree)}/session/${targetSession.id}`)
+    const index = offset > 0 ? 0 : nextProjectSessions.length - 1
+    const targetSession = nextProjectSessions[index]
+    const nextSession = nextProjectSessions[index + 1]
+    const prevSession = nextProjectSessions[index - 1]
+
+    if (offset > 0) {
+      if (nextSession) prefetchSession(nextSession, "high")
+    }
+
+    if (offset < 0) {
+      if (prevSession) prefetchSession(prevSession, "high")
+    }
+
+    if (import.meta.env.DEV) {
+      navStart({
+        dir: base64Encode(targetSession.directory),
+        from: params.id,
+        to: targetSession.id,
+        trigger: offset > 0 ? "alt+arrowdown" : "alt+arrowup",
+      })
+    }
+    navigateToSession(targetSession)
     queueMicrotask(() => scrollToSession(targetSession.id))
   }
 
@@ -465,7 +655,7 @@ export default function Layout(props: ParentProps) {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
-    navigate(`/${params.dir}/session/${session?.id}`)
+    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
     layout.mobileSidebar.hide()
   }
 
@@ -514,7 +704,8 @@ export default function Layout(props: ParentProps) {
     const id = params.id
     setStore("lastSession", directory, id)
     notification.session.markViewed(id)
-    untrack(() => layout.projects.expand(directory))
+    const project = currentProject()
+    untrack(() => layout.projects.expand(project?.worktree ?? directory))
     requestAnimationFrame(() => scrollToSession(id))
   })
 
@@ -644,13 +835,13 @@ export default function Layout(props: ParentProps) {
     const updated = createMemo(() => DateTime.fromMillis(props.session.time.updated))
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
+    const [sessionStore] = globalSync.child(props.session.directory)
     const hasPermissions = createMemo(() => {
-      const store = globalSync.child(props.project.worktree)[0]
-      const permissions = store.permission?.[props.session.id] ?? []
+      const permissions = sessionStore.permission?.[props.session.id] ?? []
       if (permissions.length > 0) return true
-      const childSessions = store.session.filter((s) => s.parentID === props.session.id)
+      const childSessions = sessionStore.session.filter((s) => s.parentID === props.session.id)
       for (const child of childSessions) {
-        const childPermissions = store.permission?.[child.id] ?? []
+        const childPermissions = sessionStore.permission?.[child.id] ?? []
         if (childPermissions.length > 0) return true
       }
       return false
@@ -658,7 +849,7 @@ export default function Layout(props: ParentProps) {
     const isWorking = createMemo(() => {
       if (props.session.id === params.id) return false
       if (hasPermissions()) return false
-      const status = globalSync.child(props.project.worktree)[0].session_status[props.session.id]
+      const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
     return (
@@ -672,6 +863,8 @@ export default function Layout(props: ParentProps) {
             <A
               href={`${props.slug}/session/${props.session.id}`}
               class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
+              onMouseEnter={() => prefetchSession(props.session, "high")}
+              onFocus={() => prefetchSession(props.session, "high")}
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
                 <span
@@ -759,6 +952,10 @@ export default function Layout(props: ParentProps) {
     const isExpanded = createMemo(() =>
       props.mobile ? mobileProjects.expanded(props.project.worktree) : props.project.expanded,
     )
+    const isActive = createMemo(() => {
+      const current = params.dir ? base64Decode(params.dir) : ""
+      return props.project.worktree === current || props.project.sandboxes?.includes(current)
+    })
     const handleOpenChange = (open: boolean) => {
       if (props.mobile) {
         if (open) mobileProjects.expand(props.project.worktree)
@@ -777,7 +974,10 @@ export default function Layout(props: ParentProps) {
               <Button
                 as={"div"}
                 variant="ghost"
-                class="group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg"
+                classList={{
+                  "group/session flex items-center justify-between gap-3 w-full px-1.5 self-stretch h-auto border-none rounded-lg": true,
+                  "bg-surface-raised-base-hover": isActive() && !isExpanded(),
+                }}
               >
                 <Collapsible.Trigger class="group/trigger flex items-center gap-3 p-0 text-left min-w-0 grow border-none">
                   <ProjectAvatar
@@ -861,7 +1061,7 @@ export default function Layout(props: ParentProps) {
             </Collapsible>
           </Match>
           <Match when={true}>
-            <Tooltip placement="right" value={props.project.worktree}>
+            <Tooltip placement="right" value={getFilename(props.project.worktree)}>
               <ProjectVisual project={props.project} />
             </Tooltip>
           </Match>

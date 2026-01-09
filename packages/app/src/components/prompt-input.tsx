@@ -1,5 +1,17 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { createEffect, on, Component, Show, For, onMount, onCleanup, Switch, Match, createMemo } from "solid-js"
+import {
+  createEffect,
+  on,
+  Component,
+  Show,
+  For,
+  onMount,
+  onCleanup,
+  Switch,
+  Match,
+  createMemo,
+  createSignal,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createFocusSignal } from "@solid-primitives/active-element"
 import { useLocal } from "@/context/local"
@@ -30,7 +42,7 @@ import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
-import { persisted } from "@/utils/persist"
+import { Persist, persisted } from "@/utils/persist"
 import { Identifier } from "@/utils/id"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
@@ -153,6 +165,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
+  const imageAttachments = createMemo(
+    () => prompt.current().filter((part) => part.type === "image") as ImageAttachmentPart[],
+  )
 
   const [store, setStore] = createStore<{
     popover: "at" | "slash" | null
@@ -160,7 +175,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: Prompt | null
     placeholder: number
     dragging: boolean
-    imageAttachments: ImageAttachmentPart[]
     mode: "normal" | "shell"
     applyingHistory: boolean
   }>({
@@ -169,14 +183,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     dragging: false,
-    imageAttachments: [],
     mode: "normal",
     applyingHistory: false,
   })
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
-    "prompt-history.v1",
+    Persist.global("prompt-history", ["prompt-history.v1"]),
     createStore<{
       entries: Prompt[]
     }>({
@@ -184,7 +197,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }),
   )
   const [shellHistory, setShellHistory] = persisted(
-    "prompt-history-shell.v1",
+    Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
     createStore<{
       entries: Prompt[]
     }>({
@@ -235,6 +248,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
+  const isFocused = createFocusSignal(() => editorRef)
+
   createEffect(() => {
     params.id
     editorRef.focus()
@@ -245,7 +260,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onCleanup(() => clearInterval(interval))
   })
 
-  const isFocused = createFocusSignal(() => editorRef)
+  const [composing, setComposing] = createSignal(false)
+  const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
@@ -260,21 +276,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         mime: file.type,
         dataUrl,
       }
-      setStore(
-        produce((draft) => {
-          draft.imageAttachments.push(attachment)
-        }),
-      )
+      const cursorPosition = prompt.cursor() ?? getCursorPosition(editorRef)
+      prompt.set([...prompt.current(), attachment], cursorPosition)
     }
     reader.readAsDataURL(file)
   }
 
   const removeImageAttachment = (id: string) => {
-    setStore(
-      produce((draft) => {
-        draft.imageAttachments = draft.imageAttachments.filter((a) => a.id !== id)
-      }),
-    )
+    const current = prompt.current()
+    const next = current.filter((part) => part.type !== "image" || part.id !== id)
+    prompt.set(next, prompt.cursor())
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
@@ -282,12 +293,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const clipboardData = event.clipboardData
     if (!clipboardData) return
 
+    event.preventDefault()
+    event.stopPropagation()
+
     const items = Array.from(clipboardData.items)
     const imageItems = items.filter((item) => ACCEPTED_FILE_TYPES.includes(item.type))
 
     if (imageItems.length > 0) {
-      event.preventDefault()
-      event.stopPropagation()
       for (const item of imageItems) {
         const file = item.getAsFile()
         if (file) await addImageAttachment(file)
@@ -295,8 +307,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    event.preventDefault()
-    event.stopPropagation()
     const plainText = clipboardData.getData("text/plain") ?? ""
     addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
@@ -337,13 +347,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   onMount(() => {
-    editorRef.addEventListener("paste", handlePaste)
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
   })
   onCleanup(() => {
-    editorRef.removeEventListener("paste", handlePaste)
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
     document.removeEventListener("drop", handleGlobalDrop)
@@ -524,8 +532,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     on(
       () => prompt.current(),
       (currentParts) => {
+        const inputParts = currentParts.filter((part) => part.type !== "image") as Prompt
         const domParts = parseFromDOM()
-        if (isNormalizedEditor() && isPromptEqual(currentParts, domParts)) return
+        if (isNormalizedEditor() && isPromptEqual(inputParts, domParts)) return
 
         const selection = window.getSelection()
         let cursorPosition: number | null = null
@@ -533,7 +542,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           cursorPosition = getCursorPosition(editorRef)
         }
 
-        renderEditor(currentParts)
+        renderEditor(inputParts)
 
         if (cursorPosition !== null) {
           setCursorPosition(editorRef, cursorPosition)
@@ -624,11 +633,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const handleInput = () => {
     const rawParts = parseFromDOM()
+    const images = imageAttachments()
     const cursorPosition = getCursorPosition(editorRef)
     const rawText = rawParts.map((p) => ("content" in p ? p.content : "")).join("")
     const trimmed = rawText.replace(/\u200B/g, "").trim()
     const hasNonText = rawParts.some((part) => part.type !== "text")
-    const shouldReset = trimmed.length === 0 && !hasNonText
+    const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
 
     if (shouldReset) {
       setStore("popover", null)
@@ -667,7 +677,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       setStore("savedPrompt", null)
     }
 
-    prompt.set(rawParts, cursorPosition)
+    prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
 
@@ -770,16 +780,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .map((p) => ("content" in p ? p.content : ""))
       .join("")
       .trim()
-    if (!text) return
+    const hasImages = prompt.some((part) => part.type === "image")
+    if (!text && !hasImages) return
 
     const entry = clonePromptParts(prompt)
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
     const lastEntry = currentHistory.entries[0]
-    if (lastEntry) {
-      const lastText = lastEntry.map((p) => ("content" in p ? p.content : "")).join("")
-      if (lastText === text) return
-    }
+    if (lastEntry && isPromptEqual(lastEntry, entry)) return
 
     setCurrentHistory("entries", (entries) => [entry, ...entries].slice(0, MAX_HISTORY))
   }
@@ -868,6 +876,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
+    if (event.key === "Enter" && isImeComposing(event)) {
+      return
+    }
+
     if (store.popover && (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter")) {
       if (store.popover === "at") {
         atOnKeyDown(event)
@@ -949,7 +961,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
-    const images = store.imageAttachments.slice()
+    const images = imageAttachments().slice()
     const mode = store.mode
 
     if (text.trim().length === 0 && images.length === 0) {
@@ -1043,14 +1055,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const clearInput = () => {
       prompt.reset()
-      setStore("imageAttachments", [])
       setStore("mode", "normal")
       setStore("popover", null)
     }
 
     const restoreInput = () => {
       prompt.set(currentPrompt, promptLength(currentPrompt))
-      setStore("imageAttachments", images)
       setStore("mode", mode)
       setStore("popover", null)
       requestAnimationFrame(() => {
@@ -1093,6 +1103,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             agent,
             model: `${model.providerID}/${model.modelID}`,
             variant,
+            parts: images.map((attachment) => ({
+              id: Identifier.ascending("part"),
+              type: "file" as const,
+              mime: attachment.mime,
+              url: attachment.dataUrl,
+              filename: attachment.filename,
+            })),
           })
           .catch((err) => {
             showToast({
@@ -1446,9 +1463,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </For>
           </div>
         </Show>
-        <Show when={store.imageAttachments.length > 0}>
+        <Show when={imageAttachments().length > 0}>
           <div class="flex flex-wrap gap-2 px-3 pt-3">
-            <For each={store.imageAttachments}>
+            <For each={imageAttachments()}>
               {(attachment) => (
                 <div class="relative group">
                   <Show
@@ -1489,6 +1506,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
             contenteditable="true"
             onInput={handleInput}
+            onPaste={handlePaste}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
@@ -1498,7 +1518,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "font-mono!": store.mode === "shell",
             }}
           />
-          <Show when={!prompt.dirty() && store.imageAttachments.length === 0}>
+          <Show when={!prompt.dirty()}>
             <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? "Enter shell command..."
@@ -1572,14 +1592,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       onClick={() => permission.toggleAutoAccept(params.id!, sdk.directory)}
                       classList={{
                         "_hidden group-hover/prompt-input:flex size-6 items-center justify-center": true,
-                        "text-text-base": !permission.isAutoAccepting(params.id!),
-                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!),
+                        "text-text-base": !permission.isAutoAccepting(params.id!, sdk.directory),
+                        "hover:bg-surface-success-base": permission.isAutoAccepting(params.id!, sdk.directory),
                       }}
                     >
                       <Icon
                         name="chevron-double-right"
                         size="small"
-                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!) }}
+                        classList={{ "text-icon-success-base": permission.isAutoAccepting(params.id!, sdk.directory) }}
                       />
                     </Button>
                   </TooltipKeybind>
@@ -1631,7 +1651,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             >
               <IconButton
                 type="submit"
-                disabled={!prompt.dirty() && store.imageAttachments.length === 0 && !working()}
+                disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"

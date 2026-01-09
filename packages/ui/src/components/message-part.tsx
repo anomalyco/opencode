@@ -566,7 +566,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={throttledText()} />
+        <Markdown text={throttledText()} cacheKey={part.id} />
       </div>
     </Show>
   )
@@ -580,7 +580,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} />
+        <Markdown text={throttledText()} cacheKey={part.id} />
       </div>
     </Show>
   )
@@ -759,6 +759,13 @@ ToolRegistry.register({
       })
     }
 
+    const handleSubtitleClick = () => {
+      const sessionId = childSessionId()
+      if (sessionId && data.navigateToSession) {
+        data.navigateToSession(sessionId)
+      }
+    }
+
     const renderChildToolPart = () => {
       const toolData = childToolPart()
       if (!toolData) return null
@@ -797,6 +804,7 @@ ToolRegistry.register({
                       titleClass: "capitalize",
                       subtitle: props.input.description,
                     }}
+                    onSubtitleClick={handleSubtitleClick}
                   />
                 }
               >
@@ -826,6 +834,7 @@ ToolRegistry.register({
                 titleClass: "capitalize",
                 subtitle: props.input.description,
               }}
+              onSubtitleClick={handleSubtitleClick}
             >
               <div
                 ref={autoScroll.scrollRef}
