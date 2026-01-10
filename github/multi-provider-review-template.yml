@@ -1,0 +1,75 @@
+name: Multi-Provider Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  check-guidelines:
+    if: |
+      (github.event_name == 'pull_request') ||
+      (github.event.issue.pull_request &&
+       (startsWith(github.event.comment.body, '/review') ||
+        contains(github.event.comment.body, '@opencode') ||
+        contains(github.event.comment.body, '@claude')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Get PR number
+        id: pr-number
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Get PR details
+        id: pr-details
+        run: |
+          gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} > pr_data.json
+          echo "title=$(jq -r .title pr_data.json)" >> $GITHUB_OUTPUT
+          echo "sha=$(jq -r .head.sha pr_data.json)" >> $GITHUB_OUTPUT
+
+      - name: Check for AGENTS.md
+        id: agents-md
+        run: |
+          if [ -f AGENTS.md ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Multi-Provider Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEW_PROVIDERS: opencode/big-pickle,opencode/grok-code,opencode/minimax-m2.1-free,opencode/glm-4.7-free
+          PR_TITLE: ${{ steps.pr-details.outputs.title }}
+          PR_NUMBER: ${{ steps.pr-number.outputs.number }}
+          HAS_AGENTS: ${{ steps.agents-md.outputs.exists }}
+        run: |
+          PR_BODY=$(jq -r .body pr_data.json)
+          curl -o multi-review.ts https://raw.githubusercontent.com/anomalyco/opencode/main/github/multi-review-script.ts
+
+          if [ "$HAS_AGENTS" = "true" ]; then
+            export INCLUDE_AGENTS=true
+          fi
+
+          bun run multi-review.ts
