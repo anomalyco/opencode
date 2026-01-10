@@ -439,6 +439,9 @@ export namespace Provider {
       }
     },
     unbound: async (input) => {
+      const config = await Config.get()
+      const providerConfig = config.provider?.["unbound"]
+
       // Get API key from env or auth storage
       const apiKey = await (async () => {
         const env = Env.all()
@@ -446,16 +449,15 @@ export namespace Provider {
         if (envKey) return envKey
         const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
-        const config = await Config.get()
-        if (config.provider?.["unbound"]?.options?.apiKey) return config.provider["unbound"].options.apiKey
+        if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
         return undefined
       })()
 
       if (!apiKey) return { autoload: false }
 
       // Fetch available models from Unbound gateway
+      const baseURL = providerConfig?.options?.baseURL ?? "https://api.getunbound.ai/v1"
       try {
-        const baseURL = (await Config.get()).provider?.["unbound"]?.options?.baseURL ?? "https://api.getunbound.ai/v1"
         const response = await fetch(`${baseURL}/models`, {
           headers: {
             Authorization: `Bearer ${apiKey}`,
@@ -526,6 +528,11 @@ export namespace Provider {
               }
             }
           }
+        } else {
+          log.warn("Failed to fetch Unbound models", {
+            status: response.status,
+            statusText: response.statusText,
+          })
         }
       } catch (e) {
         log.warn("Failed to fetch Unbound models, using default", { error: e })
