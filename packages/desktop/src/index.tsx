@@ -257,6 +257,15 @@ const platform: Platform = {
 
   // @ts-expect-error
   fetch: tauriFetch,
+
+  getDefaultServerUrl: async () => {
+    const result = await invoke<string | null>("get_default_server_url").catch(() => null)
+    return result
+  },
+
+  setDefaultServerUrl: async (url: string | null) => {
+    await invoke("set_default_server_url", { url })
+  },
 }
 
 createMenu()

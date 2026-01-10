@@ -13,11 +13,15 @@ use tauri::{
     path::BaseDirectory, AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl,
     WebviewWindow,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
+
+const SETTINGS_STORE: &str = "opencode.settings.dat";
+const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
 #[derive(Clone)]
 struct ServerState {
@@ -86,6 +90,41 @@ async fn ensure_server_started(state: State<'_, ServerState>) -> Result<(), Stri
         .clone()
         .await
         .map_err(|_| "Failed to get server status".to_string())?
+}
+
+#[tauri::command]
+async fn get_default_server_url(app: AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let value = store.get(DEFAULT_SERVER_URL_KEY);
+    match value {
+        Some(v) => Ok(v.as_str().map(String::from)),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    match url {
+        Some(u) => {
+            store.set(DEFAULT_SERVER_URL_KEY, serde_json::Value::String(u));
+        }
+        None => {
+            store.delete(DEFAULT_SERVER_URL_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
 }
 
 fn get_sidecar_port() -> u32 {
@@ -193,6 +232,30 @@ async fn is_server_running(port: u32) -> bool {
         .is_ok()
 }
 
+async fn check_server_health(url: &str) -> bool {
+    let health_url = format!("{}/health", url.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build();
+
+    let Ok(client) = client else {
+        return false;
+    };
+
+    client
+        .get(&health_url)
+        .send()
+        .await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false)
+}
+
+fn get_configured_server_url(app: &AppHandle) -> Option<String> {
+    let store = app.store(SETTINGS_STORE).ok()?;
+    let value = store.get(DEFAULT_SERVER_URL_KEY)?;
+    value.as_str().map(String::from)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
@@ -219,7 +282,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
             install_cli,
-            ensure_server_started
+            ensure_server_started,
+            get_default_server_url,
+            set_default_server_url
         ])
         .setup(move |app| {
             let app = app.handle().clone();
@@ -266,41 +331,114 @@ pub fn run() {
             {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    let should_spawn_sidecar = !is_server_running(port).await;
+                    // Check for configured default server URL
+                    let configured_url = get_configured_server_url(&app);
 
-                    let (child, res) = if should_spawn_sidecar {
-                        let child = spawn_sidecar(&app, port);
+                    let (child, res, server_url) = if let Some(ref url) = configured_url {
+                        println!("Configured default server URL: {}", url);
 
-                        let timestamp = Instant::now();
-                        let res = loop {
-                            if timestamp.elapsed() > Duration::from_secs(7) {
-                                break Err(format!(
-                                    "Failed to spawn OpenCode Server. Logs:\n{}",
-                                    get_logs(app.clone()).await.unwrap()
-                                ));
+                        // Try to connect to the configured server
+                        let mut healthy = false;
+                        let mut should_fallback = false;
+
+                        loop {
+                            if check_server_health(url).await {
+                                healthy = true;
+                                println!("Connected to configured server: {}", url);
+                                break;
                             }
 
-                            tokio::time::sleep(Duration::from_millis(10)).await;
+                            let res = app.dialog()
+                                .message(format!("Could not connect to configured server:\n{}\n\nWould you like to retry or start a local server instead?", url))
+                                .title("Connection Failed")
+                                .buttons(MessageDialogButtons::OkCancelCustom("Retry".to_string(), "Start Local".to_string()))
+                                .blocking_show_with_result();
 
-                            if is_server_running(port).await {
-                                // give the server a little bit more time to warm up
+                            match res {
+                                MessageDialogResult::Custom(name) if name == "Retry" => {
+                                    continue;
+                                },
+                                _ => {
+                                    should_fallback = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if healthy {
+                            (None, Ok(()), Some(url.clone()))
+                        } else if should_fallback {
+                            // Fall back to spawning local sidecar
+                            let child = spawn_sidecar(&app, port);
+
+                            let timestamp = Instant::now();
+                            let res = loop {
+                                if timestamp.elapsed() > Duration::from_secs(7) {
+                                    break Err(format!(
+                                        "Failed to spawn OpenCode Server. Logs:\n{}",
+                                        get_logs(app.clone()).await.unwrap()
+                                    ));
+                                }
+
                                 tokio::time::sleep(Duration::from_millis(10)).await;
 
-                                break Ok(());
-                            }
+                                if is_server_running(port).await {
+                                    tokio::time::sleep(Duration::from_millis(10)).await;
+                                    break Ok(());
+                                }
+                            };
+
+                            println!("Server ready after {:?}", timestamp.elapsed());
+                            (Some(child), res, None)
+                        } else {
+                            (None, Err("User cancelled".to_string()), None)
+                        }
+                    } else {
+                        // No configured URL, spawn local sidecar as before
+                        let should_spawn_sidecar = !is_server_running(port).await;
+
+                        let (child, res) = if should_spawn_sidecar {
+                            let child = spawn_sidecar(&app, port);
+
+                            let timestamp = Instant::now();
+                            let res = loop {
+                                if timestamp.elapsed() > Duration::from_secs(7) {
+                                    break Err(format!(
+                                        "Failed to spawn OpenCode Server. Logs:\n{}",
+                                        get_logs(app.clone()).await.unwrap()
+                                    ));
+                                }
+
+                                tokio::time::sleep(Duration::from_millis(10)).await;
+
+                                if is_server_running(port).await {
+                                    tokio::time::sleep(Duration::from_millis(10)).await;
+                                    break Ok(());
+                                }
+                            };
+
+                            println!("Server ready after {:?}", timestamp.elapsed());
+
+                            (Some(child), res)
+                        } else {
+                            (None, Ok(()))
                         };
 
-                        println!("Server ready after {:?}", timestamp.elapsed());
-
-                        (Some(child), res)
-                    } else {
-                        (None, Ok(()))
+                        (child, res, None)
                     };
 
                     app.state::<ServerState>().set_child(child);
 
                     if res.is_ok() {
                         let _ = window.eval("window.__OPENCODE__.serverReady = true;");
+
+                        // If using a configured server URL, inject it
+                        if let Some(url) = server_url {
+                            let escaped_url = url.replace('\\', "\\\\").replace('"', "\\\"");
+                            let _ = window.eval(format!(
+                                "window.__OPENCODE__.serverUrl = \"{escaped_url}\";",
+                            ));
+                        }
                     }
 
                     let _ = tx.send(res);

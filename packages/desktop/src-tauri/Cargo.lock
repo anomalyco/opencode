@@ -2795,6 +2795,7 @@ dependencies = [
  "futures",
  "gtk",
  "listeners",
+ "reqwest",
  "semver",
  "serde",
  "serde_json",
