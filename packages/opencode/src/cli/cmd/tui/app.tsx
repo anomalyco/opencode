@@ -211,6 +211,8 @@ function App() {
     renderer.clearSelection()
   }
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
+  const [showConsole, setShowConsole] = createSignal(false)
+  const [showDebugPanel, setShowDebugPanel] = createSignal(false)
 
   createEffect(() => {
     console.log(JSON.stringify(route.data))
@@ -477,20 +479,22 @@ function App() {
       category: "System",
     },
     {
-      title: "Toggle debug panel",
+      title: showDebugPanel() ? "Hide debug panel" : "Show debug panel",
       category: "System",
       value: "app.debug",
       onSelect: (dialog) => {
         renderer.toggleDebugOverlay()
+        setShowDebugPanel((prev) => !prev)
         dialog.clear()
       },
     },
     {
-      title: "Toggle console",
+      title: showConsole() ? "Hide console" : "Show console",
       category: "System",
       value: "app.console",
       onSelect: (dialog) => {
         renderer.console.toggle()
+        setShowConsole((prev) => !prev)
         dialog.clear()
       },
     },
