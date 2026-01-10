@@ -472,6 +472,13 @@ export namespace Provider {
             delete input.models["default"]
             for (const model of models) {
               const modelId = model.id || model.name
+              // Parse parameters - support both nested and flat structures
+              const params = model.parameters || model
+              const pricing = model.pricing || {}
+
+              // Detect if model supports prompt caching
+              const supportsPromptCaching = params.supports_prompt_caching || params.supportsPromptCaching || false
+
               input.models[modelId] = {
                 id: modelId,
                 providerID: "unbound",
@@ -483,28 +490,31 @@ export namespace Provider {
                 },
                 status: "active",
                 headers: {},
-                options: {},
+                options: {
+                  // Pass prompt caching support as an option for downstream use
+                  supportsPromptCaching,
+                },
                 cost: {
-                  input: parseFloat(model.pricing?.input_token_price) || 0,
-                  output: parseFloat(model.pricing?.output_token_price) || 0,
+                  input: parseFloat(pricing.input_token_price || pricing.inputTokenPrice) || 0,
+                  output: parseFloat(pricing.output_token_price || pricing.outputTokenPrice) || 0,
                   cache: {
-                    read: parseFloat(model.pricing?.cache_read_price) || 0,
-                    write: parseFloat(model.pricing?.cache_write_price) || 0,
+                    read: parseFloat(pricing.cache_read_price || pricing.cacheReadPrice) || 0,
+                    write: parseFloat(pricing.cache_write_price || pricing.cacheWritePrice) || 0,
                   },
                 },
                 limit: {
-                  context: model.parameters?.context_window || model.context_window || 128000,
-                  output: model.parameters?.max_tokens || model.max_tokens || 4096,
+                  context: params.context_window || params.contextWindow || 128000,
+                  output: params.max_tokens || params.maxTokens || 4096,
                 },
                 capabilities: {
                   temperature: true,
                   reasoning: false,
-                  attachment: model.parameters?.supports_images || model.supports_images || false,
+                  attachment: params.supports_images || params.supportsImages || false,
                   toolcall: true,
                   input: {
                     text: true,
                     audio: false,
-                    image: model.parameters?.supports_images || model.supports_images || false,
+                    image: params.supports_images || params.supportsImages || false,
                     video: false,
                     pdf: false,
                   },
@@ -525,7 +535,10 @@ export namespace Provider {
         autoload: true,
         options: {
           headers: {
-            "X-Source": "opencode",
+            // App identification for Unbound analytics and tracking
+            "X-Unbound-Metadata": JSON.stringify({
+              labels: [{ key: "app", value: "opencode" }],
+            }),
           },
         },
       }
