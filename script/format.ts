@@ -2,4 +2,6 @@
 
 import { $ } from "bun"
 
-await $`bun run prettier --ignore-unknown --write .`
+const check = Bun.argv.includes("--check")
+
+await $`bun run prettier --ignore-unknown ${check ? "--check" : "--write"} .`
