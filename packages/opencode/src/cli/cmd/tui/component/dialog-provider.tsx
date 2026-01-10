@@ -36,7 +36,7 @@ export function createDialogProviderOptions() {
         description: {
           opencode: "(Recommended)",
           anthropic: "(Claude Max or API key)",
-          openai: "ChatGPT Plus/Pro or API key",
+          openai: "(ChatGPT Plus/Pro or API key)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {

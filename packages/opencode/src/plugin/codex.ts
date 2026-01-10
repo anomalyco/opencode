@@ -98,45 +98,94 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
   return response.json()
 }
 
-const HTML_SUCCESS = `<!DOCTYPE html>
+const HTML_SUCCESS = `<!doctype html>
 <html>
-<head>
-  <title>OpenCode - Codex Authorization Successful</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
-    .container { text-align: center; padding: 2rem; }
-    h1 { color: #4ade80; margin-bottom: 1rem; }
-    p { color: #aaa; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Authorization Successful</h1>
-    <p>You can close this window and return to OpenCode.</p>
-  </div>
-  <script>setTimeout(() => window.close(), 2000);</script>
-</body>
+  <head>
+    <title>OpenCode - Codex Authorization Successful</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        background: #131010;
+        color: #f1ecec;
+      }
+      .container {
+        text-align: center;
+        padding: 2rem;
+      }
+      h1 {
+        color: #f1ecec;
+        margin-bottom: 1rem;
+      }
+      p {
+        color: #b7b1b1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Authorization Successful</h1>
+      <p>You can close this window and return to OpenCode.</p>
+    </div>
+    <script>
+      setTimeout(() => window.close(), 2000)
+    </script>
+  </body>
 </html>`
 
-const HTML_ERROR = (error: string) => `<!DOCTYPE html>
+const HTML_ERROR = (error: string) => `<!doctype html>
 <html>
-<head>
-  <title>OpenCode - Codex Authorization Failed</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
-    .container { text-align: center; padding: 2rem; }
-    h1 { color: #f87171; margin-bottom: 1rem; }
-    p { color: #aaa; }
-    .error { color: #fca5a5; font-family: monospace; margin-top: 1rem; padding: 1rem; background: rgba(248,113,113,0.1); border-radius: 0.5rem; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>Authorization Failed</h1>
-    <p>An error occurred during authorization.</p>
-    <div class="error">${error}</div>
-  </div>
-</body>
+  <head>
+    <title>OpenCode - Codex Authorization Failed</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        background: #131010;
+        color: #f1ecec;
+      }
+      .container {
+        text-align: center;
+        padding: 2rem;
+      }
+      h1 {
+        color: #fc533a;
+        margin-bottom: 1rem;
+      }
+      p {
+        color: #b7b1b1;
+      }
+      .error {
+        color: #ff917b;
+        font-family: monospace;
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #3c140d;
+        border-radius: 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Authorization Failed</h1>
+      <p>An error occurred during authorization.</p>
+      <div class="error">${error}</div>
+    </div>
+  </body>
 </html>`
 
 interface PendingOAuth {
