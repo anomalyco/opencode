@@ -82,6 +82,8 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       const selected = flat()[selectedIndex]
       if (selected) props.onSelect?.(selected, selectedIndex)
     } else {
+      // Skip list navigation for text editing shortcuts (e.g., Option+Arrow, Option+Backspace on macOS)
+      if (event.altKey || event.metaKey) return
       list.onKeyDown(event)
     }
   }
