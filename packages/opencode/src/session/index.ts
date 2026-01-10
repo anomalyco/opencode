@@ -404,11 +404,24 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
-      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const usage = input.usage as LanguageModelUsage
+      let inputTokens = usage.inputTokens ?? 0
+      let cachedInputTokens = usage.cachedInputTokens ?? 0
+
+      // If input tokens are 0 and anthropic metadata usage exists, try to read from anthropic usage
+      const anthUsageRec = input.metadata?.["anthropic"]?.["usage"]
+      if (anthUsageRec) {
+        const anthUsage = anthUsageRec as Record<string, unknown>
+        if (inputTokens === 0 && anthUsage) {
+          inputTokens = (anthUsage["input_tokens"] ?? 0) as number
+          cachedInputTokens = (anthUsage["cache_read_input_tokens"] ?? 0) as number
+        }
+      }
+
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const adjustedInputTokens = excludesCachedTokens
-        ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+        ? inputTokens
+        : inputTokens - cachedInputTokens
       const safe = (value: number) => {
         if (!Number.isFinite(value)) return 0
         return value
