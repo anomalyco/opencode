@@ -16,6 +16,24 @@ import { existsSync } from "fs"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
+
+  // Helper function to run git commands with timeout to prevent hangs
+  async function gitWithTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number = 5000,
+    fallback: T
+  ): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((resolve) => 
+        setTimeout(() => {
+          log.warn("git command timed out, falling back to non-git behavior", { timeoutMs })
+          resolve(fallback)
+        }, timeoutMs)
+      )
+    ])
+  }
+
   export const Info = z
     .object({
       id: z.string(),
@@ -73,19 +91,23 @@ export namespace Project {
 
         // generate id from root commit
         if (!id) {
-          const roots = await $`git rev-list --max-parents=0 --all`
-            .quiet()
-            .nothrow()
-            .cwd(sandbox)
-            .text()
-            .then((x) =>
-              x
-                .split("\n")
-                .filter(Boolean)
-                .map((x) => x.trim())
-                .toSorted(),
-            )
-            .catch(() => undefined)
+          const roots = await gitWithTimeout(
+            $`git rev-list --max-parents=0 --all`
+              .quiet()
+              .nothrow()
+              .cwd(sandbox)
+              .text()
+              .then((x) =>
+                x
+                  .split("\n")
+                  .filter(Boolean)
+                  .map((x) => x.trim())
+                  .toSorted(),
+              )
+              .catch(() => undefined),
+            5000,
+            undefined
+          )
 
           if (!roots) {
             return {
@@ -113,13 +135,17 @@ export namespace Project {
           }
         }
 
-        const top = await $`git rev-parse --show-toplevel`
-          .quiet()
-          .nothrow()
-          .cwd(sandbox)
-          .text()
-          .then((x) => path.resolve(sandbox, x.trim()))
-          .catch(() => undefined)
+        const top = await gitWithTimeout(
+          $`git rev-parse --show-toplevel`
+            .quiet()
+            .nothrow()
+            .cwd(sandbox)
+            .text()
+            .then((x) => path.resolve(sandbox, x.trim()))
+            .catch(() => undefined),
+          5000,
+          undefined
+        )
 
         if (!top) {
           return {
@@ -132,17 +158,21 @@ export namespace Project {
 
         sandbox = top
 
-        const worktree = await $`git rev-parse --git-common-dir`
-          .quiet()
-          .nothrow()
-          .cwd(sandbox)
-          .text()
-          .then((x) => {
-            const dirname = path.dirname(x.trim())
-            if (dirname === ".") return sandbox
-            return dirname
-          })
-          .catch(() => undefined)
+        const worktree = await gitWithTimeout(
+          $`git rev-parse --git-common-dir`
+            .quiet()
+            .nothrow()
+            .cwd(sandbox)
+            .text()
+            .then((x) => {
+              const dirname = path.dirname(x.trim())
+              if (dirname === ".") return sandbox
+              return dirname
+            })
+            .catch(() => undefined),
+          5000,
+          undefined
+        )
 
         if (!worktree) {
           return {
