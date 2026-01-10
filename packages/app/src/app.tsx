@@ -38,9 +38,6 @@ declare global {
 }
 
 const defaultServerUrl = iife(() => {
-  const param = new URLSearchParams(document.location.search).get("url")
-  if (param) return param
-
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
   if (import.meta.env.DEV)
@@ -108,18 +105,16 @@ export function AppInterface() {
                 <Route path="/" component={() => <Navigate href="session" />} />
                 <Route
                   path="/session/:id?"
-                  component={(p) => (
-                    <Show when={p.params.id ?? "new"} keyed>
-                      <TerminalProvider>
-                        <FileProvider>
-                          <PromptProvider>
-                            <Suspense fallback={<Loading />}>
-                              <Session />
-                            </Suspense>
-                          </PromptProvider>
-                        </FileProvider>
-                      </TerminalProvider>
-                    </Show>
+                  component={() => (
+                    <TerminalProvider>
+                      <FileProvider>
+                        <PromptProvider>
+                          <Suspense fallback={<Loading />}>
+                            <Session />
+                          </Suspense>
+                        </PromptProvider>
+                      </FileProvider>
+                    </TerminalProvider>
                   )}
                 />
               </Route>
