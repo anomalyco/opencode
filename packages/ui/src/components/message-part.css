@@ -76,12 +76,25 @@
   }
 
   [data-slot="user-message-text"] {
+    position: relative;
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
     background: var(--surface-base);
     padding: 8px 12px;
     border-radius: 4px;
+
+    [data-slot="user-message-copy-wrapper"] {
+      position: absolute;
+      top: 7px;
+      right: 7px;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    &:hover [data-slot="user-message-copy-wrapper"] {
+      opacity: 1;
+    }
   }
 
   .text-text-strong {
