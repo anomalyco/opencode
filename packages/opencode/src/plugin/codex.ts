@@ -314,9 +314,13 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         if (auth.type !== "oauth") return {}
 
         // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set(["gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2", "gpt-5.2-codex"])
+        // Allow base models and their variants (e.g., gpt-5.2-codex-low, gpt-5.2-codex-high)
+        const allowedBaseModels = ["gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2", "gpt-5.2-codex"]
         for (const modelId of Object.keys(provider.models)) {
-          if (!allowedModels.has(modelId)) {
+          const isAllowed = allowedBaseModels.some(
+            (base) => modelId === base || modelId.startsWith(base + "-"),
+          )
+          if (!isAllowed) {
             delete provider.models[modelId]
           }
         }
