@@ -99,7 +99,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // - task_budget on CALLER: how many calls the caller can make per request
       // - callable_by_subagents on TARGET: whether target can be called by subagents
       const callerTaskBudget = (callerAgentInfo?.options?.task_budget as number) ?? 0
-      const targetCallable = (targetAgent.options?.callable_by_subagents as boolean) ?? false
+      const targetCallable = targetAgent.options?.callable_by_subagents === true
 
       // Get target's task_budget once (used for session permissions and tool availability)
       const targetTaskBudget = (targetAgent.options?.task_budget as number) ?? 0
