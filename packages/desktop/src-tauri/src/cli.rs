@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
 
@@ -9,9 +11,10 @@ fn get_cli_install_path() -> Option<std::path::PathBuf> {
     })
 }
 
-pub fn get_sidecar_path() -> std::path::PathBuf {
-    tauri::utils::platform::current_exe()
-        .expect("Failed to get current exe")
+pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
+    // Get binary with symlinks support
+    tauri::process::current_binary(&app.env())
+        .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
         .join("opencode-cli")
@@ -26,12 +29,12 @@ fn is_cli_installed() -> bool {
 const INSTALL_SCRIPT: &str = include_str!("../../../../install");
 
 #[tauri::command]
-pub fn install_cli() -> Result<String, String> {
+pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
     if cfg!(not(unix)) {
         return Err("CLI installation is only supported on macOS & Linux".to_string());
     }
 
-    let sidecar = get_sidecar_path();
+    let sidecar = get_sidecar_path(&app);
     if !sidecar.exists() {
         return Err("Sidecar binary not found".to_string());
     }
@@ -108,7 +111,7 @@ pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
         cli_version, app_version
     );
 
-    install_cli()?;
+    install_cli(app)?;
 
     println!("Synced installed CLI");
 
