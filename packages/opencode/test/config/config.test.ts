@@ -334,6 +334,69 @@ Test agent prompt`,
   })
 })
 
+test("loads nested commands from plural commands/ directory with prefix", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const commandsDir = path.join(opencodeDir, "commands", "email")
+      await fs.mkdir(commandsDir, { recursive: true })
+
+      await Bun.write(
+        path.join(commandsDir, "digest.md"),
+        `---
+description: Generate email digest
+---
+Generate a digest of recent emails`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // Should preserve the email/ prefix from nested directory
+      expect(config.command?.["email/digest"]).toEqual({
+        description: "Generate email digest",
+        template: "Generate a digest of recent emails",
+      })
+    },
+  })
+})
+
+test("loads nested agents from plural agents/ directory with prefix", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+      const agentsDir = path.join(opencodeDir, "agents", "ml")
+      await fs.mkdir(agentsDir, { recursive: true })
+
+      await Bun.write(
+        path.join(agentsDir, "engineer.md"),
+        `---
+model: test/model
+---
+ML Engineer agent prompt`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      // Should preserve the ml/ prefix from nested directory
+      expect(config.agent?.["ml/engineer"]).toEqual(
+        expect.objectContaining({
+          name: "ml/engineer",
+          model: "test/model",
+          prompt: "ML Engineer agent prompt",
+        }),
+      )
+    },
+  })
+})
+
 test("updates config and writes to file", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
