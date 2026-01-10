@@ -57,6 +57,7 @@ export namespace Session {
         .optional(),
       title: z.string(),
       version: z.string(),
+      cost: z.number().optional(),
       time: z.object({
         created: z.number(),
         updated: z.number(),
@@ -147,8 +148,12 @@ export namespace Session {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
+      const parentCost = await getCost(input.sessionID)
       const session = await createNext({
         directory: Instance.directory,
+      })
+      await update(session.id, (draft) => {
+        draft.cost = parentCost
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, string>()
@@ -199,6 +204,7 @@ export namespace Session {
       directory: input.directory,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
+      cost: 0,
       permission: input.permission,
       time: {
         created: Date.now(),
@@ -236,6 +242,11 @@ export namespace Session {
     return Storage.read<ShareInfo>(["share", id])
   })
 
+  export const getCost = fn(Identifier.schema("session"), async (id) => {
+    const read = await Storage.read<Info>(["session", Instance.project.id, id])
+    return read.cost ?? 0
+  })
+
   export const share = fn(Identifier.schema("session"), async (id) => {
     const cfg = await Config.get()
     if (cfg.share === "disabled") {
@@ -270,6 +281,13 @@ export namespace Session {
       info: result,
     })
     return result
+  }
+
+  export async function addCost(sessionID: string, amount: number) {
+    if (amount === 0) return
+    await update(sessionID, (draft) => {
+      draft.cost = (draft.cost ?? 0) + amount
+    })
   }
 
   export const diff = fn(Identifier.schema("session"), async (sessionID) => {
