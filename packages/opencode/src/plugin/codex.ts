@@ -430,26 +430,6 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             // Cast to include accountId field
             const authWithAccount = currentAuth as typeof currentAuth & { accountId?: string }
 
-            // Extract accountId from existing access_token if not already stored
-            if (!authWithAccount.accountId && currentAuth.access) {
-              const claims = parseJwtClaims(currentAuth.access)
-              const extractedAccountId = claims && extractAccountIdFromClaims(claims)
-              if (extractedAccountId) {
-                authWithAccount.accountId = extractedAccountId
-                await input.client.auth.set({
-                  path: { id: "codex" },
-                  body: {
-                    type: "oauth",
-                    refresh: currentAuth.refresh,
-                    access: currentAuth.access,
-                    expires: currentAuth.expires,
-                    ...{ accountId: extractedAccountId },
-                  },
-                })
-                log.info("extracted and stored accountId from existing token", { accountId: extractedAccountId })
-              }
-            }
-
             // Check if token needs refresh
             if (!currentAuth.access || currentAuth.expires < Date.now()) {
               log.info("refreshing codex access token")
