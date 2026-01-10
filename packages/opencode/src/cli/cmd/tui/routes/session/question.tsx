@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createEffect, createMemo, For, on, Show } from "solid-js"
-import { useKeyboard } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme } from "../../context/theme"
@@ -12,7 +12,8 @@ import { useDialog } from "../../ui/dialog"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
+  const dimensions = useTerminalDimensions()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
 
@@ -251,101 +252,119 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       borderColor={theme.accent}
       customBorderChars={SplitBorder.customBorderChars}
     >
-      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
-        <Show when={props.request.from}>
-          <box paddingLeft={1}>
-            <text fg={theme.textMuted}>
-              Question from <span style={{ fg: theme.accent }}>{props.request.from}</span>
-            </text>
-          </box>
-        </Show>
-        <Show when={!single()}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
-            <For each={questions()}>
-              {(q, index) => {
-                const isActive = () => index() === store.tab
-                const isAnswered = () => {
-                  return (store.answers[index()]?.length ?? 0) > 0
-                }
-                return (
-                  <box
-                    paddingLeft={1}
-                    paddingRight={1}
-                    backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
-                  >
-                    <text fg={isActive() ? theme.selectedListItemText : isAnswered() ? theme.text : theme.textMuted}>
-                      {q.header}
-                    </text>
-                  </box>
-                )
-              }}
-            </For>
-            <box paddingLeft={1} paddingRight={1} backgroundColor={confirm() ? theme.accent : theme.backgroundElement}>
-              <text fg={confirm() ? theme.selectedListItemText : theme.textMuted}>Confirm</text>
+      <Show when={props.request.from || !single()}>
+        <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1} flexShrink={0}>
+          <Show when={props.request.from}>
+            <box paddingLeft={1}>
+              <text fg={theme.textMuted}>
+                Question from <span style={{ fg: theme.accent }}>{props.request.from}</span>
+              </text>
             </box>
-          </box>
-        </Show>
-
-        <Show when={!confirm()}>
-          <box paddingLeft={1} gap={1}>
-            <box>
-              <text fg={theme.text}>{question()?.question}</text>
-            </box>
-            <box>
-              <For each={options()}>
-                {(opt, i) => {
-                  const active = () => i() === store.selected
-                  const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
-                  const checkbox = () => (multi() ? (picked() ? "■" : "☐") : "")
+          </Show>
+          <Show when={!single()}>
+            <box flexDirection="row" gap={1} paddingLeft={1}>
+              <For each={questions()}>
+                {(q, index) => {
+                  const isActive = () => index() === store.tab
+                  const isAnswered = () => {
+                    return (store.answers[index()]?.length ?? 0) > 0
+                  }
                   return (
-                    <box>
-                      <box flexDirection="row" gap={1}>
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined}>
-                          <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {multi() ? checkbox() : `${i() + 1}.`} {opt.label}
-                          </text>
-                        </box>
-                      </box>
-                      <box paddingLeft={3}>
-                        <text fg={theme.textMuted}>{opt.description}</text>
-                      </box>
+                    <box
+                      paddingLeft={1}
+                      paddingRight={1}
+                      backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
+                    >
+                      <text fg={isActive() ? theme.selectedListItemText : isAnswered() ? theme.text : theme.textMuted}>
+                        {q.header}
+                      </text>
                     </box>
                   )
                 }}
               </For>
-              <box>
-                <box flexDirection="row" gap={1}>
-                  <box backgroundColor={other() ? theme.backgroundElement : undefined}>
-                    <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                      {multi() ? (customPicked() ? "■" : "☐") : `${options().length + 1}.`} Type your own answer
-                    </text>
-                  </box>
-                </box>
-                <Show when={store.editing}>
-                  <box paddingLeft={3}>
-                    <textarea
-                      ref={(val: TextareaRenderable) => (textarea = val)}
-                      focused
-                      initialValue={input()}
-                      placeholder="Type your own answer"
-                      textColor={theme.text}
-                      focusedTextColor={theme.text}
-                      cursorColor={theme.primary}
-                      keyBindings={bindings()}
-                    />
-                  </box>
-                </Show>
-                <Show when={!store.editing && input()}>
-                  <box paddingLeft={3}>
-                    <text fg={theme.textMuted}>{input()}</text>
-                  </box>
-                </Show>
+              <box
+                paddingLeft={1}
+                paddingRight={1}
+                backgroundColor={confirm() ? theme.accent : theme.backgroundElement}
+              >
+                <text fg={confirm() ? theme.selectedListItemText : theme.textMuted}>Confirm</text>
               </box>
             </box>
-          </box>
-        </Show>
+          </Show>
+        </box>
+      </Show>
 
-        <Show when={confirm() && !single()}>
+      <Show when={!confirm()}>
+        <box
+          maxHeight={Math.floor(dimensions().height * 0.5)}
+          overflow="scroll"
+          paddingLeft={2}
+          paddingRight={3}
+          backgroundColor={theme.backgroundElement}
+        >
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            syntaxStyle={syntax()}
+            content={"\n" + (question()?.question ?? "") + "\n"}
+            fg={theme.text}
+          />
+        </box>
+        <box paddingLeft={2} paddingRight={3} paddingTop={1} flexShrink={0}>
+          <For each={options()}>
+            {(opt, i) => {
+              const active = () => i() === store.selected
+              const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+              const checkbox = () => (multi() ? (picked() ? "■" : "☐") : "")
+              return (
+                <box>
+                  <box flexDirection="row" gap={1}>
+                    <box backgroundColor={active() ? theme.backgroundElement : undefined}>
+                      <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
+                        {multi() ? checkbox() : `${i() + 1}.`} {opt.label}
+                      </text>
+                    </box>
+                  </box>
+                  <box paddingLeft={3}>
+                    <text fg={theme.textMuted}>{opt.description}</text>
+                  </box>
+                </box>
+              )
+            }}
+          </For>
+          <box>
+            <box flexDirection="row" gap={1}>
+              <box backgroundColor={other() ? theme.backgroundElement : undefined}>
+                <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
+                  {multi() ? (customPicked() ? "■" : "☐") : `${options().length + 1}.`} Type your own answer
+                </text>
+              </box>
+            </box>
+            <Show when={store.editing}>
+              <box paddingLeft={3}>
+                <textarea
+                  ref={(val: TextareaRenderable) => (textarea = val)}
+                  focused
+                  initialValue={input()}
+                  placeholder="Type your own answer"
+                  textColor={theme.text}
+                  focusedTextColor={theme.text}
+                  cursorColor={theme.primary}
+                  keyBindings={bindings()}
+                />
+              </box>
+            </Show>
+            <Show when={!store.editing && input()}>
+              <box paddingLeft={3}>
+                <text fg={theme.textMuted}>{input()}</text>
+              </box>
+            </Show>
+          </box>
+        </box>
+      </Show>
+
+      <Show when={confirm() && !single()}>
+        <box paddingLeft={2} paddingRight={3} flexGrow={1}>
           <box paddingLeft={1}>
             <text fg={theme.text}>Review</text>
           </box>
@@ -361,14 +380,16 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               )
             }}
           </For>
-        </Show>
-      </box>
+        </box>
+      </Show>
+
       <box
         flexDirection="row"
         flexShrink={0}
         gap={1}
         paddingLeft={2}
         paddingRight={3}
+        paddingTop={1}
         paddingBottom={1}
         justifyContent="space-between"
       >

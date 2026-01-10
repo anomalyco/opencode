@@ -1873,7 +1873,7 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
 }
 
 function Question(props: ToolProps<typeof QuestionTool>) {
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
 
   return (
@@ -1908,9 +1908,13 @@ function Question(props: ToolProps<typeof QuestionTool>) {
                           border={["right"]}
                           borderColor={theme.border}
                         >
-                          <text fg={theme.textMuted} wrapMode="word">
-                            {q.question}
-                          </text>
+                          <code
+                            filetype="markdown"
+                            drawUnstyledText={false}
+                            syntaxStyle={syntax()}
+                            content={q.question}
+                            fg={theme.text}
+                          />
                         </box>
                         <box width={answerWidth()} paddingLeft={1} paddingRight={1} gap={isMulti() ? 1 : 0}>
                           <Show
