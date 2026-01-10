@@ -114,9 +114,40 @@ export const createClient = (config: Config = {}): Client => {
         case "arrayBuffer":
         case "blob":
         case "formData":
-        case "json":
         case "text":
           data = await response[parseAs]()
+          break
+        case "json":
+          try {
+            data = await response.json()
+          } catch (parseError) {
+            // Handle JSON parsing errors with more context
+            const errorMessage = parseError instanceof Error ? parseError.message : String(parseError)
+            const enhancedError = new Error(
+              `Failed to parse JSON response: ${errorMessage}. ` +
+                `Status: ${response.status}, URL: ${response.url}`
+            )
+            ;(enhancedError as any).cause = parseError
+            ;(enhancedError as any).response = response
+
+            let finalError: unknown = enhancedError
+            for (const fn of interceptors.error._fns) {
+              if (fn) {
+                finalError = await fn(enhancedError, response, request, opts)
+              }
+            }
+
+            if (opts.throwOnError) {
+              throw finalError
+            }
+
+            return opts.responseStyle === "data"
+              ? undefined
+              : {
+                  error: finalError,
+                  ...result,
+                }
+          }
           break
         case "stream":
           return opts.responseStyle === "data"
