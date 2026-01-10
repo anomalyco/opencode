@@ -52,7 +52,7 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePlatform } from "@/context/platform"
-import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/v2/client"
+import { Agent, createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/v2/client"
 import { Binary } from "@opencode-ai/util/binary"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -979,6 +979,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       } else if (working()) {
         abort()
       }
+    }
+
+    if (event.key === "Tab") {
+      const agentName = local.agent.current()?.name
+      const agentNames = local.agent.list().map((agent) => agent.name)
+
+      if (!agentName || !agentNames.length || agentNames.length === 1) {
+        return
+      }
+
+      const agentNameIndex = agentNames.indexOf(agentName)
+
+      let nextAgentName: Agent["name"]
+
+      if (event.shiftKey) {
+        nextAgentName = agentNames[agentNameIndex === 0 ? agentNames.length - 1 : agentNameIndex - 1]
+      } else {
+        nextAgentName = agentNames[agentNameIndex === agentNames.length - 1 ? 0 : agentNameIndex + 1]
+      }
+
+      if (!nextAgentName) {
+        return
+      }
+
+      event.preventDefault()
+
+      local.agent.set(nextAgentName)
     }
   }
 
