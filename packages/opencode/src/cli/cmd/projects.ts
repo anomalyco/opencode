@@ -4,6 +4,8 @@ import { bootstrap } from "../bootstrap"
 import { Storage } from "../../storage/storage"
 import { Project } from "../../project/project"
 import { Session } from "../../session"
+import { Locale } from "../../util/locale"
+import { UI } from "../ui"
 import { access } from "fs/promises"
 
 interface ProjectStats {
@@ -125,32 +127,50 @@ async function aggregateProjectStats(args: {
   return filtered
 }
 
-function displayProjectStats(stats: ProjectStats[], args: { limit?: number }) {
-  const width = 79
+export function displayProjectStats(
+  stats: ProjectStats[],
+  args: { limit?: number },
+  write: (...message: string[]) => void = UI.println,
+  options?: { width?: number },
+) {
+  const width = clampWidth(options?.width ?? process.stdout.columns ?? 100)
 
-  function renderRow(path: string, sessions: string, lastActive: string): string {
-    // Path: 40 chars, Sessions: 12 chars, Last Active: 20 chars
-    const pathFormatted = formatPath(path, 40).padEnd(40)
-    const sessionsFormatted = sessions.padStart(8)
-    const lastActiveFormatted = lastActive.padEnd(20)
-    return `│ ${pathFormatted}  ${sessionsFormatted}    ${lastActiveFormatted} │`
+  const sessionsWidth = Math.max("Sessions".length, ...stats.map((s) => s.sessionCount.toString().length), 1)
+  const lastActiveValues = stats.map((s) => (s.lastActive ? Locale.todayTimeOrDateTime(s.lastActive) : "never"))
+  const lastActiveWidth = Math.max("Last Active".length, ...lastActiveValues.map((v) => v.length), 1)
+  const paddingWidth = 8 // borders + inter-column spaces
+  const pathWidth = Math.max(10, width - sessionsWidth - lastActiveWidth - paddingWidth)
+
+  function renderRow(path: string, sessions: string, lastActive: string) {
+    const pathLines = wrapText(path, pathWidth)
+    const rows: string[] = []
+
+    for (let i = 0; i < pathLines.length; i++) {
+      const pathPart = pathLines[i].padEnd(pathWidth)
+      const sessionsPart = i === 0 ? sessions.padStart(sessionsWidth) : "".padStart(sessionsWidth)
+      const lastActivePart = i === 0 ? lastActive.padEnd(lastActiveWidth) : "".padEnd(lastActiveWidth)
+      rows.push(`│ ${pathPart}  ${sessionsPart}  ${lastActivePart} │`)
+    }
+
+    return rows
   }
 
   // Header
-  console.log("┌" + "─".repeat(width - 2) + "┐")
-  console.log("│" + "PROJECTS".padStart(41).padEnd(width - 2) + "│")
-  console.log("├" + "─".repeat(width - 2) + "┤")
-  console.log(renderRow("Path", "Sessions", "Last Active"))
-  console.log("├" + "─".repeat(width - 2) + "┤")
+  write("┌" + "─".repeat(width - 2) + "┐")
+  write("│" + "PROJECTS".padStart(Math.floor((width - 2 + "PROJECTS".length) / 2)).padEnd(width - 2) + "│")
+  write("├" + "─".repeat(width - 2) + "┤")
+  renderRow("Path", "Sessions", "Last Active").forEach((line) => write(line))
+  write("├" + "─".repeat(width - 2) + "┤")
 
   // Body
   if (stats.length === 0) {
     const emptyMsg = "No projects found"
-    const padding = Math.floor((width - 2 - emptyMsg.length) / 2)
-    console.log("│" + " ".repeat(padding) + emptyMsg + " ".repeat(width - 2 - padding - emptyMsg.length) + "│")
+    const padding = Math.max(0, Math.floor((width - 2 - emptyMsg.length) / 2))
+    write("│" + " ".repeat(padding) + emptyMsg + " ".repeat(width - 2 - padding - emptyMsg.length) + "│")
   } else {
     let totalSessions = 0
-    for (const stat of stats) {
+    for (let index = 0; index < stats.length; index++) {
+      const stat = stats[index]
       totalSessions += stat.sessionCount
 
       let path = stat.project.worktree
@@ -158,38 +178,35 @@ function displayProjectStats(stats: ProjectStats[], args: { limit?: number }) {
       if (!stat.worktreeExists) path += " [deleted]"
 
       const sessionsStr = stat.sessionCount.toString()
-      const lastActiveStr = stat.lastActive
-        ? new Date(stat.lastActive).toLocaleString("en-US", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-          })
-        : "never"
+      const lastActiveStr = lastActiveValues[index] ?? "never"
 
-      console.log(renderRow(path, sessionsStr, lastActiveStr))
+      renderRow(path, sessionsStr, lastActiveStr).forEach((line) => write(line))
     }
 
     // Footer
-    console.log("└" + "─".repeat(width - 2) + "┘")
-    console.log()
-    console.log(`Total: ${stats.length} projects, ${totalSessions} sessions`)
-    console.log()
+    write("└" + "─".repeat(width - 2) + "┘")
+    write("")
+    write(`Total: ${stats.length} projects, ${totalSessions} sessions`)
+    write("")
     return
   }
 
-  console.log("└" + "─".repeat(width - 2) + "┘")
-  console.log()
+  write("└" + "─".repeat(width - 2) + "┘")
+  write("")
 }
 
-function formatPath(path: string, maxLength: number): string {
-  if (path.length <= maxLength) return path
+function clampWidth(input: number) {
+  const min = 80
+  const max = 120
+  if (!Number.isFinite(input)) return 100
+  return Math.min(max, Math.max(min, Math.floor(input)))
+}
 
-  // Truncate in middle: /Users/.../path/to/project
-  const ellipsis = "..."
-  const keepStart = Math.floor((maxLength - ellipsis.length) / 2)
-  const keepEnd = maxLength - ellipsis.length - keepStart
-
-  return path.slice(0, keepStart) + ellipsis + path.slice(-keepEnd)
+function wrapText(text: string, width: number): string[] {
+  if (width <= 0) return [text]
+  const lines: string[] = []
+  for (let i = 0; i < text.length; i += width) {
+    lines.push(text.slice(i, i + width))
+  }
+  return lines.length ? lines : [text]
 }
