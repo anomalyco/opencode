@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { $ } from "bun"
 import path from "path"
 import { ReadTool } from "../../src/tool/read"
 import { Instance } from "../../src/project/instance"
@@ -117,6 +118,92 @@ describe("tool.read external_directory permission", () => {
           },
         }
         await read.execute({ filePath: path.join(tmp.path, "internal.txt") }, testCtx)
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeUndefined()
+      },
+    })
+  })
+
+  test("asks for external_directory permission when reading symlink pointing outside project", async () => {
+    await using outerTmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "secret.txt"), "secret data from outside")
+      },
+    })
+    await using tmp = await tmpdir({ git: true })
+
+    // Create symlink inside project pointing to file outside
+    const symlinkPath = path.join(tmp.path, "escape-link.txt")
+    await $`ln -s ${path.join(outerTmp.path, "secret.txt")} ${symlinkPath}`.quiet()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: symlinkPath }, testCtx)
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeDefined()
+      },
+    })
+  })
+
+  test("asks for external_directory permission when reading broken symlink pointing outside", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    // Create broken symlink pointing outside project
+    const symlinkPath = path.join(tmp.path, "broken-escape.txt")
+    await $`ln -s /nonexistent/outside/path ${symlinkPath}`.quiet()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        // Will fail because file doesn't exist, but permission should be asked first
+        await read.execute({ filePath: symlinkPath }, testCtx).catch(() => {})
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeDefined()
+      },
+    })
+  })
+
+  test("does not ask for external_directory when reading symlink pointing inside project", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "target.txt"), "internal target content")
+      },
+    })
+
+    // Create symlink inside project pointing to file inside project
+    const symlinkPath = path.join(tmp.path, "internal-link.txt")
+    await $`ln -s ${path.join(tmp.path, "target.txt")} ${symlinkPath}`.quiet()
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await read.execute({ filePath: symlinkPath }, testCtx)
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeUndefined()
       },
