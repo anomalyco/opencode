@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import z from "zod"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -239,12 +240,20 @@ export namespace SessionProcessor {
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })
-                  input.assistantMessage.finish = value.finishReason
+
+                  // Support `finishReason` in both new and old versions of ai-sdk
+                  // https://github.com/vercel/ai/pull/11338
+                  const finishReason = z.union([
+                    z.string(),
+                    z.object({ unified: z.string(), raw: z.string() }),
+                  ]).transform((value) => typeof value === "string" ? value : value.unified).parse(value.finishReason);
+
+                  input.assistantMessage.finish = finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
-                    reason: value.finishReason,
+                    reason: finishReason,
                     snapshot: await Snapshot.track(),
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
