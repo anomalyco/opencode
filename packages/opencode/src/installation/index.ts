@@ -110,12 +110,41 @@ export namespace Installation {
     }),
   )
 
-  async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
-    if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
+  export type BrewFormula = "anomalyco/tap/opencode" | "sst/tap/opencode" | "opencode"
+
+  export async function getBrewFormula(): Promise<BrewFormula> {
+    const anomalycoTap = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
+    if (anomalycoTap.includes("opencode")) return "anomalyco/tap/opencode"
+    
+    const sstTap = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
+    if (sstTap.includes("opencode")) return "sst/tap/opencode"
+    
     const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
+    
     return "opencode"
+  }
+
+  export function getMigrationCommands(from: BrewFormula): string[] | null {
+    if (from === "anomalyco/tap/opencode") return null
+    if (from === "sst/tap/opencode") {
+      return ["brew uninstall sst/tap/opencode", "brew install anomalyco/tap/opencode"]
+    }
+    if (from === "opencode") {
+      return ["brew uninstall opencode", "brew install anomalyco/tap/opencode"]
+    }
+    return null
+  }
+
+  export async function executeMigration(commands: string[]) {
+    for (const cmd of commands) {
+      const parts = cmd.split(" ")
+      if (parts[0] === "brew" && parts[1] === "uninstall") {
+        await $`brew uninstall ${parts[2]}`.env({ HOMEBREW_NO_AUTO_UPDATE: "1", ...process.env }).quiet()
+      } else if (parts[0] === "brew" && parts[1] === "install") {
+        await $`brew install ${parts[2]}`.env({ HOMEBREW_NO_AUTO_UPDATE: "1", ...process.env }).quiet()
+      }
+    }
   }
 
   export async function upgrade(method: Method, target: string) {

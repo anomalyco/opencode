@@ -42,6 +42,41 @@ export const UpgradeCommand = {
       }
     }
     prompts.log.info("Using method: " + method)
+
+    if (method === "brew") {
+      const formula = await Installation.getBrewFormula()
+      const commands = Installation.getMigrationCommands(formula)
+
+      if (commands) {
+        const reason =
+          formula === "sst/tap/opencode"
+            ? "You have the old sst/tap formula installed. The tap has been renamed to anomalyco/tap."
+            : "You are on the homebrew core formula, which updates every ~10 versions.\nThe anomalyco/tap formula updates on every release."
+
+        prompts.log.warn(`${reason}\n\nTo migrate: ${commands.join(" && ")}`)
+
+        const migrate = await prompts.confirm({
+          message: "Would you like to migrate to the anomalyco/tap? (You can run these commands manually later)",
+          initialValue: true,
+        })
+        if (migrate) {
+          for (const cmd of commands) {
+            const migrationSpinner = prompts.spinner()
+            migrationSpinner.start(cmd)
+            try {
+              await Installation.executeMigration([cmd])
+              migrationSpinner.stop(cmd)
+            } catch (err) {
+              migrationSpinner.stop(`Failed: ${cmd}`, 1)
+              if (err instanceof Error) prompts.log.error(err.message)
+              prompts.outro("Done")
+              return
+            }
+          }
+        }
+      }
+    }
+
     const target = args.target ? args.target.replace(/^v/, "") : await Installation.latest()
 
     if (Installation.VERSION === target) {
