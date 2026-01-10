@@ -76,26 +76,26 @@ export namespace SystemPrompt {
     GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
   }
 
-  export async function custom() {
+  export async function paths() {
     const config = await Config.get()
-    const paths = new Set<string>()
+    const files = new Set<string>()
+    const urls: string[] = []
 
     for (const localRuleFile of LOCAL_RULE_FILES) {
       const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
       if (matches.length > 0) {
-        matches.forEach((path) => paths.add(path))
+        matches.forEach((p) => files.add(p))
         break
       }
     }
 
     for (const globalRuleFile of GLOBAL_RULE_FILES) {
       if (await Bun.file(globalRuleFile).exists()) {
-        paths.add(globalRuleFile)
+        files.add(globalRuleFile)
         break
       }
     }
 
-    const urls: string[] = []
     if (config.instructions) {
       for (let instruction of config.instructions) {
         if (instruction.startsWith("https://") || instruction.startsWith("http://")) {
@@ -117,11 +117,17 @@ export namespace SystemPrompt {
         } else {
           matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
         }
-        matches.forEach((path) => paths.add(path))
+        matches.forEach((p) => files.add(p))
       }
     }
 
-    const foundFiles = Array.from(paths).map((p) =>
+    return { files: Array.from(files), urls }
+  }
+
+  export async function custom() {
+    const { files, urls } = await paths()
+
+    const foundFiles = files.map((p) =>
       Bun.file(p)
         .text()
         .catch(() => "")

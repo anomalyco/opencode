@@ -425,6 +425,11 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("opencode.status"),
       },
       {
+        display: "/instructions",
+        description: "show loaded instructions",
+        onSelect: () => command.trigger("opencode.instructions"),
+      },
+      {
         display: "/mcp",
         description: "toggle MCPs",
         onSelect: () => command.trigger("mcp.list"),

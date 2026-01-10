@@ -33,6 +33,7 @@ import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { SessionPrompt } from "../session/prompt"
 import { SessionCompaction } from "../session/compaction"
+import { InstructionsRoute } from "./instructions"
 import { SessionRevert } from "../session/revert"
 import { lazy } from "../util/lazy"
 import { Todo } from "../session/todo"
@@ -279,6 +280,7 @@ export namespace Server {
         .use(validator("query", z.object({ directory: z.string().optional() })))
 
         .route("/project", ProjectRoute)
+        .route("/instructions", InstructionsRoute)
 
         .get(
           "/pty",
