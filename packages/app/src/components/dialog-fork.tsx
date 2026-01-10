@@ -63,18 +63,13 @@ export const DialogFork: Component = () => {
 
     dialog.close()
 
-    sdk.client.session
-      .fork({
-        sessionID,
-        messageID: item.id,
+    sdk.client.session.fork({ sessionID, messageID: item.id }).then((forked) => {
+      if (!forked.data) return
+      navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
+      requestAnimationFrame(() => {
+        prompt.set(restored)
       })
-      .then((forked) => {
-        if (!forked.data) return
-        navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
-        requestAnimationFrame(() => {
-          prompt.set(restored)
-        })
-      })
+    })
   }
 
   return (
