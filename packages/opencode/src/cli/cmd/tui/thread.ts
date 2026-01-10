@@ -34,9 +34,15 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
   return fn as typeof fetch
 }
 
-function createEventSource(client: RpcClient): EventSource {
+function createEventSource(client: RpcClient, directory: string): EventSource {
   return {
-    on: (handler) => client.on<Event>("event", handler),
+    on: (handler) =>
+      client.on<Event>("event", (event) => {
+        handler(event)
+        if (event.type === "server.instance.disposed") {
+          client.call("subscribe", { directory }).catch(() => {})
+        }
+      }),
   }
 }
 
@@ -140,7 +146,7 @@ export const TuiThreadCommand = cmd({
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
       customFetch = createWorkerFetch(client)
-      events = createEventSource(client)
+      events = createEventSource(client, cwd)
     }
 
     const tuiPromise = tui({
