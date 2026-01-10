@@ -54,7 +54,7 @@ async function aggregateProjectStats(args: {
 
   // Show progress for large datasets
   if (projects.length > 50) {
-    console.log(`Processing ${projects.length} projects...`)
+    UI.println(`Processing ${projects.length} projects...`)
   }
 
   // Process in batches for performance
@@ -68,18 +68,25 @@ async function aggregateProjectStats(args: {
 
         // Get session keys for this project
         const sessionKeys = await Storage.list(["session", project.id])
+        // Read sessions in small batches to avoid overwhelming the filesystem
+        const SESSION_BATCH_SIZE = 20
+        const sessions: (Session.Info | null)[] = []
 
         // Find most recent session activity
         let lastActive: number | null = null
         if (sessionKeys.length > 0) {
           // Read sessions to find the latest time.updated
-          const sessions = await Promise.all(
-            sessionKeys.map((key) => Storage.read<Session.Info>(key).catch(() => null)),
-          )
+          for (let j = 0; j < sessionKeys.length; j += SESSION_BATCH_SIZE) {
+            const sessionBatchKeys = sessionKeys.slice(j, j + SESSION_BATCH_SIZE)
+            const sessionBatch = await Promise.all(
+              sessionBatchKeys.map((key) => Storage.read<Session.Info>(key).catch(() => null)),
+            )
+            sessions.push(...sessionBatch)
+          }
 
           for (const session of sessions) {
             if (session && session.time.updated) {
-              lastActive = !lastActive ? session.time.updated : Math.max(lastActive, session.time.updated)
+              lastActive = Math.max(lastActive ?? 0, session.time.updated)
             }
           }
         }
@@ -205,8 +212,32 @@ function clampWidth(input: number) {
 function wrapText(text: string, width: number): string[] {
   if (width <= 0) return [text]
   const lines: string[] = []
-  for (let i = 0; i < text.length; i += width) {
-    lines.push(text.slice(i, i + width))
+  let remaining = text
+
+  while (remaining.length > 0) {
+    if (remaining.length <= width) {
+      lines.push(remaining)
+      break
+    }
+
+    const candidate = remaining.slice(0, width)
+
+    // Prefer to break on path separators, then on spaces, within the width.
+    let breakIndex = candidate.lastIndexOf("/")
+    if (breakIndex <= 0) {
+      breakIndex = candidate.lastIndexOf(" ")
+    }
+
+    if (breakIndex > 0) {
+      // Include the separator/space in the current line to avoid dropping characters.
+      const line = remaining.slice(0, breakIndex + 1)
+      lines.push(line)
+      remaining = remaining.slice(breakIndex + 1)
+    } else {
+      // Fallback: hard wrap at the specified width.
+      lines.push(candidate)
+      remaining = remaining.slice(width)
+    }
   }
   return lines.length ? lines : [text]
 }
