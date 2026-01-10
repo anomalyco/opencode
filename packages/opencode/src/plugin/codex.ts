@@ -42,12 +42,6 @@ function generateState(): string {
   return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
 }
 
-export function base64UrlDecode(str: string): string {
-  const base64 = str.replace(/-/g, "+").replace(/_/g, "/")
-  const padding = base64.length % 4
-  return atob(padding ? base64 + "=".repeat(4 - padding) : base64)
-}
-
 export interface IdTokenClaims {
   chatgpt_account_id?: string
   organizations?: Array<{ id: string }>
@@ -61,8 +55,7 @@ export function parseJwtClaims(token: string): IdTokenClaims | undefined {
   const parts = token.split(".")
   if (parts.length !== 3) return undefined
   try {
-    const decoded = base64UrlDecode(parts[1])
-    return JSON.parse(decoded) as IdTokenClaims
+    return JSON.parse(Buffer.from(parts[1], "base64url").toString())
   } catch {
     return undefined
   }
