@@ -1545,25 +1545,27 @@ export namespace SessionPrompt {
     }
 
     const templateParts = await resolvePromptParts(template)
-    const parts =
-      (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
-        ? [
-            {
-              type: "subtask" as const,
-              agent: agent.name,
-              description: command.description ?? "",
-              command: input.command,
-              // TODO: how can we make task tool accept a more complex input?
-              prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
-            },
-          ]
-        : [...templateParts, ...(input.parts ?? [])]
+    const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
+    const parts = isSubtask
+      ? [
+          {
+            type: "subtask" as const,
+            agent: agent.name,
+            description: command.description ?? "",
+            command: input.command,
+            // TODO: how can we make task tool accept a more complex input?
+            prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+          },
+        ]
+      : [...templateParts, ...(input.parts ?? [])]
+
+    const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
 
     const result = (await prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
       model,
-      agent: agentName,
+      agent: userAgent,
       parts,
       variant: input.variant,
     })) as MessageV2.WithParts

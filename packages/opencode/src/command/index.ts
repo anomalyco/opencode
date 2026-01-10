@@ -75,6 +75,7 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+        agent: "plan"
       },
     }
 
