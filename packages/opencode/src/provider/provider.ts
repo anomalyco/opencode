@@ -485,23 +485,26 @@ export namespace Provider {
                 headers: {},
                 options: {},
                 cost: {
-                  input: 0,
-                  output: 0,
-                  cache: { read: 0, write: 0 },
+                  input: parseFloat(model.pricing?.input_token_price) || 0,
+                  output: parseFloat(model.pricing?.output_token_price) || 0,
+                  cache: {
+                    read: parseFloat(model.pricing?.cache_read_price) || 0,
+                    write: parseFloat(model.pricing?.cache_write_price) || 0,
+                  },
                 },
                 limit: {
-                  context: model.context_window || model.contextWindow || 128000,
-                  output: model.max_tokens || model.maxTokens || 16384,
+                  context: model.parameters?.context_window || model.context_window || 128000,
+                  output: model.parameters?.max_tokens || model.max_tokens || 4096,
                 },
                 capabilities: {
                   temperature: true,
                   reasoning: false,
-                  attachment: model.supports_images || model.supportsImages || false,
+                  attachment: model.parameters?.supports_images || model.supports_images || false,
                   toolcall: true,
                   input: {
                     text: true,
                     audio: false,
-                    image: model.supports_images || model.supportsImages || false,
+                    image: model.parameters?.supports_images || model.supports_images || false,
                     video: false,
                     pdf: false,
                   },
@@ -752,7 +755,7 @@ export namespace Provider {
         },
         limit: {
           context: 128000,
-          output: 16384,
+          output: 4096,
         },
         capabilities: {
           temperature: true,
