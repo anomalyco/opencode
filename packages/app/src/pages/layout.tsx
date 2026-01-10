@@ -691,10 +691,7 @@ export default function Layout(props: ParentProps) {
       })
       resolve(result)
     } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
+      dialog.show(() => <DialogSelectDirectory multiple={true} onSelect={resolve} />, { onClose: () => resolve(null) })
     }
   }
 

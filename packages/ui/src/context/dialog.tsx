@@ -13,12 +13,18 @@ import { Dialog as Kobalte } from "@kobalte/core/dialog"
 
 type DialogElement = () => JSX.Element
 
+type DialogOptions = {
+  onClose?: () => void
+  preventClose?: boolean
+}
+
 type Active = {
   id: string
   node: JSX.Element
   dispose: () => void
   owner: Owner
   onClose?: () => void
+  preventClose?: boolean
 }
 
 const Context = createContext<ReturnType<typeof init>>()
@@ -34,7 +40,7 @@ function init() {
     setActive(undefined)
   }
 
-  const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
+  const show = (element: DialogElement, owner: Owner, options?: DialogOptions) => {
     close()
 
     const id = Math.random().toString(36).slice(2)
@@ -49,6 +55,7 @@ function init() {
             open={true}
             onOpenChange={(open) => {
               if (open) return
+              if (options?.preventClose) return
               close()
             }}
           >
@@ -63,7 +70,7 @@ function init() {
 
     if (!dispose) return
 
-    setActive({ id, node, dispose, owner, onClose })
+    setActive({ id, node, dispose, owner, onClose: options?.onClose, preventClose: options?.preventClose })
   }
 
   return {
@@ -100,9 +107,9 @@ export function useDialog() {
     get active() {
       return ctx.active
     },
-    show(element: DialogElement, onClose?: () => void) {
+    show(element: DialogElement, options?: DialogOptions) {
       const base = ctx.active?.owner ?? owner
-      ctx.show(element, base, onClose)
+      ctx.show(element, base, options)
     },
     close() {
       ctx.close()

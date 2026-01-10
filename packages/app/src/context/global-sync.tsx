@@ -23,9 +23,22 @@ import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { useGlobalSDK } from "./global-sdk"
 import { ErrorPage, type InitError } from "../pages/error"
-import { batch, createContext, useContext, onCleanup, onMount, type ParentProps, Switch, Match } from "solid-js"
+import {
+  batch,
+  createContext,
+  createEffect,
+  useContext,
+  onCleanup,
+  onMount,
+  type ParentProps,
+  Switch,
+  Match,
+} from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectServerConnection } from "@/components/dialog-select-server"
+import { useServer } from "@/context/server"
 
 type State = {
   status: "loading" | "partial" | "complete"
@@ -67,12 +80,14 @@ function createGlobalSync() {
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
     error?: InitError
+    connectionError: boolean
     path: Path
     project: Project[]
     provider: ProviderListResponse
     provider_auth: ProviderAuthResponse
   }>({
     ready: false,
+    connectionError: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: [],
     provider: { all: [], connected: [], default: {} },
@@ -407,15 +422,13 @@ function createGlobalSync() {
   onCleanup(unsub)
 
   async function bootstrap() {
+    setGlobalStore("connectionError", false)
     const health = await globalSDK.client.global
       .health()
       .then((x) => x.data)
       .catch(() => undefined)
     if (!health?.healthy) {
-      setGlobalStore(
-        "error",
-        new Error(`Could not connect to server. Is there a server running at \`${globalSDK.url}\`?`),
-      )
+      setGlobalStore("connectionError", true)
       return
     }
 
@@ -471,6 +484,9 @@ function createGlobalSync() {
     get error() {
       return globalStore.error
     },
+    get connectionError() {
+      return globalStore.connectionError
+    },
     child,
     bootstrap,
     project: {
@@ -481,15 +497,64 @@ function createGlobalSync() {
 
 const GlobalSyncContext = createContext<ReturnType<typeof createGlobalSync>>()
 
+function ConnectionErrorOverlay(props: { url: string; onRetry: () => void }) {
+  const dialog = useDialog()
+
+  onMount(() => {
+    dialog.show(
+      () => <DialogSelectServerConnection url={props.url} onRetry={props.onRetry} onClose={() => dialog.close()} />,
+      { preventClose: true },
+    )
+  })
+
+  return <div class="h-screen w-screen flex items-center justify-center bg-background-base" />
+}
+
+function ConnectionWatcher(props: { onRetry: () => void }) {
+  const server = useServer()
+  const globalSDK = useGlobalSDK()
+  const dialog = useDialog()
+
+  createEffect((prev: boolean | undefined) => {
+    const current = server.healthy()
+    if (prev === true && current === false) {
+      dialog.show(
+        () => (
+          <DialogSelectServerConnection
+            url={globalSDK.url}
+            onRetry={() => {
+              dialog.close()
+              props.onRetry()
+            }}
+            onClose={() => dialog.close()}
+          />
+        ),
+        { preventClose: true },
+      )
+    }
+    return current
+  })
+
+  return null
+}
+
 export function GlobalSyncProvider(props: ParentProps) {
   const value = createGlobalSync()
+  const globalSDK = useGlobalSDK()
+
   return (
     <Switch>
+      <Match when={value.connectionError}>
+        <ConnectionErrorOverlay url={globalSDK.url} onRetry={value.bootstrap} />
+      </Match>
       <Match when={value.error}>
         <ErrorPage error={value.error} />
       </Match>
       <Match when={value.ready}>
-        <GlobalSyncContext.Provider value={value}>{props.children}</GlobalSyncContext.Provider>
+        <GlobalSyncContext.Provider value={value}>
+          <ConnectionWatcher onRetry={value.bootstrap} />
+          {props.children}
+        </GlobalSyncContext.Provider>
       </Match>
     </Switch>
   )

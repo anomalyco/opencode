@@ -24,9 +24,12 @@ async function checkHealth(url: string, fetch?: typeof globalThis.fetch): Promis
     .catch(() => ({ healthy: false }))
 }
 
-export function DialogSelectServer() {
-  const navigate = useNavigate()
-  const dialog = useDialog()
+interface ServerSelectorProps {
+  onSelect?: (url: string) => void
+  showDialog?: boolean
+}
+
+export function ServerSelector(props: ServerSelectorProps) {
   const server = useServer()
   const platform = usePlatform()
   const [store, setStore] = createStore({
@@ -84,14 +87,9 @@ export function DialogSelectServer() {
 
   function select(value: string, persist?: boolean) {
     if (!persist && store.status[value]?.healthy === false) return
-    dialog.close()
-    if (persist) {
-      server.add(value)
-      navigate("/")
-      return
-    }
-    server.setActive(value)
-    navigate("/")
+    if (persist) server.add(value)
+    if (!persist) server.setActive(value)
+    props.onSelect?.(value)
   }
 
   async function handleSubmit(e: SubmitEvent) {
@@ -114,66 +112,113 @@ export function DialogSelectServer() {
     select(value, true)
   }
 
+  const content = (
+    <div class="flex flex-col gap-4 pb-4">
+      <List
+        search={{ placeholder: "Search servers", autofocus: true }}
+        emptyMessage="No servers yet"
+        items={sortedItems}
+        key={(x) => x}
+        current={current()}
+        onSelect={(x) => {
+          if (x) select(x)
+        }}
+      >
+        {(i) => (
+          <div
+            class="flex items-center gap-2 min-w-0 flex-1"
+            classList={{ "opacity-50": store.status[i]?.healthy === false }}
+          >
+            <div
+              classList={{
+                "size-1.5 rounded-full shrink-0": true,
+                "bg-icon-success-base": store.status[i]?.healthy === true,
+                "bg-icon-critical-base": store.status[i]?.healthy === false,
+                "bg-border-weak-base": store.status[i] === undefined,
+              }}
+            />
+            <span class="truncate">{serverDisplayName(i)}</span>
+            <span class="text-text-weak">{store.status[i]?.version}</span>
+          </div>
+        )}
+      </List>
+
+      <div class="mt-6 px-3 flex flex-col gap-1.5">
+        <div class="px-3">
+          <h3 class="text-14-regular text-text-weak">Add a server</h3>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div class="flex items-start gap-2">
+            <div class="flex-1 min-w-0 h-auto">
+              <TextField
+                type="text"
+                label="Server URL"
+                hideLabel
+                placeholder="http://localhost:4096"
+                value={store.url}
+                onChange={(v) => {
+                  setStore("url", v)
+                  setStore("error", "")
+                }}
+                validationState={store.error ? "invalid" : "valid"}
+                error={store.error}
+              />
+            </div>
+            <Button type="submit" variant="secondary" icon="plus-small" size="large" disabled={store.adding}>
+              {store.adding ? "Checking..." : "Add"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+
+  if (props.showDialog === false) {
+    return content
+  }
+
   return (
     <Dialog title="Servers" description="Switch which OpenCode server this app connects to.">
-      <div class="flex flex-col gap-4 pb-4">
-        <List
-          search={{ placeholder: "Search servers", autofocus: true }}
-          emptyMessage="No servers yet"
-          items={sortedItems}
-          key={(x) => x}
-          current={current()}
-          onSelect={(x) => {
-            if (x) select(x)
-          }}
-        >
-          {(i) => (
-            <div
-              class="flex items-center gap-2 min-w-0 flex-1"
-              classList={{ "opacity-50": store.status[i]?.healthy === false }}
-            >
-              <div
-                classList={{
-                  "size-1.5 rounded-full shrink-0": true,
-                  "bg-icon-success-base": store.status[i]?.healthy === true,
-                  "bg-icon-critical-base": store.status[i]?.healthy === false,
-                  "bg-border-weak-base": store.status[i] === undefined,
-                }}
-              />
-              <span class="truncate">{serverDisplayName(i)}</span>
-              <span class="text-text-weak">{store.status[i]?.version}</span>
-            </div>
-          )}
-        </List>
+      {content}
+    </Dialog>
+  )
+}
 
-        <div class="mt-6 px-3 flex flex-col gap-1.5">
-          <div class="px-3">
-            <h3 class="text-14-regular text-text-weak">Add a server</h3>
-          </div>
-          <form onSubmit={handleSubmit}>
-            <div class="flex items-start gap-2">
-              <div class="flex-1 min-w-0 h-auto">
-                <TextField
-                  type="text"
-                  label="Server URL"
-                  hideLabel
-                  placeholder="http://localhost:4096"
-                  value={store.url}
-                  onChange={(v) => {
-                    setStore("url", v)
-                    setStore("error", "")
-                  }}
-                  validationState={store.error ? "invalid" : "valid"}
-                  error={store.error}
-                />
-              </div>
-              <Button type="submit" variant="secondary" icon="plus-small" size="large" disabled={store.adding}>
-                {store.adding ? "Checking..." : "Add"}
-              </Button>
-            </div>
-          </form>
-        </div>
-      </div>
+export function DialogSelectServer() {
+  const navigate = useNavigate()
+  const dialog = useDialog()
+
+  return (
+    <ServerSelector
+      showDialog
+      onSelect={() => {
+        dialog.close()
+        navigate("/")
+      }}
+    />
+  )
+}
+
+interface DialogSelectServerConnectionProps {
+  url: string
+  onRetry: () => void
+  onClose: () => void
+}
+
+export function DialogSelectServerConnection(props: DialogSelectServerConnectionProps) {
+  return (
+    <Dialog
+      title="Could not connect to server"
+      description={`Unable to connect to the OpenCode server at ${props.url}. Select or add a different server.`}
+      action={<div />}
+    >
+      <ServerSelector
+        showDialog={false}
+        onSelect={() => {
+          props.onClose()
+          props.onRetry()
+        }}
+      />
     </Dialog>
   )
 }

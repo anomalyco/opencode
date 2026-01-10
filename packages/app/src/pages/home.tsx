@@ -45,10 +45,7 @@ export default function Home() {
       })
       resolve(result)
     } else {
-      dialog.show(
-        () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
-        () => resolve(null),
-      )
+      dialog.show(() => <DialogSelectDirectory multiple={true} onSelect={resolve} />, { onClose: () => resolve(null) })
     }
   }
 
