@@ -10,7 +10,9 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./tool": "./src/tool.ts"
+    "./tool": "./src/tool.ts",
+    "./v2": "./src/v2/index.ts",
+    "./v2/tool": "./src/v2/tool.ts"
   },
   "files": [
     "dist"
