@@ -438,6 +438,95 @@ export namespace Provider {
         },
       }
     },
+    unbound: async (input) => {
+      // Get API key from env or auth storage
+      const apiKey = await (async () => {
+        const env = Env.all()
+        const envKey = input.env.map((item) => env[item]).find(Boolean)
+        if (envKey) return envKey
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        const config = await Config.get()
+        if (config.provider?.["unbound"]?.options?.apiKey) return config.provider["unbound"].options.apiKey
+        return undefined
+      })()
+
+      if (!apiKey) return { autoload: false }
+
+      // Fetch available models from Unbound gateway
+      try {
+        const baseURL = (await Config.get()).provider?.["unbound"]?.options?.baseURL ?? "https://api.getunbound.ai/v1"
+        const response = await fetch(`${baseURL}/models`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          signal: AbortSignal.timeout(10000),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          const models = data.data || data.models || []
+
+          // Clear default model and populate with actual models from gateway
+          if (models.length > 0) {
+            delete input.models["default"]
+            for (const model of models) {
+              const modelId = model.id || model.name
+              input.models[modelId] = {
+                id: modelId,
+                providerID: "unbound",
+                name: model.name || modelId,
+                api: {
+                  id: modelId,
+                  url: baseURL,
+                  npm: "@ai-sdk/openai-compatible",
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: {
+                  input: 0,
+                  output: 0,
+                  cache: { read: 0, write: 0 },
+                },
+                limit: {
+                  context: model.context_window || model.contextWindow || 128000,
+                  output: model.max_tokens || model.maxTokens || 16384,
+                },
+                capabilities: {
+                  temperature: true,
+                  reasoning: false,
+                  attachment: model.supports_images || model.supportsImages || false,
+                  toolcall: true,
+                  input: {
+                    text: true,
+                    audio: false,
+                    image: model.supports_images || model.supportsImages || false,
+                    video: false,
+                    pdf: false,
+                  },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                release_date: new Date().toISOString().split("T")[0],
+                variants: {},
+              }
+            }
+          }
+        }
+      } catch (e) {
+        log.warn("Failed to fetch Unbound models, using default", { error: e })
+      }
+
+      return {
+        autoload: true,
+        options: {
+          headers: {
+            "X-Source": "opencode",
+          },
+        },
+      }
+    },
   }
 
   export const Model = z
@@ -639,6 +728,53 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Add Unbound provider - AI Gateway for secure, compliant AI access
+    if (!database["unbound"]) {
+      const defaultModel: Model = {
+        id: "default",
+        providerID: "unbound",
+        name: "Default Model",
+        api: {
+          id: "default",
+          url: "https://api.getunbound.ai/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+        status: "active",
+        headers: {},
+        options: {},
+        cost: {
+          input: 0,
+          output: 0,
+          cache: { read: 0, write: 0 },
+        },
+        limit: {
+          context: 128000,
+          output: 16384,
+        },
+        capabilities: {
+          temperature: true,
+          reasoning: false,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: true, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        release_date: "2024-01-01",
+        variants: {},
+      }
+      database["unbound"] = {
+        id: "unbound",
+        name: "Unbound",
+        source: "custom",
+        env: ["UNBOUND_API_KEY"],
+        options: {},
+        models: {
+          default: defaultModel,
+        },
       }
     }
 

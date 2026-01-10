@@ -8,6 +8,7 @@ export const iconNames = [
   "zai-coding-plan",
   "xiaomi",
   "xai",
+  "unbound",
   "wandb",
   "vultr",
   "vercel",
