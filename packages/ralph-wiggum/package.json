@@ -1,0 +1,31 @@
+{
+  "name": "@sureshsankaran/ralph-wiggum",
+  "version": "0.2.0",
+  "description": "Ralph Wiggum plugin for OpenCode - iterative, self-referential AI development loops",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "ralph-wiggum",
+    "iterative",
+    "ai",
+    "development"
+  ],
+  "author": "sureshsankaran",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sureshsankaran/opencode.git",
+    "directory": "packages/ralph-wiggum"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -3,65 +3,6 @@
   "instructions": ["STYLE_GUIDE.md"],
   // Ralph Wiggum plugin for iterative development loops
   "plugin": ["file:///Users/pavittra/suresh/opencode/packages/opencode/.opencode/plugins/ralph-wiggum.ts"],
-  // Set DAG orchestrator as the default agent for automatic task decomposition
-  "default_agent": "dag-orchestrator",
-  "provider": {
-    "cliproxyapi": {
-      "name": "CLIProxyAPI (ChatGPT)",
-      "api": "http://localhost:8317/v1",
-      "npm": "@ai-sdk/openai-compatible",
-      "env": ["CLIPROXY_API_KEY"],
-      "options": {
-        "apiKey": "ABC-123456",
-        "baseURL": "http://localhost:8317/v1",
-      },
-      "models": {
-        "gpt-5-codex": {
-          "name": "GPT-5 Codex",
-          "tool_call": true,
-          "reasoning": true,
-          "attachment": true,
-          "temperature": true,
-          "limit": {
-            "context": 128000,
-            "output": 16000,
-          },
-        },
-        "gpt-5.1-codex": {
-          "name": "GPT-5.1 Codex",
-          "tool_call": true,
-          "reasoning": true,
-          "attachment": true,
-          "temperature": true,
-          "limit": {
-            "context": 128000,
-            "output": 16000,
-          },
-        },
-        "gpt-5.2-codex": {
-          "name": "GPT-5.2 Codex",
-          "tool_call": true,
-          "reasoning": true,
-          "attachment": true,
-          "temperature": true,
-          "limit": {
-            "context": 128000,
-            "output": 32000,
-          },
-        },
-      },
-    },
-  },
-  // Agent configurations
-  "agent": {
-    // Configure the DAG orchestrator
-    "dag-orchestrator": {
-      "description": "DAG-based task orchestrator with Hivemind parallel execution",
-      "mode": "primary",
-      "model": "cliproxyapi/gpt-5.2-codex",
-      "temperature": 0.2,
-    },
-  },
   "permission": {
     "bash": {
       "ls foo": "ask",
@@ -113,9 +54,6 @@
     },
   },
   "tools": {
-    "github-triage": false,
-    // Enable the DAG analyzer tools
-    "dag-analyzer_analyze": true,
-    "dag-analyzer_generateHivemindPlan": true,
-  },
+    "github-triage": false
+  }
 }
