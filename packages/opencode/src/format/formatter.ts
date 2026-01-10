@@ -276,6 +276,15 @@ export const dart: Info = {
   },
 }
 
+export const swiftFormat: Info = {
+  name: "swift-format",
+  command: ["swift-format", "-i", "$FILE"],
+  extensions: [".swift"],
+  async enabled() {
+    return Bun.which("swift-format") !== null
+  },
+}
+
 export const ocamlformat: Info = {
   name: "ocamlformat",
   command: ["ocamlformat", "-i", "$FILE"],
