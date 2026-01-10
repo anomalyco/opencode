@@ -35,6 +35,7 @@ export namespace Question {
       id: Identifier.schema("question"),
       sessionID: Identifier.schema("session"),
       questions: z.array(Info).describe("Questions to ask"),
+      from: z.string().optional().describe("Identifier of who is asking the question (e.g. agent name)"),
       tool: z
         .object({
           messageID: z.string(),
@@ -96,18 +97,20 @@ export namespace Question {
   export async function ask(input: {
     sessionID: string
     questions: Info[]
+    from?: string
     tool?: { messageID: string; callID: string }
   }): Promise<Answer[]> {
     const s = await state()
     const id = Identifier.ascending("question")
 
-    log.info("asking", { id, questions: input.questions.length })
+    log.info("asking", { id, questions: input.questions.length, from: input.from })
 
     return new Promise<Answer[]>((resolve, reject) => {
       const info: Request = {
         id,
         sessionID: input.sessionID,
         questions: input.questions,
+        from: input.from,
         tool: input.tool,
       }
       s.pending[id] = {

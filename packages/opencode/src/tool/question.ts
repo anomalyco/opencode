@@ -7,11 +7,18 @@ export const QuestionTool = Tool.define("question", {
   description: DESCRIPTION,
   parameters: z.object({
     questions: z.array(Question.Info).describe("Questions to ask"),
+    from: z
+      .string()
+      .optional()
+      .describe(
+        "Identifier of who is asking the question (e.g. agent name). Used to inform the user which agent is asking.",
+      ),
   }),
   async execute(params, ctx) {
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: params.questions,
+      from: params.from,
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
     })
 

@@ -8,3 +8,4 @@ Usage notes:
 - Users will always be able to select "Other" to provide custom text input
 - Answers are returned as arrays of labels; set `multiple: true` to allow selecting more than one
 - If you recommend a specific option, make that the first option in the list and add "(Recommended)" at the end of the label
+- Use the optional `from` parameter to identify who is asking the question (e.g. your agent name). This helps the user understand which agent is requesting input.

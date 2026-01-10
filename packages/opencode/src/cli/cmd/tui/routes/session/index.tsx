@@ -27,7 +27,15 @@ import {
   RGBA,
 } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
+import type {
+  AssistantMessage,
+  Part,
+  ToolPart,
+  UserMessage,
+  TextPart,
+  ReasoningPart,
+  Session as SessionType,
+} from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
@@ -111,6 +119,31 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
+  const descendants = createMemo(() => {
+    const rootID = session()?.parentID ?? session()?.id
+    if (!rootID) return []
+
+    const result: SessionType[] = []
+    const visited = new Set<string>()
+    const queue = [rootID]
+
+    while (queue.length > 0) {
+      const currentID = queue.shift()!
+      if (visited.has(currentID)) continue
+      visited.add(currentID)
+
+      const current = sync.data.session.find((x) => x.id === currentID)
+      if (current) result.push(current)
+
+      for (const s of sync.data.session) {
+        if (s.parentID === currentID && !visited.has(s.id)) {
+          queue.push(s.id)
+        }
+      }
+    }
+
+    return result.toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
     return sync.data.session
@@ -120,11 +153,13 @@ export function Session() {
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return descendants().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return descendants()
+      .flatMap((x) => sync.data.question[x.id] ?? [])
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
 
   const pending = createMemo(() => {
@@ -1841,26 +1876,68 @@ function Question(props: ToolProps<typeof QuestionTool>) {
   const { theme } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
 
-  function format(answer?: string[]) {
-    if (!answer?.length) return "(no answer)"
-    return answer.join(", ")
-  }
-
   return (
     <Switch>
       <Match when={props.metadata.answers}>
-        <BlockTool title="# Questions" part={props.part}>
-          <box>
-            <For each={props.input.questions ?? []}>
-              {(q, i) => (
-                <box flexDirection="row" gap={1}>
-                  <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
-                </box>
-              )}
-            </For>
-          </box>
-        </BlockTool>
+        {(() => {
+          const ctx = use()
+          const allAnswers = () => (props.input.questions ?? []).map((_, idx) => props.metadata.answers?.[idx] ?? [])
+          const maxAnswerLen = () => Math.max(20, ...allAnswers().flatMap((answers) => answers.map((a) => a.length)))
+          const tableWidth = () => ctx.width - 6
+          const halfWidth = () => Math.floor(tableWidth() * 0.5)
+          const answerWidth = () => Math.max(20, Math.min(maxAnswerLen() + 2, halfWidth()))
+          return (
+            <BlockTool title="# Questions" part={props.part}>
+              <box width={tableWidth()} border={["top", "left", "right", "bottom"]} borderColor={theme.border}>
+                <For each={props.input.questions ?? []}>
+                  {(q, i) => {
+                    const answers = () => props.metadata.answers?.[i()] ?? []
+                    const isLast = () => i() === (props.input.questions?.length ?? 0) - 1
+                    const isMulti = () => answers().length > 1
+                    return (
+                      <box
+                        flexDirection="row"
+                        width="100%"
+                        border={isLast() ? [] : ["bottom"]}
+                        borderColor={theme.border}
+                      >
+                        <box
+                          flexGrow={1}
+                          paddingLeft={1}
+                          paddingRight={1}
+                          border={["right"]}
+                          borderColor={theme.border}
+                        >
+                          <text fg={theme.textMuted} wrapMode="word">
+                            {q.question}
+                          </text>
+                        </box>
+                        <box width={answerWidth()} paddingLeft={1} paddingRight={1} gap={isMulti() ? 1 : 0}>
+                          <Show
+                            when={answers().length > 0}
+                            fallback={
+                              <text fg={theme.textMuted} wrapMode="word">
+                                (no answer)
+                              </text>
+                            }
+                          >
+                            <For each={answers()}>
+                              {(answer) => (
+                                <text fg={theme.text} wrapMode="word">
+                                  {answer}
+                                </text>
+                              )}
+                            </For>
+                          </Show>
+                        </box>
+                      </box>
+                    )
+                  }}
+                </For>
+              </box>
+            </BlockTool>
+          )
+        })()}
       </Match>
       <Match when={true}>
         <InlineTool icon="→" pending="Asking questions..." complete={count()} part={props.part}>

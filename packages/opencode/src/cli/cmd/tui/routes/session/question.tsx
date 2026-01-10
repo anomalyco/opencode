@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { createMemo, For, Show } from "solid-js"
+import { createEffect, createMemo, For, on, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
@@ -40,6 +40,20 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     if (!value) return false
     return store.answers[store.tab]?.includes(value) ?? false
   })
+
+  createEffect(
+    on(
+      () => props.request.id,
+      () => {
+        setStore("tab", 0)
+        setStore("answers", [])
+        setStore("custom", [])
+        setStore("selected", 0)
+        setStore("editing", false)
+      },
+      { defer: true },
+    ),
+  )
 
   function submit() {
     const answers = questions().map((_, i) => store.answers[i] ?? [])
@@ -184,13 +198,9 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         setStore("selected", (store.selected + 1) % total)
       }
 
-      if (evt.name === "return") {
+      if (evt.name === "space" && multi()) {
         evt.preventDefault()
         if (other()) {
-          if (!multi()) {
-            setStore("editing", true)
-            return
-          }
           const value = input()
           if (value && customPicked()) {
             toggle(value)
@@ -201,10 +211,29 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         }
         const opt = opts[store.selected]
         if (!opt) return
+        toggle(opt.label)
+        return
+      }
+
+      if (evt.name === "return") {
+        evt.preventDefault()
         if (multi()) {
-          toggle(opt.label)
+          const hasSelections = (store.answers[store.tab]?.length ?? 0) > 0
+          if (!hasSelections) return
+          if (single()) {
+            submit()
+            return
+          }
+          setStore("tab", store.tab + 1)
+          setStore("selected", 0)
           return
         }
+        if (other()) {
+          setStore("editing", true)
+          return
+        }
+        const opt = opts[store.selected]
+        if (!opt) return
         pick(opt.label)
       }
 
@@ -223,6 +252,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
+        <Show when={props.request.from}>
+          <box paddingLeft={1}>
+            <text fg={theme.textMuted}>
+              Question from <span style={{ fg: theme.accent }}>{props.request.from}</span>
+            </text>
+          </box>
+        </Show>
         <Show when={!single()}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
             <For each={questions()}>
@@ -253,25 +289,22 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         <Show when={!confirm()}>
           <box paddingLeft={1} gap={1}>
             <box>
-              <text fg={theme.text}>
-                {question()?.question}
-                {multi() ? " (select all that apply)" : ""}
-              </text>
+              <text fg={theme.text}>{question()?.question}</text>
             </box>
             <box>
               <For each={options()}>
                 {(opt, i) => {
                   const active = () => i() === store.selected
                   const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                  const checkbox = () => (multi() ? (picked() ? "■" : "☐") : "")
                   return (
                     <box>
                       <box flexDirection="row" gap={1}>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {i() + 1}. {opt.label}
+                            {multi() ? checkbox() : `${i() + 1}.`} {opt.label}
                           </text>
                         </box>
-                        <text fg={theme.success}>{picked() ? "✓" : ""}</text>
                       </box>
                       <box paddingLeft={3}>
                         <text fg={theme.textMuted}>{opt.description}</text>
@@ -284,10 +317,9 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 <box flexDirection="row" gap={1}>
                   <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                     <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                      {options().length + 1}. Type your own answer
+                      {multi() ? (customPicked() ? "■" : "☐") : `${options().length + 1}.`} Type your own answer
                     </text>
                   </box>
-                  <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
                 </box>
                 <Show when={store.editing}>
                   <box paddingLeft={3}>
@@ -341,6 +373,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         justifyContent="space-between"
       >
         <box flexDirection="row" gap={2}>
+          <Show when={!confirm()}>
+            <box paddingLeft={1} paddingRight={1} backgroundColor={theme.backgroundElement}>
+              <text fg={theme.textMuted}>{multi() ? "Multiple" : "Single"}</text>
+            </box>
+          </Show>
           <Show when={!single()}>
             <text fg={theme.text}>
               {"⇆"} <span style={{ fg: theme.textMuted }}>tab</span>
@@ -351,10 +388,15 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               {"↑↓"} <span style={{ fg: theme.textMuted }}>select</span>
             </text>
           </Show>
+          <Show when={!confirm() && multi()}>
+            <text fg={theme.text}>
+              space <span style={{ fg: theme.textMuted }}>toggle</span>
+            </text>
+          </Show>
           <text fg={theme.text}>
             enter{" "}
             <span style={{ fg: theme.textMuted }}>
-              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
+              {confirm() ? "submit" : multi() ? "confirm" : single() ? "submit" : "confirm"}
             </span>
           </text>
 
