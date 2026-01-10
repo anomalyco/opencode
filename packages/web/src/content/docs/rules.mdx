@@ -92,6 +92,17 @@ Example:
 }
 ```
 
+You can also use remote URLs to load instructions from the web.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+Remote instructions are fetched with a 5 second timeout.
+
 All instruction files are combined with your `AGENTS.md` files.
 
 ---
