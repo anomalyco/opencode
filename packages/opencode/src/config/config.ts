@@ -557,6 +557,12 @@ export namespace Config {
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
+      reminder: z
+        .union([z.string(), z.literal(false)])
+        .optional()
+        .describe(
+          "Custom reminder text injected into user messages for this agent. Set to false to disable the default reminder.",
+        ),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -576,6 +582,7 @@ export namespace Config {
         "permission",
         "disable",
         "tools",
+        "reminder",
       ])
 
       // Extract unknown properties into options

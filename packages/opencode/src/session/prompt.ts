@@ -16,7 +16,6 @@ import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
 import { Plugin } from "../plugin"
-import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
@@ -1173,17 +1172,21 @@ export namespace SessionPrompt {
   function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info }) {
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
-    if (input.agent.name === "plan") {
+
+    // If agent has a reminder configured (string), inject it
+    // If reminder is false or undefined, skip injection
+    if (typeof input.agent.reminder === "string") {
       userMessage.parts.push({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        // TODO (for mr dax): update to use the anthropic full fledged one (see plan-reminder-anthropic.txt)
-        text: PROMPT_PLAN,
+        text: input.agent.reminder,
         synthetic: true,
       })
     }
+
+    // Notify build agent when switching from plan mode
     const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
     if (wasPlan && input.agent.name === "build") {
       userMessage.parts.push({

@@ -11,6 +11,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_PLAN from "../session/prompt/plan.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 
@@ -35,6 +36,7 @@ export namespace Agent {
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
+      reminder: z.union([z.string(), z.literal(false)]).optional(),
     })
     .meta({
       ref: "Agent",
@@ -79,6 +81,8 @@ export namespace Agent {
       plan: {
         name: "plan",
         options: {},
+        // TODO (for mr dax): update to use the anthropic full fledged one (see plan-reminder-anthropic.txt)
+        reminder: PROMPT_PLAN,
         permission: PermissionNext.merge(
           defaults,
           PermissionNext.fromConfig({
@@ -208,6 +212,7 @@ export namespace Agent {
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
+      item.reminder = value.reminder ?? item.reminder
     }
 
     // Ensure Truncate.DIR is allowed unless explicitly configured
