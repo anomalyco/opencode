@@ -16,6 +16,7 @@ use tauri::{
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::StoreExt;
 use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
@@ -301,7 +302,7 @@ pub fn run() {
                 .unwrap_or(LogicalSize::new(1920, 1080));
 
             // Create window immediately with serverReady = false
-            let mut window_builder =
+            let window_builder =
                 WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
                     .title("OpenCode")
                     .inner_size(size.width as f64, size.height as f64)
@@ -317,11 +318,9 @@ pub fn run() {
                     ));
 
             #[cfg(target_os = "macos")]
-            {
-                window_builder = window_builder
-                    .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true);
-            }
+            let window_builder = window_builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
 
             let window = window_builder.build().expect("Failed to create window");
 
