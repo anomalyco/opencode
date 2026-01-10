@@ -770,6 +770,22 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    status_hints: z
+      .object({
+        enabled: z.boolean().optional().default(true).describe("Enable status line hints"),
+        items: z
+          .array(
+            z.object({
+              keybind: z.string().describe("Keybind identifier (e.g., 'agent_cycle', 'variant_cycle')"),
+              label: z.string().describe("Display label for the hint"),
+              when: z.string().optional().describe("Condition to show hint (e.g., 'hasVariants')"),
+            }),
+          )
+          .optional()
+          .describe("List of hints to display in status line"),
+      })
+      .optional()
+      .describe("Configure status line hints shown at the bottom of the TUI"),
   })
 
   export const Server = z

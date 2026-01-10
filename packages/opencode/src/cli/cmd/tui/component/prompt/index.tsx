@@ -1,5 +1,5 @@
 import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
-import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match, For } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
@@ -1062,12 +1062,39 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
-                  </text>
-                  <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
+                  {(() => {
+                    const tuiConfig = sync.data.config.tui as any
+                    const config = tuiConfig?.status_hints
+                    const enabled = config?.enabled !== false
+                    if (!enabled) return null
+                    
+                    // Default hints configuration
+                    const defaultHints = [
+                      { keybind: "agent_cycle", label: "switch agent" },
+                      { keybind: "variant_cycle", label: "switch variants", when: "hasVariants" },
+                      { keybind: "command_list", label: "commands" },
+                    ]
+                    
+                    const hints = config?.items ?? defaultHints
+                    
+                    return (
+                      <For each={hints}>
+                        {(hint: any) => {
+                          // Check conditional display
+                          if (hint.when === "hasVariants") {
+                            const hasVariants = local.model.variant.list().length > 0
+                            if (!hasVariants) return null
+                          }
+                          
+                          return (
+                            <text fg={theme.text}>
+                              {keybind.print(hint.keybind)} <span style={{ fg: theme.textMuted }}>{hint.label}</span>
+                            </text>
+                          )
+                        }}
+                      </For>
+                    )
+                  })()}
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
