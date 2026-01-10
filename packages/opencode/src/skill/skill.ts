@@ -43,19 +43,7 @@ export namespace Skill {
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {
-      let md
-      try {
-        md = await ConfigMarkdown.parse(match)
-      } catch (error) {
-        if (error instanceof ConfigMarkdown.FrontmatterError) {
-          log.warn("skipping skill with invalid YAML frontmatter", {
-            path: error.data.path,
-            message: error.data.message,
-          })
-          return
-        }
-        throw error
-      }
+      const md = await ConfigMarkdown.parse(match)
       if (!md) {
         return
       }
