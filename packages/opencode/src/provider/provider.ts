@@ -442,84 +442,64 @@ export namespace Provider {
       const config = await Config.get()
       const providerConfig = config.provider?.["unbound"]
 
-      // Get API key from env or auth storage
+      // Get API key from env, auth storage, or config (consistent with cloudflare-ai-gateway pattern)
       const apiKey = await (async () => {
-        const env = Env.all()
-        const envKey = input.env.map((item) => env[item]).find(Boolean)
+        const envKey = input.env.map((key) => Env.get(key)).find(Boolean)
         if (envKey) return envKey
         const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
-        if (providerConfig?.options?.apiKey) return providerConfig.options.apiKey
-        return undefined
+        return providerConfig?.options?.apiKey
       })()
 
       if (!apiKey) return { autoload: false }
 
-      // Fetch available models from Unbound gateway
       const baseURL = providerConfig?.options?.baseURL ?? "https://api.getunbound.ai/v1"
+
+      // Fetch available models from Unbound gateway
       try {
         const response = await fetch(`${baseURL}/models`, {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
+          headers: { Authorization: `Bearer ${apiKey}` },
           signal: AbortSignal.timeout(10000),
         })
 
         if (response.ok) {
           const data = await response.json()
-          const models = data.data || data.models || []
+          const models = data.data ?? data.models ?? []
 
-          // Clear default model and populate with actual models from gateway
           if (models.length > 0) {
             delete input.models["default"]
             for (const model of models) {
-              const modelId = model.id || model.name
-              // Parse parameters - support both nested and flat structures
-              const params = model.parameters || model
-              const pricing = model.pricing || {}
-
-              // Detect if model supports prompt caching
-              const supportsPromptCaching = params.supports_prompt_caching || params.supportsPromptCaching || false
+              const modelId = model.id ?? model.name
+              const params = model.parameters ?? model
+              const pricing = model.pricing ?? {}
+              const supportsImages = params.supports_images ?? params.supportsImages ?? false
 
               input.models[modelId] = {
                 id: modelId,
                 providerID: "unbound",
-                name: model.name || modelId,
-                api: {
-                  id: modelId,
-                  url: baseURL,
-                  npm: "@ai-sdk/openai-compatible",
-                },
+                name: model.name ?? modelId,
+                api: { id: modelId, url: baseURL, npm: "@ai-sdk/openai-compatible" },
                 status: "active",
                 headers: {},
-                options: {
-                  // Pass prompt caching support as an option for downstream use
-                  supportsPromptCaching,
-                },
+                options: { supportsPromptCaching: params.supports_prompt_caching ?? params.supportsPromptCaching ?? false },
                 cost: {
-                  input: parseFloat(pricing.input_token_price || pricing.inputTokenPrice) || 0,
-                  output: parseFloat(pricing.output_token_price || pricing.outputTokenPrice) || 0,
+                  input: parseFloat(pricing.input_token_price ?? pricing.inputTokenPrice) || 0,
+                  output: parseFloat(pricing.output_token_price ?? pricing.outputTokenPrice) || 0,
                   cache: {
-                    read: parseFloat(pricing.cache_read_price || pricing.cacheReadPrice) || 0,
-                    write: parseFloat(pricing.cache_write_price || pricing.cacheWritePrice) || 0,
+                    read: parseFloat(pricing.cache_read_price ?? pricing.cacheReadPrice) || 0,
+                    write: parseFloat(pricing.cache_write_price ?? pricing.cacheWritePrice) || 0,
                   },
                 },
                 limit: {
-                  context: params.context_window || params.contextWindow || 128000,
-                  output: params.max_tokens || params.maxTokens || 4096,
+                  context: params.context_window ?? params.contextWindow ?? 128000,
+                  output: params.max_tokens ?? params.maxTokens ?? 4096,
                 },
                 capabilities: {
                   temperature: true,
                   reasoning: false,
-                  attachment: params.supports_images || params.supportsImages || false,
+                  attachment: supportsImages,
                   toolcall: true,
-                  input: {
-                    text: true,
-                    audio: false,
-                    image: params.supports_images || params.supportsImages || false,
-                    video: false,
-                    pdf: false,
-                  },
+                  input: { text: true, audio: false, image: supportsImages, video: false, pdf: false },
                   output: { text: true, audio: false, image: false, video: false, pdf: false },
                   interleaved: false,
                 },
@@ -529,10 +509,7 @@ export namespace Provider {
             }
           }
         } else {
-          log.warn("Failed to fetch Unbound models", {
-            status: response.status,
-            statusText: response.statusText,
-          })
+          log.warn("Failed to fetch Unbound models", { status: response.status, statusText: response.statusText })
         }
       } catch (e) {
         log.warn("Failed to fetch Unbound models, using default", { error: e })
@@ -542,10 +519,7 @@ export namespace Provider {
         autoload: true,
         options: {
           headers: {
-            // App identification for Unbound analytics and tracking
-            "X-Unbound-Metadata": JSON.stringify({
-              labels: [{ key: "app", value: "opencode" }],
-            }),
+            "X-Unbound-Metadata": JSON.stringify({ labels: [{ key: "app", value: "opencode" }] }),
           },
         },
       }
@@ -754,41 +728,8 @@ export namespace Provider {
       }
     }
 
-    // Add Unbound provider - AI Gateway for secure, compliant AI access
+    // Add Unbound provider (AI Gateway) - models are fetched dynamically via custom loader
     if (!database["unbound"]) {
-      const defaultModel: Model = {
-        id: "default",
-        providerID: "unbound",
-        name: "Default Model",
-        api: {
-          id: "default",
-          url: "https://api.getunbound.ai/v1",
-          npm: "@ai-sdk/openai-compatible",
-        },
-        status: "active",
-        headers: {},
-        options: {},
-        cost: {
-          input: 0,
-          output: 0,
-          cache: { read: 0, write: 0 },
-        },
-        limit: {
-          context: 128000,
-          output: 4096,
-        },
-        capabilities: {
-          temperature: true,
-          reasoning: false,
-          attachment: true,
-          toolcall: true,
-          input: { text: true, audio: false, image: true, video: false, pdf: false },
-          output: { text: true, audio: false, image: false, video: false, pdf: false },
-          interleaved: false,
-        },
-        release_date: "2024-01-01",
-        variants: {},
-      }
       database["unbound"] = {
         id: "unbound",
         name: "Unbound",
@@ -796,7 +737,28 @@ export namespace Provider {
         env: ["UNBOUND_API_KEY"],
         options: {},
         models: {
-          default: defaultModel,
+          default: {
+            id: "default",
+            providerID: "unbound",
+            name: "Default Model",
+            api: { id: "default", url: "https://api.getunbound.ai/v1", npm: "@ai-sdk/openai-compatible" },
+            status: "active",
+            headers: {},
+            options: {},
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            limit: { context: 128000, output: 4096 },
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: true,
+              toolcall: true,
+              input: { text: true, audio: false, image: true, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            release_date: "2024-01-01",
+            variants: {},
+          },
         },
       }
     }
