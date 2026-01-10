@@ -62,8 +62,10 @@ jobs:
       - name: Get PR body
         id: pr-body
         run: |
-          PR_BODY=$(gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} | jq -r .body)
-          echo "body=$PR_BODY" >> $GITHUB_OUTPUT
+          PR_BODY=$(gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} --jq .body | tr '\n' ' ' | sed 's/"/\\"/g')
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$PR_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
