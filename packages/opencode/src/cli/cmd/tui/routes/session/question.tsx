@@ -89,15 +89,21 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const dialog = useDialog()
 
   useKeyboard((evt) => {
+    // Guard: ensure we have valid question data
+    const currentQuestion = question()
+    if (!currentQuestion && !confirm()) return
+
     // When editing "Other" textarea
     if (store.editing && !confirm()) {
       if (evt.name === "escape") {
         evt.preventDefault()
+        evt.stopPropagation()
         setStore("editing", false)
         return
       }
       if (evt.name === "return") {
         evt.preventDefault()
+        evt.stopPropagation()
         const text = textarea?.plainText?.trim() ?? ""
         const prev = store.custom[store.tab]
 
@@ -149,6 +155,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
     if (evt.name === "left" || evt.name === "h") {
       evt.preventDefault()
+      evt.stopPropagation()
       const next = (store.tab - 1 + tabs()) % tabs()
       setStore("tab", next)
       setStore("selected", 0)
@@ -156,6 +163,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
     if (evt.name === "right" || evt.name === "l") {
       evt.preventDefault()
+      evt.stopPropagation()
       const next = (store.tab + 1) % tabs()
       setStore("tab", next)
       setStore("selected", 0)
@@ -164,10 +172,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     if (confirm()) {
       if (evt.name === "return") {
         evt.preventDefault()
+        evt.stopPropagation()
         submit()
       }
       if (evt.name === "escape" || keybind.match("app_exit", evt)) {
         evt.preventDefault()
+        evt.stopPropagation()
         reject()
       }
     } else {
@@ -176,16 +186,19 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
       if (evt.name === "up" || evt.name === "k") {
         evt.preventDefault()
+        evt.stopPropagation()
         setStore("selected", (store.selected - 1 + total) % total)
       }
 
       if (evt.name === "down" || evt.name === "j") {
         evt.preventDefault()
+        evt.stopPropagation()
         setStore("selected", (store.selected + 1) % total)
       }
 
       if (evt.name === "return") {
         evt.preventDefault()
+        evt.stopPropagation()
         if (other()) {
           if (!multi()) {
             setStore("editing", true)
@@ -210,6 +223,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
       if (evt.name === "escape" || keybind.match("app_exit", evt)) {
         evt.preventDefault()
+        evt.stopPropagation()
         reject()
       }
     }
