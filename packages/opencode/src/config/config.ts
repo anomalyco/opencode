@@ -1023,6 +1023,15 @@ export namespace Config {
                 .object({
                   command: z.string().array(),
                   environment: z.record(z.string(), z.string()).optional(),
+                  timeout: z.number().optional().describe("Timeout in milliseconds (default: 30000)"),
+                })
+                .array()
+                .optional(),
+              input_required: z
+                .object({
+                  command: z.string().array(),
+                  environment: z.record(z.string(), z.string()).optional(),
+                  timeout: z.number().optional().describe("Timeout in milliseconds (default: 30000)"),
                 })
                 .array()
                 .optional(),
