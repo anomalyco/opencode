@@ -429,11 +429,16 @@ permission:
     "*": ask
     "git diff": allow
     "git log*": allow
+    "grep *": allow
   webfetch: deny
 ---
 
 Only analyze code and suggest changes.
 ```
+
+:::tip
+Use pattern matching for commands with arguments. `"grep *"` allows `grep pattern file.txt`, while `"grep"` alone would block it. Commands like `git status` work for default behavior but require explicit permission (like `"git status*"`) when arguments are passed.
+:::
 
 You can set permissions for specific bash commands.
 
@@ -444,7 +449,8 @@ You can set permissions for specific bash commands.
     "build": {
       "permission": {
         "bash": {
-          "git push": "ask"
+          "git push": "ask",
+          "grep *": "allow"
         }
       }
     }
@@ -480,7 +486,7 @@ Since the last matching rule takes precedence, put the `*` wildcard first and sp
       "permission": {
         "bash": {
           "*": "ask",
-          "git status": "allow"
+          "git status *": "allow"
         }
       }
     }
