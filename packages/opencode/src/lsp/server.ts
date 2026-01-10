@@ -1528,7 +1528,11 @@ export namespace LSPServer {
       })
       return {
         process: proc,
-        initialization: {},
+        initialization: {
+          telemetry: {
+            enabled: false,
+          },
+        },
       }
     },
   }
