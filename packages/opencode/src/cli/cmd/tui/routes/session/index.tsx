@@ -73,6 +73,9 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { useCollaboration } from "../../context/collaboration"
+import { DialogCollaborationJoin } from "../../component/dialog-collaboration-join"
+import { DialogPrompt } from "../../ui/dialog-prompt"
 
 addDefaultParsers(parsers.parsers)
 
@@ -187,6 +190,7 @@ export function Session() {
 
   const toast = useToast()
   const sdk = useSDK()
+  const collaboration = useCollaboration()
 
   // Handle initial prompt from fork
   createEffect(() => {
@@ -198,6 +202,23 @@ export function Session() {
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
+
+  // Workaround: children inserted into `<scrollbox>` are re-parented to its internal `content`,
+  // which can prevent Solid's cleanup logic from removing them reliably.
+  // If the collaboration queue is empty, proactively remove any stale queue renderables that might have been left behind.
+  const collabQueueLength = createMemo(() => sync.data.collaboration[route.sessionID]?.messageQueue?.length ?? 0)
+  createEffect(
+    on(collabQueueLength, (next) => {
+      if (!scroll) return
+      if (next !== 0) return
+      for (const child of scroll.getChildren()) {
+        const id = child.id
+        if (id === "collab-waiting-for" || id.startsWith("collab-queued-")) {
+          scroll.remove(id)
+        }
+      }
+    }),
+  )
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
@@ -387,6 +408,119 @@ export function Session() {
           })
           .then(() => toast.show({ message: "Session unshared successfully", variant: "success" }))
           .catch(() => toast.show({ message: "Failed to unshare session", variant: "error" }))
+        dialog.clear()
+      },
+    },
+    // Collaboration commands
+    {
+      title: "Start collaboration",
+      value: "collab.start",
+      category: "Collaboration",
+      disabled: collaboration.isCollaborative(route.sessionID),
+      onSelect: async (dialog) => {
+        dialog.clear()
+        const name = await DialogPrompt.show(dialog, "Enter your display name", {
+          placeholder: "Your name",
+        })
+        if (!name) {
+          dialog.clear()
+          return
+        }
+        try {
+          console.log("[COLLAB CMD] Starting collaboration as", name)
+          await collaboration.join(route.sessionID, name)
+          console.log("[COLLAB CMD] Join succeeded, showing toast")
+          toast.show({ message: `Started collaboration as ${name}`, variant: "success" })
+          // Auto-generate a join code
+          const code = await collaboration.createJoinCode()
+          if (code) {
+            await Clipboard.copy(code.formatted)
+            toast.show({
+              message: `Join code copied: ${code.formatted}`,
+              variant: "info",
+              duration: 8000,
+            })
+          }
+        } catch (e) {
+          console.log("[COLLAB CMD] Join failed:", e)
+          toast.show({
+            message: e instanceof Error ? e.message : "Failed to start collaboration",
+            variant: "error",
+          })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Join collaboration",
+      value: "collab.join",
+      category: "Collaboration",
+      disabled: collaboration.isJoined,
+      onSelect: (dialog) => {
+        dialog.replace(() => (
+          <DialogCollaborationJoin
+            onJoined={(sessionID) => {
+              navigate({ type: "session", sessionID })
+            }}
+          />
+        ))
+      },
+    },
+    {
+      title: "Leave collaboration",
+      value: "collab.leave",
+      category: "Collaboration",
+      disabled: !collaboration.isJoined,
+      onSelect: async (dialog) => {
+        await collaboration.leave()
+        toast.show({ message: "Left collaboration", variant: "info" })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Copy join code",
+      value: "collab.code",
+      category: "Collaboration",
+      disabled: !collaboration.isJoined,
+      onSelect: async (dialog) => {
+        try {
+          const code = await collaboration.createJoinCode()
+          if (code) {
+            await Clipboard.copy(code.formatted)
+            toast.show({
+              message: `Join code copied: ${code.formatted}`,
+              variant: "success",
+              duration: 8000,
+            })
+          }
+        } catch (e) {
+          toast.show({
+            message: e instanceof Error ? e.message : "Failed to create join code",
+            variant: "error",
+          })
+        }
+        dialog.clear()
+      },
+    },
+    {
+      title: "Flush message queue",
+      value: "collab.flush",
+      category: "Collaboration",
+      disabled: !collaboration.isDriver(route.sessionID),
+      onSelect: async (dialog) => {
+        try {
+          const result = await collaboration.forceFlush()
+          if (result?.flushed) {
+            toast.show({ message: "Queue flushed", variant: "success" })
+          } else {
+            toast.show({ message: "Queue is empty", variant: "info" })
+          }
+        } catch (e) {
+          toast.show({
+            message: e instanceof Error ? e.message : "Failed to flush queue",
+            variant: "error",
+          })
+        }
         dialog.clear()
       },
     },
@@ -869,6 +1003,8 @@ export function Session() {
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
+  // NOTE: The session scrollbox now paints its viewport background, so queued-message removal clears cleanly.
+
   return (
     <context.Provider
       value={{
@@ -1003,6 +1139,13 @@ export function Session() {
                   </Switch>
                 )}
               </For>
+              {/* Queued collaboration messages shown inline in chat */}
+              <CollaborationQueueDisplay
+                sessionID={route.sessionID}
+                collaboration={collaboration}
+                sync={sync}
+                theme={theme}
+              />
             </scrollbox>
             <box flexShrink={0}>
               <Show when={permissions().length > 0}>
@@ -1894,4 +2037,79 @@ function filetype(input?: string) {
   const language = LANGUAGE_EXTENSIONS[ext]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
+}
+
+// Separate component for collaboration queue to ensure proper reactivity
+function CollaborationQueueDisplay(props: {
+  sessionID: string
+  collaboration: ReturnType<typeof useCollaboration>
+  sync: ReturnType<typeof useSync>
+  theme: ReturnType<typeof useTheme>["theme"]
+}) {
+  const isCollaborative = createMemo(() => props.collaboration.isCollaborative(props.sessionID))
+  const collabState = createMemo(() => props.sync.data.collaboration[props.sessionID])
+  const queue = createMemo(() => {
+    // Important: return a new array reference so <For> reconciles even if the underlying store mutates in place.
+    const q = collabState()?.messageQueue ?? []
+    console.log("[QUEUE COMPONENT] Queue memo, length:", q.length)
+    return q.slice()
+  })
+  const waitingFor = createMemo(() => (collabState()?.waitingFor ?? []).slice())
+  const hasQueuedMessages = createMemo(() => queue().length > 0)
+
+  return (
+    <box id="collab-queue-root" flexDirection="column">
+      <Show when={isCollaborative()}>
+        <Show when={hasQueuedMessages()}>
+          <For each={queue()}>
+            {(msg) => {
+              const participant = createMemo(() => collabState()?.participants[msg.participantID])
+              const color = createMemo(() =>
+                participant()?.color ? RGBA.fromHex(participant()!.color!) : props.theme.accent
+              )
+              const isMe = createMemo(() => msg.participantID === props.collaboration.participantID)
+
+              return (
+                <box
+                  id={`collab-queued-${msg.id}`}
+                  border={["left"]}
+                  borderColor={color()}
+                  customBorderChars={SplitBorder.customBorderChars}
+                  marginTop={1}
+                >
+                  <box
+                    paddingTop={1}
+                    paddingBottom={1}
+                    paddingLeft={2}
+                    backgroundColor={props.theme.backgroundPanel}
+                    flexShrink={0}
+                  >
+                    <text fg={props.theme.text}>{msg.text}</text>
+                    <box flexDirection="row" gap={1} paddingTop={1}>
+                      <text>
+                        <span style={{ bg: props.theme.accent, fg: props.theme.backgroundPanel, bold: true }}>
+                          {" "}QUEUED{" "}
+                        </span>
+                      </text>
+                      <text fg={props.theme.textMuted}>
+                        from {msg.participantName}
+                        {isMe() ? " (you)" : ""}
+                      </text>
+                    </box>
+                  </box>
+                </box>
+              )
+            }}
+          </For>
+        </Show>
+        <Show when={waitingFor().length > 0}>
+          <box id="collab-waiting-for" paddingLeft={3} marginTop={1}>
+            <text fg={props.theme.warning}>
+              Waiting for: {waitingFor().join(", ")}
+            </text>
+          </box>
+        </Show>
+      </Show>
+    </box>
+  )
 }

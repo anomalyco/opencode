@@ -135,6 +135,13 @@ export namespace CollaborationQueue {
 
   /**
    * Determine if queue should be flushed
+   *
+   * Queue auto-flushes ONLY when:
+   * - There were ~wait directives AND they're all resolved
+   *
+   * Queue does NOT auto-flush when:
+   * - No ~directives used (driver must send to flush)
+   * - There are still pending waits
    */
   export function shouldFlush(sessionID: string): FlushCheckResult {
     const session = CollaborationSession.getSession(sessionID)
@@ -143,11 +150,12 @@ export namespace CollaborationQueue {
       return { flush: false, reason: "empty_queue" }
     }
 
+    // If no pending waits, DON'T auto-flush - wait for driver to send
     if (session.pendingWaits.length === 0) {
-      return { flush: true, reason: "no_pending_waits" }
+      return { flush: false, reason: "no_pending_waits" }
     }
 
-    // Check if all pending waits are resolved
+    // Check if all pending waits are resolved - then auto-flush
     const allResolved = session.pendingWaits.every((wait) => wait.waitingFor.length === 0)
     if (allResolved) {
       return { flush: true, reason: "all_waits_resolved" }
@@ -200,6 +208,9 @@ export namespace CollaborationQueue {
     }
 
     const messageCount = session.messageQueue.length
+
+    // Clear the message queue
+    session.messageQueue = []
 
     // Clear pending waits
     session.pendingWaits = []

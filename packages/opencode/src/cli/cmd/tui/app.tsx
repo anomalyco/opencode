@@ -36,6 +36,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { CollaborationProvider } from "./context/collaboration"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -133,8 +134,9 @@ export function tui(input: {
                         events={input.events}
                       >
                         <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
+                          <CollaborationProvider>
+                            <ThemeProvider mode={mode}>
+                              <LocalProvider>
                               <KeybindProvider>
                                 <PromptStashProvider>
                                   <DialogProvider>
@@ -151,7 +153,8 @@ export function tui(input: {
                                 </PromptStashProvider>
                               </KeybindProvider>
                             </LocalProvider>
-                          </ThemeProvider>
+                            </ThemeProvider>
+                          </CollaborationProvider>
                         </SyncProvider>
                       </SDKProvider>
                     </RouteProvider>

@@ -30,6 +30,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { useCollaboration } from "../../context/collaboration"
 
 export type PromptProps = {
   sessionID?: string
@@ -72,6 +73,29 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const collaboration = useCollaboration()
+
+  // Typing indicator management
+  let typingTimeout: Timer | null = null
+  function handleTypingIndicator(value: string) {
+    if (!collaboration.isJoined || !props.sessionID) return
+
+    // Send typing = true
+    collaboration.setTyping(true)
+
+    // Clear previous timeout
+    if (typingTimeout) clearTimeout(typingTimeout)
+
+    // Set typing = false after 3 seconds of no typing
+    typingTimeout = setTimeout(() => {
+      collaboration.setTyping(false)
+    }, 3000)
+  }
+
+  onCleanup(() => {
+    if (typingTimeout) clearTimeout(typingTimeout)
+    if (collaboration.isJoined) collaboration.setTyping(false)
+  })
 
   function promptModelWarning() {
     toast.show({
@@ -527,6 +551,96 @@ export function Prompt(props: PromptProps) {
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
+    // Collaborative mode: non-drivers queue messages instead of sending directly
+    const isCollabJoined = collaboration.isJoined
+    const isCollabDriver = props.sessionID ? collaboration.isDriver(props.sessionID) : false
+
+    if (
+      isCollabJoined &&
+      props.sessionID &&
+      !isCollabDriver &&
+      store.mode !== "shell"
+    ) {
+      try {
+        // Clear typing indicator
+        collaboration.setTyping(false)
+
+        // Queue the message
+        const queueResult = await collaboration.queueMessage(inputText, nonTextParts)
+        if (!queueResult) {
+          toast.show({
+            message: "Failed to queue - not properly joined",
+            variant: "error",
+          })
+          return
+        }
+
+        // Clear input and history
+        history.append({
+          ...store.prompt,
+          mode: store.mode,
+        })
+        input.extmarks.clear()
+        input.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        console.log("[PROMPT] Input cleared")
+
+        toast.show({
+          message: "Message queued",
+          variant: "info",
+          duration: 2000,
+        })
+        props.onSubmit?.()
+        return
+      } catch (e) {
+        toast.show({
+          message: e instanceof Error ? e.message : "Failed to queue message",
+          variant: "error",
+        })
+        return
+      }
+    }
+
+    // Clear typing indicator when submitting
+    if (collaboration.isJoined) {
+      collaboration.setTyping(false)
+    }
+
+    // If driver in collaborative mode, combine queued messages with driver's message
+    let finalInputText = inputText
+    const collabState = props.sessionID ? sync.data.collaboration[props.sessionID] : undefined
+    const collabQueue = collabState?.messageQueue ?? []
+
+    console.log("[PROMPT SUBMIT] collabState exists:", !!collabState)
+    console.log("[PROMPT SUBMIT] collabQueue length:", collabQueue.length)
+    console.log("[PROMPT SUBMIT] sessionID:", props.sessionID)
+
+    if (collabQueue.length > 0 && props.sessionID) {
+      // Combine queued messages with driver's message
+      const queuedTexts = collabQueue.map((msg: { participantName: string; text: string }) =>
+        `[${msg.participantName}]: ${msg.text}`
+      )
+      const driverText = inputText ? `[${collaboration.participantName ?? "driver"}]: ${inputText}` : ""
+      finalInputText = [...queuedTexts, driverText].filter(Boolean).join("\n\n")
+
+      console.log("[PROMPT SUBMIT] Clearing queue for session:", props.sessionID)
+      console.log("[PROMPT SUBMIT] Queue before clear:", JSON.stringify(sync.data.collaboration[props.sessionID]?.messageQueue))
+
+      // Clear local queue immediately (replace arrays so UI <For> sees the change)
+      sync.set("collaboration", props.sessionID, "messageQueue", [])
+      sync.set("collaboration", props.sessionID, "pendingWaits", [])
+      sync.set("collaboration", props.sessionID, "waitingFor", [])
+
+      console.log("[PROMPT SUBMIT] Queue after clear:", JSON.stringify(sync.data.collaboration[props.sessionID]?.messageQueue))
+
+      // Also notify server (best effort)
+      if (collaboration.isJoined && collaboration.isDriver(props.sessionID)) {
+        console.log("[PROMPT SUBMIT] Calling forceFlush")
+        collaboration.forceFlush().catch((e) => console.error("[PROMPT SUBMIT] forceFlush error:", e))
+      }
+    }
+
     // Capture mode before it gets reset
     const currentMode = store.mode
     const variant = local.model.variant.current()
@@ -578,7 +692,7 @@ export function Prompt(props: PromptProps) {
           {
             id: Identifier.ascending("part"),
             type: "text",
-            text: inputText,
+            text: finalInputText,
           },
           ...nonTextParts.map((x) => ({
             id: Identifier.ascending("part"),
@@ -771,6 +885,7 @@ export function Prompt(props: PromptProps) {
                 const value = input.plainText
                 setStore("prompt", "input", value)
                 autocomplete.onInput(value)
+                handleTypingIndicator(value)
                 syncExtmarksWithPromptParts()
               }}
               keyBindings={textareaKeybindings()}

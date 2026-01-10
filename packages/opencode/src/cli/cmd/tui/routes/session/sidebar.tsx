@@ -11,16 +11,30 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useCollaboration } from "../../context/collaboration"
+import { RGBA } from "@opentui/core"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const collaboration = useCollaboration()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
+  // Collaboration data
+  const collabState = createMemo(() => sync.data.collaboration[props.sessionID])
+  const participants = createMemo(() =>
+    collabState() ? Object.values(collabState()!.participants) : [],
+  )
+  const typingUsers = createMemo(() => collaboration.typingUsers(props.sessionID))
+  const messageQueue = createMemo(() => collabState()?.messageQueue ?? [])
+  const waitingFor = createMemo(() => collabState()?.waitingFor ?? [])
+  const joinCode = createMemo(() => collabState()?.joinCode)
+
   const [expanded, setExpanded] = createStore({
+    collab: true,
     mcp: true,
     diff: true,
     todo: true,
@@ -97,6 +111,78 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
+            {/* Collaboration Panel */}
+            <Show when={participants().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => participants().length > 2 && setExpanded("collab", !expanded.collab)}
+                >
+                  <Show when={participants().length > 2}>
+                    <text fg={theme.text}>{expanded.collab ? "▼" : "▶"}</text>
+                  </Show>
+                  <text fg={theme.text}>
+                    <b>Collaboration</b>
+                    <Show when={!expanded.collab}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {" "}
+                        ({participants().length} users)
+                      </span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={participants().length <= 2 || expanded.collab}>
+                  {/* Participants list */}
+                  <For each={participants()}>
+                    {(participant) => (
+                      <box flexDirection="row" gap={1}>
+                        <text
+                          flexShrink={0}
+                          fg={participant.color ? RGBA.fromHex(participant.color) : theme.text}
+                        >
+                          {participant.role === "driver" ? "★" : "•"}
+                        </text>
+                        <text fg={theme.text}>
+                          {participant.name}
+                          <Show when={participant.id === collaboration.participantID}>
+                            <span style={{ fg: theme.textMuted }}> (you)</span>
+                          </Show>
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                  {/* Typing indicators */}
+                  <Show when={typingUsers().length > 0}>
+                    <text fg={theme.textMuted}>
+                      {typingUsers()
+                        .map((u) => u.name)
+                        .join(", ")}{" "}
+                      typing...
+                    </text>
+                  </Show>
+                  {/* Queue status */}
+                  <Show when={messageQueue().length > 0}>
+                    <text fg={theme.accent}>
+                      {messageQueue().length} message{messageQueue().length > 1 ? "s" : ""} queued
+                    </text>
+                  </Show>
+                  {/* Waiting for status */}
+                  <Show when={waitingFor().length > 0}>
+                    <text fg={theme.warning}>Waiting for: {waitingFor().join(", ")}</text>
+                  </Show>
+                  {/* Join code */}
+                  <Show when={joinCode()}>
+                    <text fg={theme.textMuted}>
+                      Code:{" "}
+                      <span style={{ fg: theme.text }}>
+                        {joinCode()!.code.slice(0, 3)}-{joinCode()!.code.slice(3)}
+                      </span>
+                    </text>
+                  </Show>
+                </Show>
+              </box>
+            </Show>
             <Show when={mcpEntries().length > 0}>
               <box>
                 <box

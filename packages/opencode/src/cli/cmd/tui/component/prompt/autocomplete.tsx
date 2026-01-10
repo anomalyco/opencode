@@ -394,7 +394,38 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.share"),
         })
       }
+
+      // Session-specific collaboration commands
+      results.push(
+        {
+          display: "/collab start",
+          description: "start collaboration in this session",
+          onSelect: () => command.trigger("collab.start"),
+        },
+        {
+          display: "/collab leave",
+          description: "leave the current collaboration",
+          onSelect: () => command.trigger("collab.leave"),
+        },
+        {
+          display: "/collab code",
+          description: "generate and copy join code",
+          onSelect: () => command.trigger("collab.code"),
+        },
+        {
+          display: "/collab flush",
+          description: "send queued messages now (driver only)",
+          onSelect: () => command.trigger("collab.flush"),
+        },
+      )
     }
+
+    // Collaboration join - available everywhere
+    results.push({
+      display: "/collab join",
+      description: "join a collaborative session",
+      onSelect: () => command.trigger("collab.join"),
+    })
 
     results.push(
       {

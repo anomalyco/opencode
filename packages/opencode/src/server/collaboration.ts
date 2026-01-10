@@ -273,12 +273,11 @@ export const CollaborationRoute = new Hono()
       const sessionID = c.req.valid("param").sessionID
       const { participantID } = c.req.valid("json")
 
-      // Get combined message before flushing
+      // Get combined message before flushing (forceFlush clears the queue)
       const combined = CollaborationQueue.getCombinedMessage(sessionID)
       const flushed = CollaborationQueue.forceFlush(sessionID, participantID)
 
       if (flushed) {
-        CollaborationQueue.clearQueue(sessionID)
         return c.json({
           flushed: true,
           combinedMessage: combined.text,

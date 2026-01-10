@@ -18,6 +18,69 @@ import type {
   ProviderAuthMethod,
   VcsInfo,
 } from "@opencode-ai/sdk/v2"
+
+// Collaboration types (inline until SDK is regenerated)
+export namespace CollaborationTypes {
+  export type Role = "driver" | "participant"
+
+  export type Participant = {
+    id: string
+    sessionID: string
+    name: string
+    role: Role
+    color?: string
+    time: {
+      joined: number
+      lastSeen: number
+    }
+  }
+
+  export type TypingStatus = {
+    participantID: string
+    sessionID: string
+    isTyping: boolean
+    preview?: string
+    time: number
+  }
+
+  export type QueuedMessage = {
+    id: string
+    sessionID: string
+    participantID: string
+    participantName: string
+    text: string
+    directives: Array<{
+      type: "mention" | "wait"
+      target: string
+      resolved: boolean
+    }>
+    time: { queued: number }
+    attachments?: unknown[]
+  }
+
+  export type PendingWait = {
+    target: string
+    waitingFor: string[]
+    triggeredBy: string
+  }
+
+  export type JoinCode = {
+    code: string
+    sessionID: string
+    createdBy: string
+    time: { created: number; expires: number }
+  }
+
+  export type SessionState = {
+    participants: Record<string, Participant>
+    typingStatuses: Record<string, TypingStatus>
+    messageQueue: QueuedMessage[]
+    pendingWaits: PendingWait[]
+    waitingFor: string[]
+    joinCode: JoinCode | null
+    myParticipantID: string | null
+  }
+}
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
@@ -73,6 +136,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
+      collaboration: {
+        [sessionID: string]: CollaborationTypes.SessionState
+      }
     }>({
       provider_next: {
         all: [],
@@ -100,6 +166,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
+      collaboration: {},
     })
 
     const sdk = useSDK()
@@ -305,6 +372,153 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
       }
+
+      // Collaboration events (handled separately since SDK types haven't been regenerated)
+      const eventType = event.type as string
+      const eventProps = (event as { properties: unknown }).properties as Record<string, unknown>
+
+      // Debug: log collaboration events
+      if (eventType.startsWith("collaboration.")) {
+        console.log("[COLLAB EVENT]", eventType, JSON.stringify(eventProps, null, 2))
+      }
+
+      switch (eventType) {
+        case "collaboration.participant.joined": {
+          const { sessionID, participant } = eventProps as {
+            sessionID: string
+            participant: CollaborationTypes.Participant
+          }
+          // Ensure collaboration state exists for this session
+          if (!store.collaboration[sessionID]) {
+            setStore("collaboration", sessionID, {
+              participants: {},
+              typingStatuses: {},
+              messageQueue: [],
+              pendingWaits: [],
+              waitingFor: [],
+              joinCode: null,
+              myParticipantID: null,
+            })
+          }
+          setStore("collaboration", sessionID, "participants", participant.id, participant)
+          break
+        }
+
+        case "collaboration.participant.left": {
+          const { sessionID, participantID } = eventProps as {
+            sessionID: string
+            participantID: string
+          }
+          if (!store.collaboration[sessionID]) break
+          setStore(
+            "collaboration",
+            sessionID,
+            "participants",
+            produce((draft) => {
+              delete draft[participantID]
+            }),
+          )
+          setStore(
+            "collaboration",
+            sessionID,
+            "typingStatuses",
+            produce((draft) => {
+              delete draft[participantID]
+            }),
+          )
+          break
+        }
+
+        case "collaboration.participant.updated": {
+          const { sessionID, participant } = eventProps as {
+            sessionID: string
+            participant: CollaborationTypes.Participant
+          }
+          if (!store.collaboration[sessionID]) break
+          setStore("collaboration", sessionID, "participants", participant.id, reconcile(participant))
+          break
+        }
+
+        case "collaboration.typing.changed": {
+          const status = eventProps as unknown as CollaborationTypes.TypingStatus
+          if (!store.collaboration[status.sessionID]) break
+          if (status.isTyping) {
+            setStore("collaboration", status.sessionID, "typingStatuses", status.participantID, status)
+          } else {
+            setStore(
+              "collaboration",
+              status.sessionID,
+              "typingStatuses",
+              produce((draft) => {
+                delete draft[status.participantID]
+              }),
+            )
+          }
+          break
+        }
+
+        case "collaboration.message.queued": {
+          const { sessionID, message } = eventProps as {
+            sessionID: string
+            message: CollaborationTypes.QueuedMessage
+          }
+          if (!store.collaboration[sessionID]) break
+          // Check for duplicate (same message ID already in queue)
+          const existingQueue = store.collaboration[sessionID]?.messageQueue ?? []
+          if (existingQueue.some((m) => m.id === message.id)) {
+            console.log("[COLLAB] Ignoring duplicate message:", message.id)
+            break
+          }
+          setStore(
+            "collaboration",
+            sessionID,
+            "messageQueue",
+            produce((draft) => {
+              draft.push(message)
+            }),
+          )
+          break
+        }
+
+        case "collaboration.queue.flushed": {
+          const { sessionID, messageCount } = eventProps as { sessionID: string; messageCount: number }
+          console.log("[SSE] QueueFlushed received for session:", sessionID, "count:", messageCount)
+          if (!store.collaboration[sessionID]) {
+            console.log("[SSE] No collaboration state for session, skipping")
+            break
+          }
+          console.log("[SSE] Queue before SSE clear:", store.collaboration[sessionID]?.messageQueue?.length)
+          // Use direct replacement (not `reconcile([])`) so Solid sees the array reference change and <For> clears.
+          setStore("collaboration", sessionID, "messageQueue", [])
+          setStore("collaboration", sessionID, "pendingWaits", [])
+          setStore("collaboration", sessionID, "waitingFor", [])
+          console.log("[SSE] Queue after SSE clear:", store.collaboration[sessionID]?.messageQueue?.length)
+          break
+        }
+
+        case "collaboration.waiting.for": {
+          const { sessionID, waitingFor } = eventProps as {
+            sessionID: string
+            waitingFor: string[]
+          }
+          if (!store.collaboration[sessionID]) break
+          setStore("collaboration", sessionID, "waitingFor", waitingFor)
+          break
+        }
+
+        case "collaboration.joincode.created": {
+          const { sessionID, code } = eventProps as { sessionID: string; code: string }
+          if (!store.collaboration[sessionID]) break
+          // Store the code with formatted version
+          setStore("collaboration", sessionID, "joinCode", {
+            code,
+            sessionID,
+            createdBy: "",
+            time: { created: Date.now(), expires: Date.now() + 24 * 60 * 60 * 1000 },
+          })
+          break
+        }
+      }
     })
 
     const exit = useExit()
@@ -398,11 +612,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
+          const [session, messages, todo, diff, collaboration] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
             sdk.client.session.messages({ sessionID, limit: 100 }),
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
+            // Fetch collaboration state
+            fetch(`${sdk.url}/session/${sessionID}/collaboration`)
+              .then((r) => r.json())
+              .catch(() => null) as Promise<CollaborationTypes.SessionState | null>,
           ])
           setStore(
             produce((draft) => {
@@ -415,6 +633,18 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []
+              // Set collaboration state if there are participants
+              if (collaboration && Object.keys(collaboration.participants || {}).length > 0) {
+                draft.collaboration[sessionID] = {
+                  participants: collaboration.participants ?? {},
+                  typingStatuses: collaboration.typingStatuses ?? {},
+                  messageQueue: collaboration.messageQueue ?? [],
+                  pendingWaits: collaboration.pendingWaits ?? [],
+                  waitingFor: [],
+                  joinCode: collaboration.joinCode ?? null,
+                  myParticipantID: null,
+                }
+              }
             }),
           )
           fullSyncedSessions.add(sessionID)
