@@ -521,6 +521,21 @@ export function Session() {
       },
     },
     {
+      title: (sync.data.config.tui as any)?.auto_scroll !== false ? "Disable auto-scroll" : "Enable auto-scroll",
+      value: "session.toggle.autoscroll",
+      category: "Session",
+      onSelect: (dialog) => {
+        const current = (sync.data.config.tui as any)?.auto_scroll ?? true
+        sdk.client.config.update({
+          tui: {
+            ...sync.data.config.tui,
+            auto_scroll: !current,
+          },
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: animationsEnabled() ? "Disable animations" : "Enable animations",
       value: "session.toggle.animations",
       category: "Session",
@@ -903,7 +918,7 @@ export function Session() {
                   foregroundColor: theme.border,
                 },
               }}
-              stickyScroll={true}
+              stickyScroll={(sync.data.config.tui as any)?.auto_scroll ?? true}
               stickyStart="bottom"
               flexGrow={1}
               scrollAcceleration={scrollAcceleration()}
