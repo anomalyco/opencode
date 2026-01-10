@@ -49,6 +49,14 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
       }
     }
 
+    function normalizeKeyName(evt: ParsedKey) {
+      if (!evt.baseCode) return evt.name
+      if (!evt.ctrl && !evt.meta && !evt.super) return evt.name
+      const baseChar = String.fromCodePoint(evt.baseCode)
+      if (baseChar.length !== 1) return evt.name
+      return baseChar.toLowerCase()
+    }
+
     useKeyboard(async (evt) => {
       if (!store.leader && result.match("leader", evt)) {
         leader(true)
@@ -77,7 +85,8 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         if (evt.name === "\x1F") {
           return Keybind.fromParsedKey({ ...evt, name: "_", ctrl: true }, store.leader)
         }
-        return Keybind.fromParsedKey(evt, store.leader)
+        const normalizedName = normalizeKeyName(evt)
+        return Keybind.fromParsedKey({ ...evt, name: normalizedName }, store.leader)
       },
       match(key: keyof KeybindsConfig, evt: ParsedKey) {
         const keybind = keybinds()[key]
