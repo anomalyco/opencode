@@ -1,0 +1,96 @@
+name: Multi-Provider Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    if: |
+      (github.event_name == 'pull_request') ||
+      (github.event.issue.pull_request &&
+       (startsWith(github.event.comment.body, '/review') ||
+        contains(github.event.comment.body, '@opencode') ||
+        contains(github.event.comment.body, '@claude')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Get PR number
+        id: pr-number
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install opencode
+        run: |
+          for i in {1..3}; do
+            echo "Attempt $i of 3 to install opencode..."
+            if curl -fsSL https://opencode.ai/install | bash; then
+              echo "opencode installed successfully"
+              exit 0
+            fi
+            echo "Attempt $i failed, waiting 5 seconds before retry..."
+            sleep 5
+          done
+          echo "Failed to install opencode after 3 attempts"
+          exit 1
+
+      - name: Get PR details
+        id: pr-details
+        run: |
+          gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} > pr_data.json
+          echo "title=$(jq -r .title pr_data.json)" >> $GITHUB_OUTPUT
+          echo "sha=$(jq -r .head.sha pr_data.json)" >> $GITHUB_OUTPUT
+
+      - name: Get PR body
+        id: pr-body
+        run: |
+          PR_BODY=$(gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} --jq .body | tr '\n' ' ' | sed 's/"/\\"/g')
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$PR_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check for AGENTS.md
+        id: agents-md
+        run: |
+          if [ -f AGENTS.md ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Multi-Provider Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS || 'opencode/big-pickle,opencode/grok-code,opencode/minimax-m2.1-free,opencode/glm-4.7-free' }}
+          PR_TITLE: ${{ steps.pr-details.outputs.title }}
+          PR_NUMBER: ${{ steps.pr-number.outputs.number }}
+          PR_BODY: ${{ steps.pr-body.outputs.body }}
+          HAS_AGENTS: ${{ steps.agents-md.outputs.exists || 'false' }}
+        run: |
+          cp github/multi-review-script.ts multi-review.ts
+
+          if [ "$HAS_AGENTS" = "true" ]; then
+            export INCLUDE_AGENTS=true
+          fi
+
+          bun run multi-review.ts
