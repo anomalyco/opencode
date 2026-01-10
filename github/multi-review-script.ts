@@ -12,12 +12,22 @@ const PR_TITLE = process.env.PR_TITLE || ""
 const INCLUDE_AGENTS = process.env.INCLUDE_AGENTS === "true"
 
 async function buildPrompt(): Promise<string> {
-  const prBody = execSync("jq -r .body pr_data.json", { encoding: "utf8" }).trim()
-  
+  let prBody = ""
+  try {
+    prBody = execSync("jq -r .body pr_data.json", { encoding: "utf8" }).trim()
+  } catch (e) {
+    console.log("Warning: Could not read PR data, using empty body")
+    prBody = ""
+  }
+
   let agentsSection = ""
-  if (INCLUDE_AGENTS && existsSync("AGENTS.md")) {
-    const agentsContent = readFileSync("AGENTS.md", "utf8").substring(0, 2000)
-    agentsSection = `\n\n## Project Guidelines (from AGENTS.md)\n${agentsContent}`
+  try {
+    if (INCLUDE_AGENTS && existsSync("AGENTS.md")) {
+      const agentsContent = readFileSync("AGENTS.md", "utf8").substring(0, 2000)
+      agentsSection = `\n\n## Project Guidelines (from AGENTS.md)\n${agentsContent}`
+    }
+  } catch (e) {
+    console.log("Warning: Could not read AGENTS.md")
   }
   
   return `REPO: ${REPO}
@@ -244,20 +254,9 @@ async function calculateConfidenceScores(reviews: ReviewResult[]): Promise<Recor
 async function main() {
   console.log(`Running reviews with ${REVIEW_PROVIDERS.length} providers`)
 
-  // Post initial checklist immediately
-  await postOrUpdateChecklist("🤖 Starting multi-provider code review...")
-
-  // Build prompt
   const prompt = await buildPrompt()
   console.log(`Prompt built (${prompt.length} chars), includes AGENTS.md: ${INCLUDE_AGENTS}`)
 
-  // Update checklist - reading conventions
-  await postOrUpdateChecklist("📖 Reading repository conventions...", ["Read repository conventions"])
-
-  // Update checklist - reading files
-  await postOrUpdateChecklist("📁 Reading modified files...", ["Read repository conventions", "Read modified files"])
-
-  // Run reviews in parallel
   const results = await Promise.all(REVIEW_PROVIDERS.map((provider) => runReview(provider, prompt)))
 
   // Update checklist - analysis complete

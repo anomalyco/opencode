@@ -62,12 +62,11 @@ jobs:
       - name: Run Multi-Provider Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REVIEW_PROVIDERS: opencode/big-pickle,opencode/grok-code,opencode/minimax-m2.1-free,opencode/glm-4.7-free
+          REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS || 'opencode/big-pickle,opencode/grok-code,opencode/minimax-m2.1-free,opencode/glm-4.7-free' }}
           PR_TITLE: ${{ steps.pr-details.outputs.title }}
           PR_NUMBER: ${{ steps.pr-number.outputs.number }}
-          HAS_AGENTS: ${{ steps.agents-md.outputs.exists }}
+          HAS_AGENTS: ${{ steps.agents-md.outputs.exists || 'false' }}
         run: |
-          PR_BODY=$(jq -r .body pr_data.json)
           curl -f -o multi-review.ts https://raw.githubusercontent.com/keithah/multi-provider-code-review/main/multi-review-script.ts
 
           if [ "$HAS_AGENTS" = "true" ]; then
