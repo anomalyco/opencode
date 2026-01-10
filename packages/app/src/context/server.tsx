@@ -19,7 +19,6 @@ export function serverDisplayName(url: string) {
   return url
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "")
-    .split("/")[0]
 }
 
 function projectsKey(url: string) {
