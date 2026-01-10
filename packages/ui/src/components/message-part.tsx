@@ -38,6 +38,8 @@ import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
+import { Tooltip } from "./tooltip"
+import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 
 interface Diagnostic {
@@ -278,6 +280,7 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
   const dialog = useDialog()
+  const [copied, setCopied] = createSignal(false)
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -305,6 +308,14 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const openImagePreview = (url: string, alt?: string) => {
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
+  }
+
+  const handleCopy = async () => {
+    const content = text()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -341,6 +352,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       <Show when={text()}>
         <div data-slot="user-message-text">
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          <div data-slot="user-message-copy-wrapper">
+            <Tooltip value={copied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
+              <IconButton icon={copied() ? "check" : "copy"} variant="secondary" onClick={handleCopy} />
+            </Tooltip>
+          </div>
         </div>
       </Show>
     </div>
@@ -566,7 +582,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="text-part">
-        <Markdown text={throttledText()} />
+        <Markdown text={throttledText()} cacheKey={part.id} />
       </div>
     </Show>
   )
@@ -580,7 +596,7 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   return (
     <Show when={throttledText()}>
       <div data-component="reasoning-part">
-        <Markdown text={throttledText()} />
+        <Markdown text={throttledText()} cacheKey={part.id} />
       </div>
     </Show>
   )
@@ -984,6 +1000,22 @@ ToolRegistry.register({
 ToolRegistry.register({
   name: "todowrite",
   render(props) {
+    const todos = createMemo(() => {
+      const meta = props.metadata?.todos
+      if (Array.isArray(meta)) return meta
+
+      const input = props.input.todos
+      if (Array.isArray(input)) return input
+
+      return []
+    })
+
+    const subtitle = createMemo(() => {
+      const list = todos()
+      if (list.length === 0) return ""
+      return `${list.filter((t: Todo) => t.status === "completed").length}/${list.length}`
+    })
+
     return (
       <BasicTool
         {...props}
@@ -991,14 +1023,12 @@ ToolRegistry.register({
         icon="checklist"
         trigger={{
           title: "To-dos",
-          subtitle: props.input.todos
-            ? `${props.input.todos.filter((t: Todo) => t.status === "completed").length}/${props.input.todos.length}`
-            : "",
+          subtitle: subtitle(),
         }}
       >
-        <Show when={props.input.todos?.length}>
+        <Show when={todos().length}>
           <div data-component="todos">
-            <For each={props.input.todos}>
+            <For each={todos()}>
               {(todo: Todo) => (
                 <Checkbox readOnly checked={todo.status === "completed"}>
                   <div data-slot="message-part-todo-content" data-completed={todo.status === "completed"}>

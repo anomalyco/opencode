@@ -33,7 +33,7 @@ export const GrepTool = Tool.define("grep", {
     const searchPath = params.path || Instance.directory
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-nH", "--field-match-separator=|", "--regexp", params.pattern]
+    const args = ["-nH", "--hidden", "--follow", "--field-match-separator=|", "--regexp", params.pattern]
     if (params.include) {
       args.push("--glob", params.include)
     }
