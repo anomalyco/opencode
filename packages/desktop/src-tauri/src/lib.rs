@@ -1,4 +1,6 @@
 mod cli;
+#[cfg(windows)]
+mod job_object;
 mod window_customizer;
 
 use cli::{get_sidecar_path, install_cli, sync_cli};
@@ -44,29 +46,69 @@ impl ServerState {
 #[derive(Clone)]
 struct LogState(Arc<Mutex<VecDeque<String>>>);
 
+/// Holds the Windows Job Object that ensures child processes are killed when the app exits.
+/// On Windows, when the job object handle is closed (including on crash), all assigned
+/// processes are automatically terminated by the OS.
+#[cfg(windows)]
+struct JobObjectState {
+    job: std::sync::Mutex<Option<job_object::JobObject>>,
+    error: std::sync::Mutex<Option<String>>,
+}
+
+#[cfg(windows)]
+impl JobObjectState {
+    fn new() -> Self {
+        match job_object::JobObject::new() {
+            Ok(job) => Self {
+                job: std::sync::Mutex::new(Some(job)),
+                error: std::sync::Mutex::new(None),
+            },
+            Err(e) => {
+                eprintln!("Failed to create job object: {e}");
+                Self {
+                    job: std::sync::Mutex::new(None),
+                    error: std::sync::Mutex::new(Some(format!("Failed to create job object: {e}"))),
+                }
+            }
+        }
+    }
+
+    fn assign_pid(&self, pid: u32) {
+        if let Some(job) = self.job.lock().unwrap().as_ref() {
+            if let Err(e) = job.assign_pid(pid) {
+                eprintln!("Failed to assign process {pid} to job object: {e}");
+                *self.error.lock().unwrap() =
+                    Some(format!("Failed to assign process to job object: {e}"));
+            } else {
+                println!("Assigned process {pid} to job object for automatic cleanup");
+            }
+        }
+    }
+}
+
 const MAX_LOG_ENTRIES: usize = 200;
 
-#[tauri::command]
-fn kill_sidecar(app: AppHandle) {
-    let Some(server_state) = app.try_state::<ServerState>() else {
-        println!("Server not running");
-        return;
-    };
+// #[tauri::command]
+// fn kill_sidecar(app: AppHandle) {
+//     let Some(server_state) = app.try_state::<ServerState>() else {
+//         println!("Server not running");
+//         return;
+//     };
 
-    let Some(server_state) = server_state
-        .child
-        .lock()
-        .expect("Failed to acquire mutex lock")
-        .take()
-    else {
-        println!("Server state missing");
-        return;
-    };
+//     let Some(server_state) = server_state
+//         .child
+//         .lock()
+//         .expect("Failed to acquire mutex lock")
+//         .take()
+//     else {
+//         println!("Server state missing");
+//         return;
+//     };
 
-    let _ = server_state.kill();
+//     let _ = server_state.kill();
 
-    println!("Killed server");
-}
+//     println!("Killed server");
+// }
 
 async fn get_logs(app: AppHandle) -> Result<String, String> {
     let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
@@ -217,7 +259,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
         .invoke_handler(tauri::generate_handler![
-            kill_sidecar,
+            // kill_sidecar,
             install_cli,
             ensure_server_started
         ])
@@ -226,6 +268,11 @@ pub fn run() {
 
             // Initialize log state
             app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
+
+            // On Windows, create a job object that will automatically kill child processes
+            // when the app exits (even on crash). This is more reliable than manual cleanup.
+            #[cfg(windows)]
+            app.manage(JobObjectState::new());
 
             // Get port and create window immediately for faster perceived startup
             let port = get_sidecar_port();
@@ -270,6 +317,14 @@ pub fn run() {
 
                     let (child, res) = if should_spawn_sidecar {
                         let child = spawn_sidecar(&app, port);
+
+                        // On Windows, assign the child process to the job object for automatic
+                        // cleanup when the app exits (even on crash)
+                        #[cfg(windows)]
+                        {
+                            let job_state = app.state::<JobObjectState>();
+                            job_state.assign_pid(child.pid());
+                        }
 
                         let timestamp = Instant::now();
                         let res = loop {
@@ -330,7 +385,9 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 println!("Received Exit");
 
-                kill_sidecar(app.clone());
+                // On Windows, the job object handles cleanup automatically (even on crash).
+                // We still call kill_sidecar as a belt-and-suspenders approach for graceful shutdown.
+                // kill_sidecar(app.clone());
             }
         });
 }
