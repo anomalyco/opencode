@@ -169,14 +169,21 @@ export namespace CollaborationQueue {
   }
 
   /**
-   * Attempt to flush queue if conditions are met
+   * Notify that queue is ready to be committed, if conditions are met.
+   *
+   * Important: this does NOT clear the queue. The driver commits by calling `forceFlush()`.
    */
   export function tryFlush(sessionID: string): boolean {
     const { flush, reason } = shouldFlush(sessionID)
 
     if (flush) {
-      log.info("auto-flushing queue", { sessionID, reason })
-      return doFlush(sessionID)
+      const session = CollaborationSession.getSession(sessionID)
+      log.info("queue ready", { sessionID, reason, messageCount: session.messageQueue.length })
+      Bus.publish(CollaborationSession.Event.QueueReady, {
+        sessionID,
+        messageCount: session.messageQueue.length,
+      })
+      return true
     }
 
     return false
@@ -280,11 +287,14 @@ export namespace CollaborationQueue {
 
     // Broadcast updated waiting status
     const waitingFor = getWaitingForNames(session)
-    if (waitingFor.length > 0) {
-      Bus.publish(CollaborationSession.Event.WaitingFor, {
-        sessionID,
-        waitingFor,
-      })
+    Bus.publish(CollaborationSession.Event.WaitingFor, {
+      sessionID,
+      waitingFor,
+    })
+
+    // If all waits are resolved, notify readiness.
+    if (waitingFor.length === 0) {
+      tryFlush(sessionID)
     }
   }
 

@@ -59,6 +59,13 @@ export namespace CollaborationSession {
         messageCount: z.number(),
       }),
     ),
+    QueueReady: BusEvent.define(
+      "collaboration.queue.ready",
+      z.object({
+        sessionID: z.string(),
+        messageCount: z.number(),
+      }),
+    ),
     WaitResolved: BusEvent.define(
       "collaboration.wait.resolved",
       z.object({

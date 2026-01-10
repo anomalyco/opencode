@@ -237,10 +237,16 @@ export const { use: useCollaboration, provider: CollaborationProvider } = create
         flushed: boolean
         combinedMessage?: string
         participants?: string[]
+        attachments?: unknown[]
       } | null> {
         if (!store.sessionID || !store.participantID) return null
 
-        const result = await api<{ flushed: boolean; combinedMessage?: string; participants?: string[] }>(
+        const result = await api<{
+          flushed: boolean
+          combinedMessage?: string
+          participants?: string[]
+          attachments?: unknown[]
+        }>(
           `/session/${store.sessionID}/collaboration/flush`,
           {
             method: "POST",
@@ -301,16 +307,22 @@ export const { use: useCollaboration, provider: CollaborationProvider } = create
           typingStatuses: Record<string, CollaborationTypes.TypingStatus>
           messageQueue: CollaborationTypes.QueuedMessage[]
           pendingWaits: CollaborationTypes.PendingWait[]
+          joinCode?: CollaborationTypes.JoinCode | null
         }>(`/session/${sessionID}/collaboration`)
 
         if (state && Object.keys(state.participants).length > 0) {
+          const waitingFor = Array.from(
+            new Set(state.pendingWaits.flatMap((w) => w.waitingFor)),
+          )
+            .map((id) => state.participants[id]?.name)
+            .filter((name): name is string => !!name)
           sync.set("collaboration", sessionID, {
             participants: state.participants,
             typingStatuses: state.typingStatuses,
             messageQueue: state.messageQueue,
             pendingWaits: state.pendingWaits,
-            waitingFor: [],
-            joinCode: null,
+            waitingFor,
+            joinCode: state.joinCode ?? null,
             myParticipantID: store.sessionID === sessionID ? store.participantID : null,
           })
         }

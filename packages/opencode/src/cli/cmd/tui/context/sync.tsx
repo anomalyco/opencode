@@ -81,6 +81,18 @@ export namespace CollaborationTypes {
     myParticipantID: string | null
   }
 }
+
+function getWaitingForNames(state: CollaborationTypes.SessionState): string[] {
+  const ids = new Set<string>()
+  for (const wait of state.pendingWaits ?? []) {
+    for (const id of wait.waitingFor ?? []) {
+      ids.add(id)
+    }
+  }
+  return Array.from(ids)
+    .map((id) => state.participants[id]?.name)
+    .filter((name): name is string => !!name)
+}
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
@@ -640,7 +652,15 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                   typingStatuses: collaboration.typingStatuses ?? {},
                   messageQueue: collaboration.messageQueue ?? [],
                   pendingWaits: collaboration.pendingWaits ?? [],
-                  waitingFor: [],
+                  waitingFor: getWaitingForNames({
+                    participants: collaboration.participants ?? {},
+                    typingStatuses: collaboration.typingStatuses ?? {},
+                    messageQueue: collaboration.messageQueue ?? [],
+                    pendingWaits: collaboration.pendingWaits ?? [],
+                    waitingFor: [],
+                    joinCode: collaboration.joinCode ?? null,
+                    myParticipantID: null,
+                  }),
                   joinCode: collaboration.joinCode ?? null,
                   myParticipantID: null,
                 }

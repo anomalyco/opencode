@@ -33,6 +33,7 @@ import { Locale } from "@/util/locale"
 import type { Tool } from "@/tool/tool"
 import type { ReadTool } from "@/tool/read"
 import type { WriteTool } from "@/tool/write"
+import { Identifier } from "@/id/id"
 import { BashTool } from "@/tool/bash"
 import type { GlobTool } from "@/tool/glob"
 import { TodoWriteTool } from "@/tool/todo"
@@ -78,6 +79,22 @@ import { DialogCollaborationJoin } from "../../component/dialog-collaboration-jo
 import { DialogPrompt } from "../../ui/dialog-prompt"
 
 addDefaultParsers(parsers.parsers)
+
+function stripCollabDirectives(text: string): string {
+  return text.replace(/~(\w+)/g, "").trim().replace(/\s+/g, " ")
+}
+
+function hasCollabWaitDirective(
+  text: string,
+  participants: Record<string, { name: string }> | undefined,
+): boolean {
+  const participantNames = new Set(Object.values(participants ?? {}).map((p) => p.name.toLowerCase()))
+  for (const match of text.matchAll(/~(\w+)/g)) {
+    const target = match[1].toLowerCase()
+    if (target === "all" || participantNames.has(target)) return true
+  }
+  return false
+}
 
 class CustomSpeedScroll implements ScrollAcceleration {
   constructor(private speed: number) {}
@@ -218,6 +235,76 @@ export function Session() {
         }
       }
     }),
+  )
+
+  // Auto-commit: when a wait resolves and the last queued message is the driver's (and doesn't add new waits),
+  // drain the queue and send it as a single prompt.
+  const collabWaitingLength = createMemo(() => sync.data.collaboration[route.sessionID]?.waitingFor?.length ?? 0)
+  createEffect(
+    on(
+      collabWaitingLength,
+      (next, prev) => {
+        if ((prev ?? 0) === 0) return
+        if (next !== 0) return
+        if (!collaboration.isJoined) return
+        if (collaboration.sessionID !== route.sessionID) return
+        if (!collaboration.isDriver(route.sessionID)) return
+
+        const state = sync.data.collaboration[route.sessionID]
+        const queue = state?.messageQueue ?? []
+        const last = queue.at(-1)
+        if (!last) return
+        if (!collaboration.participantID || last.participantID !== collaboration.participantID) return
+        if (hasCollabWaitDirective(last.text, state?.participants)) return
+
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to commit the queue",
+            duration: 3000,
+          })
+          return
+        }
+
+        void (async () => {
+          try {
+            const result = await collaboration.forceFlush()
+            if (!result?.flushed || !result.combinedMessage) return
+
+            const variant = local.model.variant.current()
+            const messageID = Identifier.ascending("message")
+            const attachments = Array.isArray(result.attachments) ? result.attachments : []
+
+            sdk.client.session.prompt({
+              sessionID: route.sessionID,
+              ...selectedModel,
+              messageID,
+              agent: local.agent.current().name,
+              model: selectedModel,
+              variant,
+              parts: [
+                {
+                  id: Identifier.ascending("part"),
+                  type: "text",
+                  text: result.combinedMessage,
+                },
+                ...attachments.map((x: any) => ({
+                  ...x,
+                  id: Identifier.ascending("part"),
+                })),
+              ],
+            })
+          } catch (e) {
+            toast.show({
+              message: e instanceof Error ? e.message : "Failed to commit queue",
+              variant: "error",
+            })
+          }
+        })()
+      },
+      { defer: true },
+    ),
   )
 
   // Allow exit when in child session (prompt is hidden)
@@ -503,21 +590,92 @@ export function Session() {
       },
     },
     {
-      title: "Flush message queue",
-      value: "collab.flush",
+      title: "Commit queue (override waits)",
+      value: "collab.override",
       category: "Collaboration",
       disabled: !collaboration.isDriver(route.sessionID),
       onSelect: async (dialog) => {
         try {
+          const selectedModel = local.model.current()
+          if (!selectedModel) {
+            toast.show({
+              variant: "warning",
+              message: "Connect a provider to commit the queue",
+              duration: 3000,
+            })
+            dialog.clear()
+            return
+          }
+
+          const state = sync.data.collaboration[route.sessionID]
+          const queue = state?.messageQueue ?? []
+          if (queue.length === 0) {
+            toast.show({ message: "Queue is empty", variant: "info" })
+            dialog.clear()
+            return
+          }
+
+          const tailIsDriver = queue.at(-1)?.participantID === collaboration.participantID
+          let finalDriverMessage: string | null = null
+          if (!tailIsDriver) {
+            finalDriverMessage = await DialogPrompt.show(dialog, "Final driver message", {
+              placeholder: "Add a final message to commit the queue",
+            })
+            if (finalDriverMessage === null) {
+              dialog.clear()
+              return
+            }
+            finalDriverMessage = stripCollabDirectives(finalDriverMessage).trim()
+            if (!finalDriverMessage) {
+              toast.show({ message: "Final driver message is required", variant: "warning" })
+              dialog.clear()
+              return
+            }
+          }
+
           const result = await collaboration.forceFlush()
           if (result?.flushed) {
-            toast.show({ message: "Queue flushed", variant: "success" })
+            if (!result.combinedMessage) {
+              toast.show({ message: "Queue flushed", variant: "success" })
+              dialog.clear()
+              return
+            }
+
+            const variant = local.model.variant.current()
+            const messageID = Identifier.ascending("message")
+            const attachments = Array.isArray(result.attachments) ? result.attachments : []
+            const extra =
+              finalDriverMessage && finalDriverMessage.length > 0
+                ? `\n\n[${collaboration.participantName ?? "driver"}]: ${finalDriverMessage}`
+                : ""
+
+            sdk.client.session.prompt({
+              sessionID: route.sessionID,
+              ...selectedModel,
+              messageID,
+              agent: local.agent.current().name,
+              model: selectedModel,
+              variant,
+              parts: [
+                {
+                  id: Identifier.ascending("part"),
+                  type: "text",
+                  text: result.combinedMessage + extra,
+                },
+                ...attachments.map((x: any) => ({
+                  ...x,
+                  id: Identifier.ascending("part"),
+                })),
+              ],
+            })
+
+            toast.show({ message: "Queue committed", variant: "success" })
           } else {
             toast.show({ message: "Queue is empty", variant: "info" })
           }
         } catch (e) {
           toast.show({
-            message: e instanceof Error ? e.message : "Failed to flush queue",
+            message: e instanceof Error ? e.message : "Failed to commit queue",
             variant: "error",
           })
         }

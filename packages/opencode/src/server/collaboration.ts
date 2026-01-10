@@ -259,6 +259,7 @@ export const CollaborationRoute = new Hono()
                   flushed: z.boolean(),
                   combinedMessage: z.string().optional(),
                   participants: z.array(z.string()).optional(),
+                  attachments: z.array(z.any()).optional(),
                 }),
               ),
             },
@@ -282,6 +283,7 @@ export const CollaborationRoute = new Hono()
           flushed: true,
           combinedMessage: combined.text,
           participants: combined.participants,
+          attachments: combined.attachments,
         })
       }
 

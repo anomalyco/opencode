@@ -32,6 +32,22 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { useCollaboration } from "../../context/collaboration"
 
+function stripCollabDirectives(text: string): string {
+  return text.replace(/~(\w+)/g, "").trim().replace(/\s+/g, " ")
+}
+
+function hasCollabWaitDirective(
+  text: string,
+  participants: Record<string, { name: string }> | undefined,
+): boolean {
+  const participantNames = new Set(Object.values(participants ?? {}).map((p) => p.name.toLowerCase()))
+  for (const match of text.matchAll(/~(\w+)/g)) {
+    const target = match[1].toLowerCase()
+    if (target === "all" || participantNames.has(target)) return true
+  }
+  return false
+}
+
 export type PromptProps = {
   sessionID?: string
   visible?: boolean
@@ -550,16 +566,25 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    let promptParts = nonTextParts
 
     // Collaborative mode: non-drivers queue messages instead of sending directly
     const isCollabJoined = collaboration.isJoined
     const isCollabDriver = props.sessionID ? collaboration.isDriver(props.sessionID) : false
+    const isShellMode = store.mode === "shell"
+    const isSlashCommand =
+      !isShellMode &&
+      inputText.startsWith("/") &&
+      iife(() => {
+        const command = inputText.split(" ")[0].slice(1)
+        return sync.data.command.some((x) => x.name === command)
+      })
 
     if (
       isCollabJoined &&
       props.sessionID &&
       !isCollabDriver &&
-      store.mode !== "shell"
+      !isShellMode
     ) {
       try {
         // Clear typing indicator
@@ -603,29 +628,92 @@ export function Prompt(props: PromptProps) {
     }
 
     // Clear typing indicator when submitting
-    if (collaboration.isJoined) {
-      collaboration.setTyping(false)
-    }
+    if (collaboration.isJoined) collaboration.setTyping(false)
 
-    // If driver in collaborative mode, combine queued messages with driver's message
+    // If driver in collaborative mode, combine queued messages with driver's message (unless waiting).
     let finalInputText = inputText
     const collabState = props.sessionID ? sync.data.collaboration[props.sessionID] : undefined
     const collabQueue = collabState?.messageQueue ?? []
+    const isWaiting = (collabState?.waitingFor?.length ?? 0) > 0
+    const driverHasWaitDirective =
+      !!props.sessionID && isCollabJoined && isCollabDriver && hasCollabWaitDirective(inputText, collabState?.participants)
 
     console.log("[PROMPT SUBMIT] collabState exists:", !!collabState)
     console.log("[PROMPT SUBMIT] collabQueue length:", collabQueue.length)
     console.log("[PROMPT SUBMIT] sessionID:", props.sessionID)
 
-    if (collabQueue.length > 0 && props.sessionID) {
+    // Driver messages that create/extend a wait are queued (not committed).
+    // While we're waiting on others, driver messages are also queued so the driver can be the final message.
+    if (
+      props.sessionID &&
+      isCollabJoined &&
+      isCollabDriver &&
+      !isShellMode &&
+      !isSlashCommand &&
+      (isWaiting || driverHasWaitDirective)
+    ) {
+      try {
+        const queueResult = await collaboration.queueMessage(inputText, nonTextParts)
+        if (!queueResult) {
+          toast.show({
+            message: "Failed to queue - not properly joined",
+            variant: "error",
+          })
+          return
+        }
+
+        history.append({
+          ...store.prompt,
+          mode: store.mode,
+        })
+        input.extmarks.clear()
+        input.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+
+        toast.show({
+          message: "Message queued",
+          variant: "info",
+          duration: 2000,
+        })
+        props.onSubmit?.()
+        return
+      } catch (e) {
+        toast.show({
+          message: e instanceof Error ? e.message : "Failed to queue message",
+          variant: "error",
+        })
+        return
+      }
+    }
+
+    // If there are queued messages, the driver can commit them by sending a normal (untagged) prompt.
+    if (!isShellMode && !isSlashCommand && collabQueue.length > 0 && props.sessionID && isCollabJoined && isCollabDriver) {
+      if (isWaiting) {
+        toast.show({
+          message: `Waiting for: ${(collabState?.waitingFor ?? []).join(", ")}`,
+          variant: "info",
+          duration: 4000,
+        })
+        return
+      }
+
       // Combine queued messages with driver's message
-      const queuedTexts = collabQueue.map((msg: { participantName: string; text: string }) =>
-        `[${msg.participantName}]: ${msg.text}`
-      )
-      const driverText = inputText ? `[${collaboration.participantName ?? "driver"}]: ${inputText}` : ""
+      const queuedTexts = collabQueue.map((msg: { participantName: string; text: string }) => {
+        return `[${msg.participantName}]: ${stripCollabDirectives(msg.text)}`
+      })
+      const driverText = inputText
+        ? `[${collaboration.participantName ?? "driver"}]: ${stripCollabDirectives(inputText)}`
+        : ""
       finalInputText = [...queuedTexts, driverText].filter(Boolean).join("\n\n")
 
       console.log("[PROMPT SUBMIT] Clearing queue for session:", props.sessionID)
       console.log("[PROMPT SUBMIT] Queue before clear:", JSON.stringify(sync.data.collaboration[props.sessionID]?.messageQueue))
+
+      const queuedAttachments = collabQueue.flatMap((msg: { attachments?: unknown[] }) =>
+        Array.isArray(msg.attachments) ? msg.attachments : [],
+      )
+      promptParts = [...queuedAttachments, ...nonTextParts] as any[]
 
       // Clear local queue immediately (replace arrays so UI <For> sees the change)
       sync.set("collaboration", props.sessionID, "messageQueue", [])
@@ -694,9 +782,9 @@ export function Prompt(props: PromptProps) {
             type: "text",
             text: finalInputText,
           },
-          ...nonTextParts.map((x) => ({
-            id: Identifier.ascending("part"),
+          ...(promptParts as any[]).map((x) => ({
             ...x,
+            id: Identifier.ascending("part"),
           })),
         ],
       })
