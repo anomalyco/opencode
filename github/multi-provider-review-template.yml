@@ -68,7 +68,7 @@ jobs:
           HAS_AGENTS: ${{ steps.agents-md.outputs.exists }}
         run: |
           PR_BODY=$(jq -r .body pr_data.json)
-          curl -o multi-review.ts https://raw.githubusercontent.com/anomalyco/opencode/main/github/multi-review-script.ts
+          curl -f -o multi-review.ts https://raw.githubusercontent.com/keithah/multi-provider-code-review/main/multi-review-script.ts
 
           if [ "$HAS_AGENTS" = "true" ]; then
             export INCLUDE_AGENTS=true
