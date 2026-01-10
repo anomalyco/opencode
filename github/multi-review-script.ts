@@ -7,8 +7,9 @@ type ReviewResult = {
 
 const REVIEW_PROVIDERS = (process.env.REVIEW_PROVIDERS || "").split(",").map((p) => p.trim()).filter(Boolean)
 const PR_NUMBER = process.env.PR_NUMBER || ""
-const REPO = process.env.GITHUB_REPOSITORY || ""
 const PR_TITLE = process.env.PR_TITLE || ""
+const PR_BODY = process.env.PR_BODY || ""
+const REPO = process.env.GITHUB_REPOSITORY || ""
 const INCLUDE_AGENTS = process.env.INCLUDE_AGENTS === "true"
 
 async function buildPrompt(): Promise<string> {

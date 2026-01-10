@@ -59,12 +59,21 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Get PR body
+        id: pr-body
+        run: |
+          PR_BODY=$(gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} | jq -r .body)
+          echo "body=$PR_BODY" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run Multi-Provider Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS || 'opencode/big-pickle,opencode/grok-code,opencode/minimax-m2.1-free,opencode/glm-4.7-free' }}
           PR_TITLE: ${{ steps.pr-details.outputs.title }}
           PR_NUMBER: ${{ steps.pr-number.outputs.number }}
+          PR_BODY: ${{ steps.pr-body.outputs.body }}
           HAS_AGENTS: ${{ steps.agents-md.outputs.exists || 'false' }}
         run: |
           curl -f -o multi-review.ts https://raw.githubusercontent.com/keithah/multi-provider-code-review/main/multi-review-script.ts
