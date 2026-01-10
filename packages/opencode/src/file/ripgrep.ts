@@ -367,8 +367,15 @@ export namespace Ripgrep {
     return lines.join("\n")
   }
 
-  export async function search(input: { cwd: string; pattern: string; glob?: string[]; limit?: number }) {
+  export async function search(input: {
+    cwd: string
+    pattern: string
+    glob?: string[]
+    limit?: number
+    follow?: boolean
+  }) {
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    if (input.follow !== false) args.push("--follow")
 
     if (input.glob) {
       for (const g of input.glob) {
