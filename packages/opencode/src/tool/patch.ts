@@ -7,8 +7,8 @@ import { Bus } from "../bus"
 import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Patch } from "../patch"
-import { Filesystem } from "../util/filesystem"
 import { createTwoFilesPatch } from "diff"
+import { assertExternalDirectory } from "./external-directory"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -49,19 +49,7 @@ export const PatchTool = Tool.define("patch", {
 
     for (const hunk of hunks) {
       const filePath = path.resolve(Instance.directory, hunk.path)
-
-      if (!Filesystem.contains(Instance.directory, filePath)) {
-        const parentDir = path.dirname(filePath)
-        await ctx.ask({
-          permission: "external_directory",
-          patterns: [parentDir, path.join(parentDir, "*")],
-          always: [parentDir + "/*"],
-          metadata: {
-            filepath: filePath,
-            parentDir,
-          },
-        })
-      }
+      await assertExternalDirectory(ctx, filePath)
 
       switch (hunk.type) {
         case "add":
@@ -103,12 +91,15 @@ export const PatchTool = Tool.define("patch", {
 
           const diff = createTwoFilesPatch(filePath, filePath, oldContent, newContent)
 
+          const movePath = hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined
+          await assertExternalDirectory(ctx, movePath)
+
           fileChanges.push({
             filePath,
             oldContent,
             newContent,
             type: hunk.move_path ? "move" : "update",
-            movePath: hunk.move_path ? path.resolve(Instance.directory, hunk.move_path) : undefined,
+            movePath,
           })
 
           totalDiff += diff + "\n"
