@@ -105,6 +105,32 @@
           transform: scale(0.98);
         }
       }
+      [data-slot="back-soon"] {
+        color: rgba(255, 255, 255, 0.59);
+        text-align: center;
+        font-size: 13px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: 160%; /* 20.8px */
+      }
+      [data-slot="follow-us"] {
+        display: inline-flex;
+        height: 40px;
+        padding: 0 12px;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.17);
+        color: rgba(255, 255, 255, 0.59);
+        font-family: "JetBrains Mono Nerd Font";
+        font-size: 14px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: normal;
+        text-decoration: none;
+      }
+
       [data-slot="fine-print"] {
         color: rgba(255, 255, 255, 0.39);
         text-align: center;

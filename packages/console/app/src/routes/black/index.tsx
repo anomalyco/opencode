@@ -2,7 +2,7 @@ import { A, createAsync } from "@solidjs/router"
 import "./index.css"
 import { Title } from "@solidjs/meta"
 import { github } from "~/lib/github"
-import { createMemo } from "solid-js"
+import { createMemo, Match, Switch } from "solid-js"
 import { config } from "~/config"
 
 export default function Black() {
@@ -15,6 +15,10 @@ export default function Black() {
         }).format(githubData()!.stars!)
       : config.github.starsFormatted.compact,
   )
+
+  // TODO: Frank, toggle this based on availability
+  const available = false
+
   return (
     <div data-page="black">
       <Title>opencode</Title>
@@ -143,10 +147,20 @@ export default function Black() {
             </p>
             <p data-slot="subheading">Including Claude, GPT, Gemini, and more</p>
           </div>
-          <a href="/black/subscribe" data-slot="button">
-            Subscribe $200/mo
-          </a>
-          <p data-slot="fine-print">Fair usage limits apply</p>
+          <Switch>
+            <Match when={available}>
+              <a href="/black/subscribe" data-slot="button">
+                Subscribe $200/mo
+              </a>
+              <p data-slot="fine-print">Fair usage limits apply</p>
+            </Match>
+            <Match when={!available}>
+              <p data-slot="back-soon">We’ll be back soon with more availability.</p>
+              <a data-slot="follow-us" href="https://x.com/opencode" target="_blank">
+                Follow @opencode
+              </a>
+            </Match>
+          </Switch>
         </section>
       </main>
       <footer data-component="footer">
