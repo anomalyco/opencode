@@ -517,6 +517,8 @@ export namespace Provider {
       source: z.enum(["env", "config", "custom", "api"]),
       env: z.string().array(),
       key: z.string().optional(),
+      npm: z.string().optional(),
+      api: z.string().optional(),
       options: z.record(z.string(), z.any()),
       models: z.record(z.string(), Model),
     })
@@ -597,6 +599,8 @@ export namespace Provider {
       source: "custom",
       name: provider.name,
       env: provider.env ?? [],
+      npm: provider.npm,
+      api: provider.api,
       options: {},
       models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
     }
@@ -662,6 +666,8 @@ export namespace Provider {
         id: providerID,
         name: provider.name ?? existing?.name ?? providerID,
         env: provider.env ?? existing?.env ?? [],
+        npm: provider.npm ?? existing?.npm,
+        api: provider.api ?? existing?.api,
         options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
         source: "config",
         models: existing?.models ?? {},
@@ -870,8 +876,13 @@ export namespace Provider {
       }
 
       if (Object.keys(provider.models).length === 0) {
-        delete providers[providerID]
-        continue
+        const npm = provider.npm
+        const base = provider.options["baseURL"] ?? provider.api
+        const keep = npm === "@ai-sdk/openai-compatible" && Boolean(base)
+        if (!keep) {
+          delete providers[providerID]
+          continue
+        }
       }
 
       log.info("found", { providerID })
@@ -885,8 +896,118 @@ export namespace Provider {
     }
   })
 
+  function normalizeModelsURL(base: string): string {
+    const url = new URL(base)
+    const path = url.pathname.replace(/\/+$/, "")
+    if (path.endsWith("/v1")) {
+      url.pathname = path + "/models"
+      return url.toString()
+    }
+    url.pathname = path + "/v1/models"
+    return url.toString()
+  }
+
+  function discoveredModel(provider: Info, modelID: string, baseURL: string): Model {
+    const model: Model = {
+      id: modelID,
+      providerID: provider.id,
+      api: {
+        id: modelID,
+        npm: provider.npm ?? "@ai-sdk/openai-compatible",
+        url: baseURL,
+      },
+      name: modelID,
+      family: "",
+      capabilities: {
+        temperature: false,
+        reasoning: false,
+        attachment: false,
+        toolcall: true,
+        input: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        output: {
+          text: true,
+          audio: false,
+          image: false,
+          video: false,
+          pdf: false,
+        },
+        interleaved: false,
+      },
+      cost: {
+        input: 0,
+        output: 0,
+        cache: {
+          read: 0,
+          write: 0,
+        },
+      },
+      limit: {
+        context: 128000,
+        output: 8192,
+      },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "",
+      variants: {},
+    }
+
+    model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+
+    return model
+  }
+
+  async function discoverOpenAICompatibleModels(provider: Info): Promise<Info> {
+    const base = provider.options["baseURL"] ?? provider.api
+    if (!base) return provider
+    if (provider.npm !== "@ai-sdk/openai-compatible") return provider
+
+    try {
+      const url = normalizeModelsURL(String(base))
+      const result = await fetch(url)
+      if (!result.ok) return provider
+
+      const json = (await result.json()) as { data?: { id?: string }[] }
+      const ids = (json.data ?? []).map((item) => item.id).filter(Boolean) as string[]
+
+      const next: Info = {
+        ...provider,
+        models: { ...provider.models },
+      }
+
+      for (const id of ids) {
+        if (next.models[id]) continue
+        next.models[id] = discoveredModel(provider, id, String(base))
+      }
+
+      return next
+    } catch (e) {
+      log.debug("openai-compatible discovery failed", {
+        providerID: provider.id,
+        error: e instanceof Error ? e.message : String(e),
+      })
+      return provider
+    }
+  }
+
   export async function list() {
-    return state().then((state) => state.providers)
+    const s = await state()
+    const providers = { ...s.providers }
+
+    await Promise.all(
+      Object.entries(providers).map(async ([providerID, provider]) => {
+        const next = await discoverOpenAICompatibleModels(provider)
+        providers[providerID] = next
+      }),
+    )
+
+    return providers
   }
 
   async function getSDK(model: Model) {
@@ -979,10 +1100,10 @@ export namespace Provider {
   }
 
   export async function getModel(providerID: string, modelID: string) {
-    const s = await state()
-    const provider = s.providers[providerID]
+    const providers = await list()
+    const provider = providers[providerID]
     if (!provider) {
-      const availableProviders = Object.keys(s.providers)
+      const availableProviders = Object.keys(providers)
       const matches = fuzzysort.go(providerID, availableProviders, { limit: 3, threshold: -10000 })
       const suggestions = matches.map((m) => m.target)
       throw new ModelNotFoundError({ providerID, modelID, suggestions })

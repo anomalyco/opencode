@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
-import path from "path"
+import http from "node:http"
+import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
@@ -200,6 +201,191 @@ test("custom model alias via config", async () => {
       expect(providers["anthropic"]).toBeDefined()
       expect(providers["anthropic"].models["my-alias"]).toBeDefined()
       expect(providers["anthropic"].models["my-alias"].name).toBe("My Custom Alias")
+    },
+  })
+})
+
+test("openai-compatible discovers models from /v1/models", async () => {
+  let requests: string[] = []
+  const server = http.createServer((req, res) => {
+    requests.push(req.url ?? "")
+    if (req.url === "/v1/models") {
+      res.writeHead(200, { "content-type": "application/json" })
+      res.end(JSON.stringify({ data: [{ id: "model-a" }, { id: "model-b" }] }))
+      return
+    }
+    res.writeHead(404)
+    res.end()
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()))
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("server address not found")
+  const baseURL = `http://127.0.0.1:${address.port}`
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "local-llm": {
+              name: "Local LLM",
+              npm: "@ai-sdk/openai-compatible",
+              api: baseURL,
+              env: [],
+              models: {},
+              options: {
+                apiKey: "not-needed",
+                baseURL: baseURL,
+              },
+            },
+          },
+        }),
+      )
+    },
+    dispose: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["local-llm"]).toBeDefined()
+      expect(providers["local-llm"].models["model-a"]).toBeDefined()
+      expect(providers["local-llm"].models["model-b"]).toBeDefined()
+      expect(providers["local-llm"].models["model-a"].limit.output).toBe(8192)
+    },
+  })
+
+  expect(requests).toContain("/v1/models")
+})
+
+test("openai-compatible normalizes baseURL with /v1", async () => {
+  let requests: string[] = []
+  const server = http.createServer((req, res) => {
+    requests.push(req.url ?? "")
+    if (req.url === "/v1/models") {
+      res.writeHead(200, { "content-type": "application/json" })
+      res.end(JSON.stringify({ data: [{ id: "model-c" }] }))
+      return
+    }
+    res.writeHead(404)
+    res.end()
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()))
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("server address not found")
+  const baseURL = `http://127.0.0.1:${address.port}/v1`
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "local-llm": {
+              name: "Local LLM",
+              npm: "@ai-sdk/openai-compatible",
+              api: baseURL,
+              env: [],
+              models: {},
+              options: {
+                apiKey: "not-needed",
+                baseURL: baseURL,
+              },
+            },
+          },
+        }),
+      )
+    },
+    dispose: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["local-llm"].models["model-c"]).toBeDefined()
+    },
+  })
+
+  expect(requests).toContain("/v1/models")
+})
+
+test("openai-compatible discovery does not override config models", async () => {
+  // regression: discovered models must also resolve via Provider.getModel()
+  // (chat/message path uses getModel, not Provider.list())
+
+  const server = http.createServer((req, res) => {
+    if (req.url === "/v1/models") {
+      res.writeHead(200, { "content-type": "application/json" })
+      res.end(JSON.stringify({ data: [{ id: "model-a" }] }))
+      return
+    }
+    res.writeHead(404)
+    res.end()
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()))
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("server address not found")
+  const baseURL = `http://127.0.0.1:${address.port}`
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "local-llm": {
+              name: "Local LLM",
+              npm: "@ai-sdk/openai-compatible",
+              api: baseURL,
+              env: [],
+              models: {
+                "model-a": {
+                  name: "Configured A",
+                  tool_call: false,
+                  limit: {
+                    context: 32000,
+                    output: 2048,
+                  },
+                },
+              },
+              options: {
+                apiKey: "not-needed",
+                baseURL: baseURL,
+              },
+            },
+          },
+        }),
+      )
+    },
+    dispose: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["local-llm"].models["model-a"]
+      expect(model.name).toBe("Configured A")
+      expect(model.capabilities.toolcall).toBe(false)
+      expect(model.limit.output).toBe(2048)
+
+      const resolved = await Provider.getModel("local-llm", "model-a")
+      expect(resolved.id).toBe("model-a")
     },
   })
 })
