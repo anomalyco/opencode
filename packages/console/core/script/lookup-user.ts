@@ -38,10 +38,21 @@ if (identifier.startsWith("wrk_")) {
         workspaceID: UserTable.workspaceID,
         workspaceName: WorkspaceTable.name,
         role: UserTable.role,
+        subscribed: SubscriptionTable.timeCreated,
       })
       .from(UserTable)
       .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
-      .where(eq(UserTable.accountID, accountID)),
+      .innerJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
+      .where(eq(UserTable.accountID, accountID))
+      .then((rows) =>
+        rows.map((row) => ({
+          userID: row.userID,
+          workspaceID: row.workspaceID,
+          workspaceName: row.workspaceName,
+          role: row.role,
+          subscribed: formatDate(row.subscribed),
+        })),
+      ),
   )
 
   // Get all payments for these workspaces
