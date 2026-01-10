@@ -25,11 +25,9 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
-
-    // For existing files, also check resolved path to catch symlinks pointing outside
-    if (exists && !Filesystem.containsResolved(Instance.directory, filepath)) {
+    // Check if path is a symlink pointing outside (even if target doesn't exist)
+    // This must happen BEFORE the exists check to catch broken symlinks
+    if (!Filesystem.containsResolved(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
       await ctx.ask({
         permission: "external_directory",
@@ -41,6 +39,9 @@ export const WriteTool = Tool.define("write", {
         },
       })
     }
+
+    const file = Bun.file(filepath)
+    const exists = await file.exists()
     const contentOld = exists ? await file.text() : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 

@@ -8,6 +8,7 @@ import { FileWatcher } from "../file/watcher"
 import { Instance } from "../project/instance"
 import { Patch } from "../patch"
 import { createTwoFilesPatch } from "diff"
+import { Filesystem } from "../util/filesystem"
 import { assertExternalDirectory } from "./external-directory"
 
 const PatchParams = z.object({
@@ -50,6 +51,20 @@ export const PatchTool = Tool.define("patch", {
     for (const hunk of hunks) {
       const filePath = path.resolve(Instance.directory, hunk.path)
       await assertExternalDirectory(ctx, filePath)
+
+      // Check if path is a symlink pointing outside (even if target doesn't exist)
+      if (!Filesystem.containsResolved(Instance.directory, filePath)) {
+        const parentDir = path.dirname(filePath)
+        await ctx.ask({
+          permission: "external_directory",
+          patterns: [parentDir, path.join(parentDir, "*")],
+          always: [parentDir + "/*"],
+          metadata: {
+            filepath: filePath,
+            parentDir,
+          },
+        })
+      }
 
       switch (hunk.type) {
         case "add":

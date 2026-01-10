@@ -43,6 +43,20 @@ export const EditTool = Tool.define("edit", {
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filePath)
 
+    // Check if path is a symlink pointing outside (even if target doesn't exist)
+    if (!Filesystem.containsResolved(Instance.directory, filePath)) {
+      const parentDir = path.dirname(filePath)
+      await ctx.ask({
+        permission: "external_directory",
+        patterns: [parentDir, path.join(parentDir, "*")],
+        always: [parentDir + "/*"],
+        metadata: {
+          filepath: filePath,
+          parentDir,
+        },
+      })
+    }
+
     let diff = ""
     let contentOld = ""
     let contentNew = ""

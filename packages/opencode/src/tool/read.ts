@@ -32,18 +32,9 @@ export const ReadTool = Tool.define("read", {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
     })
 
-    await ctx.ask({
-      permission: "read",
-      patterns: [filepath],
-      always: ["*"],
-      metadata: {},
-    })
-
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
-
-    // For existing files, also check resolved path to catch symlinks pointing outside
-    if (exists && !ctx.extra?.["bypassCwdCheck"] && !Filesystem.containsResolved(Instance.directory, filepath)) {
+    // Check if path is a symlink pointing outside (even if target doesn't exist)
+    // This must happen BEFORE the exists check to catch broken symlinks
+    if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.containsResolved(Instance.directory, filepath)) {
       const parentDir = path.dirname(filepath)
       await ctx.ask({
         permission: "external_directory",
@@ -55,6 +46,16 @@ export const ReadTool = Tool.define("read", {
         },
       })
     }
+
+    await ctx.ask({
+      permission: "read",
+      patterns: [filepath],
+      always: ["*"],
+      metadata: {},
+    })
+
+    const file = Bun.file(filepath)
+    const exists = await file.exists()
 
     if (!exists) {
       const dir = path.dirname(filepath)
