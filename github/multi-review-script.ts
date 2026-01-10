@@ -1,4 +1,4 @@
-import { execSync, existsSync, readFileSync } from "fs"
+import { execSync, existsSync, readFileSync } from "node:fs"
 
 type ReviewResult = {
   provider: string

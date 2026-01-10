@@ -54,6 +54,8 @@ jobs:
 
       - name: Get PR details
         id: pr-details
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} > pr_data.json
           echo "title=$(jq -r .title pr_data.json)" >> $GITHUB_OUTPUT
@@ -61,13 +63,13 @@ jobs:
 
       - name: Get PR body
         id: pr-body
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           PR_BODY=$(gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} --jq .body | tr '\n' ' ' | sed 's/"/\\"/g')
           echo "body<<EOF" >> $GITHUB_OUTPUT
           echo "$PR_BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check for AGENTS.md
         id: agents-md
@@ -80,7 +82,7 @@ jobs:
 
       - name: Run Multi-Provider Review
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
           REVIEW_PROVIDERS: ${{ vars.REVIEW_PROVIDERS || 'opencode/big-pickle,opencode/grok-code,opencode/minimax-m2.1-free,opencode/glm-4.7-free' }}
           PR_TITLE: ${{ steps.pr-details.outputs.title }}
           PR_NUMBER: ${{ steps.pr-number.outputs.number }}
