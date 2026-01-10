@@ -10463,6 +10463,9 @@
           "expires": {
             "type": "number"
           },
+          "accountId": {
+            "type": "string"
+          },
           "enterpriseUrl": {
             "type": "string"
           }
