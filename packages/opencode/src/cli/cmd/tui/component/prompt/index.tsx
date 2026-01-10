@@ -466,6 +466,7 @@ export function Prompt(props: PromptProps) {
       input.blur()
     },
     set(prompt) {
+      if (!input) return;
       input.setText(prompt.input)
       setStore("prompt", prompt)
       restoreExtmarksFromParts(prompt.parts)
