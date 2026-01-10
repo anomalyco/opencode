@@ -387,7 +387,8 @@
 [data-component="edit-content"],
 [data-component="write-content"],
 [data-component="todos"],
-[data-component="diagnostics"] {
+[data-component="diagnostics"],
+.error-card {
   -webkit-user-select: text;
   user-select: text;
 }
