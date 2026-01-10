@@ -3,7 +3,7 @@ import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitPr
 import { useSDK } from "@/context/sdk"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
-import { resolveThemeVariant, useTheme } from "@opencode-ai/ui/theme"
+import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -16,6 +16,7 @@ type TerminalColors = {
   background: string
   foreground: string
   cursor: string
+  selectionBackground: string
 }
 
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
@@ -23,11 +24,13 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
     background: "#fcfcfc",
     foreground: "#211e1e",
     cursor: "#211e1e",
+    selectionBackground: withAlpha("#211e1e", 0.2),
   },
   dark: {
     background: "#191515",
     foreground: "#d4d4d4",
     cursor: "#d4d4d4",
+    selectionBackground: withAlpha("#d4d4d4", 0.25),
   },
 }
 
@@ -42,6 +45,8 @@ export const Terminal = (props: TerminalProps) => {
   let serializeAddon: SerializeAddon
   let fitAddon: FitAddon
   let handleResize: () => void
+  let handleTextareaFocus: () => void
+  let handleTextareaBlur: () => void
   let reconnect: number | undefined
   let disposed = false
 
@@ -55,10 +60,14 @@ export const Terminal = (props: TerminalProps) => {
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
     const background = resolved["background-stronger"] ?? fallback.background
+    const alpha = mode === "dark" ? 0.25 : 0.2
+    const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
+    const selectionBackground = withAlpha(base, alpha)
     return {
       background,
       foreground: text,
       cursor: text,
+      selectionBackground,
     }
   }
 
@@ -98,6 +107,7 @@ export const Terminal = (props: TerminalProps) => {
 
     const t = new mod.Terminal({
       cursorBlink: true,
+      cursorStyle: "bar",
       fontSize: 14,
       fontFamily: "IBM Plex Mono, monospace",
       allowTransparency: true,
@@ -163,6 +173,17 @@ export const Terminal = (props: TerminalProps) => {
 
     t.open(container)
     container.addEventListener("pointerdown", handlePointerDown)
+
+    handleTextareaFocus = () => {
+      t.options.cursorBlink = true
+    }
+    handleTextareaBlur = () => {
+      t.options.cursorBlink = false
+    }
+
+    t.textarea?.addEventListener("focus", handleTextareaFocus)
+    t.textarea?.addEventListener("blur", handleTextareaBlur)
+
     focusTerminal()
 
     if (local.pty.buffer) {
@@ -235,6 +256,8 @@ export const Terminal = (props: TerminalProps) => {
       window.removeEventListener("resize", handleResize)
     }
     container.removeEventListener("pointerdown", handlePointerDown)
+    term?.textarea?.removeEventListener("focus", handleTextareaFocus)
+    term?.textarea?.removeEventListener("blur", handleTextareaBlur)
 
     const t = term
     if (serializeAddon && props.onCleanup && t) {

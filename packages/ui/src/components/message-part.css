@@ -77,7 +77,8 @@
 
   [data-slot="user-message-text"] {
     white-space: pre-wrap;
-    overflow-x: auto;
+    word-break: break-word;
+    overflow: hidden;
     background: var(--surface-base);
     padding: 8px 12px;
     border-radius: 4px;
@@ -253,6 +254,7 @@
 
   scrollbar-width: none;
   -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
@@ -270,6 +272,7 @@
   /* Hide scrollbar */
   scrollbar-width: none;
   -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
@@ -457,6 +460,7 @@
   from {
     --border-angle: 0deg;
   }
+
   to {
     --border-angle: 360deg;
   }
