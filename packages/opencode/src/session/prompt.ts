@@ -1465,6 +1465,80 @@ export namespace SessionPrompt {
   export async function command(input: CommandInput) {
     log.info("command", input)
     const command = await Command.get(input.command)
+
+    // Handle plugin commands with direct execution (experimental.pluginCommands)
+    if (command.directExecution && command.pluginCommand && command.execute) {
+      log.info("executing plugin command directly", { command: input.command })
+      const startTime = Date.now()
+      try {
+        // Parse arguments for the plugin tool
+        const raw = input.arguments.match(argsRegex) ?? []
+        const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
+
+        // Execute the plugin tool directly without AI
+        const result = await command.execute({ args: args.join(" ") }, {})
+
+        // Create message and part IDs
+        const messageID = Identifier.ascending("message")
+        const partID = Identifier.ascending("part")
+
+        // Create a minimal assistant message for the result
+        const message: MessageV2.Assistant = {
+          id: messageID,
+          sessionID: input.sessionID,
+          role: "assistant",
+          time: {
+            created: startTime,
+            completed: Date.now(),
+          },
+          parentID: "",
+          modelID: "plugin",
+          providerID: "plugin",
+          mode: "plugin",
+          agent: "plugin",
+          path: {
+            cwd: process.cwd(),
+            root: process.cwd(),
+          },
+          cost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            reasoning: 0,
+            cache: { read: 0, write: 0 },
+          },
+        }
+
+        // Create a text part with the result
+        const part: MessageV2.TextPart = {
+          id: partID,
+          sessionID: input.sessionID,
+          messageID: messageID,
+          type: "text",
+          text: result,
+          time: {
+            start: startTime,
+            end: Date.now(),
+          },
+        }
+
+        // Persist and publish the message and part
+        await Session.updateMessage(message)
+        await Session.updatePart(part)
+
+        log.info("plugin command executed successfully", { command: input.command })
+        return { info: message, parts: [part] }
+      } catch (error) {
+        log.error("plugin command execution failed", { command: input.command, error })
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: `Plugin command failed: ${errorMessage}` }).toObject(),
+        })
+        return
+      }
+    }
+
     const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
 
     const raw = input.arguments.match(argsRegex) ?? []

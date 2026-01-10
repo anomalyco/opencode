@@ -1046,6 +1046,10 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          pluginCommands: z
+            .boolean()
+            .optional()
+            .describe("Enable plugin tools as slash commands with direct execution"),
         })
         .optional(),
     })

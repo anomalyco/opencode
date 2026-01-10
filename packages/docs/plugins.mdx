@@ -1,0 +1,139 @@
+---
+title: Plugins
+description: Extend OpenCode with custom plugins
+---
+
+# Plugins
+
+OpenCode supports plugins that can extend its functionality with custom tools, event handlers, and commands.
+
+## Creating a Plugin
+
+A plugin is a JavaScript/TypeScript module that exports a function returning a `Hooks` object:
+
+```typescript
+import { tool } from "@opencode-ai/plugin"
+
+export const MyPlugin = async () => ({
+  tool: {
+    "my-tool": tool({
+      description: "Description of what this tool does",
+      args: {
+        // Zod schema for arguments
+      },
+      async execute(args, context) {
+        // Tool implementation
+        return "Result string"
+      },
+    }),
+  },
+})
+```
+
+## Installing Plugins
+
+Add plugins to your `opencode.json` or `opencode.jsonc` configuration:
+
+```json
+{
+  "plugin": ["my-plugin-package", "file:./local-plugin"]
+}
+```
+
+## Plugin Commands (Experimental)
+
+<Warning>This feature is experimental and must be enabled with `experimental.pluginCommands: true`</Warning>
+
+Plugin tools can optionally be exposed as slash commands that users can invoke directly from the command input.
+
+### Enabling Plugin Commands
+
+Add to your `opencode.json`:
+
+```json
+{
+  "experimental": {
+    "pluginCommands": true
+  }
+}
+```
+
+### Creating a Plugin Command
+
+Add the `command` and `directExecution` properties to your tool definition:
+
+```typescript
+import { tool } from "@opencode-ai/plugin"
+
+export const MyPlugin = async () => ({
+  tool: {
+    "my-command": {
+      ...tool({
+        description: "A command that users can invoke directly",
+        args: {},
+        async execute(args, context) {
+          return "Command result displayed to user"
+        },
+      }),
+      // Expose as slash command in autocomplete
+      command: true,
+      // Execute directly without AI processing
+      directExecution: true,
+    },
+  },
+})
+```
+
+### Command Properties
+
+| Property          | Type      | Default | Description                                                                                                               |
+| ----------------- | --------- | ------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `command`         | `boolean` | `false` | When `true`, the tool appears in the `/` command autocomplete with a `plugin:` prefix                                     |
+| `directExecution` | `boolean` | `false` | When `true`, the command executes directly without AI processing. When `false`, the command is sent to the AI as a prompt |
+
+### Using Plugin Commands
+
+Once enabled, plugin commands appear in the autocomplete when you type `/`. They are prefixed with `plugin:` to distinguish them from built-in commands:
+
+```
+/plugin:my-command
+```
+
+### Execution Modes
+
+**Direct Execution** (`directExecution: true`):
+
+- Command runs immediately without AI involvement
+- Result is displayed directly to the user
+- Faster execution, no token usage
+- Best for: status checks, statistics, simple queries
+
+**AI-Assisted** (`directExecution: false`):
+
+- Command template is sent to the AI
+- AI processes and responds
+- Can leverage AI capabilities
+- Best for: complex tasks requiring AI reasoning
+
+## Event Handlers
+
+Plugins can also subscribe to OpenCode events:
+
+```typescript
+export const MyPlugin = async () => ({
+  event: {
+    "command.executed": async (event) => {
+      // Handle command execution events
+      console.log(`Command ${event.command} was executed`)
+    },
+  },
+})
+```
+
+## Best Practices
+
+1. **Use descriptive names**: Tool and command names should clearly indicate their purpose
+2. **Provide helpful descriptions**: Descriptions help users understand what the tool does
+3. **Handle errors gracefully**: Return meaningful error messages
+4. **Keep direct execution fast**: Direct execution commands should complete quickly
+5. **Use AI-assisted mode for complex tasks**: Let the AI handle tasks requiring reasoning

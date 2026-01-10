@@ -6,6 +6,7 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { Plugin } from "../plugin"
 
 export namespace Command {
   export const Event = {
@@ -32,13 +33,21 @@ export namespace Command {
       template: z.promise(z.string()).or(z.string()),
       subtask: z.boolean().optional(),
       hints: z.array(z.string()),
+      // Plugin command properties (experimental.pluginCommands)
+      pluginCommand: z.boolean().optional(),
+      directExecution: z.boolean().optional(),
+      execute: z.function().optional(),
     })
     .meta({
       ref: "Command",
     })
 
   // for some reason zod is inferring `string` for z.promise(z.string()).or(z.string()) so we have to manually override it
-  export type Info = Omit<z.infer<typeof Info>, "template"> & { template: Promise<string> | string }
+  export type Info = Omit<z.infer<typeof Info>, "template" | "execute"> & {
+    template: Promise<string> | string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    execute?: (...args: any[]) => Promise<string>
+  }
 
   export function hints(template: string): string[] {
     const result: string[] = []
@@ -115,6 +124,30 @@ export namespace Command {
           })
         },
         hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+      }
+    }
+
+    // Add plugin tools as commands (experimental.pluginCommands)
+    if (cfg.experimental?.pluginCommands) {
+      const plugins = await Plugin.list()
+      for (const plugin of plugins) {
+        for (const [toolName, def] of Object.entries(plugin.tool ?? {})) {
+          if (def.command) {
+            const commandName = `plugin:${toolName}`
+            result[commandName] = {
+              name: commandName,
+              description: def.description,
+              pluginCommand: true,
+              directExecution: def.directExecution ?? false,
+              execute: def.execute,
+              get template() {
+                // For non-direct execution, create a template that invokes the tool
+                return `Use the ${toolName} tool to help the user.`
+              },
+              hints: [],
+            }
+          }
+        }
       }
     }
 
