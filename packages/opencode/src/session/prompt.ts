@@ -100,6 +100,14 @@ export namespace SessionPrompt {
       ),
     system: z.string().optional(),
     variant: z.string().optional(),
+    collaboration: z
+      .object({
+        participantID: z.string().optional(),
+        participantName: z.string().optional(),
+        participants: z.array(z.string()).optional(),
+        isCombined: z.boolean().optional(),
+      })
+      .optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -815,6 +823,7 @@ export namespace SessionPrompt {
       model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
       system: input.system,
       variant: input.variant,
+      collaboration: input.collaboration,
     }
 
     const parts = await Promise.all(

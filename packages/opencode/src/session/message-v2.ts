@@ -315,6 +315,14 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    collaboration: z
+      .object({
+        participantID: z.string().optional(),
+        participantName: z.string().optional(),
+        participants: z.array(z.string()).optional(),
+        isCombined: z.boolean().optional(),
+      })
+      .optional(),
   }).meta({
     ref: "UserMessage",
   })

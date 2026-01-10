@@ -49,6 +49,7 @@ import { errors } from "./error"
 import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
 import { QuestionRoute } from "./question"
+import { CollaborationRoute, CollaborationJoinRoute } from "./collaboration"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 import { Worktree } from "../worktree"
@@ -278,6 +279,8 @@ export namespace Server {
         .use(validator("query", z.object({ directory: z.string().optional() })))
 
         .route("/project", ProjectRoute)
+        .route("/session", CollaborationRoute)
+        .route("/collaboration", CollaborationJoinRoute)
 
         .get(
           "/pty",
