@@ -44,6 +44,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
+import { ClaudeAgentProvider, ClaudeAgentSession } from "@/provider/claude-agent"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -291,7 +292,12 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
+
+      // Check for pending compaction/subtask tasks before exiting
+      // These need to be processed even after SDK agent finishes
+      if (tasks.length > 0) {
+        log.info("has pending tasks, skipping exit check", { sessionID, taskCount: tasks.length })
+      } else if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
@@ -313,8 +319,8 @@ export namespace SessionPrompt {
       const task = tasks.pop()
 
       // pending subtask
-      // TODO: centralize "invoke tool" logic
-      if (task?.type === "subtask") {
+      // Skip subtask processing when using SDK agent - SDK handles it via Task v2 tool
+      if (task?.type === "subtask" && !ClaudeAgentProvider.isClaudeAgentProvider(lastUser.model.providerID)) {
         const taskTool = await TaskTool.init()
         const assistantMessage = (await Session.updateMessage({
           id: Identifier.ascending("message"),
@@ -479,7 +485,8 @@ export namespace SessionPrompt {
       }
 
       // pending compaction
-      if (task?.type === "compaction") {
+      // Skip compaction processing when using SDK agent - SDK handles it internally
+      if (task?.type === "compaction" && !ClaudeAgentProvider.isClaudeAgentProvider(lastUser.model.providerID)) {
         const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
@@ -503,6 +510,28 @@ export namespace SessionPrompt {
           model: lastUser.model,
           auto: true,
         })
+        continue
+      }
+
+      // Claude Agent SDK provider handling
+      // When using claude-agent provider, delegate to the SDK's agent runtime
+      if (ClaudeAgentProvider.isClaudeAgentProvider(lastUser.model.providerID)) {
+        const claudeAgentConfig = await ClaudeAgentSession.getConfig(session)
+        const result = await ClaudeAgentSession.process({
+          sessionID,
+          user: lastUser,
+          messages: msgs,
+          config: claudeAgentConfig,
+          abort,
+          session,
+        })
+
+        // Claude Agent SDK handles its own tool loop internally
+        // The SDK processes everything in one call, so we always break after
+        if (result.info.role === "assistant") {
+          // SDK completed - exit loop
+          break
+        }
         continue
       }
 

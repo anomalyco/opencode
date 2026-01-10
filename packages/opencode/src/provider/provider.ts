@@ -72,6 +72,25 @@ export namespace Provider {
   }>
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
+    /**
+     * Claude Agent SDK provider
+     * Uses @anthropic-ai/claude-agent-sdk for agent execution with built-in tools
+     */
+    async "claude-agent"() {
+      const hasKey = await (async () => {
+        const env = Env.all()
+        if (env.ANTHROPIC_API_KEY) return true
+        if (await Auth.get("anthropic")) return true
+        const config = await Config.get()
+        if (config.provider?.["claude-agent"]?.options?.apiKey) return true
+        return false
+      })()
+
+      return {
+        autoload: hasKey,
+        options: {},
+      }
+    },
     async anthropic() {
       return {
         autoload: false,
@@ -602,6 +621,48 @@ export namespace Provider {
     }
   }
 
+  /**
+   * Create a model definition for Claude Agent SDK provider
+   */
+  function createClaudeAgentModel(
+    id: string,
+    name: string,
+    apiId: string,
+    options: { context: number; output: number; costInput: number; costOutput: number },
+  ): Model {
+    return {
+      id,
+      providerID: "claude-agent",
+      name,
+      family: "claude",
+      api: {
+        id: apiId,
+        url: "https://api.anthropic.com/v1",
+        npm: "@anthropic-ai/claude-agent-sdk",
+      },
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: { field: "reasoning_content" },
+      },
+      cost: {
+        input: options.costInput,
+        output: options.costOutput,
+        cache: { read: options.costInput * 0.1, write: options.costInput * 1.25 },
+      },
+      limit: { context: options.context, output: options.output },
+      status: "active",
+      options: {},
+      headers: {},
+      release_date: "2025-01-01",
+      variants: {},
+    }
+  }
+
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
@@ -640,6 +701,36 @@ export namespace Provider {
           providerID: "github-copilot-enterprise",
         })),
       }
+    }
+
+    // Add Claude Agent SDK provider (uses @anthropic-ai/claude-agent-sdk)
+    // This provider bypasses normal processing and uses the SDK's built-in agent runtime
+    database["claude-agent"] = {
+      id: "claude-agent",
+      name: "Claude Agent SDK",
+      source: "custom",
+      env: ["ANTHROPIC_API_KEY"],
+      options: {},
+      models: {
+        "claude-sonnet-4": createClaudeAgentModel("claude-sonnet-4", "Claude Sonnet 4 (Agent SDK)", "claude-sonnet-4-20250514", {
+          context: 200000,
+          output: 16384,
+          costInput: 3,
+          costOutput: 15,
+        }),
+        "claude-opus-4": createClaudeAgentModel("claude-opus-4", "Claude Opus 4 (Agent SDK)", "claude-opus-4-20250514", {
+          context: 200000,
+          output: 32768,
+          costInput: 15,
+          costOutput: 75,
+        }),
+        "claude-haiku-3.5": createClaudeAgentModel("claude-haiku-3.5", "Claude Haiku 3.5 (Agent SDK)", "claude-3-5-haiku-20241022", {
+          context: 200000,
+          output: 8192,
+          costInput: 0.8,
+          costOutput: 4,
+        }),
+      },
     }
 
     function mergeProvider(providerID: string, provider: Partial<Info>) {

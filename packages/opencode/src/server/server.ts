@@ -10,6 +10,7 @@ import { proxy } from "hono/proxy"
 import { Session } from "../session"
 import z from "zod"
 import { Provider } from "../provider/provider"
+import { ClaudeAgentProvider } from "../provider/claude-agent"
 import { filter, mapValues, sortBy, pipe } from "remeda"
 import { NamedError } from "@opencode-ai/util/error"
 import { ModelsDev } from "../provider/models"
@@ -939,6 +940,7 @@ export namespace Server {
                   archived: z.number().optional(),
                 })
                 .optional(),
+              metadata: z.record(z.string(), z.any()).optional(),
             }),
           ),
           async (c) => {
@@ -950,6 +952,9 @@ export namespace Server {
                 session.title = updates.title
               }
               if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
+              if (updates.metadata !== undefined) {
+                session.metadata = { ...session.metadata, ...updates.metadata }
+              }
             })
 
             return c.json(updatedSession)

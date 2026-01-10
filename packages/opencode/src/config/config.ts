@@ -835,6 +835,33 @@ export namespace Config {
         })
         .catchall(z.any())
         .optional(),
+      claudeAgent: z
+        .object({
+          model: z.string().optional().describe("Model to use (e.g., 'claude-sonnet-4')"),
+          permissionMode: z
+            .enum(["default", "acceptEdits", "bypassPermissions", "plan"])
+            .optional()
+            .describe("Permission mode for SDK tool execution"),
+          allowedTools: z
+            .array(z.string())
+            .optional()
+            .describe("List of SDK built-in tools to enable"),
+          systemPrompt: z.string().optional().describe("Additional system prompt to append"),
+          cwd: z.string().optional().describe("Working directory for the agent"),
+          mcpServers: z
+            .record(
+              z.string(),
+              z.object({
+                command: z.string(),
+                args: z.array(z.string()).optional(),
+                env: z.record(z.string(), z.string()).optional(),
+              }),
+            )
+            .optional()
+            .describe("MCP servers to pass to Claude Agent SDK"),
+        })
+        .optional()
+        .describe("Claude Agent SDK specific configuration (only used when provider is 'claude-agent')"),
     })
     .strict()
     .meta({
