@@ -47,6 +47,8 @@ jobs:
           gh api /repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }} > pr_data.json
           echo "title=$(jq -r .title pr_data.json)" >> $GITHUB_OUTPUT
           echo "sha=$(jq -r .head.sha pr_data.json)" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check for AGENTS.md
         id: agents-md
