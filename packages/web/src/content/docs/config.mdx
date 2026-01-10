@@ -160,7 +160,8 @@ You can configure TUI-specific settings through the `tui` option.
     "scroll_acceleration": {
       "enabled": true
     },
-    "diff_style": "auto"
+    "diff_style": "auto",
+    "auto_scroll": true
   }
 }
 ```
@@ -170,6 +171,7 @@ Available options:
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
 - `scroll_speed` - Custom scroll speed multiplier (default: `1`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
 - `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
+- `auto_scroll` - Automatically scroll to bottom when new messages arrive (default: `true`).
 
 [Learn more about using the TUI here](/docs/tui).
 
