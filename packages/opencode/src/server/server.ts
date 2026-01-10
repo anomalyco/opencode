@@ -49,6 +49,7 @@ import { errors } from "./error"
 import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
 import { QuestionRoute } from "./question"
+import { ModeSwitchRoute } from "./modeswitch"
 import { Installation } from "@/installation"
 import { MDNS } from "./mdns"
 import { Worktree } from "../worktree"
@@ -1695,6 +1696,7 @@ export namespace Server {
           },
         )
         .route("/question", QuestionRoute)
+        .route("/modeswitch", ModeSwitchRoute)
         .get(
           "/command",
           describeRoute({

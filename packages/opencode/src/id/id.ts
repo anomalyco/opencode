@@ -7,6 +7,7 @@ export namespace Identifier {
     message: "msg",
     permission: "per",
     question: "que",
+    modeswitch: "msw",
     user: "usr",
     part: "prt",
     pty: "pty",

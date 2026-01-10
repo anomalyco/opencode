@@ -71,6 +71,7 @@ import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
+import { ModeSwitchPrompt } from "./modeswitch"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
 
@@ -125,6 +126,10 @@ export function Session() {
   const questions = createMemo(() => {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
+  })
+  const modeswitches = createMemo(() => {
+    if (session()?.parentID) return []
+    return children().flatMap((x) => sync.data.modeswitch[x.id] ?? [])
   })
 
   const pending = createMemo(() => {
@@ -1011,8 +1016,16 @@ export function Session() {
               <Show when={permissions().length === 0 && questions().length > 0}>
                 <QuestionPrompt request={questions()[0]} />
               </Show>
+              <Show when={permissions().length === 0 && questions().length === 0 && modeswitches().length > 0}>
+                <ModeSwitchPrompt request={modeswitches()[0]} />
+              </Show>
               <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
+                visible={
+                  !session()?.parentID &&
+                  permissions().length === 0 &&
+                  questions().length === 0 &&
+                  modeswitches().length === 0
+                }
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
@@ -1021,7 +1034,7 @@ export function Session() {
                     r.set(route.initialPrompt)
                   }
                 }}
-                disabled={permissions().length > 0 || questions().length > 0}
+                disabled={permissions().length > 0 || questions().length > 0 || modeswitches().length > 0}
                 onSubmit={() => {
                   toBottom()
                 }}

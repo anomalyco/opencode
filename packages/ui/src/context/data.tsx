@@ -1,4 +1,12 @@
-import type { Message, Session, Part, FileDiff, SessionStatus, PermissionRequest } from "@opencode-ai/sdk/v2"
+import type {
+  Message,
+  Session,
+  Part,
+  FileDiff,
+  SessionStatus,
+  PermissionRequest,
+  ModeSwitchRequest,
+} from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
@@ -16,6 +24,9 @@ type Data = {
   permission?: {
     [sessionID: string]: PermissionRequest[]
   }
+  modeswitch?: {
+    [sessionID: string]: ModeSwitchRequest[]
+  }
   message: {
     [sessionID: string]: Message[]
   }
@@ -30,6 +41,13 @@ export type PermissionRespondFn = (input: {
   response: "once" | "always" | "reject"
 }) => void
 
+export type ModeSwitchRespondFn = (input: {
+  sessionID: string
+  requestID: string
+  response: "approve" | "reject"
+  targetMode?: string
+}) => void
+
 export type NavigateToSessionFn = (sessionID: string) => void
 
 export const { use: useData, provider: DataProvider } = createSimpleContext({
@@ -38,6 +56,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     data: Data
     directory: string
     onPermissionRespond?: PermissionRespondFn
+    onModeSwitchRespond?: ModeSwitchRespondFn
     onNavigateToSession?: NavigateToSessionFn
   }) => {
     return {
@@ -48,6 +67,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         return props.directory
       },
       respondToPermission: props.onPermissionRespond,
+      respondToModeSwitch: props.onModeSwitchRespond,
       navigateToSession: props.onNavigateToSession,
     }
   },

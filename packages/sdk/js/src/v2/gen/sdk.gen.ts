@@ -51,6 +51,9 @@ import type {
   McpLocalConfig,
   McpRemoteConfig,
   McpStatusResponses,
+  ModeswitchListResponses,
+  ModeswitchReplyErrors,
+  ModeswitchReplyResponses,
   Part as Part2,
   PartDeleteErrors,
   PartDeleteResponses,
@@ -1875,6 +1878,64 @@ export class Question extends HeyApiClient {
   }
 }
 
+export class Modeswitch extends HeyApiClient {
+  /**
+   * List pending mode switch requests
+   *
+   * Get all pending mode switch requests across all sessions.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ModeswitchListResponses, unknown, ThrowOnError>({
+      url: "/modeswitch",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Reply to mode switch request
+   *
+   * Approve or reject a mode switch request from the AI assistant.
+   */
+  public reply<ThrowOnError extends boolean = false>(
+    parameters: {
+      requestID: string
+      directory?: string
+      reply?: "approve" | "reject"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "requestID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "reply" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ModeswitchReplyResponses, ModeswitchReplyErrors, ThrowOnError>({
+      url: "/modeswitch/{requestID}/reply",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Command extends HeyApiClient {
   /**
    * List commands
@@ -3007,6 +3068,8 @@ export class OpencodeClient extends HeyApiClient {
   permission = new Permission({ client: this.client })
 
   question = new Question({ client: this.client })
+
+  modeswitch = new Modeswitch({ client: this.client })
 
   command = new Command({ client: this.client })
 

@@ -16,6 +16,7 @@ import {
   AssistantMessage,
   FilePart,
   Message as MessageType,
+  ModeSwitchRequest,
   Part as PartType,
   ReasoningPart,
   TextPart,
@@ -460,7 +461,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return next
   })
 
+  const modeswitch = createMemo(() => {
+    const next = data.store.modeswitch?.[props.message.sessionID]?.[0]
+    if (!next || !next.tool) return undefined
+    if (next.tool.callID !== part.callID) return undefined
+    return next
+  })
+
   const [showPermission, setShowPermission] = createSignal(false)
+  const [showModeSwitch, setShowModeSwitch] = createSignal(false)
 
   createEffect(() => {
     const perm = permission()
@@ -472,9 +481,19 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     }
   })
 
+  createEffect(() => {
+    const ms = modeswitch()
+    if (ms) {
+      const timeout = setTimeout(() => setShowModeSwitch(true), 50)
+      onCleanup(() => clearTimeout(timeout))
+    } else {
+      setShowModeSwitch(false)
+    }
+  })
+
   const [forceOpen, setForceOpen] = createSignal(false)
   createEffect(() => {
-    if (permission()) setForceOpen(true)
+    if (permission() || modeswitch()) setForceOpen(true)
   })
 
   const respond = (response: "once" | "always" | "reject") => {
@@ -484,6 +503,17 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
       sessionID: perm.sessionID,
       permissionID: perm.id,
       response,
+    })
+  }
+
+  const respondModeSwitch = (response: "approve" | "reject") => {
+    const ms = modeswitch()
+    if (!ms || !data.respondToModeSwitch) return
+    data.respondToModeSwitch({
+      sessionID: ms.sessionID,
+      requestID: ms.id,
+      response,
+      targetMode: ms.targetMode,
     })
   }
 
@@ -497,7 +527,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
   return (
-    <div data-component="tool-part-wrapper" data-permission={showPermission()}>
+    <div data-component="tool-part-wrapper" data-permission={showPermission() || showModeSwitch()}>
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
@@ -552,6 +582,20 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             </Button>
           </div>
         </div>
+      </Show>
+      <Show when={showModeSwitch() && modeswitch()}>
+        {(ms) => (
+          <div data-component="permission-prompt">
+            <div data-slot="permission-actions">
+              <Button variant="ghost" size="small" onClick={() => respondModeSwitch("reject")}>
+                Reject
+              </Button>
+              <Button variant="primary" size="small" onClick={() => respondModeSwitch("approve")}>
+                Switch to {ms().targetMode}
+              </Button>
+            </div>
+          </div>
+        )}
       </Show>
     </div>
   )
@@ -1021,6 +1065,28 @@ ToolRegistry.register({
                 </Checkbox>
               )}
             </For>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "modeswitch",
+  render(props) {
+    return (
+      <BasicTool
+        {...props}
+        icon="task"
+        trigger={{
+          title: "Mode Switch",
+          subtitle: props.metadata.targetMode ? `to ${props.metadata.targetMode}` : undefined,
+        }}
+      >
+        <Show when={props.input.reason}>
+          <div data-component="tool-output">
+            <Markdown text={props.input.reason} />
           </div>
         </Show>
       </BasicTool>

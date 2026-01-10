@@ -9,6 +9,7 @@ import type {
   Command,
   PermissionRequest,
   QuestionRequest,
+  ModeSwitchRequest,
   LspStatus,
   McpStatus,
   McpResource,
@@ -45,6 +46,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       question: {
         [sessionID: string]: QuestionRequest[]
+      }
+      modeswitch: {
+        [sessionID: string]: ModeSwitchRequest[]
       }
       config: Config
       session: Session[]
@@ -85,6 +89,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       permission: {},
       question: {},
+      modeswitch: {},
       command: [],
       provider: [],
       provider_default: {},
@@ -177,6 +182,43 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           setStore(
             "question",
+            request.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "modeswitch.replied": {
+          const requests = store.modeswitch[event.properties.sessionID]
+          if (!requests) break
+          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
+          if (!match.found) break
+          setStore(
+            "modeswitch",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
+          break
+        }
+
+        case "modeswitch.asked": {
+          const request = event.properties
+          const requests = store.modeswitch[request.sessionID]
+          if (!requests) {
+            setStore("modeswitch", request.sessionID, [request])
+            break
+          }
+          const match = Binary.search(requests, request.id, (r) => r.id)
+          if (match.found) {
+            setStore("modeswitch", request.sessionID, match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "modeswitch",
             request.sessionID,
             produce((draft) => {
               draft.splice(match.index, 0, request)

@@ -1,0 +1,3 @@
+Request to switch from planning mode to build mode.
+
+Call this tool when planning is complete. If you asked the user a question, wait for their response first.

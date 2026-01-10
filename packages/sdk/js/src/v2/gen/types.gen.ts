@@ -625,6 +625,37 @@ export type EventTodoUpdated = {
   }
 }
 
+export type ModeSwitchRequest = {
+  id: string
+  sessionID: string
+  /**
+   * The mode to switch to
+   */
+  targetMode: string
+  /**
+   * Why the LLM wants to switch modes
+   */
+  reason: string
+  tool?: {
+    messageID: string
+    callID: string
+  }
+}
+
+export type EventModeswitchAsked = {
+  type: "modeswitch.asked"
+  properties: ModeSwitchRequest
+}
+
+export type EventModeswitchReplied = {
+  type: "modeswitch.replied"
+  properties: {
+    sessionID: string
+    requestID: string
+    reply: "approve" | "reject"
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -861,6 +892,8 @@ export type Event =
   | EventSessionCompacted
   | EventFileEdited
   | EventTodoUpdated
+  | EventModeswitchAsked
+  | EventModeswitchReplied
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -3704,6 +3737,59 @@ export type QuestionRejectResponses = {
 }
 
 export type QuestionRejectResponse = QuestionRejectResponses[keyof QuestionRejectResponses]
+
+export type ModeswitchListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/modeswitch"
+}
+
+export type ModeswitchListResponses = {
+  /**
+   * List of pending mode switch requests
+   */
+  200: Array<ModeSwitchRequest>
+}
+
+export type ModeswitchListResponse = ModeswitchListResponses[keyof ModeswitchListResponses]
+
+export type ModeswitchReplyData = {
+  body?: {
+    reply: "approve" | "reject"
+  }
+  path: {
+    requestID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/modeswitch/{requestID}/reply"
+}
+
+export type ModeswitchReplyErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ModeswitchReplyError = ModeswitchReplyErrors[keyof ModeswitchReplyErrors]
+
+export type ModeswitchReplyResponses = {
+  /**
+   * Mode switch request handled successfully
+   */
+  200: boolean
+}
+
+export type ModeswitchReplyResponse = ModeswitchReplyResponses[keyof ModeswitchReplyResponses]
 
 export type CommandListData = {
   body?: never

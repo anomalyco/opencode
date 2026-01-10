@@ -2,7 +2,7 @@ import { createMemo, Show, type ParentProps } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
-import { LocalProvider } from "@/context/local"
+import { LocalProvider, useLocal } from "@/context/local"
 
 import { base64Decode } from "@opencode-ai/util/encode"
 import { DataProvider } from "@opencode-ai/ui/context"
@@ -18,30 +18,46 @@ export default function Layout(props: ParentProps) {
     <Show when={params.dir} keyed>
       <SDKProvider directory={directory()}>
         <SyncProvider>
-          {iife(() => {
-            const sync = useSync()
-            const sdk = useSDK()
-            const respond = (input: {
-              sessionID: string
-              permissionID: string
-              response: "once" | "always" | "reject"
-            }) => sdk.client.permission.respond(input)
+          <LocalProvider>
+            {iife(() => {
+              const sync = useSync()
+              const sdk = useSDK()
+              const local = useLocal()
+              const respond = (input: {
+                sessionID: string
+                permissionID: string
+                response: "once" | "always" | "reject"
+              }) => sdk.client.permission.respond(input)
 
-            const navigateToSession = (sessionID: string) => {
-              navigate(`/${params.dir}/session/${sessionID}`)
-            }
+              const respondToModeSwitch = (input: {
+                sessionID: string
+                requestID: string
+                response: "approve" | "reject"
+                targetMode?: string
+              }) => {
+                sdk.client.modeswitch.reply({ requestID: input.requestID, reply: input.response })
+                if (input.response === "approve" && input.targetMode) {
+                  local.agent.set(input.targetMode)
+                }
+              }
 
-            return (
-              <DataProvider
-                data={sync.data}
-                directory={directory()}
-                onPermissionRespond={respond}
-                onNavigateToSession={navigateToSession}
-              >
-                <LocalProvider>{props.children}</LocalProvider>
-              </DataProvider>
-            )
-          })}
+              const navigateToSession = (sessionID: string) => {
+                navigate(`/${params.dir}/session/${sessionID}`)
+              }
+
+              return (
+                <DataProvider
+                  data={sync.data}
+                  directory={directory()}
+                  onPermissionRespond={respond}
+                  onModeSwitchRespond={respondToModeSwitch}
+                  onNavigateToSession={navigateToSession}
+                >
+                  {props.children}
+                </DataProvider>
+              )
+            })}
+          </LocalProvider>
         </SyncProvider>
       </SDKProvider>
     </Show>

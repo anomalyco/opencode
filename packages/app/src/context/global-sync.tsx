@@ -16,6 +16,7 @@ import {
   type LspStatus,
   type VcsInfo,
   type PermissionRequest,
+  type ModeSwitchRequest,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -47,6 +48,9 @@ type State = {
   }
   permission: {
     [sessionID: string]: PermissionRequest[]
+  }
+  modeswitch: {
+    [sessionID: string]: ModeSwitchRequest[]
   }
   mcp: {
     [name: string]: McpStatus
@@ -96,6 +100,7 @@ function createGlobalSync() {
         session_diff: {},
         todo: {},
         permission: {},
+        modeswitch: {},
         mcp: {},
         lsp: [],
         vcs: undefined,
@@ -197,6 +202,38 @@ function createGlobalSync() {
                   reconcile(
                     permissions
                       .filter((p) => !!p?.id)
+                      .slice()
+                      .sort((a, b) => a.id.localeCompare(b.id)),
+                    { key: "id" },
+                  ),
+                )
+              }
+            })
+          }),
+          sdk.modeswitch.list().then((x) => {
+            const grouped: Record<string, ModeSwitchRequest[]> = {}
+            for (const req of x.data ?? []) {
+              if (!req?.id || !req.sessionID) continue
+              const existing = grouped[req.sessionID]
+              if (existing) {
+                existing.push(req)
+                continue
+              }
+              grouped[req.sessionID] = [req]
+            }
+
+            batch(() => {
+              for (const sessionID of Object.keys(store.modeswitch)) {
+                if (grouped[sessionID]) continue
+                setStore("modeswitch", sessionID, [])
+              }
+              for (const [sessionID, requests] of Object.entries(grouped)) {
+                setStore(
+                  "modeswitch",
+                  sessionID,
+                  reconcile(
+                    requests
+                      .filter((r) => !!r?.id)
                       .slice()
                       .sort((a, b) => a.id.localeCompare(b.id)),
                     { key: "id" },
@@ -386,6 +423,43 @@ function createGlobalSync() {
         if (!result.found) break
         setStore(
           "permission",
+          event.properties.sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 1)
+          }),
+        )
+        break
+      }
+      case "modeswitch.asked": {
+        const sessionID = event.properties.sessionID
+        const requests = store.modeswitch[sessionID]
+        if (!requests) {
+          setStore("modeswitch", sessionID, [event.properties])
+          break
+        }
+
+        const result = Binary.search(requests, event.properties.id, (r) => r.id)
+        if (result.found) {
+          setStore("modeswitch", sessionID, result.index, reconcile(event.properties))
+          break
+        }
+
+        setStore(
+          "modeswitch",
+          sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties)
+          }),
+        )
+        break
+      }
+      case "modeswitch.replied": {
+        const requests = store.modeswitch[event.properties.sessionID]
+        if (!requests) break
+        const result = Binary.search(requests, event.properties.requestID, (r) => r.id)
+        if (!result.found) break
+        setStore(
+          "modeswitch",
           event.properties.sessionID,
           produce((draft) => {
             draft.splice(result.index, 1)
