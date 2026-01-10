@@ -13,13 +13,8 @@ const REPO = process.env.GITHUB_REPOSITORY || ""
 const INCLUDE_AGENTS = process.env.INCLUDE_AGENTS === "true"
 
 async function buildPrompt(): Promise<string> {
-  let prBody = ""
-  try {
-    prBody = execSync("jq -r .body pr_data.json", { encoding: "utf8" }).trim()
-  } catch (e) {
-    console.log("Warning: Could not read PR data, using empty body")
-    prBody = ""
-  }
+  let prBody = PR_BODY || ""
+  console.log(`Using PR body: ${prBody.substring(0, 100)}...`)
 
   let agentsSection = ""
   try {
