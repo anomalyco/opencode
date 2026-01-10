@@ -183,8 +183,8 @@ async function postOrUpdateChecklist(status: string, completedTasks: string[] = 
       encoding: "utf8",
     })
   } else {
-    // Create new comment
-    const result = execSync(`gh api --method POST -H "Accept: application/vnd.github+json" /repos/${REPO}/issues/${PR_NUMBER}/comments -f "body=${escaped}"`, {
+    // Create new comment with specific author name
+    const result = execSync(`gh api --method POST -H "Accept: application/vnd.github+json" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" /repos/${REPO}/issues/${PR_NUMBER}/comments -f "body=${escaped}"`, {
       encoding: "utf8",
     })
     const comment = JSON.parse(result.toString())
@@ -244,32 +244,32 @@ async function calculateConfidenceScores(reviews: ReviewResult[]): Promise<Recor
 async function main() {
   console.log(`Running reviews with ${REVIEW_PROVIDERS.length} providers`)
 
-  // Post initial checklist
-  await postOrUpdateChecklist("(In Progress)")
+  // Post initial checklist immediately
+  await postOrUpdateChecklist("🤖 Starting multi-provider code review...")
 
   // Build prompt
   const prompt = await buildPrompt()
   console.log(`Prompt built (${prompt.length} chars), includes AGENTS.md: ${INCLUDE_AGENTS}`)
 
   // Update checklist - reading conventions
-  await postOrUpdateChecklist("(Reading repository conventions...)", ["Read repository conventions"])
+  await postOrUpdateChecklist("📖 Reading repository conventions...", ["Read repository conventions"])
 
   // Update checklist - reading files
-  await postOrUpdateChecklist("(Reading modified files...)", ["Read repository conventions", "Read modified files"])
+  await postOrUpdateChecklist("📁 Reading modified files...", ["Read repository conventions", "Read modified files"])
 
   // Run reviews in parallel
   const results = await Promise.all(REVIEW_PROVIDERS.map((provider) => runReview(provider, prompt)))
 
   // Update checklist - analysis complete
-  await postOrUpdateChecklist("(Analyzing security implications...)", ["Read repository conventions", "Read modified files", "Analyze security implications"])
+  await postOrUpdateChecklist("🔒 Analyzing security implications...", ["Read repository conventions", "Read modified files", "Analyze security implications"])
 
   // Update checklist - code review
-  await postOrUpdateChecklist("(Reviewing code quality...)", ["Read repository conventions", "Read modified files", "Analyze security implications", "Review code quality and conventions"])
+  await postOrUpdateChecklist("🔍 Reviewing code quality and conventions...", ["Read repository conventions", "Read modified files", "Analyze security implications", "Review code quality and conventions"])
 
   console.log("\nAll reviews completed. Synthesizing...")
 
   // Update checklist - synthesizing
-  await postOrUpdateChecklist("(Providing comprehensive feedback...)", ["Read repository conventions", "Read modified files", "Analyze security implications", "Review code quality and conventions", "Provide comprehensive feedback"])
+  await postOrUpdateChecklist("🤔 Providing comprehensive feedback...", ["Read repository conventions", "Read modified files", "Analyze security implications", "Review code quality and conventions", "Provide comprehensive feedback"])
 
   const synthesis = await synthesize(results)
   const providerList = results.map(r => r.provider).join(", ")
