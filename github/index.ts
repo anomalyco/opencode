@@ -654,6 +654,15 @@ async function configureGit(appToken: string) {
   // Do not change git config when running locally
   if (isMock()) return
 
+  // Skip git configuration when using GITHUB_TOKEN
+  // The GitHub Actions runner already has proper authentication configured
+  if (useEnvGithubToken()) {
+    console.log("Skipping git config (using GitHub TOKEN)")
+    await $`git config --global user.name "opencode-agent[bot]"`
+    await $`git config --global user.email "opencode-agent[bot]@users.noreply.github.com"`
+    return
+  }
+
   console.log("Configuring git...")
   const config = "http.https://github.com/.extraheader"
   const ret = await $`git config --local --get ${config}`
@@ -668,6 +677,9 @@ async function configureGit(appToken: string) {
 }
 
 async function restoreGitConfig() {
+  // Skip restoration when using GITHUB_TOKEN (we didn't modify config)
+  if (useEnvGithubToken()) return
+
   if (gitConfig === undefined) return
   console.log("Restoring git config...")
   const config = "http.https://github.com/.extraheader"
