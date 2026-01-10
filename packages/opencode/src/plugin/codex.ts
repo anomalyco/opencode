@@ -411,6 +411,10 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             }
           },
         },
+        {
+          label: "Manually enter API Key",
+          type: "api",
+        },
       ],
     },
   }
