@@ -92,6 +92,9 @@ export default function Home() {
               <strong>Claude Pro</strong> Log in with Anthropic to use your Claude Pro or Max account
             </li>
             <li>
+              <strong>ChatGPT Plus/Pro</strong> Log in with OpenAI to use your ChatGPT Plus or Pro account
+            </li>
+            <li>
               <strong>Use any model</strong> Supports 75+ LLM providers through{" "}
               <a href="https://models.dev">Models.dev</a>, including local models
             </li>
