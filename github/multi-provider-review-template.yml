@@ -78,7 +78,7 @@ jobs:
           PR_BODY: ${{ steps.pr-body.outputs.body }}
           HAS_AGENTS: ${{ steps.agents-md.outputs.exists || 'false' }}
         run: |
-          curl -f -o multi-review.ts https://raw.githubusercontent.com/keithah/multi-provider-code-review/main/multi-review-script.ts
+          cp github/multi-review-script.ts multi-review.ts
 
           if [ "$HAS_AGENTS" = "true" ]; then
             export INCLUDE_AGENTS=true
