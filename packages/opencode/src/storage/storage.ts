@@ -138,6 +138,58 @@ export namespace Storage {
         )
       }
     },
+    async (dir) => {
+      log.info("migrating session costs")
+      const startTime = Date.now()
+      let migratedCount = 0
+
+      for await (const sessionPath of new Bun.Glob("session/*/*.json").scan({
+        cwd: dir,
+        absolute: true,
+      })) {
+        const session = await Bun.file(sessionPath).json()
+        if (!session) continue
+        if (session.cost != null) continue
+
+        let totalCost = 0
+        const messageDir = path.join(dir, "message", session.id)
+
+        if (await fs.exists(messageDir)) {
+          for await (const messagePath of new Bun.Glob("*.json").scan({
+            cwd: messageDir,
+            absolute: true,
+          })) {
+            const message = await Bun.file(messagePath).json()
+            if (message.role !== "assistant") continue
+            totalCost += message.cost ?? 0
+          }
+        }
+
+        await Bun.file(sessionPath).write(
+          JSON.stringify(
+            {
+              ...session,
+              cost: totalCost,
+            },
+            null,
+            2,
+          ),
+        )
+
+        migratedCount++
+        if (migratedCount % 50 === 0) {
+          log.info("cost migration progress", {
+            sessionsMigrated: migratedCount,
+            elapsedMs: Date.now() - startTime,
+          })
+        }
+      }
+
+      log.info("cost migration complete", {
+        sessionsMigrated: migratedCount,
+        elapsedMs: Date.now() - startTime,
+      })
+    },
   ]
 
   const state = lazy(async () => {
