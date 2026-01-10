@@ -6,6 +6,7 @@ export type ToolContext = {
   messageID: string
   agent: string
   abort: AbortSignal
+  metadata(input: { title?: string; metadata?: Record<string, unknown> }): void
 }
 
 /**
