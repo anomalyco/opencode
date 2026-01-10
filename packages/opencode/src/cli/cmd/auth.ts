@@ -294,6 +294,7 @@ export const AuthLoginCommand = cmd({
                 hint: {
                   opencode: "recommended",
                   anthropic: "Claude Max or API key",
+                  openai: "ChatGPT Plus/Pro or API key",
                 }[x.id],
               })),
             ),
@@ -341,8 +342,6 @@ export const AuthLoginCommand = cmd({
               "Configure via opencode.json options (profile, region, endpoint) or\n" +
               "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID).",
           )
-          prompts.outro("Done")
-          return
         }
 
         if (provider === "opencode") {
