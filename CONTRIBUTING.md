@@ -27,6 +27,8 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 ## Developing OpenCode
 
 - Requirements: Bun 1.3+
+>[!NOTE]
+>This project strictly uses Bun. Avoid using npm or pnpm to prevent dependency resolution errors.
 - Install dependencies and start the dev server from the repo root:
 
   ```bash
@@ -65,7 +67,7 @@ Then run it with:
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
 - Core pieces:
-  - `packages/opencode`: OpenCode core business logic & server.
+  - `packages/opencode`: OpenCode core business logic & server. If you are focusing on CLI features, you can develop directly inside this directory using `bun src/index.ts`.
   - `packages/opencode/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
   - `packages/app`: The shared web UI components, written in SolidJS
   - `packages/desktop`: The native desktop app, built with Tauri (wraps `packages/app`)
