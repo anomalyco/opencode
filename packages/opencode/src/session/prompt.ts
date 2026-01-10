@@ -308,7 +308,7 @@ export namespace SessionPrompt {
           prompt: undefined as string | undefined,
           systemMessage: undefined as string | undefined,
         }
-        Plugin.triggerSync(
+        await Plugin.trigger(
           "session.stop",
           {
             sessionID,

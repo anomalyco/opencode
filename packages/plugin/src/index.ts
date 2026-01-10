@@ -219,7 +219,6 @@ export interface Hooks {
   /**
    * Called just before the session loop exits. Plugins can set output.stop = false
    * to continue the loop (e.g., for iterative development loops like Ralph Wiggum).
-   * This hook is SYNCHRONOUS - do not perform async operations here.
    *
    * Input:
    * - sessionID: The session ID
@@ -234,5 +233,5 @@ export interface Hooks {
   "session.stop"?: (
     input: { sessionID: string; step: number; lastAssistantText?: string },
     output: { stop: boolean; prompt?: string; systemMessage?: string },
-  ) => void
+  ) => Promise<void>
 }

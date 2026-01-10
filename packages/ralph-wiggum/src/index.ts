@@ -100,6 +100,7 @@ function writeFinalState(sessionID: string, s: RalphState): void {
 /**
  * Tokenize a string respecting quoted strings.
  * Handles both single and double quotes, preserving content within quotes as single tokens.
+ * Also handles escape sequences like \" and \\
  */
 function tokenize(input: string): string[] {
   const tokens: string[] = []

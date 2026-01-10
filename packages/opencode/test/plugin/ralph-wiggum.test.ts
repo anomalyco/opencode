@@ -57,8 +57,11 @@ describe("ralph-wiggum plugin", () => {
         await Plugin.init()
         const plugins = await Plugin.list()
 
-        // Find the ralph plugin
-        const ralphPlugin = plugins.find((p: any) => typeof p["session.stop"] === "function") as any
+        // Find the ralph plugin specifically (has both event and session.stop hooks, plus cancel-ralph tool)
+        const ralphPlugin = plugins.find(
+          (p: any) =>
+            typeof p["session.stop"] === "function" && typeof p.event === "function" && p.tool?.["cancel-ralph"],
+        ) as any
         expect(ralphPlugin).toBeDefined()
 
         // Create a mock session
@@ -80,20 +83,20 @@ describe("ralph-wiggum plugin", () => {
           })
         }
 
-        // Get the stop hook (synchronous)
+        // Get the stop hook
         const stopHook = ralphPlugin["session.stop"] as (
           input: { sessionID: string; step: number },
           output: { stop: boolean },
-        ) => void
+        ) => Promise<void>
 
         // First iteration - should set stop: false
         const output1 = { stop: true }
-        stopHook({ sessionID: session.id, step: 1 }, output1)
+        await stopHook({ sessionID: session.id, step: 1 }, output1)
         expect(output1.stop).toBe(false)
 
         // Second iteration - should set stop: true (max reached)
         const output2 = { stop: true }
-        stopHook({ sessionID: session.id, step: 2 }, output2)
+        await stopHook({ sessionID: session.id, step: 2 }, output2)
         expect(output2.stop).toBe(true)
 
         await Session.remove(session.id)
@@ -108,7 +111,10 @@ describe("ralph-wiggum plugin", () => {
         await Plugin.init()
         const plugins = await Plugin.list()
 
-        const ralphPlugin = plugins.find((p: any) => typeof p["session.stop"] === "function") as any
+        const ralphPlugin = plugins.find(
+          (p: any) =>
+            typeof p["session.stop"] === "function" && typeof p.event === "function" && p.tool?.["cancel-ralph"],
+        ) as any
         expect(ralphPlugin).toBeDefined()
 
         const session = await Session.create({})
@@ -135,15 +141,15 @@ describe("ralph-wiggum plugin", () => {
           })
         }
 
-        // Get the stop hook (synchronous)
+        // Get the stop hook
         const stopHook = ralphPlugin["session.stop"] as (
           input: { sessionID: string; step: number },
           output: { stop: boolean },
-        ) => void
+        ) => Promise<void>
 
         // First iteration - should set stop: false (loop active)
         const output1 = { stop: true }
-        stopHook({ sessionID: session.id, step: 1 }, output1)
+        await stopHook({ sessionID: session.id, step: 1 }, output1)
         expect(output1.stop).toBe(false)
 
         // Cancel the loop using the tool
@@ -152,7 +158,7 @@ describe("ralph-wiggum plugin", () => {
 
         // After cancel - should leave stop: true (no active loop)
         const output2 = { stop: true }
-        stopHook({ sessionID: session.id, step: 2 }, output2)
+        await stopHook({ sessionID: session.id, step: 2 }, output2)
         expect(output2.stop).toBe(true)
 
         await Session.remove(session.id)
@@ -167,7 +173,10 @@ describe("ralph-wiggum plugin", () => {
         await Plugin.init()
         const plugins = await Plugin.list()
 
-        const ralphPlugin = plugins.find((p: any) => typeof p["session.stop"] === "function") as any
+        const ralphPlugin = plugins.find(
+          (p: any) =>
+            typeof p["session.stop"] === "function" && typeof p.event === "function" && p.tool?.["cancel-ralph"],
+        ) as any
         expect(ralphPlugin).toBeDefined()
 
         const session = await Session.create({})
@@ -187,22 +196,22 @@ describe("ralph-wiggum plugin", () => {
           })
         }
 
-        // Get the stop hook (synchronous)
+        // Get the stop hook
         const stopHook = ralphPlugin["session.stop"] as (
           input: { sessionID: string; step: number; lastAssistantText?: string },
           output: { stop: boolean; prompt?: string; systemMessage?: string },
-        ) => void
+        ) => Promise<void>
 
         // First iteration without promise - should continue
         const output1: { stop: boolean; prompt?: string; systemMessage?: string } = { stop: true }
-        stopHook({ sessionID: session.id, step: 1, lastAssistantText: "I'm working on it..." }, output1)
+        await stopHook({ sessionID: session.id, step: 1, lastAssistantText: "I'm working on it..." }, output1)
         expect(output1.stop).toBe(false)
         expect(output1.prompt).toBe("test prompt")
         expect(output1.systemMessage).toContain("Ralph iteration")
 
         // Second iteration with promise in response - should stop
         const output2: { stop: boolean; prompt?: string; systemMessage?: string } = { stop: true }
-        stopHook(
+        await stopHook(
           { sessionID: session.id, step: 2, lastAssistantText: "Task complete! <promise>DONE</promise>" },
           output2,
         )
@@ -220,7 +229,10 @@ describe("ralph-wiggum plugin", () => {
         await Plugin.init()
         const plugins = await Plugin.list()
 
-        const ralphPlugin = plugins.find((p: any) => typeof p["session.stop"] === "function") as any
+        const ralphPlugin = plugins.find(
+          (p: any) =>
+            typeof p["session.stop"] === "function" && typeof p.event === "function" && p.tool?.["cancel-ralph"],
+        ) as any
         expect(ralphPlugin).toBeDefined()
 
         const session = await Session.create({})
@@ -243,17 +255,17 @@ describe("ralph-wiggum plugin", () => {
         const stopHook = ralphPlugin["session.stop"] as (
           input: { sessionID: string; step: number; lastAssistantText?: string },
           output: { stop: boolean; prompt?: string; systemMessage?: string },
-        ) => void
+        ) => Promise<void>
 
         // Each iteration should get back the same original prompt
         const output1: { stop: boolean; prompt?: string; systemMessage?: string } = { stop: true }
-        stopHook({ sessionID: session.id, step: 1, lastAssistantText: "Working..." }, output1)
+        await stopHook({ sessionID: session.id, step: 1, lastAssistantText: "Working..." }, output1)
         expect(output1.stop).toBe(false)
         expect(output1.prompt).toBe("Build a hello world app")
         expect(output1.systemMessage).toContain("[Ralph iteration 2/5]")
 
         const output2: { stop: boolean; prompt?: string; systemMessage?: string } = { stop: true }
-        stopHook({ sessionID: session.id, step: 2, lastAssistantText: "Still working..." }, output2)
+        await stopHook({ sessionID: session.id, step: 2, lastAssistantText: "Still working..." }, output2)
         expect(output2.stop).toBe(false)
         expect(output2.prompt).toBe("Build a hello world app")
         expect(output2.systemMessage).toContain("[Ralph iteration 3/5]")
@@ -270,7 +282,10 @@ describe("ralph-wiggum plugin", () => {
         await Plugin.init()
         const plugins = await Plugin.list()
 
-        const ralphPlugin = plugins.find((p: any) => typeof p["session.stop"] === "function") as any
+        const ralphPlugin = plugins.find(
+          (p: any) =>
+            typeof p["session.stop"] === "function" && typeof p.event === "function" && p.tool?.["cancel-ralph"],
+        ) as any
         expect(ralphPlugin).toBeDefined()
 
         const session = await Session.create({})
@@ -306,9 +321,9 @@ describe("ralph-wiggum plugin", () => {
         const stopHook = ralphPlugin["session.stop"] as (
           input: { sessionID: string; step: number; lastAssistantText?: string },
           output: { stop: boolean; prompt?: string; systemMessage?: string },
-        ) => void
+        ) => Promise<void>
         const output = { stop: true }
-        stopHook({ sessionID: session.id, step: 1, lastAssistantText: "Working..." }, output)
+        await stopHook({ sessionID: session.id, step: 1, lastAssistantText: "Working..." }, output)
 
         // Now check status
         const activeStatus = await ralphStatusTool.execute({}, mockCtx)
@@ -332,7 +347,10 @@ describe("ralph-wiggum plugin", () => {
         await Plugin.init()
         const plugins = await Plugin.list()
 
-        const ralphPlugin = plugins.find((p: any) => typeof p["session.stop"] === "function") as any
+        const ralphPlugin = plugins.find(
+          (p: any) =>
+            typeof p["session.stop"] === "function" && typeof p.event === "function" && p.tool?.["cancel-ralph"],
+        ) as any
         expect(ralphPlugin).toBeDefined()
 
         const session = await Session.create({})
@@ -365,9 +383,9 @@ describe("ralph-wiggum plugin", () => {
         const stopHook = ralphPlugin["session.stop"] as (
           input: { sessionID: string; step: number; lastAssistantText?: string },
           output: { stop: boolean; prompt?: string; systemMessage?: string },
-        ) => void
+        ) => Promise<void>
         const output: { stop: boolean; prompt?: string } = { stop: true }
-        stopHook({ sessionID: session.id, step: 1 }, output)
+        await stopHook({ sessionID: session.id, step: 1 }, output)
 
         // Verify the prompt was parsed correctly (quotes stripped, spaces preserved)
         expect(output.prompt).toBe("Build a complex multi-word feature")
