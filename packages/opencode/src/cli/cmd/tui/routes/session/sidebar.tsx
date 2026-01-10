@@ -53,10 +53,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     if (!last) return
     const total =
       last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const cacheTotal = last.tokens.cache.read + last.tokens.cache.write
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     return {
       tokens: total.toLocaleString(),
       percentage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
+      cachePercentage: total > 0 ? Math.round((cacheTotal / total) * 100) : 0,
     }
   })
 
@@ -94,6 +96,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <b>Context</b>
               </text>
               <text fg={theme.textMuted}>{context()?.tokens ?? 0} tokens</text>
+              <text fg={theme.textMuted}>{context()?.cachePercentage ?? 0}% cached</text>
               <text fg={theme.textMuted}>{context()?.percentage ?? 0}% used</text>
               <text fg={theme.textMuted}>{cost()} spent</text>
             </box>
