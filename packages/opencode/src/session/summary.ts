@@ -9,6 +9,7 @@ import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
 
 import { Log } from "@/util/log"
+import { decodeGitQuotepath } from "@opencode-ai/util/encode"
 import path from "path"
 import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
@@ -40,7 +41,7 @@ export namespace SessionSummary {
         .flatMap((x) => x.parts)
         .filter((x) => x.type === "patch")
         .flatMap((x) => x.files)
-        .map((x) => path.relative(Instance.worktree, x)),
+        .map((x) => decodeGitQuotepath(path.relative(Instance.worktree, x))),
     )
     const diffs = await computeDiff({ messages: input.messages }).then((x) =>
       x.filter((x) => {

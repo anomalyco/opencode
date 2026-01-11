@@ -6,6 +6,7 @@ import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { decodeGitQuotepath } from "@opencode-ai/util/encode"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
@@ -159,26 +160,49 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+
+    // Use env for diff cmd just in case
+    const diffCmd = $`git -c core.autocrlf=false diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+      .env({
+        ...process.env,
+        GIT_DIR: git,
+        GIT_WORK_TREE: Instance.worktree,
+      })
       .quiet()
       .cwd(Instance.directory)
       .nothrow()
-      .lines()) {
+
+    const readFile = async (ref: string, file: string) => {
+      const proc = Bun.spawn(["git", "-c", "core.autocrlf=false", "show", `${ref}:${file}`], {
+        env: {
+          ...process.env,
+          GIT_DIR: git,
+          GIT_WORK_TREE: Instance.worktree,
+        },
+        cwd: Instance.directory,
+        stderr: "pipe",
+        stdout: "pipe",
+      })
+      const output = await new Response(proc.stdout).text().catch(() => "")
+      const exitCode = await proc.exited.catch(() => 1)
+      if (exitCode !== 0) return ""
+      return output
+    }
+
+    for await (const line of diffCmd.lines()) {
       if (!line) continue
-      const [additions, deletions, file] = line.split("\t")
+      const parts = line.split("\t")
+      const additions = parts[0]
+      const deletions = parts[1]
+      const rawFile = parts.slice(2).join("\t")
+
+      if (!rawFile) continue
+
+      const file = decodeGitQuotepath(rawFile)
       const isBinaryFile = additions === "-" && deletions === "-"
-      const before = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${from}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
-      const after = isBinaryFile
-        ? ""
-        : await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} show ${to}:${file}`
-            .quiet()
-            .nothrow()
-            .text()
+      const before = isBinaryFile ? "" : await readFile(from, file)
+      const after = isBinaryFile ? "" : await readFile(to, file)
+
       const added = isBinaryFile ? 0 : parseInt(additions)
       const deleted = isBinaryFile ? 0 : parseInt(deletions)
       result.push({
