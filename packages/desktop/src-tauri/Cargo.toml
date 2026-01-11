@@ -38,6 +38,7 @@ listeners = "0.3"
 tauri-plugin-os = "2"
 futures = "0.3.31"
 semver = "1.0.27"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"

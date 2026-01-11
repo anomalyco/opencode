@@ -43,6 +43,8 @@ export function SessionHeader() {
   })
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const worktrees = createMemo(() => layout.projects.list().map((p) => p.worktree), [], { equals: same })
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const view = createMemo(() => layout.view(sessionKey()))
 
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
@@ -171,20 +173,24 @@ export function SessionHeader() {
                 title="Toggle review"
                 keybind={command.keybind("review.toggle")}
               >
-                <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
+                <Button
+                  variant="ghost"
+                  class="group/review-toggle size-6 p-0"
+                  onClick={() => view().reviewPanel.toggle()}
+                >
                   <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                     <Icon
-                      name={layout.review.opened() ? "layout-right" : "layout-left"}
+                      name={view().reviewPanel.opened() ? "layout-right" : "layout-left"}
                       size="small"
                       class="group-hover/review-toggle:hidden"
                     />
                     <Icon
-                      name={layout.review.opened() ? "layout-right-partial" : "layout-left-partial"}
+                      name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-left-partial"}
                       size="small"
                       class="hidden group-hover/review-toggle:inline-block"
                     />
                     <Icon
-                      name={layout.review.opened() ? "layout-right-full" : "layout-left-full"}
+                      name={view().reviewPanel.opened() ? "layout-right-full" : "layout-left-full"}
                       size="small"
                       class="hidden group-active/review-toggle:inline-block"
                     />
@@ -197,11 +203,11 @@ export function SessionHeader() {
               title="Toggle terminal"
               keybind={command.keybind("terminal.toggle")}
             >
-              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
+              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={() => view().terminal.toggle()}>
                 <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                   <Icon
                     size="small"
-                    name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                    name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
                     class="group-hover/terminal-toggle:hidden"
                   />
                   <Icon
@@ -211,7 +217,7 @@ export function SessionHeader() {
                   />
                   <Icon
                     size="small"
-                    name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                    name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
                     class="hidden group-active/terminal-toggle:inline-block"
                   />
                 </div>
