@@ -148,12 +148,8 @@ export namespace Session {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
-      const parentCost = await getCost(input.sessionID)
       const session = await createNext({
         directory: Instance.directory,
-      })
-      await update(session.id, (draft) => {
-        draft.cost = parentCost
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, string>()
