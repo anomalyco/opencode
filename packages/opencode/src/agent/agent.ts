@@ -211,16 +211,18 @@ export namespace Agent {
     }
 
     // Ensure Truncate.DIR is allowed unless explicitly configured
+    // The pattern must include /* because external-directory.ts creates glob patterns like "dir/*"
+    const truncateDirGlob = `${Truncate.DIR}/*`
     for (const name in result) {
       const agent = result[name]
       const explicit = agent.permission.some(
-        (r) => r.permission === "external_directory" && r.pattern === Truncate.DIR && r.action === "deny",
+        (r) => r.permission === "external_directory" && r.pattern === truncateDirGlob && r.action === "deny",
       )
       if (explicit) continue
 
       result[name].permission = PermissionNext.merge(
         result[name].permission,
-        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow" } }),
+        PermissionNext.fromConfig({ external_directory: { [truncateDirGlob]: "allow" } }),
       )
     }
 
