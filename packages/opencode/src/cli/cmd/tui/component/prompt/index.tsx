@@ -694,9 +694,9 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(local.agent.current().name)
   })
 
+  const hasVariants = createMemo(() => local.model.variant.list().length > 0)
   const showVariant = createMemo(() => {
-    const variants = local.model.variant.list()
-    if (variants.length === 0) return false
+    if (!hasVariants()) return false
     const current = local.model.variant.current()
     return !!current
   })
@@ -1068,6 +1068,11 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
+                  <Show when={hasVariants()}>
+                    <text fg={theme.text}>
+                      {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>cycle variants</span>
+                    </text>
+                  </Show>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
