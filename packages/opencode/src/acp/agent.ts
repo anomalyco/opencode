@@ -30,6 +30,7 @@ import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { applyPatch } from "diff"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -104,6 +105,20 @@ export namespace ACP {
                     directory,
                   })
                   return
+                }
+                if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+                  const metadata = permission.metadata || {}
+                  const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
+                  const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+
+                  const content = await Bun.file(filepath).text()
+                  const newContent = getNewContent(content, diff)
+
+                  this.connection.writeTextFile({
+                    sessionId: sessionId,
+                    path: filepath,
+                    content: newContent,
+                  })
                 }
                 await this.config.sdk.permission.reply({
                   requestID: permission.id,
@@ -1094,5 +1109,13 @@ export namespace ACP {
         text: uri,
       }
     }
+  }
+
+  function getNewContent(fileOriginal: string, unifiedDiff: string): string {
+    const result = applyPatch(fileOriginal, unifiedDiff)
+    if (result === false) {
+      throw new Error("Failed to apply unified diff (context mismatch)")
+    }
+    return result
   }
 }
