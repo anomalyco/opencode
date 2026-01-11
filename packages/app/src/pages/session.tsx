@@ -53,6 +53,7 @@ import {
 import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
+import { useForkSession } from "@/hooks/use-fork-session"
 
 type DiffStyle = "unified" | "split"
 
@@ -167,6 +168,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const permission = usePermission()
+  const forkSession = useForkSession()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -908,22 +910,6 @@ export default function Page() {
     updateHash(message.id)
   }
 
-  const forkFromMessage = (message: UserMessage) => {
-    const sessionID = params.id
-    if (!sessionID) return
-
-    const parts = sync.data.part[message.id] ?? []
-    const restored = extractPromptFromParts(parts, { directory: sdk.directory })
-
-    sdk.client.session.fork({ sessionID, messageID: message.id }).then((forked) => {
-      if (!forked.data) return
-      navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
-      requestAnimationFrame(() => {
-        prompt.set(restored)
-      })
-    })
-  }
-
   const getActiveMessageId = (container: HTMLDivElement) => {
     const cutoff = container.scrollTop + 100
     const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
@@ -1111,7 +1097,7 @@ export default function Page() {
                             messages={visibleUserMessages()}
                             current={activeMessage()}
                             onMessageSelect={scrollToMessage}
-                            onFork={forkFromMessage}
+                            onFork={(msg) => forkSession(msg.id)}
                             wide={!showTabs()}
                             class="pointer-events-auto"
                           />

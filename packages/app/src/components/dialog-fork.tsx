@@ -1,14 +1,11 @@
 import { Component, createMemo } from "solid-js"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
-import { useSDK } from "@/context/sdk"
-import { usePrompt } from "@/context/prompt"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
-import { extractPromptFromParts } from "@/utils/prompt"
+import { useForkSession } from "@/hooks/use-fork-session"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
-import { base64Encode } from "@opencode-ai/util/encode"
 
 interface ForkableMessage {
   id: string
@@ -22,11 +19,9 @@ function formatTime(date: Date): string {
 
 export const DialogFork: Component = () => {
   const params = useParams()
-  const navigate = useNavigate()
   const sync = useSync()
-  const sdk = useSDK()
-  const prompt = usePrompt()
   const dialog = useDialog()
+  const forkSession = useForkSession()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -54,22 +49,8 @@ export const DialogFork: Component = () => {
 
   const handleSelect = (item: ForkableMessage | undefined) => {
     if (!item) return
-
-    const sessionID = params.id
-    if (!sessionID) return
-
-    const parts = sync.data.part[item.id] ?? []
-    const restored = extractPromptFromParts(parts, { directory: sdk.directory })
-
     dialog.close()
-
-    sdk.client.session.fork({ sessionID, messageID: item.id }).then((forked) => {
-      if (!forked.data) return
-      navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
-      requestAnimationFrame(() => {
-        prompt.set(restored)
-      })
-    })
+    forkSession(item.id)
   }
 
   return (
