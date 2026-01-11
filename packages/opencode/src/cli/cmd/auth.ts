@@ -295,6 +295,7 @@ export const AuthLoginCommand = cmd({
                   opencode: "recommended",
                   anthropic: "Claude Max or API key",
                   openai: "ChatGPT Plus/Pro or API key",
+                  openrouter: "OAuth or API key",
                 }[x.id],
               })),
             ),
