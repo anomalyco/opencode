@@ -501,7 +501,7 @@ export function SessionTurn(
                             <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
                           </Show>
                           <Show when={(msg() as UserMessage).model?.modelID}>
-                            <span data-slot="session-turn-badge">{(msg() as UserMessage).model.modelID}</span>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).model?.modelID}</span>
                           </Show>
                           <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
                         </div>
