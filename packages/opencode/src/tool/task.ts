@@ -12,26 +12,20 @@ import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 import { Instance } from "../project/instance"
 
-// Track task calls per request: Map<sessionID, Map<messageID, count>>
-// Budget is per-request (one "work assignment" within a session), resets on new messageID
-// Note: State grows with sessions/messages but entries are small. Future optimization:
+// Track task calls per session: Map<sessionID, count>
+// Budget is per-session (all calls within the delegated work count toward the limit)
+// Note: State grows with sessions but entries are small. Future optimization:
 // clean up completed sessions via Session lifecycle hooks if memory becomes a concern.
-const taskCallState = Instance.state(() => new Map<string, Map<string, number>>())
+const taskCallState = Instance.state(() => new Map<string, number>())
 
-function getCallCount(sessionID: string, messageID: string): number {
-  const sessionCounts = taskCallState().get(sessionID)
-  return sessionCounts?.get(messageID) ?? 0
+function getCallCount(sessionID: string): number {
+  return taskCallState().get(sessionID) ?? 0
 }
 
-function incrementCallCount(sessionID: string, messageID: string): number {
+function incrementCallCount(sessionID: string): number {
   const state = taskCallState()
-  let sessionCounts = state.get(sessionID)
-  if (!sessionCounts) {
-    sessionCounts = new Map()
-    state.set(sessionID, sessionCounts)
-  }
-  const newCount = (sessionCounts.get(messageID) ?? 0) + 1
-  sessionCounts.set(messageID, newCount)
+  const newCount = (state.get(sessionID) ?? 0) + 1
+  state.set(sessionID, newCount)
   return newCount
 }
 
@@ -134,8 +128,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           )
         }
 
-        // Check 3: Budget not exhausted for this request (messageID)
-        const currentCount = getCallCount(ctx.sessionID, ctx.messageID)
+        // Check 3: Budget not exhausted for this session
+        const currentCount = getCallCount(ctx.sessionID)
         if (currentCount >= callerTaskBudget) {
           throw new Error(
             `Task budget exhausted (${currentCount}/${callerTaskBudget} calls). ` +
@@ -144,7 +138,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         }
 
         // Increment count after passing all checks (including ownership above)
-        incrementCallCount(ctx.sessionID, ctx.messageID)
+        incrementCallCount(ctx.sessionID)
       }
 
       const session = await iife(async () => {
