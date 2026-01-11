@@ -1,10 +1,10 @@
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Button } from "@opencode-ai/ui/button"
+import { TextField } from "@crazycode-ai/ui/text-field"
+import { Logo } from "@crazycode-ai/ui/logo"
+import { Button } from "@crazycode-ai/ui/button"
 import { Component, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Icon } from "@crazycode-ai/ui/icon"
 
 export type InitError = {
   name: string
@@ -42,7 +42,7 @@ function formatInitError(error: InitError): string {
   const data = error.data
   switch (error.name) {
     case "MCPFailed":
-      return `MCP server "${data.name}" failed. Note, opencode does not support MCP authentication yet.`
+      return `MCP server "${data.name}" failed. Note, crazycode does not support MCP authentication yet.`
     case "ProviderAuthError": {
       const providerID = typeof data.providerID === "string" ? data.providerID : "unknown"
       const message = typeof data.message === "string" ? data.message : safeJson(data.message)
@@ -75,7 +75,7 @@ function formatInitError(error: InitError): string {
       return [
         `Model not found: ${providerID}/${modelID}`,
         ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
-        `Check your config (opencode.json) provider/model names`,
+        `Check your config (crazycode.json) provider/model names`,
       ].join("\n")
     }
     case "ProviderInitError": {
@@ -239,11 +239,11 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         </div>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
-            Please report this error to the OpenCode team
+            Please report this error to the CrazyCode team
             <button
               type="button"
               class="flex items-center text-text-interactive-base gap-1"
-              onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+              onClick={() => platform.openLink("https://crazycode.ai/desktop-feedback")}
             >
               <div>on Discord</div>
               <Icon name="discord" class="text-text-interactive-base" />

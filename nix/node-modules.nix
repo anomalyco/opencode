@@ -8,7 +8,7 @@
 }:
 args:
 stdenvNoCC.mkDerivation {
-  pname = "opencode-node_modules";
+  pname = "crazycode-node_modules";
   inherit (args) version src;
 
   impureEnvVars = lib.fetchers.proxyImpureEnvVars ++ [

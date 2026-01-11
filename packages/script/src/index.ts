@@ -14,29 +14,29 @@ if (process.versions.bun !== expectedBunVersion) {
 }
 
 const env = {
-  OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],
-  OPENCODE_BUMP: process.env["OPENCODE_BUMP"],
-  OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
+  CRAZYCODE_CHANNEL: process.env["CRAZYCODE_CHANNEL"],
+  CRAZYCODE_BUMP: process.env["CRAZYCODE_BUMP"],
+  CRAZYCODE_VERSION: process.env["CRAZYCODE_VERSION"],
 }
 const CHANNEL = await (async () => {
-  if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
-  if (env.OPENCODE_BUMP) return "latest"
-  if (env.OPENCODE_VERSION && !env.OPENCODE_VERSION.startsWith("0.0.0-")) return "latest"
+  if (env.CRAZYCODE_CHANNEL) return env.CRAZYCODE_CHANNEL
+  if (env.CRAZYCODE_BUMP) return "latest"
+  if (env.CRAZYCODE_VERSION && !env.CRAZYCODE_VERSION.startsWith("0.0.0-")) return "latest"
   return await $`git branch --show-current`.text().then((x) => x.trim())
 })()
 const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
-  if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
+  if (env.CRAZYCODE_VERSION) return env.CRAZYCODE_VERSION
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
+  const version = await fetch("https://registry.npmjs.org/crazycode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
     })
     .then((data: any) => data.version)
   const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
-  const t = env.OPENCODE_BUMP?.toLowerCase()
+  const t = env.CRAZYCODE_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`
   return `${major}.${minor}.${patch + 1}`
@@ -53,4 +53,4 @@ export const Script = {
     return IS_PREVIEW
   },
 }
-console.log(`opencode script`, JSON.stringify(Script, null, 2))
+console.log(`crazycode script`, JSON.stringify(Script, null, 2))

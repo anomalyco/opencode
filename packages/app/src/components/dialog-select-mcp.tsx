@@ -1,9 +1,9 @@
 import { Component, createMemo, createSignal, Show } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Switch } from "@opencode-ai/ui/switch"
+import { Dialog } from "@crazycode-ai/ui/dialog"
+import { List } from "@crazycode-ai/ui/list"
+import { Switch } from "@crazycode-ai/ui/switch"
 
 export const DialogSelectMcp: Component = () => {
   const sync = useSync()

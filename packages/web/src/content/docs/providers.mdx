@@ -1,30 +1,30 @@
 ---
 title: Providers
-description: Using any LLM provider in OpenCode.
+description: Using any LLM provider in CrazyCode.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
+CrazyCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
 1. Add the API keys for the provider using the `/connect` command.
-2. Configure the provider in your OpenCode config.
+2. Configure the provider in your CrazyCode config.
 
 ---
 
 ### Credentials
 
 When you add a provider's API keys with the `/connect` command, they are stored
-in `~/.local/share/opencode/auth.json`.
+in `~/.local/share/crazycode/auth.json`.
 
 ---
 
 ### Config
 
-You can customize the providers through the `provider` section in your OpenCode
+You can customize the providers through the `provider` section in your CrazyCode
 config.
 
 ---
@@ -33,9 +33,9 @@ config.
 
 You can customize the base URL for any provider by setting the `baseURL` option. This is useful when using proxy services or custom endpoints.
 
-```json title="opencode.json" {6}
+```json title="crazycode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -48,16 +48,16 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## OpenCode Zen
+## CrazyCode Zen
 
-OpenCode Zen is a list of models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode. [Learn more](/docs/zen).
+CrazyCode Zen is a list of models provided by the CrazyCode team that have been
+tested and verified to work well with CrazyCode. [Learn more](/docs/zen).
 
 :::tip
-If you are new, we recommend starting with OpenCode Zen.
+If you are new, we recommend starting with CrazyCode Zen.
 :::
 
-1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+1. Run the `/connect` command in the TUI, select crazycode, and head to [crazycode.ai/auth](https://crazycode.ai/auth).
 
    ```txt
    /connect
@@ -80,7 +80,7 @@ If you are new, we recommend starting with OpenCode Zen.
    /models
    ```
 
-It works like any other provider in OpenCode. And is completely optional to use
+It works like any other provider in CrazyCode. And is completely optional to use
 it.
 
 ---
@@ -98,7 +98,7 @@ Don't see a provider here? Submit a PR.
 
 ### Amazon Bedrock
 
-To use Amazon Bedrock with OpenCode:
+To use Amazon Bedrock with CrazyCode:
 
 1. Head over to the **Model catalog** in the Amazon Bedrock console and request
    access to the models you want.
@@ -111,17 +111,17 @@ To use Amazon Bedrock with OpenCode:
 
    #### Environment Variables (Quick Start)
 
-   Set one of these environment variables while running opencode:
+   Set one of these environment variables while running crazycode:
 
    ```bash
    # Option 1: Using AWS access keys
-   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY crazycode
 
    # Option 2: Using named AWS profile
-   AWS_PROFILE=my-profile opencode
+   AWS_PROFILE=my-profile crazycode
 
    # Option 3: Using Bedrock bearer token
-   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   AWS_BEARER_TOKEN_BEDROCK=XXX crazycode
    ```
 
    Or add them to your bash profile:
@@ -133,11 +133,11 @@ To use Amazon Bedrock with OpenCode:
 
    #### Configuration File (Recommended)
 
-   For project-specific or persistent configuration, use `opencode.json`:
+   For project-specific or persistent configuration, use `crazycode.json`:
 
-   ```json title="opencode.json"
+   ```json title="crazycode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://crazycode.ai/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -162,9 +162,9 @@ To use Amazon Bedrock with OpenCode:
 
    If you're using VPC endpoints for Bedrock:
 
-   ```json title="opencode.json"
+   ```json title="crazycode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://crazycode.ai/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -253,7 +253,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
    :::note
-   The deployment name must match the model name for opencode to work properly.
+   The deployment name must match the model name for crazycode to work properly.
    :::
 
 3. Run the `/connect` command and search for **Azure**.
@@ -274,7 +274,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 5. Set your resource name as an environment variable:
 
    ```bash
-   AZURE_RESOURCE_NAME=XXX opencode
+   AZURE_RESOURCE_NAME=XXX crazycode
    ```
 
    Or add it to your bash profile:
@@ -300,7 +300,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
    :::note
-   The deployment name must match the model name for opencode to work properly.
+   The deployment name must match the model name for crazycode to work properly.
    :::
 
 3. Run the `/connect` command and search for **Azure Cognitive Services**.
@@ -321,7 +321,7 @@ If you encounter "I'm sorry, but I cannot assist with that request" errors, try 
 5. Set your resource name as an environment variable:
 
    ```bash
-   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
+   AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX crazycode
    ```
 
    Or add it to your bash profile:
@@ -432,11 +432,11 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
    /models
    ```
 
-   You can also add models through your opencode config.
+   You can also add models through your crazycode config.
 
-   ```json title="opencode.json"
+   ```json title="crazycode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://crazycode.ai/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -560,7 +560,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ### GitHub Copilot
 
-To use your GitHub Copilot subscription with opencode:
+To use your GitHub Copilot subscription with crazycode:
 
 :::note
 Some models might need a [Pro+
@@ -597,7 +597,7 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 
 ### Google Vertex AI
 
-To use Google Vertex AI with OpenCode:
+To use Google Vertex AI with CrazyCode:
 
 1. Head over to the **Model Garden** in the Google Cloud Console and check the
    models available in your region.
@@ -613,10 +613,10 @@ To use Google Vertex AI with OpenCode:
      - `GOOGLE_APPLICATION_CREDENTIALS`: Path to your service account JSON key file
      - Authenticate using gcloud CLI: `gcloud auth application-default login`
 
-   Set them while running opencode.
+   Set them while running crazycode.
 
    ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id crazycode
    ```
 
    Or add them to your bash profile.
@@ -726,13 +726,13 @@ For more providers and advanced features like caching and rate limiting, check t
 
 #### Optional Configs
 
-In the event you see a feature or model from Helicone that isn't configured automatically through opencode, you can always configure it yourself.
+In the event you see a feature or model from Helicone that isn't configured automatically through crazycode, you can always configure it yourself.
 
 Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need this to grab the IDs of the models you want to add.
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/crazycode/crazycode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -758,9 +758,9 @@ Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need thi
 
 Helicone supports custom headers for features like caching, user tracking, and session management. Add them to your provider config using `options.headers`:
 
-```jsonc title="~/.config/opencode/opencode.jsonc"
+```jsonc title="~/.config/crazycode/crazycode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -769,7 +769,7 @@ Helicone supports custom headers for features like caching, user tracking, and s
         "baseURL": "https://ai-gateway.helicone.ai",
         "headers": {
           "Helicone-Cache-Enabled": "true",
-          "Helicone-User-Id": "opencode",
+          "Helicone-User-Id": "crazycode",
         },
       },
     },
@@ -779,21 +779,21 @@ Helicone supports custom headers for features like caching, user tracking, and s
 
 ##### Session tracking
 
-Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [crazycode-helicone-session](https://github.com/H2Shami/crazycode-helicone-session) plugin to automatically log each CrazyCode conversation as a session in Helicone.
 
 ```bash
-npm install -g opencode-helicone-session
+npm install -g crazycode-helicone-session
 ```
 
 Add it to your config.
 
-```json title="opencode.json"
+```json title="crazycode.json"
 {
-  "plugin": ["opencode-helicone-session"]
+  "plugin": ["crazycode-helicone-session"]
 }
 ```
 
-The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each OpenCode conversation listed as a separate session.
+The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each CrazyCode conversation listed as a separate session.
 
 ##### Common Helicone headers
 
@@ -810,11 +810,11 @@ See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/he
 
 ### llama.cpp
 
-You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
+You can configure crazycode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
-```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
+```json title="crazycode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -877,11 +877,11 @@ IO.NET offers 17 models optimized for various use cases:
 
 ### LM Studio
 
-You can configure opencode to use local models through LM Studio.
+You can configure crazycode to use local models through LM Studio.
 
-```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
+```json title="crazycode.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -994,11 +994,11 @@ To use Kimi K2 from Moonshot AI:
 
 ### Ollama
 
-You can configure opencode to use local models through Ollama.
+You can configure crazycode to use local models through Ollama.
 
-```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
+```json title="crazycode.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1032,13 +1032,13 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 
 ### Ollama Cloud
 
-To use Ollama Cloud with OpenCode:
+To use Ollama Cloud with CrazyCode:
 
 1. Head over to [https://ollama.com/](https://ollama.com/) and sign in or create an account.
 
 2. Navigate to **Settings** > **Keys** and click **Add API Key** to generate a new API key.
 
-3. Copy the API key for use in OpenCode.
+3. Copy the API key for use in CrazyCode.
 
 4. Run the `/connect` command and search for **Ollama Cloud**.
 
@@ -1055,7 +1055,7 @@ To use Ollama Cloud with OpenCode:
    └ enter
    ```
 
-6. **Important**: Before using cloud models in OpenCode, you must pull the model information locally:
+6. **Important**: Before using cloud models in CrazyCode, you must pull the model information locally:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1102,19 +1102,19 @@ If you already have an API key, you can select **Manually enter API Key** and pa
 
 ---
 
-### OpenCode Zen
+### CrazyCode Zen
 
-OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
+CrazyCode Zen is a list of tested and verified models provided by the CrazyCode team. [Learn more](/docs/zen).
 
-1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
+1. Sign in to **<a href={console}>CrazyCode Zen</a>** and click **Create API Key**.
 
-2. Run the `/connect` command and search for **OpenCode Zen**.
+2. Run the `/connect` command and search for **CrazyCode Zen**.
 
    ```txt
    /connect
    ```
 
-3. Enter your OpenCode API key.
+3. Enter your CrazyCode API key.
 
    ```txt
    ┌ API key
@@ -1156,11 +1156,11 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
    /models
    ```
 
-   You can also add additional models through your opencode config.
+   You can also add additional models through your crazycode config.
 
-   ```json title="opencode.json" {6}
+   ```json title="crazycode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://crazycode.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1171,11 +1171,11 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
    }
    ```
 
-5. You can also customize them through your opencode config. Here's an example of specifying a provider
+5. You can also customize them through your crazycode config. Here's an example of specifying a provider
 
-   ```json title="opencode.json"
+   ```json title="crazycode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://crazycode.ai/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1223,7 +1223,7 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
    Or set the `AICORE_SERVICE_KEY` environment variable:
 
    ```bash
-   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' crazycode
    ```
 
    Or add it to your bash profile:
@@ -1235,7 +1235,7 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
 4. Optionally set deployment ID and resource group:
 
    ```bash
-   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
+   AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group crazycode
    ```
 
    :::note
@@ -1387,11 +1387,11 @@ Vercel AI Gateway lets you access models from OpenAI, Anthropic, Google, xAI, an
    /models
    ```
 
-You can also customize models through your opencode config. Here's an example of specifying provider routing order.
+You can also customize models through your crazycode config. Here's an example of specifying provider routing order.
 
-```json title="opencode.json"
+```json title="crazycode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1497,11 +1497,11 @@ Some useful routing options:
    /models
    ```
 
-   You can also add additional models through your opencode config.
+   You can also add additional models through your crazycode config.
 
-   ```json title="opencode.json" {6}
+   ```json title="crazycode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://crazycode.ai/config.json",
      "provider": {
        "zenmux": {
          "models": {
@@ -1519,7 +1519,7 @@ Some useful routing options:
 To add any **OpenAI-compatible** provider that's not listed in the `/connect` command:
 
 :::tip
-You can use any OpenAI-compatible provider with opencode. Most modern AI providers offer OpenAI-compatible APIs.
+You can use any OpenAI-compatible provider with crazycode. Most modern AI providers offer OpenAI-compatible APIs.
 :::
 
 1. Run the `/connect` command and scroll down to **Other**.
@@ -1558,18 +1558,18 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
    ┌  Add credential
    │
-   ▲  This only stores a credential for myprovider - you will need to configure it in opencode.json, check the docs for examples.
+   ▲  This only stores a credential for myprovider - you will need to configure it in crazycode.json, check the docs for examples.
    │
    ◇  Enter your API key
    │  sk-...
    └
    ```
 
-4. Create or update your `opencode.json` file in your project directory:
+4. Create or update your `crazycode.json` file in your project directory:
 
-   ```json title="opencode.json" ""myprovider"" {5-15}
+   ```json title="crazycode.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://crazycode.ai/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1605,9 +1605,9 @@ You can use any OpenAI-compatible provider with opencode. Most modern AI provide
 
 Here's an example setting the `apiKey`, `headers`, and model `limit` options.
 
-```json title="opencode.json" {9,11,17-20}
+```json title="crazycode.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://crazycode.ai/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1640,7 +1640,7 @@ Configuration details:
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.
 
-The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
+The `limit` fields allow CrazyCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
 ---
 
@@ -1648,12 +1648,12 @@ The `limit` fields allow OpenCode to understand how much context you have left. 
 
 If you are having trouble with configuring a provider, check the following:
 
-1. **Check the auth setup**: Run `opencode auth list` to see if the credentials
+1. **Check the auth setup**: Run `crazycode auth list` to see if the credentials
    for the provider are added to your config.
 
    This doesn't apply to providers like Amazon Bedrock, that rely on environment variables for their auth.
 
-2. For custom providers, check the opencode config and:
-   - Make sure the provider ID used in the `/connect` command matches the ID in your opencode config.
+2. For custom providers, check the crazycode config and:
+   - Make sure the provider ID used in the `/connect` command matches the ID in your crazycode config.
    - The right npm package is used for the provider. For example, use `@ai-sdk/cerebras` for Cerebras. And for all other OpenAI-compatible providers, use `@ai-sdk/openai-compatible`.
    - Check correct API endpoint is used in the `options.baseURL` field.

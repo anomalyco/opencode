@@ -1,6 +1,6 @@
 import { action, useParams, useAction, useSubmission, json } from "@solidjs/router"
 import { createStore } from "solid-js/store"
-import { Billing } from "@opencode-ai/console-core/billing.js"
+import { Billing } from "@crazycode-ai/console-core/billing.js"
 import { withActor } from "~/context/auth.withActor"
 import { queryBillingInfo } from "../../common"
 import styles from "./black-section.module.css"
@@ -43,7 +43,7 @@ export function BlackSection() {
       <div data-slot="section-title">
         <h2>Subscription</h2>
         <div data-slot="title-row">
-          <p>You are subscribed to OpenCode Black for $200 per month.</p>
+          <p>You are subscribed to CrazyCode Black for $200 per month.</p>
           <button
             data-color="primary"
             disabled={sessionSubmission.pending || store.sessionRedirecting}

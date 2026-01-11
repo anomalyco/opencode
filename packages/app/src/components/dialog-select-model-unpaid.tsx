@@ -1,10 +1,10 @@
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
-import { List, type ListRef } from "@opencode-ai/ui/list"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tag } from "@opencode-ai/ui/tag"
+import { Button } from "@crazycode-ai/ui/button"
+import { useDialog } from "@crazycode-ai/ui/context/dialog"
+import { Dialog } from "@crazycode-ai/ui/dialog"
+import type { IconName } from "@crazycode-ai/ui/icons/provider"
+import { List, type ListRef } from "@crazycode-ai/ui/list"
+import { ProviderIcon } from "@crazycode-ai/ui/provider-icon"
+import { Tag } from "@crazycode-ai/ui/tag"
 import { type Component, onCleanup, onMount, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
@@ -32,7 +32,7 @@ export const DialogSelectModelUnpaid: Component = () => {
   return (
     <Dialog title="Select model">
       <div class="flex flex-col gap-3 px-2.5">
-        <div class="text-14-medium text-text-base px-2.5">Free models provided by OpenCode</div>
+        <div class="text-14-medium text-text-base px-2.5">Free models provided by CrazyCode</div>
         <List
           ref={(ref) => (listRef = ref)}
           items={local.model.list}
@@ -82,7 +82,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                   <div class="w-full flex items-center gap-x-3">
                     <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
                     <span>{i.name}</span>
-                    <Show when={i.id === "opencode"}>
+                    <Show when={i.id === "crazycode"}>
                       <Tag>Recommended</Tag>
                     </Show>
                     <Show when={i.id === "anthropic"}>

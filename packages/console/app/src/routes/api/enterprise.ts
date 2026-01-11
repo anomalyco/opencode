@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { AWS } from "@opencode-ai/console-core/aws.js"
+import { AWS } from "@crazycode-ai/console-core/aws.js"
 
 interface EnterpriseFormData {
   name: string

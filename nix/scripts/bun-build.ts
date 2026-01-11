@@ -1,9 +1,9 @@
-import solidPlugin from "./packages/opencode/node_modules/@opentui/solid/scripts/solid-plugin"
+import solidPlugin from "./packages/crazycode/node_modules/@opentui/solid/scripts/solid-plugin"
 import path from "path"
 import fs from "fs"
 
 const version = "@VERSION@"
-const pkg = path.join(process.cwd(), "packages/opencode")
+const pkg = path.join(process.cwd(), "packages/crazycode")
 const parser = fs.realpathSync(path.join(pkg, "./node_modules/@opentui/core/parser.worker.js"))
 const worker = "./src/cli/cmd/tui/worker.ts"
 const target = process.env["BUN_COMPILE_TARGET"]
@@ -14,7 +14,7 @@ if (!target) {
 
 process.chdir(pkg)
 
-const manifestName = "opencode-assets.manifest"
+const manifestName = "crazycode-assets.manifest"
 const manifestPath = path.join(pkg, manifestName)
 
 const readTrackedAssets = () => {
@@ -53,19 +53,19 @@ const result = await Bun.build({
   sourcemap: "external",
   entrypoints: ["./src/index.ts", parser, worker],
   define: {
-    OPENCODE_VERSION: `'@VERSION@'`,
+    CRAZYCODE_VERSION: `'@VERSION@'`,
     OTUI_TREE_SITTER_WORKER_PATH: "/$bunfs/root/" + path.relative(pkg, parser).replace(/\\/g, "/"),
-    OPENCODE_CHANNEL: "'latest'",
+    CRAZYCODE_CHANNEL: "'latest'",
   },
   compile: {
     target,
-    outfile: "opencode",
+    outfile: "crazycode",
     autoloadBunfig: false,
     autoloadDotenv: false,
     //@ts-ignore (bun types aren't up to date)
     autoloadTsconfig: true,
     autoloadPackageJson: true,
-    execArgv: ["--user-agent=opencode/" + version, "--use-system-ca", "--"],
+    execArgv: ["--user-agent=crazycode/" + version, "--use-system-ca", "--"],
     windows: {},
   },
 })
@@ -88,7 +88,7 @@ const bundle = await Bun.build({
   tsconfig: "./tsconfig.json",
   plugins: [solidPlugin],
   target: "bun",
-  outdir: "./.opencode-worker",
+  outdir: "./.crazycode-worker",
   sourcemap: "none",
 })
 
@@ -110,7 +110,7 @@ if (!output) {
   throw new Error("Worker build produced no entry-point output")
 }
 
-const dest = path.join(pkg, "opencode-worker.js")
+const dest = path.join(pkg, "crazycode-worker.js")
 await Bun.write(dest, Bun.file(output.path))
 fs.rmSync(path.dirname(output.path), { recursive: true, force: true })
 

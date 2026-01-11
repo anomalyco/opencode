@@ -31,7 +31,7 @@ permissions:
 jobs:
   publish:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'anomalyco/crazycode'
     steps:
       - uses: actions/checkout@v3
         with:
@@ -41,9 +41,9 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install OpenCode
+      - name: Install CrazyCode
         if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai@1.0.169
+        run: bun i -g crazycode-ai@1.0.169
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -65,25 +65,25 @@ jobs:
 
       - name: Setup Git Identity
         run: |
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
+          git config --global user.email "crazycode@sst.dev"
+          git config --global user.name "crazycode"
           git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
       - name: Publish
         id: publish
         run: ./script/publish-start.ts
         env:
-          OPENCODE_BUMP: ${{ inputs.bump }}
-          OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CRAZYCODE_BUMP: ${{ inputs.bump }}
+          CRAZYCODE_VERSION: ${{ inputs.version }}
+          CRAZYCODE_API_KEY: ${{ secrets.CRAZYCODE_API_KEY }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-cli
-          path: packages/opencode/dist
+          name: crazycode-cli
+          path: packages/crazycode/dist
 
     outputs:
       release: ${{ steps.publish.outputs.release }}
@@ -159,11 +159,11 @@ jobs:
           cd packages/desktop
           bun ./scripts/prepare.ts
         env:
-          OPENCODE_VERSION: ${{ needs.publish.outputs.version }}
+          CRAZYCODE_VERSION: ${{ needs.publish.outputs.version }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          CRAZYCODE_API_KEY: ${{ secrets.CRAZYCODE_API_KEY }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -191,7 +191,7 @@ jobs:
             updaterJsonPreferNsis: true
             releaseId: ${{ needs.publish.outputs.release }}
             tagName: ${{ needs.publish.outputs.tag }}
-            releaseAssetNamePattern: opencode-desktop-[platform]-[arch][ext]
+            releaseAssetNamePattern: crazycode-desktop-[platform]-[arch][ext]
             releaseDraft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -226,12 +226,12 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
+          git config --global user.email "crazycode@sst.dev"
+          git config --global user.name "crazycode"
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - run: ./script/publish-complete.ts
         env:
-          OPENCODE_VERSION: ${{ needs.publish.outputs.version  }}
+          CRAZYCODE_VERSION: ${{ needs.publish.outputs.version  }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}

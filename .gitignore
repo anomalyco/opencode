@@ -16,12 +16,12 @@ ts-dist
 /result
 refs
 Session.vim
-opencode.json
+crazycode.json
 a.out
 target
 .scripts
 
 # Local dev files
-opencode-dev
+crazycode-dev
 logs/
 *.bun-build

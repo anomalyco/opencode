@@ -1,4 +1,4 @@
-import { checksum } from "@opencode-ai/util/encode"
+import { checksum } from "@crazycode-ai/util/encode"
 import { FileDiff } from "@pierre/diffs"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, onCleanup, splitProps } from "solid-js"

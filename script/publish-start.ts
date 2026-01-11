@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@crazycode-ai/script"
 import { buildNotes, getLatestRelease } from "./changelog"
 
 let notes: string[] = []
@@ -35,8 +35,8 @@ await Bun.file(extensionToml).write(toml)
 
 await $`bun install`
 
-console.log("\n=== opencode ===\n")
-await import(`../packages/opencode/script/publish.ts`)
+console.log("\n=== crazycode ===\n")
+await import(`../packages/crazycode/script/publish.ts`)
 
 console.log("\n=== sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)
@@ -56,7 +56,7 @@ if (!Script.preview) {
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force-with-lease`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/opencode/dist/*.zip ./packages/opencode/dist/*.tar.gz`
+  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/crazycode/dist/*.zip ./packages/crazycode/dist/*.tar.gz`
   const release = await $`gh release view v${Script.version} --json id,tagName`.json()
   output += `release=${release.id}\n`
   output += `tag=${release.tagName}\n`

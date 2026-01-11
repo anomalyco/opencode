@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Common issues and how to resolve them.
 ---
 
-To debug any issues with OpenCode, you can check the logs or the session data
+To debug any issues with CrazyCode, you can check the logs or the session data
 that it stores locally.
 
 ---
@@ -12,21 +12,21 @@ that it stores locally.
 
 Log files are written to:
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: `%USERPROFILE%\.local\share\opencode\log\`
+- **macOS/Linux**: `~/.local/share/crazycode/log/`
+- **Windows**: `%USERPROFILE%\.local\share\crazycode\log\`
 
 Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
 
-You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
+You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `crazycode --log-level DEBUG`.
 
 ---
 
 ### Storage
 
-opencode stores session data and other application data on disk at:
+crazycode stores session data and other application data on disk at:
 
-- **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: `%USERPROFILE%\.local\share\opencode`
+- **macOS/Linux**: `~/.local/share/crazycode/`
+- **Windows**: `%USERPROFILE%\.local\share\crazycode`
 
 This directory contains:
 
@@ -40,13 +40,13 @@ This directory contains:
 
 ## Getting help
 
-If you're experiencing issues with OpenCode:
+If you're experiencing issues with CrazyCode:
 
 1. **Report issues on GitHub**
 
    The best way to report bugs or request features is through our GitHub repository:
 
-   [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
+   [**github.com/anomalyco/crazycode/issues**](https://github.com/anomalyco/crazycode/issues)
 
    Before creating a new issue, search existing issues to see if your problem has already been reported.
 
@@ -54,7 +54,7 @@ If you're experiencing issues with OpenCode:
 
    For real-time help and community discussion, join our Discord server:
 
-   [**opencode.ai/discord**](https://opencode.ai/discord)
+   [**crazycode.ai/discord**](https://crazycode.ai/discord)
 
 ---
 
@@ -64,11 +64,11 @@ Here are some common issues and how to resolve them.
 
 ---
 
-### OpenCode won't start
+### CrazyCode won't start
 
 1. Check the logs for error messages
 2. Try running with `--print-logs` to see output in the terminal
-3. Ensure you have the latest version with `opencode upgrade`
+3. Ensure you have the latest version with `crazycode upgrade`
 
 ---
 
@@ -94,9 +94,9 @@ Examples:
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
-- `opencode/kimi-k2`
+- `crazycode/kimi-k2`
 
-To figure out what models you have access to, run `opencode models`
+To figure out what models you have access to, run `crazycode models`
 
 ---
 
@@ -110,7 +110,7 @@ To resolve this:
 2. If the issue persists, try clearing your stored configuration:
 
    ```bash
-   rm -rf ~/.local/share/opencode
+   rm -rf ~/.local/share/crazycode
    ```
 
 3. Re-authenticate with your provider using the `/connect` command in the TUI.
@@ -119,19 +119,19 @@ To resolve this:
 
 ### AI_APICallError and provider package issues
 
-If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
+If you encounter API call errors, this may be due to outdated provider packages. crazycode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
 
 To resolve provider package issues:
 
 1. Clear the provider package cache:
 
    ```bash
-   rm -rf ~/.cache/opencode
+   rm -rf ~/.cache/crazycode
    ```
 
-2. Restart opencode to reinstall the latest provider packages
+2. Restart crazycode to reinstall the latest provider packages
 
-This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
+This will force crazycode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
 
 ---
 
@@ -162,4 +162,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+crazycode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.

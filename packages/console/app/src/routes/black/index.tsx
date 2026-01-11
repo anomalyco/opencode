@@ -21,7 +21,7 @@ export default function Black() {
 
   return (
     <div data-page="black">
-      <Title>opencode</Title>
+      <Title>crazycode</Title>
       <div data-component="header-gradient" />
       <header data-component="header">
         <div data-component="header-logo">
@@ -156,8 +156,8 @@ export default function Black() {
             </Match>
             <Match when={!available}>
               <p data-slot="back-soon">We’ll be back soon with more availability.</p>
-              <a data-slot="follow-us" href="https://x.com/opencode" target="_blank">
-                Follow @opencode
+              <a data-slot="follow-us" href="https://x.com/crazycode" target="_blank">
+                Follow @crazycode
               </a>
             </Match>
           </Switch>

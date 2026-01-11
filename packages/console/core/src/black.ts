@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { fn } from "./util/fn"
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@crazycode-ai/console-resource"
 
 export namespace BlackData {
   const Schema = z.object({

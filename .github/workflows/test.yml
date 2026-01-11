@@ -20,8 +20,8 @@ jobs:
 
       - name: run
         run: |
-          git config --global user.email "bot@opencode.ai"
-          git config --global user.name "opencode"
+          git config --global user.email "bot@crazycode.ai"
+          git config --global user.name "crazycode"
           bun turbo typecheck
           bun turbo test
         env:

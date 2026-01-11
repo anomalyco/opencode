@@ -1,5 +1,5 @@
 {
-  description = "OpenCode development flake";
+  description = "CrazyCode development flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -20,7 +20,7 @@
       inherit (nixpkgs) lib;
       forEachSystem = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
-      packageJson = builtins.fromJSON (builtins.readFile ./packages/opencode/package.json);
+      packageJson = builtins.fromJSON (builtins.readFile ./packages/crazycode/package.json);
       bunTarget = {
         "aarch64-linux" = "bun-linux-arm64";
         "x86_64-linux" = "bun-linux-x64";
@@ -66,10 +66,10 @@
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = nodeModulesHash;
           };
-          mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
+          mkOpencode = pkgs.callPackage ./nix/crazycode.nix { };
           mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
 
-          opencodePkg = mkOpencode {
+          crazycodePkg = mkOpencode {
             inherit (packageJson) version;
             src = ./.;
             scripts = ./nix/scripts;
@@ -83,11 +83,11 @@
             src = ./.;
             scripts = ./nix/scripts;
             mkNodeModules = mkNodeModules;
-            opencode = opencodePkg;
+            crazycode = crazycodePkg;
           };
         in
         {
-          default = opencodePkg;
+          default = crazycodePkg;
           desktop = desktopPkg;
         }
       );
@@ -98,20 +98,20 @@
           pkgs = pkgsFor system;
         in
         {
-          opencode-dev = {
+          crazycode-dev = {
             type = "app";
             meta = {
-              description = "Nix devshell shell for OpenCode";
+              description = "Nix devshell shell for CrazyCode";
               runtimeInputs = [ pkgs.bun ];
             };
             program = "${
               pkgs.writeShellApplication {
-                name = "opencode-dev";
+                name = "crazycode-dev";
                 text = ''
                   exec bun run dev "$@"
                 '';
               }
-            }/bin/opencode-dev";
+            }/bin/crazycode-dev";
           };
         }
       );

@@ -1,13 +1,13 @@
 import { createResource, createEffect, createMemo, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { Button } from "@opencode-ai/ui/button"
+import { useDialog } from "@crazycode-ai/ui/context/dialog"
+import { Dialog } from "@crazycode-ai/ui/dialog"
+import { List } from "@crazycode-ai/ui/list"
+import { TextField } from "@crazycode-ai/ui/text-field"
+import { Button } from "@crazycode-ai/ui/button"
 import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { createOpencodeClient } from "@crazycode-ai/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
 
 type ServerStatus = { healthy: boolean; version?: string }
@@ -117,7 +117,7 @@ export function DialogSelectServer() {
   }
 
   return (
-    <Dialog title="Servers" description="Switch which OpenCode server this app connects to.">
+    <Dialog title="Servers" description="Switch which CrazyCode server this app connects to.">
       <div class="flex flex-col gap-4 pb-4">
         <List
           search={{ placeholder: "Search servers", autofocus: true }}

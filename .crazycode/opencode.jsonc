@@ -1,0 +1,23 @@
+{
+  "$schema": "https://crazycode.ai/config.json",
+  // "plugin": ["crazycode-openai-codex-auth"],
+  // "enterprise": {
+  //   "url": "https://enterprise.dev.crazycode.ai",
+  // },
+  "instructions": ["STYLE_GUIDE.md"],
+  "provider": {
+    "crazycode": {
+      "options": {},
+    },
+  },
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+    },
+  },
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false,
+  },
+}

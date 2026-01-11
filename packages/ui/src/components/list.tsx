@@ -1,4 +1,4 @@
-import { type FilteredListProps, useFilteredList } from "@opencode-ai/ui/hooks"
+import { type FilteredListProps, useFilteredList } from "@crazycode-ai/ui/hooks"
 import { createEffect, createSignal, For, onCleanup, type JSX, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Icon, type IconProps } from "./icon"

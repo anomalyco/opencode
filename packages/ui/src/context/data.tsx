@@ -1,4 +1,4 @@
-import type { Message, Session, Part, FileDiff, SessionStatus, PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { Message, Session, Part, FileDiff, SessionStatus, PermissionRequest } from "@crazycode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 

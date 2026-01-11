@@ -4,7 +4,7 @@ import { message } from "@tauri-apps/plugin-dialog"
 export async function installCli(): Promise<void> {
   try {
     const path = await invoke<string>("install_cli")
-    await message(`CLI installed to ${path}\n\nRestart your terminal to use the 'opencode' command.`, {
+    await message(`CLI installed to ${path}\n\nRestart your terminal to use the 'crazycode' command.`, {
       title: "CLI Installed",
     })
   } catch (e) {

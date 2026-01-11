@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/enterprise",
+  "name": "@crazycode-ai/enterprise",
   "version": "1.1.12",
   "private": true,
   "type": "module",
@@ -8,12 +8,12 @@
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev",
     "build": "vite build",
-    "build:cloudflare": "OPENCODE_DEPLOYMENT_TARGET=cloudflare vite build",
+    "build:cloudflare": "CRAZYCODE_DEPLOYMENT_TARGET=cloudflare vite build",
     "start": "vite start"
   },
   "dependencies": {
-    "@opencode-ai/util": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@crazycode-ai/util": "workspace:*",
+    "@crazycode-ai/ui": "workspace:*",
     "aws4fetch": "^1.0.20",
     "@pierre/diffs": "catalog:",
     "@solidjs/router": "catalog:",

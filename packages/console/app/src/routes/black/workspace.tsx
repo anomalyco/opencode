@@ -51,7 +51,7 @@ export default function BlackWorkspace() {
 
   return (
     <div data-page="black">
-      <Title>opencode</Title>
+      <Title>crazycode</Title>
       <div data-component="header-gradient" />
       <header data-component="header">
         <div data-component="header-logo">

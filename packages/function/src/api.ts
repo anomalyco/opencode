@@ -204,7 +204,7 @@ export default new Hono<{ Bindings: Env }>()
    * Used by the GitHub action to get GitHub installation access token given the OIDC token
    */
   .post("/exchange_github_app_token", async (c) => {
-    const EXPECTED_AUDIENCE = "opencode-github-action"
+    const EXPECTED_AUDIENCE = "crazycode-github-action"
     const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
     const JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`
 
@@ -252,7 +252,7 @@ export default new Hono<{ Bindings: Env }>()
     return c.json({ token: installationAuth.token })
   })
   /**
-   * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)
+   * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `crazycode github run` locally)
    */
   .post("/exchange_github_app_token_with_pat", async (c) => {
     const body = await c.req.json<{ owner: string; repo: string }>()
@@ -302,7 +302,7 @@ export default new Hono<{ Bindings: Env }>()
     }
   })
   /**
-   * Used by the opencode CLI to check if the GitHub app is installed
+   * Used by the crazycode CLI to check if the GitHub app is installed
    */
   .get("/get_github_app_installation", async (c) => {
     const owner = c.req.query("owner")

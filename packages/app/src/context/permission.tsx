@@ -1,12 +1,12 @@
 import { createMemo, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
+import { createSimpleContext } from "@crazycode-ai/ui/context"
+import type { PermissionRequest } from "@crazycode-ai/sdk/v2/client"
 import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
+import { base64Decode, base64Encode } from "@crazycode-ai/util/encode"
 
 type PermissionRespondFn = (input: {
   sessionID: string

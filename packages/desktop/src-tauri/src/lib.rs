@@ -21,7 +21,7 @@ use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
 
-const SETTINGS_STORE: &str = "opencode.settings.dat";
+const SETTINGS_STORE: &str = "crazycode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
 #[derive(Clone)]
@@ -129,9 +129,9 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
 }
 
 fn get_sidecar_port() -> u32 {
-    option_env!("OPENCODE_PORT")
+    option_env!("CRAZYCODE_PORT")
         .map(|s| s.to_string())
-        .or_else(|| std::env::var("OPENCODE_PORT").ok())
+        .or_else(|| std::env::var("CRAZYCODE_PORT").ok())
         .and_then(|port_str| port_str.parse().ok())
         .unwrap_or_else(|| {
             TcpListener::bind("127.0.0.1:0")
@@ -158,14 +158,14 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
     #[cfg(target_os = "windows")]
     let (mut rx, child) = app
         .shell()
-        .sidecar("opencode-cli")
+        .sidecar("crazycode-cli")
         .unwrap()
-        .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-        .env("OPENCODE_CLIENT", "desktop")
+        .env("CRAZYCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+        .env("CRAZYCODE_CLIENT", "desktop")
         .env("XDG_STATE_HOME", &state_dir)
         .args(["serve", &format!("--port={port}")])
         .spawn()
-        .expect("Failed to spawn opencode");
+        .expect("Failed to spawn crazycode");
 
     #[cfg(not(target_os = "windows"))]
     let (mut rx, child) = {
@@ -173,8 +173,8 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
         let shell = get_user_shell();
         app.shell()
             .command(&shell)
-            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
-            .env("OPENCODE_CLIENT", "desktop")
+            .env("CRAZYCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("CRAZYCODE_CLIENT", "desktop")
             .env("XDG_STATE_HOME", &state_dir)
             .args([
                 "-il",
@@ -182,7 +182,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
                 &format!("\"{}\" serve --port={}", sidecar.display(), port),
             ])
             .spawn()
-            .expect("Failed to spawn opencode")
+            .expect("Failed to spawn crazycode")
     };
 
     tauri::async_runtime::spawn(async move {
@@ -305,16 +305,16 @@ pub fn run() {
             #[allow(unused_mut)]
             let mut window_builder =
                 WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
-                    .title("OpenCode")
+                    .title("CrazyCode")
                     .inner_size(size.width as f64, size.height as f64)
                     .decorations(true)
                     .zoom_hotkeys_enabled(true)
                     .disable_drag_drop_handler()
                     .initialization_script(format!(
                         r#"
-                      window.__OPENCODE__ ??= {{}};
-                      window.__OPENCODE__.updaterEnabled = {updater_enabled};
-                      window.__OPENCODE__.port = {port};
+                      window.__CRAZYCODE__ ??= {{}};
+                      window.__CRAZYCODE__.updaterEnabled = {updater_enabled};
+                      window.__CRAZYCODE__.port = {port};
                     "#
                     ));
 
@@ -377,7 +377,7 @@ pub fn run() {
                             let res = loop {
                                 if timestamp.elapsed() > Duration::from_secs(7) {
                                     break Err(format!(
-                                        "Failed to spawn OpenCode Server. Logs:\n{}",
+                                        "Failed to spawn CrazyCode Server. Logs:\n{}",
                                         get_logs(app.clone()).await.unwrap()
                                     ));
                                 }
@@ -406,7 +406,7 @@ pub fn run() {
                             let res = loop {
                                 if timestamp.elapsed() > Duration::from_secs(7) {
                                     break Err(format!(
-                                        "Failed to spawn OpenCode Server. Logs:\n{}",
+                                        "Failed to spawn CrazyCode Server. Logs:\n{}",
                                         get_logs(app.clone()).await.unwrap()
                                     ));
                                 }
@@ -432,13 +432,13 @@ pub fn run() {
                     app.state::<ServerState>().set_child(child);
 
                     if res.is_ok() {
-                        let _ = window.eval("window.__OPENCODE__.serverReady = true;");
+                        let _ = window.eval("window.__CRAZYCODE__.serverReady = true;");
 
                         // If using a configured server URL, inject it
                         if let Some(url) = server_url {
                             let escaped_url = url.replace('\\', "\\\\").replace('"', "\\\"");
                             let _ = window.eval(format!(
-                                "window.__OPENCODE__.serverUrl = \"{escaped_url}\";",
+                                "window.__CRAZYCODE__.serverUrl = \"{escaped_url}\";",
                             ));
                         }
                     }

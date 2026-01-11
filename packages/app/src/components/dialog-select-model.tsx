@@ -1,12 +1,12 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
 import { Component, createMemo, createSignal, JSX, Show } from "solid-js"
 import { useLocal } from "@/context/local"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@crazycode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
-import { Button } from "@opencode-ai/ui/button"
-import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
+import { Button } from "@crazycode-ai/ui/button"
+import { Tag } from "@crazycode-ai/ui/tag"
+import { Dialog } from "@crazycode-ai/ui/dialog"
+import { List } from "@crazycode-ai/ui/list"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 
@@ -54,7 +54,7 @@ const ModelList: Component<{
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
-          <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+          <Show when={i.provider.id === "crazycode" && (!i.cost || i.cost?.input === 0)}>
             <Tag>Free</Tag>
           </Show>
           <Show when={i.latest}>

@@ -17,20 +17,20 @@ import { DateTime } from "luxon"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
-import { Avatar } from "@opencode-ai/ui/avatar"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Mark } from "@opencode-ai/ui/logo"
-import { getFilename } from "@opencode-ai/util/path"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Session } from "@opencode-ai/sdk/v2/client"
+import { base64Decode, base64Encode } from "@crazycode-ai/util/encode"
+import { Avatar } from "@crazycode-ai/ui/avatar"
+import { ResizeHandle } from "@crazycode-ai/ui/resize-handle"
+import { Button } from "@crazycode-ai/ui/button"
+import { Icon } from "@crazycode-ai/ui/icon"
+import { IconButton } from "@crazycode-ai/ui/icon-button"
+import { Tooltip, TooltipKeybind } from "@crazycode-ai/ui/tooltip"
+import { Collapsible } from "@crazycode-ai/ui/collapsible"
+import { DiffChanges } from "@crazycode-ai/ui/diff-changes"
+import { Spinner } from "@crazycode-ai/ui/spinner"
+import { Mark } from "@crazycode-ai/ui/logo"
+import { getFilename } from "@crazycode-ai/util/path"
+import { DropdownMenu } from "@crazycode-ai/ui/dropdown-menu"
+import { Session } from "@crazycode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { createStore, produce, reconcile } from "solid-js/store"
 import {
@@ -43,15 +43,15 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
+import { showToast, Toast, toaster } from "@crazycode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { Binary } from "@opencode-ai/util/binary"
-import { retry } from "@opencode-ai/util/retry"
+import { Binary } from "@crazycode-ai/util/binary"
+import { retry } from "@crazycode-ai/util/retry"
 
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
+import { useDialog } from "@crazycode-ai/ui/context/dialog"
+import { useTheme, type ColorScheme } from "@crazycode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { DialogSelectServer } from "@/components/dialog-select-server"
@@ -141,7 +141,7 @@ export default function Layout(props: ParentProps) {
           persistent: true,
           icon: "download",
           title: "Update available",
-          description: `A new version of OpenCode (${version}) is now available to install.`,
+          description: `A new version of CrazyCode (${version}) is now available to install.`,
           actions: [
             {
               label: "Install and restart",
@@ -759,13 +759,13 @@ export default function Layout(props: ParentProps) {
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const mask = "radial-gradient(circle 5px at calc(100% - 2px) 2px, transparent 5px, black 5.5px)"
-    const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+    const crazycode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
       <div class="relative size-5 shrink-0 rounded-sm">
         <Avatar
           fallback={name()}
-          src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
+          src={props.project.id === crazycode ? "https://crazycode.ai/favicon.svg" : props.project.icon?.url}
           {...getAvatarColors(props.project.icon?.color)}
           class={`size-full ${props.class ?? ""}`}
           style={
@@ -1172,7 +1172,7 @@ export default function Layout(props: ParentProps) {
               <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                 <div class="p-3 flex flex-col gap-2">
                   <div class="text-12-medium text-text-strong">Getting started</div>
-                  <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
+                  <div class="text-text-base">CrazyCode includes free models so you can start immediately.</div>
                   <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
                 </div>
                 <Tooltip placement="right" value="Connect provider" inactive={expanded()}>
@@ -1226,7 +1226,7 @@ export default function Layout(props: ParentProps) {
           <Tooltip placement="right" value="Share feedback" inactive={expanded()}>
             <Button
               as={"a"}
-              href="https://opencode.ai/desktop-feedback"
+              href="https://crazycode.ai/desktop-feedback"
               target="_blank"
               class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
               variant="ghost"

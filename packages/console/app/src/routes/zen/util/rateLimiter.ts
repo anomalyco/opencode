@@ -1,5 +1,5 @@
-import { Database, eq, and, sql, inArray } from "@opencode-ai/console-core/drizzle/index.js"
-import { IpRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
+import { Database, eq, and, sql, inArray } from "@crazycode-ai/console-core/drizzle/index.js"
+import { IpRateLimitTable } from "@crazycode-ai/console-core/schema/ip.sql.js"
 import { RateLimitError } from "./error"
 import { logger } from "./logger"
 

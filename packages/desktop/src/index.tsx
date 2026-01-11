@@ -1,6 +1,6 @@
 // @refresh reload
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@crazycode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
@@ -12,7 +12,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Logo } from "@opencode-ai/ui/logo"
+import { Logo } from "@crazycode-ai/ui/logo"
 import { Suspense, createResource, ParentProps } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
@@ -238,7 +238,7 @@ const platform: Platform = {
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96.png",
+          icon: "https://crazycode.ai/favicon-96x96.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -293,7 +293,7 @@ render(() => {
 // Gate component that waits for the server to be ready
 function ServerGate(props: ParentProps) {
   const [status] = createResource(async () => {
-    if (window.__OPENCODE__?.serverReady) return
+    if (window.__CRAZYCODE__?.serverReady) return
     return await invoke("ensure_server_started")
   })
 
