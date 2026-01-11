@@ -15,6 +15,41 @@ export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
 
+  // Built-in provider entries that should always be available in OpenCode's provider directory
+  // (even if models.dev doesn't list them).
+  const BUILTIN_PROVIDERS: Record<string, Provider> = {
+    llmgateway: {
+      id: "llmgateway",
+      name: "LLM Gateway",
+      api: "https://api.llmgateway.io/v1",
+      npm: "@llmgateway/ai-sdk-provider",
+      env: ["LLM_GATEWAY_API_KEY", "LLMGATEWAY_API_KEY"],
+      // Keep at least one model so the UI can select a default model for the provider.
+      models: {
+        "glm-4.7": {
+          id: "glm-4.7",
+          name: "GLM-4.7",
+          release_date: "2025-12-22",
+          attachment: false,
+          reasoning: true,
+          temperature: false,
+          tool_call: true,
+          interleaved: true,
+          modalities: { input: ["text"], output: ["text"] },
+          limit: { context: 200000, output: 128000 },
+          options: {},
+        },
+      },
+    },
+  }
+
+  function overlayBuiltins(providers: Record<string, Provider>) {
+    for (const [id, provider] of Object.entries(BUILTIN_PROVIDERS)) {
+      if (!providers[id]) providers[id] = provider
+    }
+    return providers
+  }
+
   export const Model = z.object({
     id: z.string(),
     name: z.string(),
@@ -100,7 +135,7 @@ export namespace ModelsDev {
 
   export async function get() {
     const result = await Data()
-    return result as Record<string, Provider>
+    return overlayBuiltins(result as Record<string, Provider>)
   }
 
   export async function refresh() {

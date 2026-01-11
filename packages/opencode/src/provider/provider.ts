@@ -40,6 +40,7 @@ import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { createLLMGateway } from "@llmgateway/ai-sdk-provider"
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers"
 import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
@@ -84,6 +85,23 @@ export namespace Provider {
     })
   }
 
+  // @llmgateway/ai-sdk-provider's return type doesn't currently satisfy `ai`'s Provider interface,
+  // even on versions that peer with ai@5. OpenCode does use image/embedding models in some flows,
+  // so we provide those via the OpenAI-compatible provider as a fallback, while keeping LLM Gateway
+  // for language models.
+  const createLLMGatewayAdapter: (options: any) => SDK = (options) => {
+    const llmgw: any = createLLMGateway(options)
+    const compat: any = createOpenAICompatible(options)
+    return {
+      // Prefer LLM Gateway for language models (routing/headers), but keep compat defaults.
+      ...compat,
+      ...llmgw,
+      // Ensure required Provider surface exists.
+      imageModel: llmgw.imageModel ?? compat.imageModel,
+      textEmbeddingModel: llmgw.textEmbeddingModel ?? compat.textEmbeddingModel,
+    } as SDK
+  }
+
   const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
     "@ai-sdk/amazon-bedrock": createAmazonBedrock,
     "@ai-sdk/anthropic": createAnthropic,
@@ -94,6 +112,7 @@ export namespace Provider {
     "@ai-sdk/openai": createOpenAI,
     "@ai-sdk/openai-compatible": createOpenAICompatible,
     "@openrouter/ai-sdk-provider": createOpenRouter,
+    "@llmgateway/ai-sdk-provider": createLLMGatewayAdapter,
     "@ai-sdk/xai": createXai,
     "@ai-sdk/mistral": createMistral,
     "@ai-sdk/groq": createGroq,
@@ -357,6 +376,17 @@ export namespace Provider {
       }
     },
     openrouter: async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
+    llmgateway: async () => {
       return {
         autoload: false,
         options: {

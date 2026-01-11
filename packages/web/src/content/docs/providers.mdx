@@ -1432,6 +1432,74 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### LLM Gateway
+
+1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
+
+2. Run the `/connect` command and search for LLM Gateway.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter the API key for the provider.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Many LLM Gateway models are preloaded by default, run the `/models` command to select the one you want.
+
+   ```txt
+   /models
+   ```
+
+   You can also add additional models through your opencode config.
+
+   ```json title="opencode.json" {6}
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
+
+5. You can also customize them through your opencode config. Here's an example of specifying a provider
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "llmgateway": {
+         "models": {
+           "glm-4.7": {
+             "name": "GLM 4.7"
+           },
+           "gpt-5.2": {
+             "name": "GPT-5.2"
+           },
+           "google/gemini-2.5-pro": {
+             "name": "Gemini 2.5 Pro"
+           },
+           "anthropic/claude-3-5-sonnet-20241022": {
+             "name": "Claude 3.5 Sonnet"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
