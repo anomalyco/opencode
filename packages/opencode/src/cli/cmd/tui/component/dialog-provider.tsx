@@ -112,8 +112,11 @@ function AutoMethod(props: AutoMethodProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
-      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.url
-      Clipboard.copy(code)
+      const text = props.authorization.instructions
+      const token = text.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0]
+      const url = text.match(/https?:\/\/\S+/)?.[0]
+      const value = token ?? url ?? props.authorization.url
+      Clipboard.copy(value)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
     }
