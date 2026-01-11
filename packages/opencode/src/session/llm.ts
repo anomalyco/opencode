@@ -9,7 +9,7 @@ import {
   type ToolSet,
   extractReasoningMiddleware,
 } from "ai"
-import { clone, mergeDeep, pipe } from "remeda"
+import { clone, mergeDeep } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
 import { Instance } from "@/project/instance"
@@ -84,13 +84,11 @@ export namespace LLM {
     const provider = await Provider.getProvider(input.model.providerID)
     const small = input.small ? ProviderTransform.smallOptions(input.model) : {}
     const variant = input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
-    const options = pipe(
-      ProviderTransform.options(input.model, input.sessionID, provider.options),
-      mergeDeep(small),
-      mergeDeep(input.model.options),
-      mergeDeep(input.agent.options),
-      mergeDeep(variant),
-    )
+    const base = ProviderTransform.options(input.model, input.sessionID, provider.options)
+    const options = [small, input.model.options, input.agent.options, variant].reduce(
+      (acc, obj) => mergeDeep(acc, obj ?? {}),
+      base,
+    ) as Record<string, unknown>
 
     const params = await Plugin.trigger(
       "chat.params",

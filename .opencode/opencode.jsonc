@@ -2,10 +2,8 @@
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["STYLE_GUIDE.md"],
   // Ralph Wiggum plugin for iterative development loops
-  // Context Drain plugin for intelligent context management
   "plugin": [
     "file:///Users/pavittra/suresh/opencode/packages/opencode/.opencode/plugins/ralph-wiggum.ts",
-    "file:///Users/pavittra/suresh/opencode/packages/opencode/.opencode/plugins/context-drain.ts",
   ],
   "permission": {
     "bash": {
