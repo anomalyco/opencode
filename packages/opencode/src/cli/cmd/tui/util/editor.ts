@@ -15,13 +15,18 @@ export namespace Editor {
     await Bun.write(filepath, opts.value)
     opts.renderer.suspend()
     opts.renderer.currentRenderBuffer.clear()
-    const parts = editor.split(" ")
+
+    const shellEscapedFilepath = `'${filepath.replace(/'/g, "'\\''")}'`
+    const isWindows = process.platform === "win32"
+    const shellCommand = isWindows ? `${editor} "${filepath}"` : `${editor} ${shellEscapedFilepath}`
+
     const proc = Bun.spawn({
-      cmd: [...parts, filepath],
+      cmd: isWindows ? ["cmd", "/c", shellCommand] : ["sh", "-c", shellCommand],
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",
     })
+
     await proc.exited
     const content = await Bun.file(filepath).text()
     opts.renderer.currentRenderBuffer.clear()
