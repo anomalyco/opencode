@@ -700,6 +700,8 @@ export function Autocomplete(props: {
               paddingRight={1}
               backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
+              onMouseOver={() => moveTo(index)}
+              onMouseUp={() => select()}
             >
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
                 {option().display}
