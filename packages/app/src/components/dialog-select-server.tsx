@@ -5,6 +5,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Button } from "@opencode-ai/ui/button"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
@@ -130,20 +131,33 @@ export function DialogSelectServer() {
           }}
         >
           {(i) => (
-            <div
-              class="flex items-center gap-2 min-w-0 flex-1"
-              classList={{ "opacity-50": store.status[i]?.healthy === false }}
-            >
+            <div class="flex items-center gap-2 min-w-0 flex-1 group/item">
               <div
-                classList={{
-                  "size-1.5 rounded-full shrink-0": true,
-                  "bg-icon-success-base": store.status[i]?.healthy === true,
-                  "bg-icon-critical-base": store.status[i]?.healthy === false,
-                  "bg-border-weak-base": store.status[i] === undefined,
-                }}
-              />
-              <span class="truncate">{serverDisplayName(i)}</span>
-              <span class="text-text-weak">{store.status[i]?.version}</span>
+                class="flex items-center gap-2 min-w-0 flex-1"
+                classList={{ "opacity-50": store.status[i]?.healthy === false }}
+              >
+                <div
+                  classList={{
+                    "size-1.5 rounded-full shrink-0": true,
+                    "bg-icon-success-base": store.status[i]?.healthy === true,
+                    "bg-icon-critical-base": store.status[i]?.healthy === false,
+                    "bg-border-weak-base": store.status[i] === undefined,
+                  }}
+                />
+                <span class="truncate">{serverDisplayName(i)}</span>
+                <span class="text-text-weak">{store.status[i]?.version}</span>
+              </div>
+              <Show when={current() !== i && server.list.includes(i)}>
+                <IconButton
+                  icon="circle-x"
+                  variant="ghost"
+                  class="opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    server.remove(i)
+                  }}
+                />
+              </Show>
             </div>
           )}
         </List>
