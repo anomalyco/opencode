@@ -41,4 +41,6 @@ export {
   ayuTheme,
   oneDarkProTheme,
   shadesOfPurpleTheme,
+  nightowlTheme,
+  vesperTheme,
 } from "./default-themes"

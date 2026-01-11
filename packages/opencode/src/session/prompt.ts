@@ -306,7 +306,6 @@ export namespace SessionPrompt {
           session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
-          message: msgs.find((m) => m.info.role === "user")!,
           history: msgs,
         })
 
@@ -383,6 +382,8 @@ export namespace SessionPrompt {
           messageID: assistantMessage.id,
           sessionID: sessionID,
           abort,
+          callID: part.callID,
+          extra: { bypassAgentCheck: true },
           async metadata(input) {
             await Session.updatePart({
               ...part,
@@ -543,12 +544,18 @@ export namespace SessionPrompt {
         model,
         abort,
       })
+
+      // Check if user explicitly invoked an agent via @ in this turn
+      const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
+      const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
+
       const tools = await resolveTools({
         agent,
         session,
         model,
         tools: lastUser.tools,
         processor,
+        bypassAgentCheck,
       })
 
       if (step === 1) {
@@ -637,6 +644,7 @@ export namespace SessionPrompt {
     session: Session.Info
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
+    bypassAgentCheck: boolean
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -646,7 +654,7 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
-      extra: { model: input.model },
+      extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
@@ -675,7 +683,7 @@ export namespace SessionPrompt {
       },
     })
 
-    for (const item of await ToolRegistry.tools(input.model.providerID)) {
+    for (const item of await ToolRegistry.tools(input.model.providerID, input.agent)) {
       const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
       tools[item.id] = tool({
         id: item.id as any,
@@ -789,6 +797,7 @@ export namespace SessionPrompt {
       }
       tools[key] = item
     }
+
     return tools
   }
 
@@ -1098,6 +1107,9 @@ export namespace SessionPrompt {
         }
 
         if (part.type === "agent") {
+          // Check if this agent would be denied by task permission
+          const perm = PermissionNext.evaluate("task", part.name, agent.permission)
+          const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
           return [
             {
               id: Identifier.ascending("part"),
@@ -1111,9 +1123,12 @@ export namespace SessionPrompt {
               sessionID: input.sessionID,
               type: "text",
               synthetic: true,
+              // An extra space is added here. Otherwise the 'Use' gets appended
+              // to user's last word; making a combined word
               text:
-                "Use the above message and context to generate a prompt and call the task tool with subagent: " +
-                part.name,
+                " Use the above message and context to generate a prompt and call the task tool with subagent: " +
+                part.name +
+                hint,
             },
           ]
         }
@@ -1422,10 +1437,23 @@ export namespace SessionPrompt {
     arguments: z.string(),
     command: z.string(),
     variant: z.string().optional(),
+    parts: z
+      .array(
+        z.discriminatedUnion("type", [
+          MessageV2.FilePart.omit({
+            messageID: true,
+            sessionID: true,
+          }).partial({
+            id: true,
+          }),
+        ]),
+      )
+      .optional(),
   })
   export type CommandInput = z.infer<typeof CommandInput>
   const bashRegex = /!`([^`]+)`/g
-  const argsRegex = /(?:[^\s"']+|"[^"]*"|'[^']*')+/g
+  // Match [Image N] as single token, quoted strings, or non-space sequences
+  const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
   const placeholderRegex = /\$(\d+)/g
   const quoteTrimRegex = /^["']|["']$/g
   /**
@@ -1516,6 +1544,7 @@ export namespace SessionPrompt {
       throw error
     }
 
+    const templateParts = await resolvePromptParts(template)
     const parts =
       (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
         ? [
@@ -1525,10 +1554,10 @@ export namespace SessionPrompt {
               description: command.description ?? "",
               command: input.command,
               // TODO: how can we make task tool accept a more complex input?
-              prompt: await resolvePromptParts(template).then((x) => x.find((y) => y.type === "text")?.text ?? ""),
+              prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : await resolvePromptParts(template)
+        : [...templateParts, ...(input.parts ?? [])]
 
     const result = (await prompt({
       sessionID: input.sessionID,
@@ -1551,22 +1580,39 @@ export namespace SessionPrompt {
 
   async function ensureTitle(input: {
     session: Session.Info
-    message: MessageV2.WithParts
     history: MessageV2.WithParts[]
     providerID: string
     modelID: string
   }) {
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
+
+    // Find first non-synthetic user message
+    const firstRealUserIdx = input.history.findIndex(
+      (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
+    )
+    if (firstRealUserIdx === -1) return
+
     const isFirst =
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
     if (!isFirst) return
+
+    // Gather all messages up to and including the first real user message for context
+    // This includes any shell/subtask executions that preceded the user's first prompt
+    const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
+    const firstRealUser = contextMessages[firstRealUserIdx]
+
+    // For subtask-only messages (from command invocations), extract the prompt directly
+    // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
+    const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
+    const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
+
     const agent = await Agent.get("title")
     if (!agent) return
     const result = await LLM.stream({
       agent,
-      user: input.message.info as MessageV2.User,
+      user: firstRealUser.info as MessageV2.User,
       system: [],
       small: true,
       tools: {},
@@ -1584,24 +1630,9 @@ export namespace SessionPrompt {
           role: "user",
           content: "Generate a title for this conversation:\n",
         },
-        ...MessageV2.toModelMessage([
-          {
-            info: {
-              id: Identifier.ascending("message"),
-              role: "user",
-              sessionID: input.session.id,
-              time: {
-                created: Date.now(),
-              },
-              agent: input.message.info.role === "user" ? input.message.info.agent : await Agent.defaultAgent(),
-              model: {
-                providerID: input.providerID,
-                modelID: input.modelID,
-              },
-            },
-            parts: input.message.parts,
-          },
-        ]),
+        ...(hasOnlySubtaskParts
+          ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
+          : MessageV2.toModelMessage(contextMessages)),
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))

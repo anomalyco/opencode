@@ -37,14 +37,40 @@ export namespace Config {
 
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
-    let result = await global()
 
-    // Override with custom config if provided
+    // Load remote/well-known config first as the base layer (lowest precedence)
+    // This allows organizations to provide default configs that users can override
+    let result: Info = {}
+    for (const [key, value] of Object.entries(auth)) {
+      if (value.type === "wellknown") {
+        process.env[value.key] = value.token
+        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
+        const response = await fetch(`${key}/.well-known/opencode`)
+        if (!response.ok) {
+          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+        }
+        const wellknown = (await response.json()) as any
+        const remoteConfig = wellknown.config ?? {}
+        // Add $schema to prevent load() from trying to write back to a non-existent file
+        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+        result = mergeConfigConcatArrays(
+          result,
+          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
+        )
+        log.debug("loaded remote config from well-known", { url: key })
+      }
+    }
+
+    // Global user config overrides remote config
+    result = mergeConfigConcatArrays(result, await global())
+
+    // Custom config path overrides global
     if (Flag.OPENCODE_CONFIG) {
       result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
+    // Project config has highest precedence (overrides global and remote)
     for (const file of ["opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
@@ -52,17 +78,10 @@ export namespace Config {
       }
     }
 
+    // Inline config content has highest precedence
     if (Flag.OPENCODE_CONFIG_CONTENT) {
       result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-    }
-
-    for (const [key, value] of Object.entries(auth)) {
-      if (value.type === "wellknown") {
-        process.env[value.key] = value.token
-        const wellknown = (await fetch(`${key}/.well-known/opencode`).then((x) => x.json())) as any
-        result = mergeConfigConcatArrays(result, await load(JSON.stringify(wellknown.config ?? {}), process.cwd()))
-      }
     }
 
     result.agent = result.agent || {}
@@ -158,6 +177,8 @@ export namespace Config {
     if (Flag.OPENCODE_DISABLE_PRUNE) {
       result.compaction = { ...result.compaction, prune: false }
     }
+
+    result.plugin = deduplicatePlugins(result.plugin ?? [])
 
     return {
       config: result,
@@ -313,6 +334,58 @@ export namespace Config {
     return plugins
   }
 
+  /**
+   * Extracts a canonical plugin name from a plugin specifier.
+   * - For file:// URLs: extracts filename without extension
+   * - For npm packages: extracts package name without version
+   *
+   * @example
+   * getPluginName("file:///path/to/plugin/foo.js") // "foo"
+   * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
+   * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
+   */
+  export function getPluginName(plugin: string): string {
+    if (plugin.startsWith("file://")) {
+      return path.parse(new URL(plugin).pathname).name
+    }
+    const lastAt = plugin.lastIndexOf("@")
+    if (lastAt > 0) {
+      return plugin.substring(0, lastAt)
+    }
+    return plugin
+  }
+
+  /**
+   * Deduplicates plugins by name, with later entries (higher priority) winning.
+   * Priority order (highest to lowest):
+   * 1. Local plugin/ directory
+   * 2. Local opencode.json
+   * 3. Global plugin/ directory
+   * 4. Global opencode.json
+   *
+   * Since plugins are added in low-to-high priority order,
+   * we reverse, deduplicate (keeping first occurrence), then restore order.
+   */
+  export function deduplicatePlugins(plugins: string[]): string[] {
+    // seenNames: canonical plugin names for duplicate detection
+    // e.g., "oh-my-opencode", "@scope/pkg"
+    const seenNames = new Set<string>()
+
+    // uniqueSpecifiers: full plugin specifiers to return
+    // e.g., "oh-my-opencode@2.4.3", "file:///path/to/plugin.js"
+    const uniqueSpecifiers: string[] = []
+
+    for (const specifier of plugins.toReversed()) {
+      const name = getPluginName(specifier)
+      if (!seenNames.has(name)) {
+        seenNames.add(name)
+        uniqueSpecifiers.push(specifier)
+      }
+    }
+
+    return uniqueSpecifiers.toReversed()
+  }
+
   export const McpLocal = z
     .object({
       type: z.literal("local").describe("Type of MCP server connection"),
@@ -395,27 +468,53 @@ export namespace Config {
   })
   export type PermissionRule = z.infer<typeof PermissionRule>
 
+  // Capture original key order before zod reorders, then rebuild in original order
+  const permissionPreprocess = (val: unknown) => {
+    if (typeof val === "object" && val !== null && !Array.isArray(val)) {
+      return { __originalKeys: Object.keys(val), ...val }
+    }
+    return val
+  }
+
+  const permissionTransform = (x: unknown): Record<string, PermissionRule> => {
+    if (typeof x === "string") return { "*": x as PermissionAction }
+    const obj = x as { __originalKeys?: string[] } & Record<string, unknown>
+    const { __originalKeys, ...rest } = obj
+    if (!__originalKeys) return rest as Record<string, PermissionRule>
+    const result: Record<string, PermissionRule> = {}
+    for (const key of __originalKeys) {
+      if (key in rest) result[key] = rest[key] as PermissionRule
+    }
+    return result
+  }
+
   export const Permission = z
-    .object({
-      read: PermissionRule.optional(),
-      edit: PermissionRule.optional(),
-      glob: PermissionRule.optional(),
-      grep: PermissionRule.optional(),
-      list: PermissionRule.optional(),
-      bash: PermissionRule.optional(),
-      task: PermissionRule.optional(),
-      external_directory: PermissionRule.optional(),
-      todowrite: PermissionAction.optional(),
-      todoread: PermissionAction.optional(),
-      webfetch: PermissionAction.optional(),
-      websearch: PermissionAction.optional(),
-      codesearch: PermissionAction.optional(),
-      lsp: PermissionRule.optional(),
-      doom_loop: PermissionAction.optional(),
-    })
-    .catchall(PermissionRule)
-    .or(PermissionAction)
-    .transform((x) => (typeof x === "string" ? { "*": x } : x))
+    .preprocess(
+      permissionPreprocess,
+      z
+        .object({
+          __originalKeys: z.string().array().optional(),
+          read: PermissionRule.optional(),
+          edit: PermissionRule.optional(),
+          glob: PermissionRule.optional(),
+          grep: PermissionRule.optional(),
+          list: PermissionRule.optional(),
+          bash: PermissionRule.optional(),
+          task: PermissionRule.optional(),
+          external_directory: PermissionRule.optional(),
+          todowrite: PermissionAction.optional(),
+          todoread: PermissionAction.optional(),
+          question: PermissionAction.optional(),
+          webfetch: PermissionAction.optional(),
+          websearch: PermissionAction.optional(),
+          codesearch: PermissionAction.optional(),
+          lsp: PermissionRule.optional(),
+          doom_loop: PermissionAction.optional(),
+        })
+        .catchall(PermissionRule)
+        .or(PermissionAction),
+    )
+    .transform(permissionTransform)
     .meta({
       ref: "PermissionConfig",
     })
@@ -440,6 +539,10 @@ export namespace Config {
       disable: z.boolean().optional(),
       description: z.string().optional().describe("Description of when to use the agent"),
       mode: z.enum(["subagent", "primary", "all"]).optional(),
+      hidden: z
+        .boolean()
+        .optional()
+        .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
       options: z.record(z.string(), z.any()).optional(),
       color: z
         .string()
@@ -458,12 +561,14 @@ export namespace Config {
     .catchall(z.any())
     .transform((agent, ctx) => {
       const knownKeys = new Set([
+        "name",
         "model",
         "prompt",
         "description",
         "temperature",
         "top_p",
         "mode",
+        "hidden",
         "color",
         "steps",
         "maxSteps",

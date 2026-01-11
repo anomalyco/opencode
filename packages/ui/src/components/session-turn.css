@@ -59,6 +59,7 @@
 
   [data-slot="session-turn-message-content"] {
     margin-top: -18px;
+    max-width: 100%;
   }
 
   [data-slot="session-turn-message-title"] {
@@ -221,6 +222,22 @@
       &:nth-child(30) {
         animation-delay: 3s;
       }
+    }
+  }
+
+  [data-slot="session-turn-summary-section"] {
+    position: relative;
+
+    [data-slot="session-turn-summary-copy"] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    &:hover [data-slot="session-turn-summary-copy"] {
+      opacity: 1;
     }
   }
 

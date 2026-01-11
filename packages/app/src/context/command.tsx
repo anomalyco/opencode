@@ -177,8 +177,19 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const dialog = useDialog()
 
     const options = createMemo(() => {
-      const all = registrations().flatMap((x) => x())
+      const seen = new Set<string>()
+      const all: CommandOption[] = []
+
+      for (const reg of registrations()) {
+        for (const opt of reg()) {
+          if (seen.has(opt.id)) continue
+          seen.add(opt.id)
+          all.push(opt)
+        }
+      }
+
       const suggested = all.filter((x) => x.suggested && !x.disabled)
+
       return [
         ...suggested.map((x) => ({
           ...x,

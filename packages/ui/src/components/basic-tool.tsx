@@ -25,6 +25,7 @@ export interface BasicToolProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
+  onSubtitleClick?: () => void
 }
 
 export function BasicTool(props: BasicToolProps) {
@@ -59,6 +60,13 @@ export function BasicTool(props: BasicToolProps) {
                             data-slot="basic-tool-tool-subtitle"
                             classList={{
                               [trigger().subtitleClass ?? ""]: !!trigger().subtitleClass,
+                              clickable: !!props.onSubtitleClick,
+                            }}
+                            onClick={(e) => {
+                              if (props.onSubtitleClick) {
+                                e.stopPropagation()
+                                props.onSubtitleClick()
+                              }
                             }}
                           >
                             {trigger().subtitle}

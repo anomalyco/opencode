@@ -44,6 +44,29 @@ You can also disable a server by setting `enabled` to `false`. This is useful if
 
 ---
 
+### Overriding remote defaults
+
+Organizations can provide default MCP servers via their `.well-known/opencode` endpoint. These servers may be disabled by default, allowing users to opt-in to the ones they need.
+
+To enable a specific server from your organization's remote config, add it to your local config with `enabled: true`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "jira": {
+      "type": "remote",
+      "url": "https://jira.example.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Your local config values override the remote defaults. See [config precedence](/docs/config#precedence-order) for more details.
+
+---
+
 ## Local
 
 Add local MCP servers using `type` to `"local"` within the MCP object.

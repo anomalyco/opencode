@@ -67,7 +67,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scrollRef()!.querySelector(`[data-key="${key}"]`)
+      const element = scrollRef()?.querySelector(`[data-key="${key}"]`)
       element?.scrollIntoView({ block: "center" })
     })
   })
@@ -175,12 +175,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           fallback={
             <div data-slot="list-empty-state">
               <div data-slot="list-message">
-                {props.emptyMessage ?? "No results"} for <span data-slot="list-filter">&quot;{filter()}&quot;</span>
+                {props.emptyMessage ?? (grouped.loading ? "Loading" : "No results")} for{" "}
+                <span data-slot="list-filter">&quot;{filter()}&quot;</span>
               </div>
             </div>
           }
         >
-          <For each={grouped()}>
+          <For each={grouped.latest}>
             {(group) => (
               <div data-slot="list-group">
                 <Show when={group.category}>

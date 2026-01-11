@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, Show } from "solid-js"
+import { createMemo, createResource, Show } from "solid-js"
 import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
@@ -20,6 +20,7 @@ import { DialogSelectServer } from "@/components/dialog-select-server"
 import { SessionLspIndicator } from "@/components/session-lsp-indicator"
 import { SessionMcpIndicator } from "@/components/session-mcp-indicator"
 import type { Session } from "@opencode-ai/sdk/v2/client"
+import { same } from "@/utils/same"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
@@ -34,8 +35,16 @@ export function SessionHeader() {
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
 
   const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
-  const currentSession = createMemo(() => sessions().find((s) => s.id === params.id))
+  const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
+  const parentSession = createMemo(() => {
+    const current = currentSession()
+    if (!current?.parentID) return undefined
+    return sync.data.session.find((s) => s.id === current.parentID)
+  })
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const worktrees = createMemo(() => layout.projects.list().map((p) => p.worktree), [], { equals: same })
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const view = createMemo(() => layout.view(sessionKey()))
 
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
@@ -43,6 +52,8 @@ export function SessionHeader() {
 
   function navigateToSession(session: Session | undefined) {
     if (!session) return
+    // Only navigate if we're actually changing to a different session
+    if (session.id === params.id) return
     navigate(`/${params.dir}/session/${session.id}`)
   }
 
@@ -60,7 +71,7 @@ export function SessionHeader() {
           <div class="flex items-center gap-2 min-w-0">
             <div class="hidden xl:flex items-center gap-2">
               <Select
-                options={layout.projects.list().map((project) => project.worktree)}
+                options={worktrees()}
                 current={sync.project?.worktree ?? projectDirectory()}
                 label={(x) => getFilename(x)}
                 onSelect={(x) => (x ? navigateToProject(x) : undefined)}
@@ -77,18 +88,56 @@ export function SessionHeader() {
               </Select>
               <div class="text-text-weaker">/</div>
             </div>
-            <Select
-              options={sessions()}
-              current={currentSession()}
-              placeholder="New session"
-              label={(x) => x.title}
-              value={(x) => x.id}
-              onSelect={navigateToSession}
-              class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
-              variant="ghost"
-            />
+            <Show
+              when={parentSession()}
+              fallback={
+                <>
+                  <Select
+                    options={sessions()}
+                    current={currentSession()}
+                    placeholder="New session"
+                    label={(x) => x.title}
+                    value={(x) => x.id}
+                    onSelect={navigateToSession}
+                    class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+                    variant="ghost"
+                  />
+                </>
+              }
+            >
+              <div class="flex items-center gap-2 min-w-0">
+                <Select
+                  options={sessions()}
+                  current={parentSession()}
+                  placeholder="Back to parent session"
+                  label={(x) => x.title}
+                  value={(x) => x.id}
+                  onSelect={(session) => {
+                    // Only navigate if selecting a different session than current parent
+                    const currentParent = parentSession()
+                    if (session && currentParent && session.id !== currentParent.id) {
+                      navigateToSession(session)
+                    }
+                  }}
+                  class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
+                  variant="ghost"
+                />
+                <div class="text-text-weaker">/</div>
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <Tooltip value="Back to parent session">
+                    <button
+                      type="button"
+                      class="flex items-center justify-center gap-1 p-1 rounded hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors flex-shrink-0"
+                      onClick={() => navigateToSession(parentSession())}
+                    >
+                      <Icon name="arrow-left" size="small" class="text-icon-base" />
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
+            </Show>
           </div>
-          <Show when={currentSession()}>
+          <Show when={currentSession() && !parentSession()}>
             <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
               <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
             </TooltipKeybind>
@@ -124,20 +173,24 @@ export function SessionHeader() {
                 title="Toggle review"
                 keybind={command.keybind("review.toggle")}
               >
-                <Button variant="ghost" class="group/review-toggle size-6 p-0" onClick={layout.review.toggle}>
+                <Button
+                  variant="ghost"
+                  class="group/review-toggle size-6 p-0"
+                  onClick={() => view().reviewPanel.toggle()}
+                >
                   <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                     <Icon
-                      name={layout.review.opened() ? "layout-right" : "layout-left"}
+                      name={view().reviewPanel.opened() ? "layout-right" : "layout-left"}
                       size="small"
                       class="group-hover/review-toggle:hidden"
                     />
                     <Icon
-                      name={layout.review.opened() ? "layout-right-partial" : "layout-left-partial"}
+                      name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-left-partial"}
                       size="small"
                       class="hidden group-hover/review-toggle:inline-block"
                     />
                     <Icon
-                      name={layout.review.opened() ? "layout-right-full" : "layout-left-full"}
+                      name={view().reviewPanel.opened() ? "layout-right-full" : "layout-left-full"}
                       size="small"
                       class="hidden group-active/review-toggle:inline-block"
                     />
@@ -150,11 +203,11 @@ export function SessionHeader() {
               title="Toggle terminal"
               keybind={command.keybind("terminal.toggle")}
             >
-              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={layout.terminal.toggle}>
+              <Button variant="ghost" class="group/terminal-toggle size-6 p-0" onClick={() => view().terminal.toggle()}>
                 <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                   <Icon
                     size="small"
-                    name={layout.terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                    name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
                     class="group-hover/terminal-toggle:hidden"
                   />
                   <Icon
@@ -164,7 +217,7 @@ export function SessionHeader() {
                   />
                   <Icon
                     size="small"
-                    name={layout.terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                    name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
                     class="hidden group-active/terminal-toggle:inline-block"
                   />
                 </div>
@@ -197,8 +250,13 @@ export function SessionHeader() {
                     }
                     return shareURL
                   },
+                  { initialValue: "" },
                 )
-                return <Show when={url()}>{(url) => <TextField value={url()} readOnly copyable class="w-72" />}</Show>
+                return (
+                  <Show when={url.latest}>
+                    {(shareUrl) => <TextField value={shareUrl()} readOnly copyable class="w-72" />}
+                  </Show>
+                )
               })}
             </Popover>
           </Show>
