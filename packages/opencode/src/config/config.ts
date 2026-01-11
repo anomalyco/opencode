@@ -453,9 +453,11 @@ export namespace Config {
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
-  export const PermissionAction = z.enum(["ask", "allow", "deny"]).meta({
-    ref: "PermissionActionConfig",
-  })
+  export const PermissionAction = z
+    .preprocess((val) => (val === true ? "allow" : val === false ? "deny" : val), z.enum(["ask", "allow", "deny"]))
+    .meta({
+      ref: "PermissionActionConfig",
+    })
   export type PermissionAction = z.infer<typeof PermissionAction>
 
   export const PermissionObject = z.record(z.string(), PermissionAction).meta({
