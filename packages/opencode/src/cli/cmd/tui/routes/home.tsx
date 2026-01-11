@@ -79,14 +79,18 @@ export function Home() {
   onMount(() => {
     randomizeTip()
     if (once) return
-    if (route.initialPrompt) {
-      prompt.set(route.initialPrompt)
-      once = true
-    } else if (args.prompt) {
-      prompt.set({ input: args.prompt, parts: [] })
-      once = true
-      prompt.submit()
-    }
+    // Defer to allow child Prompt component's onMount to run first
+    queueMicrotask(() => {
+      if (once || !prompt) return
+      if (route.initialPrompt) {
+        prompt.set(route.initialPrompt)
+        once = true
+      } else if (args.prompt) {
+        prompt.set({ input: args.prompt, parts: [] })
+        once = true
+        prompt.submit()
+      }
+    })
   })
   const directory = useDirectory()
 
