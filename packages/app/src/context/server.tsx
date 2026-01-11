@@ -16,10 +16,7 @@ export function normalizeServerUrl(input: string) {
 
 export function serverDisplayName(url: string) {
   if (!url) return ""
-  return url
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "")
-    .split("/")[0]
+  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
 function projectsKey(url: string) {

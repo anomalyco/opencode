@@ -33,16 +33,14 @@ const Loading = () => <div class="size-full flex items-center justify-center tex
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; port?: number; serverReady?: boolean }
+    __OPENCODE__?: { updaterEnabled?: boolean; port?: number; serverReady?: boolean; serverUrl?: string }
   }
 }
 
 const defaultServerUrl = iife(() => {
-  const param = new URLSearchParams(document.location.search).get("url")
-  if (param) return param
-
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
-  if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
+  if (window.__OPENCODE__?.serverUrl) return window.__OPENCODE__.serverUrl
+  if (window.__OPENCODE__?.port) return `http://127.0.0.1:${window.__OPENCODE__.port}`
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
@@ -108,18 +106,16 @@ export function AppInterface() {
                 <Route path="/" component={() => <Navigate href="session" />} />
                 <Route
                   path="/session/:id?"
-                  component={(p) => (
-                    <Show when={p.params.id ?? "new"} keyed>
-                      <TerminalProvider>
-                        <FileProvider>
-                          <PromptProvider>
-                            <Suspense fallback={<Loading />}>
-                              <Session />
-                            </Suspense>
-                          </PromptProvider>
-                        </FileProvider>
-                      </TerminalProvider>
-                    </Show>
+                  component={() => (
+                    <TerminalProvider>
+                      <FileProvider>
+                        <PromptProvider>
+                          <Suspense fallback={<Loading />}>
+                            <Session />
+                          </Suspense>
+                        </PromptProvider>
+                      </FileProvider>
+                    </TerminalProvider>
                   )}
                 />
               </Route>
