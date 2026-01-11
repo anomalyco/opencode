@@ -109,21 +109,41 @@ export namespace Snapshot {
   }
 
   export async function restore(snapshot: string) {
-    log.info("restore", { commit: snapshot })
+    log.info("restore", { commit: snapshot, cwd: Instance.directory })
     const git = gitdir()
-    const result =
-      await $`git --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot} && git --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -a -f`
-        .quiet()
-        .cwd(Instance.worktree)
-        .nothrow()
+    const prefix = path.relative(Instance.worktree, Instance.directory)
+    const pathSpec = prefix ? `${prefix}/` : ""
 
-    if (result.exitCode !== 0) {
-      log.error("failed to restore snapshot", {
+    const listResult = await $`git --git-dir ${git} ls-tree -r --name-only ${snapshot} -- ${pathSpec}`.quiet().nothrow()
+    if (listResult.exitCode !== 0) {
+      log.error("failed to list snapshot files", {
         snapshot,
-        exitCode: result.exitCode,
-        stderr: result.stderr.toString(),
-        stdout: result.stdout.toString(),
+        exitCode: listResult.exitCode,
+        stderr: listResult.stderr.toString(),
       })
+      return
+    }
+
+    const files = listResult.text().trim().split("\n").filter(Boolean)
+    if (files.length === 0) {
+      log.info("no files to restore", { snapshot, prefix })
+      return
+    }
+
+    const readResult = await $`git --git-dir ${git} --work-tree ${Instance.worktree} read-tree ${snapshot}`
+      .quiet()
+      .nothrow()
+    if (readResult.exitCode !== 0) {
+      log.error("failed to read-tree snapshot", {
+        snapshot,
+        exitCode: readResult.exitCode,
+        stderr: readResult.stderr.toString(),
+      })
+      return
+    }
+
+    for (const file of files) {
+      await $`git --git-dir ${git} --work-tree ${Instance.worktree} checkout-index -f -- ${file}`.quiet().nothrow()
     }
   }
 
@@ -165,7 +185,7 @@ export namespace Snapshot {
     const result =
       await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
         .quiet()
-        .cwd(Instance.worktree)
+        .cwd(Instance.directory)
         .nothrow()
 
     if (result.exitCode !== 0) {
