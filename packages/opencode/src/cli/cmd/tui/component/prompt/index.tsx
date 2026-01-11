@@ -36,6 +36,7 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
+  onBranch?: (initialPrompt?: string) => void
   ref?: (ref: PromptRef) => void
   hint?: JSX.Element
   showPlaceholder?: boolean
@@ -541,6 +542,9 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (inputText.startsWith("/branch")) {
+      const args = inputText.slice("/branch".length).trim()
+      props.onBranch?.(args || undefined)
     } else if (
       inputText.startsWith("/") &&
       iife(() => {

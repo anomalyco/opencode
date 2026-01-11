@@ -381,6 +381,11 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.fork"),
         },
         {
+          display: "/branch",
+          description: "branch with compacted context",
+          onSelect: () => command.trigger("session.branch"),
+        },
+        {
           display: "/thinking",
           description: "toggle thinking visibility",
           onSelect: () => command.trigger("session.toggle.thinking"),

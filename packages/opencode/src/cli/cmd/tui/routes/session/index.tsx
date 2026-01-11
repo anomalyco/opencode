@@ -118,12 +118,13 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const isChildSession = () => !!session()?.parentID
   const permissions = createMemo(() => {
-    if (session()?.parentID) return []
+    if (isChildSession()) return []
     return children().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
-    if (session()?.parentID) return []
+    if (isChildSession()) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
 
@@ -149,7 +150,7 @@ export function Session() {
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
-    if (session()?.parentID) return false
+    if (isChildSession()) return false
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
@@ -199,10 +200,9 @@ export function Session() {
   let prompt: PromptRef
   const keybind = useKeybind()
 
-  // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
   useKeyboard((evt) => {
-    if (!session()?.parentID) return
+    if (!isChildSession()) return
     if (keybind.match("app_exit", evt)) {
       exit()
     }
@@ -372,6 +372,32 @@ export function Session() {
           providerID: selectedModel.providerID,
         })
         dialog.clear()
+      },
+    },
+
+    {
+      title: "Branch session",
+      value: "session.branch",
+      category: "Session",
+      onSelect: async (dialog) => {
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({ message: "No model selected", variant: "warning" })
+          return
+        }
+        if (!messages().length) {
+          toast.show({ message: "Cannot branch an empty session", variant: "warning" })
+          return
+        }
+        dialog.clear()
+        const result = await sdk.client.session.branch({
+          sessionID: route.sessionID,
+          model: { modelID: selectedModel.modelID, providerID: selectedModel.providerID },
+          agent: local.agent.current().name,
+        })
+        if (result.data) {
+          navigate({ sessionID: result.data.id, type: "session" })
+        }
       },
     },
     {
@@ -1012,7 +1038,7 @@ export function Session() {
                 <QuestionPrompt request={questions()[0]} />
               </Show>
               <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
+                visible={!isChildSession() && permissions().length === 0 && questions().length === 0}
                 ref={(r) => {
                   prompt = r
                   promptRef.set(r)
@@ -1024,6 +1050,31 @@ export function Session() {
                 disabled={permissions().length > 0 || questions().length > 0}
                 onSubmit={() => {
                   toBottom()
+                }}
+                onBranch={async (initialPrompt) => {
+                  const selectedModel = local.model.current()
+                  if (!selectedModel) {
+                    toast.show({ message: "No model selected", variant: "warning" })
+                    return
+                  }
+                  if (!messages().length) {
+                    toast.show({ message: "Cannot branch an empty session", variant: "warning" })
+                    return
+                  }
+                  const result = await sdk.client.session.branch({
+                    sessionID: route.sessionID,
+                    model: { modelID: selectedModel.modelID, providerID: selectedModel.providerID },
+                    agent: local.agent.current().name,
+                  })
+                  if (!result.data) {
+                    toast.show({ message: "Failed to branch session", variant: "error" })
+                    return
+                  }
+                  navigate({
+                    sessionID: result.data.id,
+                    type: "session",
+                    initialPrompt: initialPrompt ? { input: initialPrompt, parts: [] } : undefined,
+                  })
                 }}
                 sessionID={route.sessionID}
               />
