@@ -20,6 +20,13 @@ export namespace Storage {
     }),
   )
 
+  export const DiskFullError = NamedError.create(
+    "DiskFullError",
+    z.object({
+      message: z.string(),
+    }),
+  )
+
   const MIGRATIONS: Migration[] = [
     async (dir) => {
       const project = path.resolve(dir, "../project")
@@ -182,7 +189,7 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const content = await Bun.file(target).json()
       fn(content)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      await atomicWrite(target, JSON.stringify(content, null, 2))
       return content as T
     })
   }
@@ -192,7 +199,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      await atomicWrite(target, JSON.stringify(content, null, 2))
     })
   }
 
@@ -202,6 +209,9 @@ export namespace Storage {
       const errnoException = e as NodeJS.ErrnoException
       if (errnoException.code === "ENOENT") {
         throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
+      }
+      if (errnoException.code === "ENOSPC") {
+        throw new DiskFullError({ message: `No space left on device while writing storage: ${errnoException.path}` })
       }
       throw e
     })
@@ -222,5 +232,67 @@ export namespace Storage {
     } catch {
       return []
     }
+  }
+
+  async function atomicWrite(target: string, data: string) {
+    const dir = path.dirname(target)
+    await fs.mkdir(dir, { recursive: true })
+    const tmp = path.join(
+      dir,
+      `.${path.basename(target)}.${process.pid}.${Date.now()}.tmp`,
+    )
+    // Write to temp, fsync, then rename atomically into place
+    const fh = await fs.open(tmp, "w")
+    try {
+      await fh.writeFile(data)
+      await fh.sync()
+    } finally {
+      await fh.close().catch(() => {})
+    }
+    try {
+      await fs.rename(tmp, target)
+    } catch (e) {
+      // Cleanup temp on failure
+      await fs.rm(tmp, { force: true }).catch(() => {})
+      throw e
+    }
+  }
+
+  export async function repair() {
+    const dir = await state().then((x) => x.dir)
+    const quarantineRoot = path.join(dir, "quarantine", String(Date.now()))
+    let quarantined = 0
+
+    // Ensure quarantine root exists
+    await fs.mkdir(quarantineRoot, { recursive: true }).catch(() => {})
+
+    // 1) Quarantine invalid JSON files
+    for await (const file of new Bun.Glob("**/*.json").scan({ cwd: dir, absolute: true })) {
+      try {
+        // Attempt to parse
+        await Bun.file(file).json()
+      } catch {
+        const rel = path.relative(dir, file)
+        const dest = path.join(quarantineRoot, rel)
+        await fs.mkdir(path.dirname(dest), { recursive: true })
+        await fs.rename(file, dest).catch(async () => {
+          // If rename fails (e.g., cross-device), fallback to copy+remove
+          const content = await Bun.file(file).arrayBuffer().catch(() => new ArrayBuffer(0))
+          await Bun.write(dest, new Uint8Array(content))
+          await fs.rm(file, { force: true }).catch(() => {})
+        })
+        quarantined++
+      }
+    }
+
+    // 2) Cleanup leftover temp files
+    let tempRemoved = 0
+    for await (const tmp of new Bun.Glob("**/*.tmp*").scan({ cwd: dir, absolute: true })) {
+      await fs.rm(tmp, { force: true }).catch(() => {})
+      tempRemoved++
+    }
+
+    log.info("storage.repair complete", { quarantined, tempRemoved })
+    return { quarantined, tempRemoved, quarantineRoot }
   }
 }
