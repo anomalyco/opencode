@@ -33,6 +33,8 @@ type SessionTabs = {
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  terminalOpened?: boolean
+  reviewPanelOpened?: boolean
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
@@ -53,11 +55,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           width: 280,
         },
         terminal: {
-          opened: false,
           height: 280,
         },
         review: {
-          opened: true,
           diffStyle: "split" as ReviewDiffStyle,
         },
         session: {
@@ -150,7 +150,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const current = store.sessionView[sessionKey]
         const keep = meta.active ?? sessionKey
         if (!current) {
-          setStore("sessionView", sessionKey, { scroll: next })
+          setStore("sessionView", sessionKey, { scroll: next, terminalOpened: false, reviewPanelOpened: true })
           prune(keep)
           return
         }
@@ -306,39 +306,19 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
       },
       terminal: {
-        opened: createMemo(() => store.terminal.opened),
-        open() {
-          setStore("terminal", "opened", true)
-        },
-        close() {
-          setStore("terminal", "opened", false)
-        },
-        toggle() {
-          setStore("terminal", "opened", (x) => !x)
-        },
         height: createMemo(() => store.terminal.height),
         resize(height: number) {
           setStore("terminal", "height", height)
         },
       },
       review: {
-        opened: createMemo(() => store.review?.opened ?? true),
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { opened: true, diffStyle })
+            setStore("review", { diffStyle })
             return
           }
           setStore("review", "diffStyle", diffStyle)
-        },
-        open() {
-          setStore("review", "opened", true)
-        },
-        close() {
-          setStore("review", "opened", false)
-        },
-        toggle() {
-          setStore("review", "opened", (x) => !x)
         },
       },
       session: {
@@ -367,6 +347,33 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         touch(sessionKey)
         scroll.seed(sessionKey)
         const s = createMemo(() => store.sessionView[sessionKey] ?? { scroll: {} })
+        const terminalOpened = createMemo(() => s().terminalOpened ?? false)
+        const reviewPanelOpened = createMemo(() => s().reviewPanelOpened ?? true)
+
+        function setTerminalOpened(next: boolean) {
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: next, reviewPanelOpened: true })
+            return
+          }
+
+          const value = current.terminalOpened ?? false
+          if (value === next) return
+          setStore("sessionView", sessionKey, "terminalOpened", next)
+        }
+
+        function setReviewPanelOpened(next: boolean) {
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, { scroll: {}, terminalOpened: false, reviewPanelOpened: next })
+            return
+          }
+
+          const value = current.reviewPanelOpened ?? true
+          if (value === next) return
+          setStore("sessionView", sessionKey, "reviewPanelOpened", next)
+        }
+
         return {
           scroll(tab: string) {
             return scroll.scroll(sessionKey, tab)
@@ -374,12 +381,41 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(sessionKey, tab, pos)
           },
+          terminal: {
+            opened: terminalOpened,
+            open() {
+              setTerminalOpened(true)
+            },
+            close() {
+              setTerminalOpened(false)
+            },
+            toggle() {
+              setTerminalOpened(!terminalOpened())
+            },
+          },
+          reviewPanel: {
+            opened: reviewPanelOpened,
+            open() {
+              setReviewPanelOpened(true)
+            },
+            close() {
+              setReviewPanelOpened(false)
+            },
+            toggle() {
+              setReviewPanelOpened(!reviewPanelOpened())
+            },
+          },
           review: {
             open: createMemo(() => s().reviewOpen),
             setOpen(open: string[]) {
               const current = store.sessionView[sessionKey]
               if (!current) {
-                setStore("sessionView", sessionKey, { scroll: {}, reviewOpen: open })
+                setStore("sessionView", sessionKey, {
+                  scroll: {},
+                  terminalOpened: false,
+                  reviewPanelOpened: true,
+                  reviewOpen: open,
+                })
                 return
               }
 

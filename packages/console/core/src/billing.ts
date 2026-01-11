@@ -171,6 +171,9 @@ export namespace Billing {
         workspaceID,
         id: Identifier.create("payment"),
         amount: amountInMicroCents,
+        enrichment: {
+          type: "credit",
+        },
       })
     })
     return amountInMicroCents
