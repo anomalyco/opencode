@@ -9,6 +9,7 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { Config } from "@/config/config"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -132,7 +133,21 @@ export const TuiThreadCommand = cmd({
       networkOpts.hostname !== "127.0.0.1"
 
     // Subscribe to events from worker
-    await client.call("subscribe", { directory: cwd })
+    const result = await client.call("subscribe", { directory: cwd })
+    if (!result.subscribed) {
+      // Reconstruct the appropriate error type for proper formatting
+      if (result.name === "ConfigJsonError") {
+        throw new Config.JsonError({ path: result.data?.path ?? "unknown", message: result.data?.message })
+      }
+      if (result.name === "ConfigInvalidError") {
+        throw new Config.InvalidError({
+          path: result.data?.path,
+          issues: result.data?.issues,
+          message: result.data?.message,
+        })
+      }
+      throw new Error(result.error)
+    }
 
     let url: string
     let customFetch: typeof fetch | undefined

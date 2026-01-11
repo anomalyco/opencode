@@ -59,18 +59,27 @@ export const rpc = {
     return { url: server.url.toString() }
   },
   async subscribe(input: { directory: string }) {
-    return Instance.provide({
-      directory: input.directory,
-      init: InstanceBootstrap,
-      fn: async () => {
-        Bus.subscribeAll((event) => {
-          Rpc.emit("event", event)
-        })
-        // Emit connected event
-        Rpc.emit("event", { type: "server.connected", properties: {} })
-        return { subscribed: true }
-      },
-    })
+    try {
+      return await Instance.provide({
+        directory: input.directory,
+        init: InstanceBootstrap,
+        fn: async () => {
+          Bus.subscribeAll((event) => {
+            Rpc.emit("event", event)
+          })
+          // Emit connected event
+          Rpc.emit("event", { type: "server.connected", properties: {} })
+          return { subscribed: true as const }
+        },
+      })
+    } catch (e) {
+      return {
+        subscribed: false as const,
+        error: e instanceof Error ? e.message : String(e),
+        name: e instanceof Error ? e.name : undefined,
+        data: e && typeof e === "object" && "toObject" in e ? (e as any).toObject().data : undefined,
+      }
+    }
   },
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
