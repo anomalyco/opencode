@@ -74,11 +74,11 @@ export function Home() {
     </Show>
   )
 
-  let prompt: PromptRef
+  let prompt: PromptRef | undefined
   const args = useArgs()
-  onMount(() => {
-    randomizeTip()
+  const initPrompt = () => {
     if (once) return
+    if (!prompt) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
       once = true
@@ -87,6 +87,10 @@ export function Home() {
       once = true
       prompt.submit()
     }
+  }
+  onMount(() => {
+    randomizeTip()
+    initPrompt()
   })
   const directory = useDirectory()
 
@@ -99,6 +103,7 @@ export function Home() {
             ref={(r) => {
               prompt = r
               promptRef.set(r)
+              initPrompt()
             }}
             hint={Hint}
           />
