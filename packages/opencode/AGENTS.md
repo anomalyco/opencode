@@ -8,6 +8,18 @@
 - **Test**: `bun test` (runs all tests)
 - **Single test**: `bun test test/tool/tool.test.ts` (specific test file)
 
+## Debugging
+
+Logs are stored in `~/Library/Application Support/opencode/log/` (macOS) or `~/.local/share/opencode/log/` (Linux). When running locally with `bun dev`, logs go to `dev.log`.
+
+```bash
+# Tail logs while running
+tail -f ~/Library/Application\ Support/opencode/log/dev.log
+
+# Print logs to stderr with debug level
+opencode --print-logs --log-level DEBUG
+```
+
 ## Code Style
 
 - **Runtime**: Bun with TypeScript ESM modules
