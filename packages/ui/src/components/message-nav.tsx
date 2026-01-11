@@ -1,7 +1,9 @@
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { ComponentProps, For, Match, Show, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
-import { Tooltip } from "@kobalte/core/tooltip"
+import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
+import { Tooltip } from "./tooltip"
+import { Icon } from "./icon"
 
 export function MessageNav(
   props: ComponentProps<"ul"> & {
@@ -9,9 +11,10 @@ export function MessageNav(
     current?: UserMessage
     size: "normal" | "compact"
     onMessageSelect: (message: UserMessage) => void
+    onFork?: (message: UserMessage) => void
   },
 ) {
-  const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect"])
+  const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect", "onFork"])
 
   const content = () => (
     <ul role="list" data-component="message-nav" data-size={local.size} {...others}>
@@ -39,6 +42,19 @@ export function MessageNav(
                       </Show>
                     </div>
                   </button>
+                  <Show when={local.onFork}>
+                    <Tooltip value="Fork from here" placement="top">
+                      <button
+                        data-slot="message-nav-fork-button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          local.onFork?.(message)
+                        }}
+                      >
+                        <Icon name="branch" size="small" />
+                      </button>
+                    </Tooltip>
+                  </Show>
                 </Match>
               </Switch>
             </li>
@@ -51,16 +67,16 @@ export function MessageNav(
   return (
     <Switch>
       <Match when={local.size === "compact"}>
-        <Tooltip openDelay={0} closeDelay={300} placement="right-start" gutter={-40} shift={-10} overlap>
-          <Tooltip.Trigger as="div">{content()}</Tooltip.Trigger>
-          <Tooltip.Portal>
-            <Tooltip.Content data-slot="message-nav-tooltip">
+        <KobalteTooltip openDelay={0} closeDelay={300} placement="right-start" gutter={-40} shift={-10} overlap>
+          <KobalteTooltip.Trigger as="div">{content()}</KobalteTooltip.Trigger>
+          <KobalteTooltip.Portal>
+            <KobalteTooltip.Content data-slot="message-nav-tooltip">
               <div data-slot="message-nav-tooltip-content">
                 <MessageNav {...props} size="normal" class="" />
               </div>
-            </Tooltip.Content>
-          </Tooltip.Portal>
-        </Tooltip>
+            </KobalteTooltip.Content>
+          </KobalteTooltip.Portal>
+        </KobalteTooltip>
       </Match>
       <Match when={local.size === "normal"}>{content()}</Match>
     </Switch>

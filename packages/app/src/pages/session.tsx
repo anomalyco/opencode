@@ -908,6 +908,22 @@ export default function Page() {
     updateHash(message.id)
   }
 
+  const forkFromMessage = (message: UserMessage) => {
+    const sessionID = params.id
+    if (!sessionID) return
+
+    const parts = sync.data.part[message.id] ?? []
+    const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+
+    sdk.client.session.fork({ sessionID, messageID: message.id }).then((forked) => {
+      if (!forked.data) return
+      navigate(`/${base64Encode(sdk.directory)}/session/${forked.data.id}`)
+      requestAnimationFrame(() => {
+        prompt.set(restored)
+      })
+    })
+  }
+
   const getActiveMessageId = (container: HTMLDivElement) => {
     const cutoff = container.scrollTop + 100
     const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
@@ -1095,6 +1111,7 @@ export default function Page() {
                             messages={visibleUserMessages()}
                             current={activeMessage()}
                             onMessageSelect={scrollToMessage}
+                            onFork={forkFromMessage}
                             wide={!showTabs()}
                             class="pointer-events-auto"
                           />

@@ -13,6 +13,7 @@
 }
 
 [data-slot="message-nav-item"] {
+  position: relative;
   display: flex;
   align-items: center;
   align-self: stretch;
@@ -89,6 +90,57 @@
 
 [data-slot="message-nav-item"]:active [data-slot="message-nav-title-preview"] {
   color: var(--text-base);
+}
+
+[data-slot="message-nav-item"] > [data-component="tooltip-trigger"] {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+[data-slot="message-nav-item"]:hover > [data-component="tooltip-trigger"] {
+  opacity: 1;
+}
+
+[data-slot="message-nav-fork-button"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background-color: var(--smoke-dark-5);
+  padding: 0;
+  cursor: pointer;
+  color: var(--icon-base);
+  border-radius: var(--radius-sm);
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+[data-slot="message-nav-fork-button"]:hover {
+  background-color: var(--smoke-dark-6);
+  color: var(--icon-strong-base);
+}
+
+[data-slot="message-nav-fork-button"]:active {
+  background-color: var(--smoke-dark-7);
+}
+
+[data-slot="message-nav-tooltip-content"] [data-slot="message-nav-fork-button"] {
+  background-color: var(--smoke-dark-6);
+}
+
+[data-slot="message-nav-tooltip-content"] [data-slot="message-nav-fork-button"]:hover {
+  background-color: var(--smoke-dark-7);
+}
+
+[data-slot="message-nav-tooltip-content"] [data-slot="message-nav-fork-button"]:active {
+  background-color: var(--smoke-dark-8);
 }
 
 [data-slot="message-nav-tooltip"] {
