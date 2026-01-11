@@ -317,6 +317,38 @@ export function Prompt(props: PromptProps) {
 
   onMount(() => {
     promptPartTypeId = input.extmarks.registerType("prompt-part")
+    props.ref?.({
+      get focused() {
+        return input.focused
+      },
+      get current() {
+        return store.prompt
+      },
+      focus() {
+        input.focus()
+      },
+      blur() {
+        input.blur()
+      },
+      set(prompt) {
+        input.setText(prompt.input)
+        setStore("prompt", prompt)
+        restoreExtmarksFromParts(prompt.parts)
+        input.gotoBufferEnd()
+      },
+      reset() {
+        input.clear()
+        input.extmarks.clear()
+        setStore("prompt", {
+          input: "",
+          parts: [],
+        })
+        setStore("extmarkToPartIndex", new Map())
+      },
+      submit() {
+        submit()
+      },
+    })
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -451,39 +483,6 @@ export function Prompt(props: PromptProps) {
       },
     },
   ])
-
-  props.ref?.({
-    get focused() {
-      return input.focused
-    },
-    get current() {
-      return store.prompt
-    },
-    focus() {
-      input.focus()
-    },
-    blur() {
-      input.blur()
-    },
-    set(prompt) {
-      input.setText(prompt.input)
-      setStore("prompt", prompt)
-      restoreExtmarksFromParts(prompt.parts)
-      input.gotoBufferEnd()
-    },
-    reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
-    },
-    submit() {
-      submit()
-    },
-  })
 
   async function submit() {
     if (props.disabled) return
