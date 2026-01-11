@@ -59,7 +59,7 @@ function EditBody(props: { request: PermissionRequest }) {
             diff={diff()}
             view={view()}
             filetype={ft()}
-            syntaxStyle={syntax()}
+            syntaxStyle={sync.data.config.tui?.diff_syntax !== false ? syntax() : undefined}
             showLineNumbers={true}
             width="100%"
             wrapMode="word"

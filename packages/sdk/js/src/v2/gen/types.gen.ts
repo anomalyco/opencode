@@ -1563,6 +1563,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Enable syntax highlighting in diffs
+     */
+    diff_syntax?: boolean
   }
   server?: ServerConfig
   /**

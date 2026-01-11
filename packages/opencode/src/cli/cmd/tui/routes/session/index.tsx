@@ -1757,7 +1757,7 @@ function Edit(props: ToolProps<typeof EditTool>) {
               diff={diffContent()}
               view={view()}
               filetype={ft()}
-              syntaxStyle={syntax()}
+              syntaxStyle={ctx.sync.data.config.tui?.diff_syntax !== false ? syntax() : undefined}
               showLineNumbers={true}
               width="100%"
               wrapMode={ctx.diffWrapMode()}
