@@ -14,6 +14,7 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 import PROMPT_ANTHROPIC_SPOOF from "./prompt/anthropic_spoof.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
+import PROMPT_CODEX_INSTRUCTIONS from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
 
@@ -21,6 +22,10 @@ export namespace SystemPrompt {
   export function header(providerID: string) {
     if (providerID.includes("anthropic")) return [PROMPT_ANTHROPIC_SPOOF.trim()]
     return []
+  }
+
+  export function instructions() {
+    return PROMPT_CODEX_INSTRUCTIONS.trim()
   }
 
   export function provider(model: Provider.Model) {
@@ -62,10 +67,10 @@ export namespace SystemPrompt {
     "CLAUDE.md",
     "CONTEXT.md", // deprecated
   ]
-  const GLOBAL_RULE_FILES = [
-    path.join(Global.Path.config, "AGENTS.md"),
-    path.join(os.homedir(), ".claude", "CLAUDE.md"),
-  ]
+  const GLOBAL_RULE_FILES = [path.join(Global.Path.config, "AGENTS.md")]
+  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+    GLOBAL_RULE_FILES.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+  }
 
   if (Flag.OPENCODE_CONFIG_DIR) {
     GLOBAL_RULE_FILES.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))

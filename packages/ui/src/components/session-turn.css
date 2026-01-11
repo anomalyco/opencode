@@ -225,6 +225,22 @@
     }
   }
 
+  [data-slot="session-turn-summary-section"] {
+    position: relative;
+
+    [data-slot="session-turn-summary-copy"] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    &:hover [data-slot="session-turn-summary-copy"] {
+      opacity: 1;
+    }
+  }
+
   [data-slot="session-turn-accordion"] {
     width: 100%;
   }
