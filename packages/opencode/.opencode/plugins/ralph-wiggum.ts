@@ -1,1 +1,1 @@
-../../../../ralph-wiggum/src/index.ts
+../../../ralph-wiggum/src/index.ts
