@@ -1,7 +1,7 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
@@ -686,7 +686,7 @@ export function Autocomplete(props: {
         height={height()}
         scrollbarOptions={{ visible: false }}
       >
-        <For
+        <Index
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
@@ -698,20 +698,20 @@ export function Autocomplete(props: {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={index() === store.selected ? theme.primary : undefined}
+              backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
             >
-              <text fg={index() === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
-                {option.display}
+              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
+                {option().display}
               </text>
-              <Show when={option.description}>
-                <text fg={index() === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
-                  {option.description}
+              <Show when={option().description}>
+                <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
+                  {option().description}
                 </text>
               </Show>
             </box>
           )}
-        </For>
+        </Index>
       </scrollbox>
     </box>
   )
