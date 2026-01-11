@@ -135,6 +135,19 @@ echo "FILE: $3" >> "$3"
       await rm(editorScript, { force: true })
     }
   })
+
+  test("should validate Windows filepath safety", async () => {
+    if (process.platform !== "win32") {
+      return
+    }
+
+    process.env["VISUAL"] = "notepad"
+
+    const mockRenderer = createMockRenderer()
+
+    const result = await Editor.open({ value: "test", renderer: mockRenderer })
+    expect(result).toBeDefined()
+  })
 })
 
 function createMockRenderer() {
