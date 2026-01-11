@@ -121,4 +121,15 @@ export namespace McpAuth {
       await set(mcpName, entry)
     }
   }
+
+  /**
+   * Check if stored tokens are expired.
+   * Returns null if no tokens exist, false if no expiry or not expired, true if expired.
+   */
+  export async function isTokenExpired(mcpName: string): Promise<boolean | null> {
+    const entry = await get(mcpName)
+    if (!entry?.tokens) return null
+    if (!entry.tokens.expiresAt) return false
+    return entry.tokens.expiresAt < Date.now() / 1000
+  }
 }

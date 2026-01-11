@@ -274,6 +274,90 @@
       "when": 1764110043942,
       "tag": "0038_famous_magik",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1766946179892,
+      "tag": "0039_striped_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1767584617316,
+      "tag": "0040_broken_gamora",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1767732559197,
+      "tag": "0041_odd_misty_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1767744077346,
+      "tag": "0042_flat_nightmare",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1767752636118,
+      "tag": "0043_lame_calypso",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1767759322451,
+      "tag": "0044_tiny_captain_midlands",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1767765497502,
+      "tag": "0045_cuddly_diamondback",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1767912262458,
+      "tag": "0046_charming_black_bolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1767916965243,
+      "tag": "0047_huge_omega_red",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1767917785224,
+      "tag": "0048_mean_frank_castle",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "5",
+      "when": 1767922954153,
+      "tag": "0049_noisy_domino",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1767931290031,
+      "tag": "0050_bumpy_mephistopheles",
+      "breakpoints": true
     }
   ]
 }

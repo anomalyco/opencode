@@ -54,7 +54,7 @@ export function DialogMessage(props: {
         {
           title: "Copy",
           value: "message.copy",
-          description: "copy message text to clipboard",
+          description: "message text to clipboard",
           onSelect: async (dialog) => {
             const msg = message()
             if (!msg) return

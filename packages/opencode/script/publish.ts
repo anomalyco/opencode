@@ -40,7 +40,7 @@ const tags = [Script.channel]
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
   if (process.platform !== "win32") {
-    await $`chmod 755 -R .`.cwd(`./dist/${name}`)
+    await $`chmod -R 755 .`.cwd(`./dist/${name}`)
   }
   await $`bun pm pack`.cwd(`./dist/${name}`)
   for (const tag of tags) {
@@ -62,7 +62,7 @@ if (!Script.preview) {
     }
   }
 
-  const image = "ghcr.io/sst/opencode"
+  const image = "ghcr.io/anomalyco/opencode"
   const platforms = "linux/amd64,linux/arm64"
   const tags = [`${image}:${Script.version}`, `${image}:latest`]
   const tagFlags = tags.flatMap((t) => ["-t", t])

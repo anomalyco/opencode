@@ -28,7 +28,10 @@ export async function createOpencodeServer(options?: ServerOptions) {
     options ?? {},
   )
 
-  const proc = spawn(`opencode`, [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`], {
+  const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
+  if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
+
+  const proc = spawn(`opencode`, args, {
     signal: options.signal,
     env: {
       ...process.env,

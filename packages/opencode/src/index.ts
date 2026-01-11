@@ -77,6 +77,7 @@ const cli = yargs(hideBin(process.argv))
     })
   })
   .usage("\n" + UI.logo())
+  .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
@@ -98,14 +99,16 @@ const cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
-  .fail((msg) => {
+  .fail((msg, err) => {
     if (
-      msg.startsWith("Unknown argument") ||
-      msg.startsWith("Not enough non-option arguments") ||
-      msg.startsWith("Invalid values:")
+      msg?.startsWith("Unknown argument") ||
+      msg?.startsWith("Not enough non-option arguments") ||
+      msg?.startsWith("Invalid values:")
     ) {
+      if (err) throw err
       cli.showHelp("log")
     }
+    if (err) throw err
     process.exit(1)
   })
   .strict()

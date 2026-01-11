@@ -4,6 +4,8 @@ import { Ripgrep } from "../file/ripgrep"
 
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
+import path from "path"
+import { assertExternalDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -14,15 +16,28 @@ export const GrepTool = Tool.define("grep", {
     path: z.string().optional().describe("The directory to search in. Defaults to the current working directory."),
     include: z.string().optional().describe('File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")'),
   }),
-  async execute(params) {
+  async execute(params, ctx) {
     if (!params.pattern) {
       throw new Error("pattern is required")
     }
 
-    const searchPath = params.path || Instance.directory
+    await ctx.ask({
+      permission: "grep",
+      patterns: [params.pattern],
+      always: ["*"],
+      metadata: {
+        pattern: params.pattern,
+        path: params.path,
+        include: params.include,
+      },
+    })
+
+    let searchPath = params.path ?? Instance.directory
+    searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
+    await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
     const rgPath = await Ripgrep.filepath()
-    const args = ["-nH", "--field-match-separator=|", "--regexp", params.pattern]
+    const args = ["-nH", "--hidden", "--follow", "--field-match-separator=|", "--regexp", params.pattern]
     if (params.include) {
       args.push("--glob", params.include)
     }
@@ -49,7 +64,8 @@ export const GrepTool = Tool.define("grep", {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
 
-    const lines = output.trim().split("\n")
+    // Handle both Unix (\n) and Windows (\r\n) line endings
+    const lines = output.trim().split(/\r?\n/)
     const matches = []
 
     for (const line of lines) {

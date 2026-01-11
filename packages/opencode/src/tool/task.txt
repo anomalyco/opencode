@@ -1,4 +1,4 @@
-Launch a new agent to handle complex, multi-step tasks autonomously.
+Launch a new agent to handle complex, multistep tasks autonomously.
 
 Available agent types and the tools they have access to:
 {agents}

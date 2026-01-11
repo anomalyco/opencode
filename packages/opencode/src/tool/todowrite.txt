@@ -4,7 +4,7 @@ It also helps the user understand the progress of the task and overall progress 
 ## When to Use This Tool
 Use this tool proactively in these scenarios:
 
-1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
+1. Complex multistep tasks - When a task requires 3 or more distinct steps or actions
 2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
 3. User explicitly requests todo list - When the user directly asks you to use the todo list
 4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)

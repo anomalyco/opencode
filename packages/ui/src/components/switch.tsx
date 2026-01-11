@@ -1,5 +1,5 @@
 import { Switch as Kobalte } from "@kobalte/core/switch"
-import { children, Show, splitProps } from "solid-js"
+import { Show, splitProps } from "solid-js"
 import type { ComponentProps, ParentProps } from "solid-js"
 
 export interface SwitchProps extends ParentProps<ComponentProps<typeof Kobalte>> {
@@ -9,13 +9,12 @@ export interface SwitchProps extends ParentProps<ComponentProps<typeof Kobalte>>
 
 export function Switch(props: SwitchProps) {
   const [local, others] = splitProps(props, ["children", "class", "hideLabel", "description"])
-  const resolved = children(() => local.children)
   return (
     <Kobalte {...others} data-component="switch">
       <Kobalte.Input data-slot="switch-input" />
-      <Show when={resolved()}>
+      <Show when={local.children}>
         <Kobalte.Label data-slot="switch-label" classList={{ "sr-only": local.hideLabel }}>
-          {resolved()}
+          {local.children}
         </Kobalte.Label>
       </Show>
       <Show when={local.description}>

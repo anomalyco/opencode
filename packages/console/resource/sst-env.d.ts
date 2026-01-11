@@ -42,10 +42,6 @@ declare module "sst" {
       "type": "sst.sst.Linkable"
       "username": string
     }
-    "Desktop": {
-      "type": "sst.cloudflare.StaticSite"
-      "url": string
-    }
     "EMAILOCTOPUS_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -98,6 +94,14 @@ declare module "sst" {
       "type": "sst.cloudflare.Astro"
       "url": string
     }
+    "WebApp": {
+      "type": "sst.cloudflare.StaticSite"
+      "url": string
+    }
+    "ZEN_BLACK": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZEN_MODELS1": {
       "type": "sst.sst.Secret"
       "value": string
@@ -118,6 +122,14 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_MODELS6": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS7": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
   }
 }
 // cloudflare 
@@ -132,6 +144,7 @@ declare module "sst" {
     "GatewayKv": cloudflare.KVNamespace
     "LogProcessor": cloudflare.Service
     "ZenData": cloudflare.R2Bucket
+    "ZenDataNew": cloudflare.R2Bucket
   }
 }
 

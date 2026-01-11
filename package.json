@@ -10,7 +10,8 @@
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
-    "hello": "echo 'Hello World!'"
+    "hello": "echo 'Hello World!'",
+    "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
     "packages": [
@@ -31,7 +32,7 @@
       "@tsconfig/bun": "1.0.9",
       "@cloudflare/workers-types": "4.20251008.0",
       "@openauthjs/openauth": "0.0.0-20250322224806",
-      "@pierre/diffs": "1.0.0-beta.3",
+      "@pierre/diffs": "1.0.2",
       "@solid-primitives/storage": "4.3.3",
       "@tailwindcss/vite": "4.1.11",
       "diff": "8.0.2",
@@ -40,10 +41,13 @@
       "hono-openapi": "1.1.2",
       "fuzzysort": "3.1.0",
       "luxon": "3.6.1",
+      "marked": "17.0.1",
+      "marked-shiki": "1.2.1",
       "typescript": "5.8.2",
       "@typescript/native-preview": "7.0.0-dev.20251207.1",
       "zod": "4.1.8",
       "remeda": "2.26.0",
+      "shiki": "3.20.0",
       "solid-list": "0.3.0",
       "tailwindcss": "4.1.11",
       "virtua": "0.42.3",
@@ -56,6 +60,7 @@
     }
   },
   "devDependencies": {
+    "@actions/artifact": "5.0.1",
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
     "prettier": "3.6.2",
@@ -64,13 +69,14 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
+    "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sst/opencode"
+    "url": "https://github.com/anomalyco/opencode"
   },
   "license": "MIT",
   "prettier": {
@@ -80,7 +86,6 @@
   "trustedDependencies": [
     "esbuild",
     "protobufjs",
-    "sharp",
     "tree-sitter",
     "tree-sitter-bash",
     "web-tree-sitter"
