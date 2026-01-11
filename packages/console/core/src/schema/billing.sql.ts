@@ -22,12 +22,27 @@ export const BillingTable = mysqlTable(
     timeReloadError: utc("time_reload_error"),
     timeReloadLockedTill: utc("time_reload_locked_till"),
     subscriptionID: varchar("subscription_id", { length: 28 }),
+    subscriptionCouponID: varchar("subscription_coupon_id", { length: 28 }),
   },
   (table) => [
     ...workspaceIndexes(table),
     uniqueIndex("global_customer_id").on(table.customerID),
     uniqueIndex("global_subscription_id").on(table.subscriptionID),
   ],
+)
+
+export const SubscriptionTable = mysqlTable(
+  "subscription",
+  {
+    ...workspaceColumns,
+    ...timestamps,
+    userID: ulid("user_id").notNull(),
+    rollingUsage: bigint("rolling_usage", { mode: "number" }),
+    fixedUsage: bigint("fixed_usage", { mode: "number" }),
+    timeRollingUpdated: utc("time_rolling_updated"),
+    timeFixedUpdated: utc("time_fixed_updated"),
+  },
+  (table) => [...workspaceIndexes(table), uniqueIndex("workspace_user_id").on(table.workspaceID, table.userID)],
 )
 
 export const PaymentTable = mysqlTable(
@@ -40,6 +55,15 @@ export const PaymentTable = mysqlTable(
     paymentID: varchar("payment_id", { length: 255 }),
     amount: bigint("amount", { mode: "number" }).notNull(),
     timeRefunded: utc("time_refunded"),
+    enrichment: json("enrichment").$type<
+      | {
+          type: "subscription"
+          couponID?: string
+        }
+      | {
+          type: "credit"
+        }
+    >(),
   },
   (table) => [...workspaceIndexes(table)],
 )
