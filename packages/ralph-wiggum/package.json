@@ -1,6 +1,6 @@
 {
   "name": "@sureshsankaran/ralph-wiggum",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Ralph Wiggum plugin for OpenCode - iterative, self-referential AI development loops",
   "type": "module",
   "main": "src/index.ts",
