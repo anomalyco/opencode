@@ -1,6 +1,7 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
+import { Usage } from "../usage"
 
 const CLIENT_ID = "Ov23li8tweQw6odWQebz"
 
@@ -94,10 +95,19 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
             delete headers["x-api-key"]
             delete headers["authorization"]
 
-            return fetch(request, {
+            const response = await fetch(request, {
               ...init,
               headers,
             })
+
+            if (response.headers.has("x-ratelimit-remaining-tokens")) {
+              const snapshot = Usage.parseCopilotRateLimitHeaders(response.headers)
+              if (snapshot) {
+                Usage.updateUsage("copilot", snapshot).catch(() => {})
+              }
+            }
+
+            return response
           },
         }
       },

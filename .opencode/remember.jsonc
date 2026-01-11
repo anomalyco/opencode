@@ -1,0 +1,16 @@
+{
+  // Enable or disable the plugin
+  "enabled": true,
+  // Where to store memories: "global", "project", or "both"
+  // - "global": ~/.config/opencode/memory/memories.sqlite (shared across projects)
+  // - "project": .opencode/memory/memories.sqlite (project-specific)
+  // - "both": search both, save to project
+  "scope": "project",
+  // Memory injection settings
+  "inject": {
+    // Number of memories to inject after user messages (default: 5)
+    "count": 5,
+    // Score threshold for [important] vs [related] tag (default: 0.6)
+    "highThreshold": 0.6
+  }
+}

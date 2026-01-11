@@ -30,6 +30,7 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
+import { DialogUsage, type UsageEntry } from "../dialog-usage"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 
 export type PromptProps = {
@@ -73,6 +74,34 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+
+  function handleUsageCommand(commandText: string) {
+    const parts = commandText.trim().split(/\s+/)
+    const provider = parts.length > 1 && !parts[1].startsWith("-") ? parts[1] : undefined
+    const refresh = parts.some((part) => part === "--refresh" || part === "-r")
+
+    type UsageResponse = {
+      entries: UsageEntry[]
+      error?: string
+    }
+
+    sdk.client.usage
+      .get({ provider, refresh })
+      .then((res) => {
+        const data = res.data as UsageResponse | undefined
+        if (!data) return
+        if (data.entries.length > 0) {
+          dialog.replace(() => <DialogUsage entries={data.entries} />)
+          return
+        }
+        const message = data.error ?? "No usage data available."
+        DialogAlert.show(dialog, "Usage", message)
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        DialogAlert.show(dialog, "Usage", message)
+      })
+  }
 
   function promptModelWarning() {
     toast.show({
@@ -484,7 +513,7 @@ export function Prompt(props: PromptProps) {
 
   async function submit() {
     if (props.disabled) return
-    if (autocomplete?.visible) return
+    if (autocomplete?.visible && !store.prompt.input.startsWith("/usage")) return
     if (!store.prompt.input) return
     const trimmed = store.prompt.input.trim()
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
@@ -528,7 +557,16 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const variant = local.model.variant.current()
 
-    if (store.mode === "shell") {
+    const isShell = store.mode === "shell"
+    const isUsage = inputText.startsWith("/usage")
+    const isCommand =
+      inputText.startsWith("/") &&
+      iife(() => {
+        const command = inputText.split(" ")[0].slice(1)
+        return sync.data.command.some((x) => x.name === command)
+      })
+
+    if (isShell) {
       sdk.client.session.shell({
         sessionID,
         agent: local.agent.current().name,
@@ -539,15 +577,23 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
-    } else if (
-      inputText.startsWith("/") &&
-      iife(() => {
-        const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
-        return sync.data.command.some((x) => x.name === command)
+    }
+
+    if (isUsage) {
+      handleUsageCommand(inputText)
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
       })
-    ) {
-      let [command, ...args] = inputText.split(" ")
+      setStore("extmarkToPartIndex", new Map())
+      props.onSubmit?.()
+      input.clear()
+      return
+    }
+
+    if (isCommand) {
+      const [command, ...args] = inputText.split(" ")
       sdk.client.session.command({
         sessionID,
         command: command.slice(1),
@@ -563,29 +609,30 @@ export function Prompt(props: PromptProps) {
             ...x,
           })),
       })
-    } else {
-      sdk.client.session
-        .prompt({
-          sessionID,
-          ...selectedModel,
-          messageID,
-          agent: local.agent.current().name,
-          model: selectedModel,
-          variant,
-          parts: [
-            {
-              id: Identifier.ascending("part"),
-              type: "text",
-              text: inputText,
-            },
-            ...nonTextParts.map((x) => ({
-              id: Identifier.ascending("part"),
-              ...x,
-            })),
-          ],
-        })
-        .catch(() => {})
     }
+
+    if (!isShell && !isUsage && !isCommand) {
+      sdk.client.session.prompt({
+        sessionID,
+        ...selectedModel,
+        messageID,
+        agent: local.agent.current().name,
+        model: selectedModel,
+        variant,
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: inputText,
+          },
+          ...nonTextParts.map((x) => ({
+            id: Identifier.ascending("part"),
+            ...x,
+          })),
+        ],
+      })
+    }
+
     history.append({
       ...store.prompt,
       mode: currentMode,
@@ -741,6 +788,7 @@ export function Prompt(props: PromptProps) {
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
+        onUsage={handleUsageCommand}
       />
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box

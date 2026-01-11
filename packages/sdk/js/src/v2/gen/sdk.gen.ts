@@ -157,6 +157,7 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  UsageGetResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -1898,6 +1899,40 @@ export class Command extends HeyApiClient {
   }
 }
 
+export class Usage extends HeyApiClient {
+  /**
+   * Get usage
+   *
+   * Fetch usage limits for authenticated providers.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      provider?: string
+      refresh?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "provider" },
+            { in: "query", key: "refresh" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<UsageGetResponses, unknown, ThrowOnError>({
+      url: "/usage",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Oauth extends HeyApiClient {
   /**
    * OAuth authorize
@@ -3011,6 +3046,8 @@ export class OpencodeClient extends HeyApiClient {
   question = new Question({ client: this.client })
 
   command = new Command({ client: this.client })
+
+  usage = new Usage({ client: this.client })
 
   provider = new Provider({ client: this.client })
 

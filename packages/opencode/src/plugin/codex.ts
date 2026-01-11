@@ -1,7 +1,12 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import z from "zod"
 import { Log } from "../util/log"
 import { OAUTH_DUMMY_KEY } from "../auth"
 import { ProviderTransform } from "../provider/transform"
+import { Bus } from "../bus"
+import { TuiEvent } from "../cli/cmd/tui/event"
+import { Session } from "../session"
+import { Usage, type PlanType, type Snapshot } from "../usage"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -9,6 +14,9 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
+
+let hasShownUsageToast = false
+let hasSubscribedToSession = false
 
 interface PkceCodes {
   verifier: string
@@ -345,7 +353,78 @@ function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResp
   })
 }
 
+const usageLimitErrorSchema = z.object({
+  error: z.object({
+    type: z.literal("usage_limit_reached"),
+    message: z.string().optional(),
+    resets_at: z.number(),
+    plan_type: z.string().optional(),
+  }),
+})
+
+async function handleUsageLimit(response: Response): Promise<void> {
+  if (response.status !== 429) return
+  const body = await response
+    .clone()
+    .json()
+    .catch(() => null)
+  if (!body) return
+  const parsed = usageLimitErrorSchema.safeParse(body)
+  if (!parsed.success) return
+  const planType = parsePlanType(parsed.data.error.plan_type)
+  await Usage.updateUsage("codex", {
+    planType,
+    primary: {
+      usedPercent: 100,
+      windowMinutes: null,
+      resetsAt: parsed.data.error.resets_at,
+    },
+  })
+}
+
+function showUsageToast(snapshot: Snapshot): void {
+  const parts: string[] = []
+  if (snapshot.primary) {
+    parts.push(`Hourly: ${snapshot.primary.usedPercent.toFixed(0)}% used`)
+  }
+  if (snapshot.secondary) {
+    parts.push(`Weekly: ${snapshot.secondary.usedPercent.toFixed(0)}% used`)
+  }
+  if (parts.length === 0) return
+  const warning = Usage.getWarning(snapshot)
+  const variant = warning ? "warning" : "info"
+  const planLabel = snapshot.planType ? ` (${formatPlanType(snapshot.planType)})` : ""
+  Bus.publish(TuiEvent.ToastShow, {
+    title: `OpenAI Usage${planLabel}`,
+    message: parts.join(" • "),
+    variant,
+    duration: 5000,
+  }).catch((error) => {
+    const message = error instanceof Error ? error.message : String(error)
+    log.debug("failed to show usage toast", { error: message })
+  })
+}
+
+function formatPlanType(planType: PlanType): string {
+  const head = planType.slice(0, 1).toUpperCase()
+  return head + planType.slice(1)
+}
+
+function parsePlanType(value: string | undefined): PlanType | null {
+  if (!value) return null
+  const parsed = Usage.planTypeSchema.safeParse(value)
+  if (!parsed.success) return null
+  return parsed.data
+}
+
 export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
+  if (!hasSubscribedToSession) {
+    Bus.subscribe(Session.Event.Created, () => {
+      hasShownUsageToast = false
+    })
+    hasSubscribedToSession = true
+  }
+
   return {
     auth: {
       provider: "openai",
@@ -448,6 +527,17 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             return fetch(url, {
               ...init,
               headers,
+            }).then(async (response) => {
+              const usageSnapshot = Usage.parseRateLimitHeaders(response.headers)
+              if (usageSnapshot) {
+                const updated = await Usage.updateUsage("codex", usageSnapshot)
+                if (!hasShownUsageToast && response.ok) {
+                  hasShownUsageToast = true
+                  showUsageToast(updated)
+                }
+              }
+              await handleUsageLimit(response)
+              return response
             })
           },
         }

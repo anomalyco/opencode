@@ -73,6 +73,7 @@ export function Autocomplete(props: {
   fileStyleId: number
   agentStyleId: number
   promptPartTypeId: () => number
+  onUsage: (command: string) => void
 }) {
   const sdk = useSDK()
   const sync = useSync()
@@ -443,6 +444,11 @@ export function Autocomplete(props: {
         display: "/status",
         description: "show status",
         onSelect: () => command.trigger("opencode.status"),
+      },
+      {
+        display: "/usage",
+        description: "show usage limits",
+        onSelect: () => props.onUsage("/usage"),
       },
       {
         display: "/mcp",

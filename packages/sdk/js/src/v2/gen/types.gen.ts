@@ -796,6 +796,46 @@ export type EventVcsBranchUpdated = {
   }
 }
 
+export type EventUsageUpdated = {
+  type: "usage.updated"
+  properties: {
+    provider: string
+    snapshot: {
+      primary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      secondary: {
+        usedPercent: number
+        windowMinutes: number | null
+        resetsAt: number | null
+      } | null
+      credits: {
+        hasCredits: boolean
+        unlimited: boolean
+        balance: string | null
+      } | null
+      planType:
+        | "guest"
+        | "free"
+        | "go"
+        | "plus"
+        | "pro"
+        | "free_workspace"
+        | "team"
+        | "business"
+        | "education"
+        | "quorum"
+        | "k12"
+        | "enterprise"
+        | "edu"
+        | null
+      updatedAt: number
+    }
+  }
+}
+
 export type Pty = {
   id: string
   title: string
@@ -883,6 +923,7 @@ export type Event =
   | EventSessionError
   | EventFileWatcherUpdated
   | EventVcsBranchUpdated
+  | EventUsageUpdated
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
@@ -3761,6 +3802,65 @@ export type CommandListResponses = {
 }
 
 export type CommandListResponse = CommandListResponses[keyof CommandListResponses]
+
+export type UsageGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    provider?: string
+    refresh?: boolean
+  }
+  url: "/usage"
+}
+
+export type UsageGetResponses = {
+  /**
+   * Usage response
+   */
+  200: {
+    entries: Array<{
+      provider: string
+      displayName: string
+      snapshot: {
+        primary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        secondary: {
+          usedPercent: number
+          windowMinutes: number | null
+          resetsAt: number | null
+        } | null
+        credits: {
+          hasCredits: boolean
+          unlimited: boolean
+          balance: string | null
+        } | null
+        planType:
+          | "guest"
+          | "free"
+          | "go"
+          | "plus"
+          | "pro"
+          | "free_workspace"
+          | "team"
+          | "business"
+          | "education"
+          | "quorum"
+          | "k12"
+          | "enterprise"
+          | "edu"
+          | null
+        updatedAt: number
+      }
+    }>
+    error?: string
+  }
+}
+
+export type UsageGetResponse = UsageGetResponses[keyof UsageGetResponses]
 
 export type ConfigProvidersData = {
   body?: never

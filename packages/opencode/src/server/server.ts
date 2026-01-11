@@ -27,6 +27,8 @@ import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
 import { Flag } from "../flag/flag"
+import { Usage } from "../usage"
+import type { Snapshot as UsageSnapshot } from "../usage"
 import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
@@ -74,7 +76,129 @@ export namespace Server {
     Disposed: BusEvent.define("global.disposed", z.object({})),
   }
 
+  const usageResponseSchema = z.object({
+    entries: z.array(
+      z.object({
+        provider: z.string(),
+        displayName: z.string(),
+        snapshot: Usage.snapshotSchema,
+      }),
+    ),
+    error: z.string().optional(),
+  })
+
+  const UsageRoute = new Hono().get(
+    "/",
+    describeRoute({
+      summary: "Get usage",
+      description: "Fetch usage limits for authenticated providers.",
+      operationId: "usage.get",
+      responses: {
+        200: {
+          description: "Usage response",
+          content: {
+            "application/json": {
+              schema: resolver(usageResponseSchema),
+            },
+          },
+        },
+      },
+    }),
+    validator(
+      "query",
+      z.object({
+        provider: z.string().optional(),
+        refresh: z.coerce.boolean().optional(),
+      }),
+    ),
+    async (c) => {
+      const query = c.req.valid("query")
+      const providerInput = query.provider?.trim()
+      const refresh = query.refresh ?? false
+      const resolved = providerInput ? Usage.resolveProvider(providerInput) : null
+      if (providerInput && !resolved) {
+        return c.json({
+          entries: [],
+          error: `Unknown provider: "${providerInput}"`,
+        })
+      }
+
+      const providers = resolved ? [resolved] : await Usage.getAuthenticatedProviders()
+      if (providers.length === 0) {
+        return c.json({
+          entries: [],
+          error: "No OAuth providers with usage tracking are authenticated. Run: opencode auth add codex",
+        })
+      }
+
+      const entries: Array<{ provider: string; displayName: string; snapshot: UsageSnapshot }> = []
+      const errors: string[] = []
+
+      for (const provider of providers) {
+        const info = Usage.getProviderInfo(provider)
+        if (!info) {
+          errors.push(`Provider "${provider}" does not support usage tracking.`)
+          continue
+        }
+
+        const authEntry = await Usage.getProviderAuth(provider)
+        if (!authEntry) {
+          errors.push(`Not authenticated with ${info.displayName}. Run: opencode auth add ${info.authKeys[0]}`)
+          continue
+        }
+        if (info.requiresOAuth && authEntry.auth.type !== "oauth") {
+          errors.push(`Not authenticated with ${info.displayName} OAuth. Run: opencode auth add ${info.authKeys[0]}`)
+          continue
+        }
+
+        const accessToken = authEntry.auth.type === "oauth" ? authEntry.auth.access : null
+        if (!accessToken) {
+          errors.push(`Missing OAuth access token for ${info.displayName}.`)
+          continue
+        }
+
+        const cached = await Usage.getUsage(provider)
+        const stale = !cached || Date.now() - cached.updatedAt > 5 * 60 * 1000
+        const snapshot = await (async () => {
+          if (!refresh && !stale) return cached
+
+          // Provider-specific fetch logic
+          let fetched: UsageSnapshot | null = null
+
+          if (provider === "copilot") {
+            const refreshToken = authEntry.auth.type === "oauth" ? authEntry.auth.refresh : null
+            if (refreshToken) {
+              fetched = await Usage.fetchCopilotUsage({ access: accessToken, refresh: refreshToken })
+            }
+          } else {
+            fetched = await Usage.fetchFromEndpoint(accessToken)
+          }
+
+          if (!fetched) return cached
+          return Usage.updateUsage(provider, fetched)
+        })()
+
+        if (!snapshot) {
+          errors.push(`Unable to fetch usage data for ${info.displayName}.`)
+          continue
+        }
+
+        entries.push({
+          provider,
+          displayName: info.displayName,
+          snapshot,
+        })
+      }
+
+      return c.json({
+        entries,
+        ...(errors.length > 0 ? { error: errors.join("\n") } : {}),
+      })
+    },
+  )
+
   const app = new Hono()
+
   export const App: () => Hono = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
@@ -1731,6 +1855,7 @@ export namespace Server {
             return c.json(commands)
           },
         )
+        .route("/usage", UsageRoute)
         .get(
           "/config/providers",
           describeRoute({
