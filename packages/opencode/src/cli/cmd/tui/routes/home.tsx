@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
-import { createMemo, Match, onMount, Show, Switch } from "solid-js"
+import { createMemo, Match, createEffect, Show, Switch, onMount } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { Logo } from "../component/logo"
 import { DidYouKnow, randomizeTip } from "../component/did-you-know"
@@ -76,9 +76,9 @@ export function Home() {
 
   let prompt: PromptRef
   const args = useArgs()
-  onMount(() => {
-    randomizeTip()
-    if (once) return
+  onMount(() => randomizeTip())
+  createEffect(() => {
+    if (once || !prompt) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
       once = true
