@@ -1563,6 +1563,32 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Configure status line hints shown at the bottom of the TUI
+     */
+    status_hints?: {
+      /**
+       * Enable status line hints
+       */
+      enabled?: boolean
+      /**
+       * List of hints to display in status line
+       */
+      items?: Array<{
+        /**
+         * Keybind identifier (e.g., 'agent_cycle', 'variant_cycle')
+         */
+        keybind: string
+        /**
+         * Display label for the hint
+         */
+        label: string
+        /**
+         * Condition to show hint (e.g., 'hasVariants')
+         */
+        when?: string
+      }>
+    }
   }
   server?: ServerConfig
   /**

@@ -9112,6 +9112,39 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
+              },
+              "status_hints": {
+                "description": "Configure status line hints shown at the bottom of the TUI",
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "description": "Enable status line hints",
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "items": {
+                    "description": "List of hints to display in status line",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "keybind": {
+                          "description": "Keybind identifier (e.g., 'agent_cycle', 'variant_cycle')",
+                          "type": "string"
+                        },
+                        "label": {
+                          "description": "Display label for the hint",
+                          "type": "string"
+                        },
+                        "when": {
+                          "description": "Condition to show hint (e.g., 'hasVariants')",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["keybind", "label"]
+                    }
+                  }
+                }
               }
             }
           },
