@@ -6,11 +6,12 @@ import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
 import { Command } from "../../command"
 import { EOL } from "os"
-import { select } from "@clack/prompts"
+import { select, isCancel } from "@clack/prompts"
 import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { Locale } from "../../util/locale"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -43,6 +44,11 @@ export const RunCommand = cmd({
       .option("continue", {
         alias: ["c"],
         describe: "continue the last session",
+        type: "boolean",
+      })
+      .option("resume", {
+        alias: ["r"],
+        describe: "resume a session from a list",
         type: "boolean",
       })
       .option("session", {
@@ -279,6 +285,32 @@ export const RunCommand = cmd({
       const sdk = createOpencodeClient({ baseUrl: args.attach })
 
       const sessionID = await (async () => {
+        if (args.resume) {
+          const result = await sdk.session.list()
+          const sessions = (result.data || [])
+            .filter((s) => !s.parentID)
+            .sort((a, b) => b.time.updated - a.time.updated)
+
+          if (sessions.length === 0) {
+            UI.error("No sessions found")
+            process.exit(1)
+          }
+
+          const selected = await select({
+            message: "Select a session to resume",
+            options: sessions.map((s) => ({
+              value: s.id,
+              label: s.title,
+              hint: Locale.todayTimeOrDateTime(s.time.updated),
+            })),
+          })
+
+          if (isCancel(selected)) {
+            process.exit(0)
+          }
+
+          return selected as string
+        }
         if (args.continue) {
           const result = await sdk.session.list()
           return result.data?.find((s) => !s.parentID)?.id
@@ -352,6 +384,34 @@ export const RunCommand = cmd({
       }
 
       const sessionID = await (async () => {
+        if (args.resume) {
+          const result = await sdk.session.list()
+          const sessions = (result.data || [])
+            .filter((s) => !s.parentID)
+            .sort((a, b) => b.time.updated - a.time.updated)
+
+          if (sessions.length === 0) {
+            server.stop()
+            UI.error("No sessions found")
+            process.exit(1)
+          }
+
+          const selected = await select({
+            message: "Select a session to resume",
+            options: sessions.map((s) => ({
+              value: s.id,
+              label: s.title,
+              hint: Locale.todayTimeOrDateTime(s.time.updated),
+            })),
+          })
+
+          if (isCancel(selected)) {
+            server.stop()
+            process.exit(0)
+          }
+
+          return selected as string
+        }
         if (args.continue) {
           const result = await sdk.session.list()
           return result.data?.find((s) => !s.parentID)?.id
