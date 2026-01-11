@@ -114,11 +114,13 @@ export namespace ACP {
                   const content = await Bun.file(filepath).text()
                   const newContent = getNewContent(content, diff)
 
-                  this.connection.writeTextFile({
-                    sessionId: sessionId,
-                    path: filepath,
-                    content: newContent,
-                  })
+                  if (newContent) {
+                    this.connection.writeTextFile({
+                      sessionId: sessionId,
+                      path: filepath,
+                      content: newContent,
+                    })
+                  }
                 }
                 await this.config.sdk.permission.reply({
                   requestID: permission.id,
@@ -1111,10 +1113,11 @@ export namespace ACP {
     }
   }
 
-  function getNewContent(fileOriginal: string, unifiedDiff: string): string {
+  function getNewContent(fileOriginal: string, unifiedDiff: string): string | undefined {
     const result = applyPatch(fileOriginal, unifiedDiff)
     if (result === false) {
-      throw new Error("Failed to apply unified diff (context mismatch)")
+      log.error("Failed to apply unified diff (context mismatch)")
+      return undefined
     }
     return result
   }
