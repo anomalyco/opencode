@@ -67,7 +67,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     if (!props.current) return
     const key = props.key(props.current)
     requestAnimationFrame(() => {
-      const element = scrollRef()!.querySelector(`[data-key="${key}"]`)
+      const element = scrollRef()?.querySelector(`[data-key="${key}"]`)
       element?.scrollIntoView({ block: "center" })
     })
   })
