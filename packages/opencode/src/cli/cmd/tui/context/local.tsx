@@ -36,9 +36,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
-        current: string
+        current?: string
       }>({
-        current: agents()[0].name,
+        current: agents()[0]?.name,
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -54,23 +54,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          const available = agents()
+          if (available.length === 0) return undefined
+          return available.find((x) => x.name === agentStore.current) ?? available[0]
         },
-        set(name: string) {
-          if (!agents().some((x) => x.name === name))
-            return toast.show({
-              variant: "warning",
-              message: `Agent not found: ${name}`,
-              duration: 3000,
-            })
-          setAgentStore("current", name)
+        set(name: string | undefined) {
+          const available = agents()
+          if (available.length === 0) {
+            setAgentStore("current", undefined)
+            return
+          }
+          if (name && available.some((x) => x.name === name)) {
+            setAgentStore("current", name)
+            return
+          }
+          setAgentStore("current", available[0].name)
         },
         move(direction: 1 | -1) {
+          const available = agents()
+          if (available.length === 0) {
+            setAgentStore("current", undefined)
+            return
+          }
           batch(() => {
-            let next = agents().findIndex((x) => x.name === agentStore.current) + direction
-            if (next < 0) next = agents().length - 1
-            if (next >= agents().length) next = 0
-            const value = agents()[next]
+            let next = available.findIndex((x) => x.name === agentStore.current) + direction
+            if (next < 0) next = available.length - 1
+            if (next >= available.length) next = 0
+            const value = available[next]
+            if (!value) return
             setAgentStore("current", value.name)
           })
         },
@@ -179,6 +190,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
+        if (!a) return undefined
         return (
           getFirstValidModel(
             () => modelStore.model[a.name],
@@ -217,6 +229,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }),
         cycle(direction: 1 | -1) {
+          const currentAgent = agent.current()
+          if (!currentAgent) return
           const current = currentModel()
           if (!current) return
           const recent = modelStore.recent
@@ -227,9 +241,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (next >= recent.length) next = 0
           const val = recent[next]
           if (!val) return
-          setModelStore("model", agent.current().name, { ...val })
+          setModelStore("model", currentAgent.name, { ...val })
         },
         cycleFavorite(direction: 1 | -1) {
+          const currentAgent = agent.current()
+          if (!currentAgent) return
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
           if (!favorites.length) {
             toast.show({
@@ -253,7 +269,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const next = favorites[index]
           if (!next) return
-          setModelStore("model", agent.current().name, { ...next })
+          setModelStore("model", currentAgent.name, { ...next })
           const uniq = uniqueBy([next, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
           if (uniq.length > 10) uniq.pop()
           setModelStore(
@@ -264,6 +280,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         set(model: { providerID: string; modelID: string }, options?: { recent?: boolean }) {
           batch(() => {
+            const currentAgent = agent.current()
+            if (!currentAgent) return
             if (!isModelValid(model)) {
               toast.show({
                 message: `Model ${model.providerID}/${model.modelID} is not valid`,
@@ -272,7 +290,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            setModelStore("model", agent.current().name, model)
+            setModelStore("model", currentAgent.name, model)
             if (options?.recent) {
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
               if (uniq.length > 10) uniq.pop()
@@ -368,6 +386,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
+      if (!value) return
       if (value.model) {
         if (isModelValid(value.model))
           model.set({
