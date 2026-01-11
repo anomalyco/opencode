@@ -7,6 +7,7 @@ import { LocalProvider } from "@/context/local"
 import { base64Decode } from "@opencode-ai/util/encode"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
+import type { QuestionAnswer } from "@opencode-ai/sdk/v2"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
@@ -21,11 +22,22 @@ export default function Layout(props: ParentProps) {
           {iife(() => {
             const sync = useSync()
             const sdk = useSDK()
-            const respond = (input: {
+            const respondPermission = (input: {
               sessionID: string
               permissionID: string
               response: "once" | "always" | "reject"
             }) => sdk.client.permission.respond(input)
+
+            const respondQuestion = (input: { sessionID: string; questionID: string; answers: QuestionAnswer[] }) =>
+              sdk.client.question.reply({
+                requestID: input.questionID,
+                answers: input.answers,
+              })
+
+            const rejectQuestion = (input: { sessionID: string; questionID: string }) =>
+              sdk.client.question.reject({
+                requestID: input.questionID,
+              })
 
             const navigateToSession = (sessionID: string) => {
               navigate(`/${params.dir}/session/${sessionID}`)
@@ -35,7 +47,9 @@ export default function Layout(props: ParentProps) {
               <DataProvider
                 data={sync.data}
                 directory={directory()}
-                onPermissionRespond={respond}
+                onPermissionRespond={respondPermission}
+                onQuestionRespond={respondQuestion}
+                onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
               >
                 <LocalProvider>{props.children}</LocalProvider>

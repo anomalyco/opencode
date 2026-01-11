@@ -1270,6 +1270,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     clearInput()
     addOptimisticMessage()
 
+    // Reject any pending questions for this session
+    const pendingQuestions = sync.data.question?.[session.id] ?? []
+    for (const q of pendingQuestions) {
+      sdk.client.question.reject({ requestID: q.id }).catch(() => {})
+    }
+
     client.session
       .prompt({
         sessionID: session.id,

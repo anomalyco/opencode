@@ -11,6 +11,7 @@ import {
   type JSX,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
+import { createStore } from "solid-js/store"
 import {
   AgentPart,
   AssistantMessage,
@@ -22,6 +23,8 @@ import {
   ToolPart,
   UserMessage,
   Todo,
+  QuestionRequest,
+  QuestionAnswer,
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -33,6 +36,7 @@ import { Button } from "./button"
 import { Card } from "./card"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
+import { TextField } from "./text-field"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
@@ -449,6 +453,346 @@ export const ToolRegistry = {
   render: getTool,
 }
 
+function QuestionPromptInline(props: { request: QuestionRequest }) {
+  const data = useData()
+  const questions = createMemo(() => props.request.questions ?? [])
+  const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
+
+  const [store, setStore] = createStore({
+    tab: 0,
+    answers: [] as QuestionAnswer[],
+    custom: [] as string[],
+    focusedOption: 0,
+  })
+
+  let containerRef: HTMLDivElement | undefined
+
+  // Auto-focus container when mounted
+  createEffect(() => {
+    if (containerRef) {
+      containerRef.focus()
+    }
+  })
+
+  const question = createMemo(() => questions()[store.tab])
+  const confirm = createMemo(() => !single() && store.tab === questions().length)
+  const options = createMemo(() => question()?.options ?? [])
+  const input = createMemo(() => store.custom[store.tab] ?? "")
+  const multi = createMemo(() => question()?.multiple === true)
+  const totalOptions = createMemo(() => options().length + 1) // +1 for custom input
+
+  // Get final answers for a question, including custom text if present
+  const getFinalAnswers = (index: number) => {
+    const selected = store.answers[index] ?? []
+    const customText = store.custom[index]?.trim()
+    if (!customText) return selected
+    if (selected.includes(customText)) return selected
+    // For multi-select, add custom text to selections
+    // For single-select, custom text replaces selections (already handled in onInput)
+    const q = questions()[index]
+    if (q?.multiple) {
+      return [...selected, customText]
+    }
+    return customText ? [customText] : selected
+  }
+
+  const submit = () => {
+    if (!data.respondToQuestion) return
+    const answers = questions().map((_: unknown, i: number) => getFinalAnswers(i))
+    data.respondToQuestion({
+      sessionID: props.request.sessionID,
+      questionID: props.request.id,
+      answers,
+    })
+  }
+
+  const reject = () => {
+    if (!data.rejectQuestion) return
+    data.rejectQuestion({
+      sessionID: props.request.sessionID,
+      questionID: props.request.id,
+    })
+  }
+
+  const pick = (answer: string, custom: boolean = false) => {
+    const answers = [...store.answers]
+    answers[store.tab] = [answer]
+    setStore("answers", answers)
+    if (custom) {
+      const inputs = [...store.custom]
+      inputs[store.tab] = answer
+      setStore("custom", inputs)
+    }
+    if (single()) {
+      if (!data.respondToQuestion) return
+      data.respondToQuestion({
+        sessionID: props.request.sessionID,
+        questionID: props.request.id,
+        answers: [[answer]],
+      })
+      return
+    }
+    setStore("tab", store.tab + 1)
+  }
+
+  const toggle = (answer: string) => {
+    const existing = store.answers[store.tab] ?? []
+    const next = [...existing]
+    const index = next.indexOf(answer)
+    if (index === -1) next.push(answer)
+    if (index !== -1) next.splice(index, 1)
+    const answers = [...store.answers]
+    answers[store.tab] = next
+    setStore("answers", answers)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Don't handle if typing in text field
+    if ((e.target as HTMLElement).tagName === "INPUT") {
+      if (e.key === "Escape") {
+        containerRef?.focus()
+      }
+      return
+    }
+
+    e.preventDefault()
+
+    switch (e.key) {
+      case "ArrowUp":
+        if (!confirm()) {
+          setStore("focusedOption", Math.max(0, store.focusedOption - 1))
+        }
+        break
+      case "ArrowDown":
+        if (!confirm()) {
+          setStore("focusedOption", Math.min(totalOptions() - 1, store.focusedOption + 1))
+        }
+        break
+      case "ArrowLeft":
+        if (!single() && store.tab > 0) {
+          setStore("tab", store.tab - 1)
+          setStore("focusedOption", 0)
+        }
+        break
+      case "ArrowRight":
+        if (!single() && store.tab < questions().length) {
+          setStore("tab", store.tab + 1)
+          setStore("focusedOption", 0)
+        }
+        break
+      case "Enter":
+        if (confirm()) {
+          submit()
+        } else if (store.focusedOption < options().length) {
+          const opt = options()[store.focusedOption]
+          if (multi()) {
+            toggle(opt.label)
+          } else {
+            pick(opt.label)
+          }
+        } else {
+          // Focus the custom input
+          const inputEl = containerRef?.querySelector("input")
+          inputEl?.focus()
+        }
+        break
+      case "Escape":
+        reject()
+        break
+    }
+  }
+
+  // Reset focused option and re-focus container when tab changes
+  createEffect(() => {
+    store.tab // track tab changes
+    setStore("focusedOption", 0)
+    containerRef?.focus()
+  })
+
+  return (
+    <>
+      <div ref={containerRef} data-component="question-content" tabIndex={0} onKeyDown={handleKeyDown}>
+        <Show when={!single()}>
+          <div data-slot="question-tabs">
+            <For each={questions()}>
+              {(q, index) => {
+                const isActive = () => index() === store.tab
+                const isAnswered = () => getFinalAnswers(index()).length > 0
+                return (
+                  <button
+                    data-slot="question-tab"
+                    data-active={isActive()}
+                    data-answered={isAnswered()}
+                    onClick={() => setStore("tab", index())}
+                  >
+                    {q.header}
+                  </button>
+                )
+              }}
+            </For>
+            <button
+              data-slot="question-tab"
+              data-active={confirm()}
+              onClick={() => setStore("tab", questions().length)}
+            >
+              Confirm
+            </button>
+          </div>
+        </Show>
+
+        <Show when={!confirm()}>
+          <div data-slot="question-body">
+            <div data-slot="question-text">
+              {question()?.question}
+              {multi() ? " (select all that apply)" : ""}
+            </div>
+
+            <div data-slot="question-options">
+              <For each={options()}>
+                {(opt, index) => {
+                  const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                  const focused = () => store.focusedOption === index()
+                  return (
+                    <div
+                      data-slot="question-option"
+                      data-picked={picked()}
+                      data-focused={focused()}
+                      onClick={() => (multi() ? toggle(opt.label) : pick(opt.label))}
+                    >
+                      <Show
+                        when={multi()}
+                        fallback={
+                          <div data-slot="question-radio" data-checked={picked()}>
+                            <Show when={picked()}>
+                              <div data-slot="question-radio-dot" />
+                            </Show>
+                          </div>
+                        }
+                      >
+                        <div data-slot="question-checkbox" data-checked={picked()}>
+                          <Show when={picked()}>
+                            <svg
+                              viewBox="0 0 12 12"
+                              fill="none"
+                              width="10"
+                              height="10"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path
+                                d="M3 7.17905L5.02703 8.85135L9 3.5"
+                                stroke="currentColor"
+                                stroke-width="1.5"
+                                stroke-linecap="square"
+                              />
+                            </svg>
+                          </Show>
+                        </div>
+                      </Show>
+                      <div data-slot="question-option-content">
+                        <div data-slot="question-option-label">{opt.label}</div>
+                        <Show when={opt.description}>
+                          <div data-slot="question-option-description">{opt.description}</div>
+                        </Show>
+                      </div>
+                    </div>
+                  )
+                }}
+              </For>
+
+              <div data-slot="question-custom" data-focused={store.focusedOption === options().length}>
+                <TextField
+                  placeholder="Type your own answer..."
+                  value={input()}
+                  onInput={(e: InputEvent) => {
+                    const value = (e.currentTarget as HTMLInputElement).value
+                    const inputs = [...store.custom]
+                    inputs[store.tab] = value
+                    setStore("custom", inputs)
+                    // For single-select, typing clears other selections
+                    if (!multi() && value.trim()) {
+                      const answers = [...store.answers]
+                      answers[store.tab] = []
+                      setStore("answers", answers)
+                    }
+                  }}
+                  onKeyDown={(e: KeyboardEvent) => {
+                    if (e.key === "Enter" && input().trim()) {
+                      e.preventDefault()
+                      const text = input().trim()
+                      const answers = [...store.answers]
+                      if (multi()) {
+                        // For multi-select, add custom text to existing selections
+                        const existing = answers[store.tab] ?? []
+                        if (!existing.includes(text)) {
+                          answers[store.tab] = [...existing, text]
+                        }
+                      } else {
+                        // For single-select, replace with custom text
+                        answers[store.tab] = [text]
+                      }
+                      setStore("answers", answers)
+                      if (single()) {
+                        submit()
+                      } else {
+                        setStore("tab", store.tab + 1)
+                      }
+                    }
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={confirm() && !single()}>
+          <div data-slot="question-review">
+            <div data-slot="question-review-title">Review your answers</div>
+            <For each={questions()}>
+              {(q, index) => {
+                const value = () => getFinalAnswers(index()).join(", ")
+                const answered = () => Boolean(value())
+                return (
+                  <div data-slot="question-review-item">
+                    <span data-slot="question-review-label">{q.header}:</span>
+                    <span data-slot="question-review-value" data-empty={!answered()}>
+                      {answered() ? value() : "(not answered)"}
+                    </span>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+      </div>
+
+      <div data-component="tool-actions">
+        <div data-slot="tool-actions-buttons">
+          <Show when={!single()}>
+            <Show when={store.tab > 0}>
+              <Button variant="ghost" size="small" onClick={() => setStore("tab", store.tab - 1)}>
+                Back
+              </Button>
+            </Show>
+            <Show when={!confirm()}>
+              <Button variant="ghost" size="small" onClick={() => setStore("tab", store.tab + 1)}>
+                Next
+              </Button>
+            </Show>
+          </Show>
+          <Button variant="ghost" size="small" onClick={reject}>
+            Dismiss
+          </Button>
+          <Show when={confirm() || single()}>
+            <Button variant="primary" size="small" onClick={submit}>
+              Submit
+            </Button>
+          </Show>
+        </div>
+      </div>
+    </>
+  )
+}
+
 PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const data = useData()
   const part = props.part as ToolPart
@@ -460,7 +804,15 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return next
   })
 
+  const question = createMemo(() => {
+    const next = data.store.question?.[props.message.sessionID]?.[0]
+    if (!next || !next.tool) return undefined
+    if (next.tool!.callID !== part.callID) return undefined
+    return next
+  })
+
   const [showPermission, setShowPermission] = createSignal(false)
+  const [showQuestion, setShowQuestion] = createSignal(false)
 
   createEffect(() => {
     const perm = permission()
@@ -472,9 +824,19 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     }
   })
 
+  createEffect(() => {
+    const q = question()
+    if (q) {
+      const timeout = setTimeout(() => setShowQuestion(true), 50)
+      onCleanup(() => clearTimeout(timeout))
+    } else {
+      setShowQuestion(false)
+    }
+  })
+
   const [forceOpen, setForceOpen] = createSignal(false)
   createEffect(() => {
-    if (permission()) setForceOpen(true)
+    if (permission() || question()) setForceOpen(true)
   })
 
   const respond = (response: "once" | "always" | "reject") => {
@@ -496,8 +858,10 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
+  const hasActivePrompt = () => showPermission() || showQuestion()
+
   return (
-    <div data-component="tool-part-wrapper" data-permission={showPermission()}>
+    <div data-component="tool-part-wrapper" data-permission={hasActivePrompt()}>
       <Switch>
         <Match when={part.state.status === "error" && part.state.error}>
           {(error) => {
@@ -539,8 +903,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
         </Match>
       </Switch>
       <Show when={showPermission() && permission()}>
-        <div data-component="permission-prompt">
-          <div data-slot="permission-actions">
+        <div data-component="tool-actions">
+          <div data-slot="tool-actions-buttons">
             <Button variant="ghost" size="small" onClick={() => respond("reject")}>
               Deny
             </Button>
@@ -553,6 +917,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           </div>
         </div>
       </Show>
+      <Show when={showQuestion() && question()}>{(q) => <QuestionPromptInline request={q()} />}</Show>
     </div>
   )
 }
@@ -810,8 +1175,8 @@ ToolRegistry.register({
               >
                 {renderChildToolPart()}
               </Show>
-              <div data-component="permission-prompt">
-                <div data-slot="permission-actions">
+              <div data-component="tool-actions">
+                <div data-slot="tool-actions-buttons">
                   <Button variant="ghost" size="small" onClick={() => respond("reject")}>
                     Deny
                   </Button>
@@ -1020,6 +1385,42 @@ ToolRegistry.register({
                   </div>
                 </Checkbox>
               )}
+            </For>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "question",
+  render(props) {
+    const questions = createMemo(() => props.input.questions ?? [])
+    const answers = createMemo(() => props.metadata?.answers ?? [])
+    const hasAnswers = createMemo(() => answers().some((a: string[]) => a?.length > 0))
+
+    return (
+      <BasicTool
+        {...props}
+        icon="speech-bubble"
+        trigger={{
+          title: "Question",
+          subtitle: questions().length > 1 ? `${questions().length} questions` : "",
+        }}
+      >
+        <Show when={hasAnswers()}>
+          <div data-component="question-summary">
+            <For each={questions()}>
+              {(q, i) => {
+                const answer = () => answers()[i()]
+                return (
+                  <div data-slot="question-summary-item">
+                    <div data-slot="question-summary-header">{q.header}</div>
+                    <div data-slot="question-summary-text">{answer()?.length ? answer().join(", ") : "Unanswered"}</div>
+                  </div>
+                )
+              }}
             </For>
           </div>
         </Show>
