@@ -15,7 +15,7 @@ import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
+import { SessionTurn, QuestionPrompt } from "@opencode-ai/ui/session-turn"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
@@ -268,6 +268,23 @@ export default function Page() {
   const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+
+  // Get child sessions for question/permission aggregation (like TUI)
+  const children = createMemo(() => {
+    const parentID = info()?.parentID ?? info()?.id
+    if (!parentID) return []
+    return sync.data.session
+      .filter((s) => s.parentID === parentID || s.id === parentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+
+  // Get questions from all child sessions (only if not a child session itself)
+  const questions = createMemo(() => {
+    if (info()?.parentID) return []
+    const result = children().flatMap((x) => sync.data.question?.[x.id] ?? [])
+    return result
+  })
+  const nextQuestion = createMemo(() => (questions().length > 0 ? questions()[0] : undefined))
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -1212,17 +1229,36 @@ export default function Page() {
             </Switch>
           </div>
 
-          {/* Prompt input */}
+          {/* Prompt input and question prompt */}
           <div
             ref={(el) => (promptDock = el)}
             class="absolute inset-x-0 bottom-0 pt-12 pb-4 md:pb-8 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{
-                "w-full md:px-6 pointer-events-auto": true,
+                "w-full md:px-6 pointer-events-auto flex flex-col": true,
                 "md:max-w-200": !showTabs(),
               }}
             >
+              {/* Question prompt - attached directly above the prompt input */}
+              <Show when={params.id ? nextQuestion() : undefined}>
+                {(question) => (
+                  <QuestionPrompt
+                    question={question()}
+                    onRespond={(answers) => {
+                      sdk.client.question.reply({
+                        requestID: question().id,
+                        answers,
+                      })
+                    }}
+                    onReject={() => {
+                      sdk.client.question.reject({
+                        requestID: question().id,
+                      })
+                    }}
+                  />
+                )}
+              </Show>
               <Show
                 when={prompt.ready()}
                 fallback={
@@ -1237,6 +1273,7 @@ export default function Page() {
                   }}
                   newSessionWorktree={newSessionWorktree()}
                   onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                  class={nextQuestion() ? "question-attached" : ""}
                 />
               </Show>
             </div>

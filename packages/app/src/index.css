@@ -5,3 +5,15 @@
     cursor: default;
   }
 }
+
+/* Style prompt input when question is attached above it */
+.question-attached {
+  border-radius: 0 0 var(--radius-md) var(--radius-md) !important;
+  box-shadow:
+    -1px 0 0 0 var(--border-base),
+    1px 0 0 0 var(--border-base),
+    0 1px 0 0 var(--border-base),
+    0 1px 2px -1px rgba(19, 16, 16, 0.04),
+    0 1px 2px 0 rgba(19, 16, 16, 0.06),
+    0 1px 3px 0 rgba(19, 16, 16, 0.08) !important;
+}

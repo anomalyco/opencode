@@ -18,6 +18,7 @@ import {
   IconRectangleStack,
   IconMagnifyingGlass,
   IconDocumentMagnifyingGlass,
+  IconQuestionMarkCircle,
 } from "../icons"
 import { IconMeta, IconRobot, IconOpenAI, IconGemini, IconAnthropic, IconBrain } from "../icons/custom"
 import { ContentCode } from "./content-code"
@@ -118,6 +119,9 @@ export function Part(props: PartProps) {
               </Match>
               <Match when={props.part.type === "tool" && props.part.tool === "task"}>
                 <IconRobot width={18} height={18} />
+              </Match>
+              <Match when={props.part.type === "tool" && props.part.tool === "question"}>
+                <IconQuestionMarkCircle width={18} height={18} />
               </Match>
               <Match when={true}>
                 <IconSparkles width={18} height={18} />
@@ -272,6 +276,14 @@ export function Part(props: PartProps) {
                   </Match>
                   <Match when={props.part.tool === "task"}>
                     <TaskTool
+                      id={props.part.id}
+                      tool={props.part.tool}
+                      message={props.message}
+                      state={props.part.state}
+                    />
+                  </Match>
+                  <Match when={props.part.tool === "question"}>
+                    <QuestionTool
                       id={props.part.id}
                       tool={props.part.tool}
                       message={props.message}
@@ -684,6 +696,61 @@ function TaskTool(props: ToolProps) {
           <ContentMarkdown expand text={props.state.output} />
         </div>
       </ResultsButton>
+    </>
+  )
+}
+
+interface QuestionOption {
+  label: string
+  description: string
+}
+
+interface QuestionInfo {
+  question: string
+  header: string
+  options: QuestionOption[]
+  multiple?: boolean
+}
+
+function QuestionTool(props: ToolProps) {
+  const questions = () => (props.state.input?.questions ?? []) as QuestionInfo[]
+  const answers = () => (props.state.metadata?.answers ?? []) as string[][]
+
+  return (
+    <>
+      <div data-component="tool-title">
+        <span data-slot="name">Question</span>
+        <span data-slot="target">{questions().length === 1 ? "1 question" : `${questions().length} questions`}</span>
+      </div>
+      <div data-component="questions">
+        <For each={questions()}>
+          {(q, i) => (
+            <div data-component="question-item">
+              <div data-slot="header">{q.header}</div>
+              <div data-slot="question">{q.question}</div>
+              <div data-slot="options">
+                <For each={q.options}>
+                  {(opt) => {
+                    const isSelected = () => answers()[i()]?.includes(opt.label)
+                    return (
+                      <div data-slot="option" data-selected={isSelected() ? true : undefined}>
+                        <span data-slot="label">{opt.label}</span>
+                        <span data-slot="description">{opt.description}</span>
+                      </div>
+                    )
+                  }}
+                </For>
+              </div>
+              <Show when={answers()[i()]?.length}>
+                <div data-slot="answer">
+                  <span data-slot="answer-label">Answer:</span>
+                  <span data-slot="answer-value">{answers()[i()]?.join(", ")}</span>
+                </div>
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
     </>
   )
 }

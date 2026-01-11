@@ -3,6 +3,8 @@ import {
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
+  type QuestionAnswer,
+  type QuestionRequest,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
@@ -11,7 +13,7 @@ import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -28,6 +30,315 @@ import { Spinner } from "./spinner"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
+import { Checkbox } from "./checkbox"
+
+export function QuestionPrompt(props: {
+  question: QuestionRequest
+  onRespond: (answers: QuestionAnswer[]) => void
+  onReject: () => void
+}) {
+  const questions = () => props.question.questions
+  // Single mode: only one question AND not multiple-select (immediate submit on selection)
+  const single = () => questions().length === 1 && questions()[0]?.multiple !== true
+
+  const [activeTab, setActiveTab] = createSignal(0)
+  const [selections, setSelections] = createSignal<Map<number, Set<string>>>(new Map())
+  const [customInputs, setCustomInputs] = createSignal<Map<number, string>>(new Map())
+  const [showCustom, setShowCustom] = createSignal<Set<number>>(new Set())
+
+  // Whether we're on the confirm tab (only for multi-question)
+  const isConfirmTab = () => !single() && activeTab() === questions().length
+  const currentQuestion = () => questions()[activeTab()]
+
+  const toggleOption = (questionIndex: number, label: string, multiple: boolean) => {
+    setSelections((prev) => {
+      const newMap = new Map(prev)
+      const current = newMap.get(questionIndex) ?? new Set<string>()
+
+      if (multiple) {
+        const newSet = new Set(current)
+        if (newSet.has(label)) {
+          newSet.delete(label)
+        } else {
+          newSet.add(label)
+        }
+        newMap.set(questionIndex, newSet)
+      } else {
+        // For single select, clear custom input if selecting a predefined option
+        setCustomInputs((prev) => {
+          const newMap = new Map(prev)
+          newMap.delete(questionIndex)
+          return newMap
+        })
+        if (current.has(label)) {
+          newMap.set(questionIndex, new Set())
+        } else {
+          newMap.set(questionIndex, new Set([label]))
+        }
+      }
+
+      return newMap
+    })
+  }
+
+  const toggleCustomInput = (questionIndex: number) => {
+    setShowCustom((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(questionIndex)) {
+        newSet.delete(questionIndex)
+        // Clear custom input when hiding
+        setCustomInputs((prev) => {
+          const newMap = new Map(prev)
+          newMap.delete(questionIndex)
+          return newMap
+        })
+      } else {
+        newSet.add(questionIndex)
+      }
+      return newSet
+    })
+  }
+
+  const setCustomInputValue = (questionIndex: number, value: string, multiple: boolean) => {
+    setCustomInputs((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(questionIndex, value)
+      return newMap
+    })
+    // For single select, clear other selections when typing custom
+    if (!multiple && value) {
+      setSelections((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(questionIndex, new Set())
+        return newMap
+      })
+    }
+  }
+
+  const isSelected = (questionIndex: number, label: string) => {
+    return selections().get(questionIndex)?.has(label) ?? false
+  }
+
+  const getCustomInput = (questionIndex: number) => {
+    return customInputs().get(questionIndex) ?? ""
+  }
+
+  const hasCustomInput = (questionIndex: number) => {
+    const input = customInputs().get(questionIndex)
+    return input !== undefined && input.trim().length > 0
+  }
+
+  const hasAnswer = (questionIndex: number) => {
+    const selected = selections().get(questionIndex)
+    return (selected && selected.size > 0) || hasCustomInput(questionIndex)
+  }
+
+  const getAnswerText = (questionIndex: number) => {
+    const selected = selections().get(questionIndex)
+    const custom = customInputs().get(questionIndex)?.trim()
+    const parts: string[] = []
+    if (selected) parts.push(...Array.from(selected))
+    if (custom) parts.push(custom)
+    return parts.join(", ")
+  }
+
+  const canSubmit = () => {
+    return questions().every((_, idx) => hasAnswer(idx))
+  }
+
+  const handleSubmit = () => {
+    const answers: QuestionAnswer[] = questions().map((q, idx) => {
+      const selected = selections().get(idx) ?? new Set()
+      const custom = customInputs().get(idx)?.trim()
+      const result = Array.from(selected)
+      if (custom) {
+        if (q.multiple) {
+          result.push(custom)
+        } else {
+          return [custom]
+        }
+      }
+      return result
+    })
+    props.onRespond(answers)
+  }
+
+  // For single-select single-question, submit immediately on selection
+  const handleSingleSelect = (label: string) => {
+    if (single()) {
+      props.onRespond([[label]])
+    } else {
+      toggleOption(activeTab(), label, false)
+      // Auto-advance to next tab after selecting
+      if (activeTab() < questions().length) {
+        setActiveTab(activeTab() + 1)
+      }
+    }
+  }
+
+  // Handle option click for multi-select or when in multi-question mode
+  const handleOptionClick = (questionIndex: number, label: string, multiple: boolean) => {
+    if (!multiple && single()) {
+      handleSingleSelect(label)
+    } else {
+      toggleOption(questionIndex, label, multiple)
+    }
+  }
+
+  return (
+    <div data-component="question-prompt">
+      {/* Tabs - show when there are multiple questions, otherwise show header */}
+      <Show
+        when={!single()}
+        fallback={
+          <div data-slot="question-header">
+            <span>Question</span>
+          </div>
+        }
+      >
+        <div data-slot="question-tabs">
+          <For each={questions()}>
+            {(q, index) => (
+              <button
+                data-slot="question-tab"
+                data-active={index() === activeTab()}
+                data-answered={hasAnswer(index())}
+                onClick={() => setActiveTab(index())}
+              >
+                {q.header}
+              </button>
+            )}
+          </For>
+          <button
+            data-slot="question-tab"
+            data-active={isConfirmTab()}
+            onClick={() => setActiveTab(questions().length)}
+          >
+            Confirm
+          </button>
+        </div>
+      </Show>
+
+      {/* Question content - show current question or confirm */}
+      <Show
+        when={!isConfirmTab()}
+        fallback={
+          /* Confirm tab - review all answers */
+          <div data-slot="question-confirm">
+            <div data-slot="question-confirm-title">Review your answers</div>
+            <For each={questions()}>
+              {(q, index) => (
+                <div data-slot="question-confirm-item">
+                  <span data-slot="question-confirm-label">{q.header}:</span>
+                  <span data-slot="question-confirm-value" data-answered={hasAnswer(index())}>
+                    {hasAnswer(index()) ? getAnswerText(index()) : "(not answered)"}
+                  </span>
+                </div>
+              )}
+            </For>
+          </div>
+        }
+      >
+        <Show when={currentQuestion()}>
+          {(q) => (
+            <div data-slot="question-item">
+              <div data-slot="question-text">
+                <Show when={single()}>
+                  <span data-slot="question-label">{q().header}</span>
+                </Show>
+                <span>
+                  {q().question}
+                  {q().multiple ? " (select all that apply)" : ""}
+                </span>
+              </div>
+              <div data-slot="question-options">
+                <For each={q().options}>
+                  {(option) => (
+                    <button
+                      data-slot="question-option"
+                      data-selected={isSelected(activeTab(), option.label)}
+                      onClick={() => handleOptionClick(activeTab(), option.label, q().multiple ?? false)}
+                    >
+                      <Checkbox
+                        checked={isSelected(activeTab(), option.label)}
+                        onChange={() => handleOptionClick(activeTab(), option.label, q().multiple ?? false)}
+                      />
+                      <div data-slot="question-option-content">
+                        <span data-slot="question-option-label">{option.label}</span>
+                        <Show when={option.description}>
+                          <span data-slot="question-option-description">{option.description}</span>
+                        </Show>
+                      </div>
+                    </button>
+                  )}
+                </For>
+                {/* Custom input option */}
+                <button
+                  data-slot="question-option"
+                  data-selected={hasCustomInput(activeTab())}
+                  onClick={() => toggleCustomInput(activeTab())}
+                >
+                  <Checkbox checked={hasCustomInput(activeTab())} onChange={() => toggleCustomInput(activeTab())} />
+                  <div data-slot="question-option-content">
+                    <span data-slot="question-option-label">Other</span>
+                    <span data-slot="question-option-description">Type your own answer</span>
+                  </div>
+                </button>
+                <Show when={showCustom().has(activeTab())}>
+                  <div data-slot="question-custom-input">
+                    <input
+                      type="text"
+                      placeholder="Type your answer..."
+                      value={getCustomInput(activeTab())}
+                      onInput={(e) => setCustomInputValue(activeTab(), e.currentTarget.value, q().multiple ?? false)}
+                      autofocus
+                    />
+                  </div>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
+      </Show>
+
+      <div data-slot="question-actions">
+        <div data-slot="question-actions-left">
+          <Button variant="ghost" size="small" onClick={props.onReject}>
+            Skip
+          </Button>
+        </div>
+        <div data-slot="question-actions-right">
+          <Show when={!single() && activeTab() > 0}>
+            <Button variant="ghost" size="small" onClick={() => setActiveTab(activeTab() - 1)}>
+              Back
+            </Button>
+          </Show>
+          <Show
+            when={!single()}
+            fallback={
+              <Button variant="primary" size="small" disabled={!canSubmit()} onClick={handleSubmit}>
+                Submit
+              </Button>
+            }
+          >
+            <Show
+              when={isConfirmTab()}
+              fallback={
+                <Button variant="primary" size="small" onClick={() => setActiveTab(activeTab() + 1)}>
+                  Next
+                </Button>
+              }
+            >
+              <Button variant="primary" size="small" disabled={!canSubmit()} onClick={handleSubmit}>
+                Submit
+              </Button>
+            </Show>
+          </Show>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function computeStatusFromPart(part: PartType | undefined): string | undefined {
   if (!part) return undefined
@@ -134,6 +445,7 @@ export function SessionTurn(
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyQuestions: QuestionRequest[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
@@ -227,9 +539,33 @@ export function SessionTurn(
     return false
   })
 
-  const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
+  // Get current session to check if it's a child session
+  const session = createMemo(() => data.store.session.find((s) => s.id === props.sessionID))
+
+  // Get all child sessions (sessions that share the same parent, or are the parent)
+  const children = createMemo(() => {
+    const parentID = session()?.parentID ?? session()?.id
+    if (!parentID) return []
+    return data.store.session
+      .filter((s) => s.parentID === parentID || s.id === parentID)
+      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  })
+
+  // Get permissions from all child sessions (only if not a child session itself)
+  const permissions = createMemo(() => {
+    if (session()?.parentID) return emptyPermissions
+    return children().flatMap((x) => data.store.permission?.[x.id] ?? [])
+  })
   const permissionCount = createMemo(() => permissions().length)
   const nextPermission = createMemo(() => permissions()[0])
+
+  // Get questions from all child sessions (only if not a child session itself)
+  const questions = createMemo(() => {
+    if (session()?.parentID) return emptyQuestions
+    return children().flatMap((x) => data.store.question?.[x.id] ?? [])
+  })
+  const questionCount = createMemo(() => questions().length)
+  const nextQuestion = createMemo(() => questions()[0])
 
   const permissionParts = createMemo(() => {
     if (props.stepsExpanded) return emptyPermissionParts
@@ -553,6 +889,7 @@ export function SessionTurn(
                         </For>
                       </div>
                     </Show>
+
                     {/* Response */}
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
