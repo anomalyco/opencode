@@ -522,7 +522,7 @@ body {
     [data-slot="content"] {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 1ch;
     }
 
     [data-slot="text"] {
