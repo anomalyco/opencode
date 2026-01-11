@@ -1,0 +1,139 @@
+name: PR Standards
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize]
+
+jobs:
+  check-standards:
+    if: |
+      github.event.pull_request.user.login != 'actions-user' &&
+      github.event.pull_request.user.login != 'opencode' &&
+      github.event.pull_request.user.login != 'rekram1-node' &&
+      github.event.pull_request.user.login != 'thdxr' &&
+      github.event.pull_request.user.login != 'kommander' &&
+      github.event.pull_request.user.login != 'jayair' &&
+      github.event.pull_request.user.login != 'fwang' &&
+      github.event.pull_request.user.login != 'adamdotdevin' &&
+      github.event.pull_request.user.login != 'iamdavidhill' &&
+      github.event.pull_request.user.login != 'opencode-agent[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Check PR standards
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title;
+
+            async function addLabel(label) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: [label]
+              });
+            }
+
+            async function removeLabel(label) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  name: label
+                });
+              } catch (e) {
+                // Label wasn't present, ignore
+              }
+            }
+
+            async function comment(marker, body) {
+              const markerText = `<!-- pr-standards:${marker} -->`;
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number
+              });
+              
+              const existing = comments.find(c => c.body.includes(markerText));
+              if (existing) return;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: markerText + '\n' + body
+              });
+            }
+
+            // Step 1: Check title format
+            // Matches: feat:, feat(scope):, feat (scope):, etc.
+            const titlePattern = /^(feat|fix|docs|chore|refactor|test)\s*(\([a-zA-Z0-9-]+\))?\s*:/;
+            const hasValidTitle = titlePattern.test(title);
+
+            if (!hasValidTitle) {
+              await addLabel('needs:title');
+              await comment('title', `Hey! Your PR title \`${title}\` doesn't follow conventional commit format.
+
+            Please update it to start with one of:
+            - \`feat:\` or \`feat(scope):\` new feature
+            - \`fix:\` or \`fix(scope):\` bug fix
+            - \`docs:\` or \`docs(scope):\` documentation changes
+            - \`chore:\` or \`chore(scope):\` maintenance tasks
+            - \`refactor:\` or \`refactor(scope):\` code refactoring
+            - \`test:\` or \`test(scope):\` adding or updating tests
+
+            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`opencode\`).
+
+            See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#pr-titles) for details.`);
+              return;
+            }
+
+            await removeLabel('needs:title');
+
+            // Step 2: Check for linked issue (skip for docs/refactor PRs)
+            const skipIssueCheck = /^(docs|refactor)\s*(\([a-zA-Z0-9-]+\))?\s*:/.test(title);
+            if (skipIssueCheck) {
+              await removeLabel('needs:issue');
+              console.log('Skipping issue check for docs/refactor PR');
+              return;
+            }
+            const query = `
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    closingIssuesReferences(first: 1) {
+                      totalCount
+                    }
+                  }
+                }
+              }
+            `;
+
+            const result = await github.graphql(query, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              number: pr.number
+            });
+
+            const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
+
+            if (linkedIssues === 0) {
+              await addLabel('needs:issue');
+              await comment('issue', `Thanks for your contribution!
+
+            This PR doesn't have a linked issue. All PRs must reference an existing issue.
+
+            Please:
+            1. Open an issue describing the bug/feature (if one doesn't exist)
+            2. Add \`Fixes #<number>\` or \`Closes #<number>\` to this PR description
+
+            See [CONTRIBUTING.md](../blob/dev/CONTRIBUTING.md#issue-first-policy) for details.`);
+              return;
+            }
+
+            await removeLabel('needs:issue');
+            console.log('PR meets all standards');
