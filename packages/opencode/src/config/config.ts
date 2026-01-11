@@ -754,9 +754,25 @@ export namespace Config {
               )
               .optional()
               .describe("Variant-specific configuration"),
+            excludeDefaultOptions: z
+              .boolean()
+              .optional()
+              .describe(
+                "Exclude all default provider options for this model (useful for custom APIs that don't support them). " +
+                "When true, disables automatic parameter injection like thinkingConfig, reasoningEffort, promptCacheKey, etc. " +
+                "Example: { 'models': { 'my-model': { 'excludeDefaultOptions': true } } }",
+              ),
           }),
         )
         .optional(),
+      excludeDefaultOptions: z
+        .boolean()
+        .optional()
+        .describe(
+          "Exclude all default provider options for all models in this provider (useful for custom APIs that don't support them). " +
+          "When true, disables automatic parameter injection for all models. Model-level setting overrides this. " +
+          "Example: { 'provider': { 'myapi': { 'excludeDefaultOptions': true } } }",
+        ),
       options: z
         .object({
           apiKey: z.string().optional(),

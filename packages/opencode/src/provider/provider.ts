@@ -504,6 +504,7 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      excludeDefaultOptions: z.boolean().optional(),
     })
     .meta({
       ref: "Model",
@@ -867,6 +868,13 @@ export namespace Provider {
             (v) => omit(v, ["disabled"]),
           )
         }
+
+        // Apply excludeDefaultOptions from config
+        // Priority: model-level > provider-level > default (undefined/false)
+        // When true, disables all default parameters to avoid API compatibility issues
+        const modelConfig = configProvider?.models?.[modelID]
+        model.excludeDefaultOptions =
+          modelConfig?.excludeDefaultOptions ?? configProvider?.excludeDefaultOptions ?? false
       }
 
       if (Object.keys(provider.models).length === 0) {

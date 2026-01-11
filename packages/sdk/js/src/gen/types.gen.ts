@@ -1067,10 +1067,18 @@ export type ProviderConfig = {
       provider?: {
         npm: string
       }
+      /**
+       * Exclude all default provider options for this model (useful for custom APIs that don't support them)
+       */
+      excludeDefaultOptions?: boolean
     }
   }
   whitelist?: Array<string>
   blacklist?: Array<string>
+  /**
+   * Exclude all default provider options for all models in this provider (useful for custom APIs that don't support them)
+   */
+  excludeDefaultOptions?: boolean
   options?: {
     apiKey?: string
     baseURL?: string

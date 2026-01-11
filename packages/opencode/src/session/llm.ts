@@ -99,11 +99,14 @@ export namespace LLM {
         message: input.user,
       },
       {
-        temperature: input.model.capabilities.temperature
-          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
-          : undefined,
-        topP: input.agent.topP ?? ProviderTransform.topP(input.model),
-        topK: ProviderTransform.topK(input.model),
+        // When excludeDefaultOptions is true, only use explicitly configured values
+        temperature: input.model.excludeDefaultOptions
+          ? input.agent.temperature
+          : input.model.capabilities.temperature
+            ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+            : undefined,
+        topP: input.model.excludeDefaultOptions ? input.agent.topP : (input.agent.topP ?? ProviderTransform.topP(input.model)),
+        topK: input.model.excludeDefaultOptions ? undefined : ProviderTransform.topK(input.model),
         options,
       },
     )
@@ -154,7 +157,9 @@ export namespace LLM {
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
       activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
       tools,
-      maxOutputTokens,
+      // When excludeDefaultOptions is true, don't send maxOutputTokens parameter
+      // This allows the API to use its own default or handle it according to its requirements
+      maxOutputTokens: input.model.excludeDefaultOptions ? undefined : maxOutputTokens,
       abortSignal: input.abort,
       headers: {
         ...(input.model.providerID.startsWith("opencode")

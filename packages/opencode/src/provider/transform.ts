@@ -436,6 +436,13 @@ export namespace ProviderTransform {
     sessionID: string,
     providerOptions?: Record<string, any>,
   ): Record<string, any> {
+    // When excludeDefaultOptions is true, skip all default parameter injection
+    // This is useful for custom APIs that may not support provider-specific options
+    // like thinkingConfig, reasoningEffort, promptCacheKey, chat_template_args, etc.
+    if (model.excludeDefaultOptions) {
+      return {}
+    }
+
     const result: Record<string, any> = {}
 
     if (model.api.npm === "@openrouter/ai-sdk-provider") {
@@ -490,6 +497,11 @@ export namespace ProviderTransform {
   }
 
   export function smallOptions(model: Provider.Model) {
+    // When excludeDefaultOptions is true, skip all default parameter injection for small models
+    if (model.excludeDefaultOptions) {
+      return {}
+    }
+
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
       if (model.api.id.includes("5.")) {
         return { reasoningEffort: "low" }

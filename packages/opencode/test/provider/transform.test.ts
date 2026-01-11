@@ -3,6 +3,86 @@ import { ProviderTransform } from "../../src/provider/transform"
 
 const OUTPUT_TOKEN_MAX = 32000
 
+describe("ProviderTransform.options - excludeDefaultOptions", () => {
+  const sessionID = "test-session-123"
+
+  const mockModel = {
+    id: "custom/custom-model",
+    providerID: "custom",
+    api: {
+      id: "custom-model",
+      url: "https://api.custom.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Custom Model",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0, write: 0 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+    excludeDefaultOptions: false,
+  } as any
+
+  test("should return empty object when excludeDefaultOptions is true", () => {
+    const model = { ...mockModel, excludeDefaultOptions: true }
+    const result = ProviderTransform.options(model, sessionID)
+    expect(result).toEqual({})
+  })
+
+  test("should return default options when excludeDefaultOptions is false", () => {
+    const model = { ...mockModel, providerID: "openai", excludeDefaultOptions: false }
+    const result = ProviderTransform.options(model, sessionID)
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should return default options when excludeDefaultOptions is undefined", () => {
+    const model = { ...mockModel, providerID: "openai", excludeDefaultOptions: undefined }
+    const result = ProviderTransform.options(model, sessionID)
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+})
+
+describe("ProviderTransform.smallOptions - excludeDefaultOptions", () => {
+  const mockModel = {
+    id: "custom/custom-model",
+    providerID: "custom",
+    api: {
+      id: "custom-model",
+      url: "https://api.custom.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    excludeDefaultOptions: false,
+  } as any
+
+  test("should return empty object when excludeDefaultOptions is true", () => {
+    const model = { ...mockModel, excludeDefaultOptions: true }
+    const result = ProviderTransform.smallOptions(model)
+    expect(result).toEqual({})
+  })
+
+  test("should return default options when excludeDefaultOptions is false for OpenAI", () => {
+    const model = { ...mockModel, providerID: "openai", excludeDefaultOptions: false }
+    const result = ProviderTransform.smallOptions(model)
+    expect(result.reasoningEffort).toBe("minimal")
+  })
+})
+
 describe("ProviderTransform.options - setCacheKey", () => {
   const sessionID = "test-session-123"
 
@@ -582,6 +662,154 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result).toHaveLength(2)
     expect(result[0].content).toBe("")
     expect(result[1].content).toHaveLength(1)
+  })
+})
+
+describe("ProviderTransform.excludeDefaultOptions", () => {
+  const sessionID = "test-session-123"
+
+  const mockModel = {
+    id: "custom/custom-model",
+    providerID: "custom",
+    api: {
+      id: "custom-model",
+      url: "https://api.custom.com",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "Custom Model",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: true,
+      toolcall: true,
+      input: { text: true, audio: false, image: true, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0.001,
+      output: 0.002,
+      cache: { read: 0.0001, write: 0.0002 },
+    },
+    limit: {
+      context: 128000,
+      output: 8192,
+    },
+    status: "active",
+    options: {},
+    headers: {},
+  } as any
+
+  test("should return empty object when excludeDefaultOptions is true", () => {
+    const modelWithExclude = { ...mockModel, excludeDefaultOptions: true }
+    const result = ProviderTransform.options(modelWithExclude, sessionID, {})
+    expect(result).toEqual({})
+  })
+
+  test("should return default options when excludeDefaultOptions is false", () => {
+    const modelWithExclude = { ...mockModel, excludeDefaultOptions: false }
+    const result = ProviderTransform.options(modelWithExclude, sessionID, {})
+    // Should return empty for this provider, but the function should run normally
+    expect(result).toEqual({})
+  })
+
+  test("should return default options when excludeDefaultOptions is undefined", () => {
+    const result = ProviderTransform.options(mockModel, sessionID, {})
+    expect(result).toEqual({})
+  })
+
+  test("should skip promptCacheKey when excludeDefaultOptions is true", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: { ...mockModel.api, npm: "@ai-sdk/openai" },
+      excludeDefaultOptions: true,
+    }
+    const result = ProviderTransform.options(openaiModel, sessionID, {})
+    expect(result).toEqual({})
+    expect(result.promptCacheKey).toBeUndefined()
+  })
+
+  test("should include promptCacheKey when excludeDefaultOptions is false for openai", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: { ...mockModel.api, npm: "@ai-sdk/openai" },
+      excludeDefaultOptions: false,
+    }
+    const result = ProviderTransform.options(openaiModel, sessionID, {})
+    expect(result.promptCacheKey).toBe(sessionID)
+  })
+
+  test("should skip thinkingConfig when excludeDefaultOptions is true for google", () => {
+    const googleModel = {
+      ...mockModel,
+      providerID: "google",
+      api: { ...mockModel.api, npm: "@ai-sdk/google", id: "gemini-3-pro" },
+      excludeDefaultOptions: true,
+    }
+    const result = ProviderTransform.options(googleModel, sessionID, {})
+    expect(result).toEqual({})
+    expect(result.thinkingConfig).toBeUndefined()
+  })
+
+  test("should include thinkingConfig when excludeDefaultOptions is false for google", () => {
+    const googleModel = {
+      ...mockModel,
+      providerID: "google",
+      api: { ...mockModel.api, npm: "@ai-sdk/google", id: "gemini-3-pro" },
+      excludeDefaultOptions: false,
+    }
+    const result = ProviderTransform.options(googleModel, sessionID, {})
+    expect(result.thinkingConfig).toBeDefined()
+    expect(result.thinkingConfig.includeThoughts).toBe(true)
+  })
+
+  test("smallOptions should return empty object when excludeDefaultOptions is true", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: { ...mockModel.api, npm: "@ai-sdk/openai", id: "gpt-5" },
+      excludeDefaultOptions: true,
+    }
+    const result = ProviderTransform.smallOptions(openaiModel)
+    expect(result).toEqual({})
+  })
+
+  test("smallOptions should return default options when excludeDefaultOptions is false", () => {
+    const openaiModel = {
+      ...mockModel,
+      providerID: "openai",
+      api: { ...mockModel.api, npm: "@ai-sdk/openai", id: "gpt-5" },
+      excludeDefaultOptions: false,
+    }
+    const result = ProviderTransform.smallOptions(openaiModel)
+    expect(result.reasoningEffort).toBeDefined()
+  })
+
+  test("should skip all provider-specific options when excludeDefaultOptions is true", () => {
+    const openrouterModel = {
+      ...mockModel,
+      providerID: "openrouter",
+      api: { ...mockModel.api, npm: "@openrouter/ai-sdk-provider", id: "gemini-3-pro" },
+      excludeDefaultOptions: true,
+    }
+    const result = ProviderTransform.options(openrouterModel, sessionID, {})
+    expect(result).toEqual({})
+    expect(result.usage).toBeUndefined()
+    expect(result.reasoning).toBeUndefined()
+  })
+
+  test("should include provider-specific options when excludeDefaultOptions is false", () => {
+    const openrouterModel = {
+      ...mockModel,
+      providerID: "openrouter",
+      api: { ...mockModel.api, npm: "@openrouter/ai-sdk-provider", id: "gemini-3-pro" },
+      excludeDefaultOptions: false,
+    }
+    const result = ProviderTransform.options(openrouterModel, sessionID, {})
+    expect(result.usage).toBeDefined()
+    expect(result.reasoning).toBeDefined()
   })
 })
 

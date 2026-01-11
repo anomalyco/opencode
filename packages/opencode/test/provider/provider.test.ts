@@ -2031,6 +2031,92 @@ test("variant config merges with generated variants", async () => {
   })
 })
 
+test("excludeDefaultOptions disables default parameters", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-api": {
+              name: "Custom API",
+              npm: "@ai-sdk/openai-compatible",
+              excludeDefaultOptions: true,
+              env: [],
+              models: {
+                "custom-model": {
+                  name: "Custom Model",
+                  tool_call: true,
+                  limit: { context: 128000, output: 8192 },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+                baseURL: "https://api.custom.com/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["custom-api"]).toBeDefined()
+      const model = providers["custom-api"].models["custom-model"]
+      expect(model.excludeDefaultOptions).toBe(true)
+    },
+  })
+})
+
+test("model-level excludeDefaultOptions overrides provider-level", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "custom-api": {
+              name: "Custom API",
+              npm: "@ai-sdk/openai-compatible",
+              excludeDefaultOptions: true,
+              env: [],
+              models: {
+                "model-1": {
+                  name: "Model 1",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+                "model-2": {
+                  name: "Model 2",
+                  excludeDefaultOptions: false,
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+              },
+              options: { apiKey: "test" },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model1 = providers["custom-api"].models["model-1"]
+      const model2 = providers["custom-api"].models["model-2"]
+      expect(model1.excludeDefaultOptions).toBe(true)
+      expect(model2.excludeDefaultOptions).toBe(false)
+    },
+  })
+})
+
 test("variants filtered in second pass for database models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
