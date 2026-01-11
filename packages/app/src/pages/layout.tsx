@@ -94,6 +94,7 @@ export default function Layout(props: ParentProps) {
   const dialog = useDialog()
   const command = useCommand()
   const theme = useTheme()
+  const [pendingArchive, setPendingArchive] = createSignal<string | undefined>()
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeLabel: Record<ColorScheme, string> = {
@@ -519,6 +520,7 @@ export default function Layout(props: ParentProps) {
     const index = sessions.findIndex((s) => s.id === session.id)
     const nextSession = sessions[index + 1] ?? sessions[index - 1]
 
+    setPendingArchive(undefined)
     await globalSDK.client.session.update({
       directory: session.directory,
       sessionID: session.id,
@@ -589,7 +591,12 @@ export default function Layout(props: ParentProps) {
         disabled: !params.dir || !params.id,
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
-          if (session) archiveSession(session)
+          if (!session) return
+          if (pendingArchive() === session.id) {
+            archiveSession(session)
+          } else {
+            setPendingArchive(session.id)
+          }
         },
       },
       {
@@ -852,12 +859,25 @@ export default function Layout(props: ParentProps) {
       const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
+    const isConfirming = () => pendingArchive() === props.session.id
+    const handleArchiveClick = (e: MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (isConfirming()) {
+        archiveSession(props.session)
+      } else {
+        setPendingArchive(props.session.id)
+      }
+    }
     return (
       <>
         <div
           data-session-id={props.session.id}
           class="group/session relative w-full rounded-md cursor-default transition-colors
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
+          onMouseLeave={() => {
+            if (isConfirming()) setPendingArchive(undefined)
+          }}
         >
           <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
             <A
@@ -918,10 +938,14 @@ export default function Layout(props: ParentProps) {
           <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
             <TooltipKeybind
               placement={props.mobile ? "bottom" : "right"}
-              title="Archive session"
+              title={isConfirming() ? "Click to confirm" : "Archive session"}
               keybind={command.keybind("session.archive")}
             >
-              <IconButton icon="archive" variant="ghost" onClick={() => archiveSession(props.session)} />
+              <IconButton
+                icon="archive"
+                variant={isConfirming() ? "danger" : "ghost"}
+                onClick={handleArchiveClick}
+              />
             </TooltipKeybind>
           </div>
         </div>
