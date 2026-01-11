@@ -3,9 +3,7 @@ import type { Plugin as PluginFn } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
-import { createOpencodeClient as createOpencodeClientV1 } from "@opencode-ai/sdk"
-import { createOpencodeClient as createOpencodeClientV2 } from "@opencode-ai/sdk/v2"
-import type { OpencodeClient as OpencodeClientV2 } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
@@ -20,28 +18,8 @@ export namespace Plugin {
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS = [CodexAuthPlugin]
 
-  type UnifiedClient = PluginInput["client"] & { v2: OpencodeClientV2 }
-
-  function createUnifiedClient(v1: PluginInput["client"], v2: OpencodeClientV2): UnifiedClient {
-    return new Proxy(v1, {
-      get(target, prop) {
-        if (prop === "v2") {
-          return v2
-        }
-        // Forward all other properties to v1 client
-        return (target as unknown as Record<PropertyKey, unknown>)[prop]
-      },
-    }) as UnifiedClient
-  }
-
   const state = Instance.state(async () => {
-    // Create both v1 and v2 clients
-    const clientV1 = createOpencodeClientV1({
-      baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
-    })
-    const clientV2 = createOpencodeClientV2({
+    const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility
       fetch: async (...args) => Server.App().fetch(...args),
@@ -50,19 +28,14 @@ export namespace Plugin {
     const config = await Config.get()
     const hooks: Hooks[] = []
 
-    // Create unified client with .v2 accessor
-    const unifiedClient = createUnifiedClient(clientV1, clientV2)
-
-    // Base input shared between v1 and v2 plugins
-    const baseInput = {
+    const input: PluginInput = {
+      client,
       project: Instance.project,
       worktree: Instance.worktree,
       directory: Instance.directory,
       serverUrl: Server.url(),
       $: Bun.$,
     }
-
-    const input: PluginInput = { client: unifiedClient, ...baseInput }
 
     // Load internal plugins first
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
@@ -139,7 +112,6 @@ export namespace Plugin {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
     for (const hook of hooks) {
-      // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
     }
     Bus.subscribeAll(async (input) => {
