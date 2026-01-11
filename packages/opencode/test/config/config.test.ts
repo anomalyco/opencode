@@ -1170,6 +1170,57 @@ describe("getPluginName", () => {
   })
 })
 
+test("project config can override autoupdate setting", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // base config has autoupdate enabled
+      await Bun.write(
+        path.join(dir, "opencode.jsonc"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          autoupdate: true,
+        }),
+      )
+      // project config disables autoupdate
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          autoupdate: false,
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.autoupdate).toBe(false)
+    },
+  })
+})
+
+test("project config can set autoupdate to notify", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          autoupdate: "notify",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.autoupdate).toBe("notify")
+    },
+  })
+})
+
 describe("deduplicatePlugins", () => {
   test("removes duplicates keeping higher priority (later entries)", () => {
     const plugins = ["global-plugin@1.0.0", "shared-plugin@1.0.0", "local-plugin@2.0.0", "shared-plugin@2.0.0"]
