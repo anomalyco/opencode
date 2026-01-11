@@ -76,12 +76,25 @@
   }
 
   [data-slot="user-message-text"] {
+    position: relative;
     white-space: pre-wrap;
-    word-break: break-all;
+    word-break: break-word;
     overflow: hidden;
     background: var(--surface-base);
     padding: 8px 12px;
     border-radius: 4px;
+
+    [data-slot="user-message-copy-wrapper"] {
+      position: absolute;
+      top: 7px;
+      right: 7px;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    &:hover [data-slot="user-message-copy-wrapper"] {
+      opacity: 1;
+    }
   }
 
   .text-text-strong {
@@ -254,6 +267,7 @@
 
   scrollbar-width: none;
   -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
@@ -271,6 +285,7 @@
   /* Hide scrollbar */
   scrollbar-width: none;
   -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
     display: none;
   }
@@ -385,7 +400,8 @@
 [data-component="edit-content"],
 [data-component="write-content"],
 [data-component="todos"],
-[data-component="diagnostics"] {
+[data-component="diagnostics"],
+.error-card {
   -webkit-user-select: text;
   user-select: text;
 }
@@ -458,6 +474,7 @@
   from {
     --border-angle: 0deg;
   }
+
   to {
     --border-angle: 360deg;
   }

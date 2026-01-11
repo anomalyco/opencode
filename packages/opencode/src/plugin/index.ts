@@ -11,11 +11,15 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import path from "path"
 import os from "os"
+import { CodexAuthPlugin } from "./codex"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.5"]
+  const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.8"]
+
+  // Built-in plugins that are directly imported (not installed from npm)
+  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
@@ -24,7 +28,7 @@ export namespace Plugin {
       fetch: async (...args) => Server.App().fetch(...args),
     })
     const config = await Config.get()
-    const hooks = []
+    const hooks: Hooks[] = []
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -33,6 +37,13 @@ export namespace Plugin {
       serverUrl: Server.url(),
       $: Bun.$,
     }
+
+    for (const plugin of INTERNAL_PLUGINS) {
+      log.info("loading internal plugin", { name: plugin.name })
+      const init = await plugin(input)
+      hooks.push(init)
+    }
+
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push(...BUILTIN)
@@ -73,6 +84,8 @@ export namespace Plugin {
     }
 
     for (let plugin of plugins) {
+      // ignore old codex plugin since it is supported first party now
+      if (plugin.includes("opencode-openai-codex-auth")) continue
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
