@@ -276,7 +276,7 @@ export namespace SessionPrompt {
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
       let lastFinished: MessageV2.Assistant | undefined
-      let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
+      let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart | MessageV2.BranchPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
         if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
@@ -284,7 +284,9 @@ export namespace SessionPrompt {
         if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
           lastFinished = msg.info as MessageV2.Assistant
         if (lastUser && lastFinished) break
-        const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
+        const task = msg.parts.filter(
+          (part) => part.type === "compaction" || part.type === "subtask" || part.type === "branch",
+        )
         if (task && !lastFinished) {
           tasks.push(...task)
         }
@@ -301,16 +303,16 @@ export namespace SessionPrompt {
       }
 
       step++
-      if (step === 1)
+      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
+      const task = tasks.pop()
+
+      if (step === 1 && task?.type !== "branch")
         ensureTitle({
           session,
           modelID: lastUser.model.modelID,
           providerID: lastUser.model.providerID,
           history: msgs,
         })
-
-      const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
-      const task = tasks.pop()
 
       // pending subtask
       // TODO: centralize "invoke tool" logic
@@ -478,7 +480,6 @@ export namespace SessionPrompt {
         continue
       }
 
-      // pending compaction
       if (task?.type === "compaction") {
         const result = await SessionCompaction.process({
           messages: msgs,
@@ -486,6 +487,20 @@ export namespace SessionPrompt {
           abort,
           sessionID,
           auto: task.auto,
+        })
+        if (result === "stop") break
+        continue
+      }
+
+      if (task?.type === "branch") {
+        const sourceMsgs = await Session.messages({ sessionID: task.sourceSessionID })
+        const currentUserMsg = msgs.find((m) => m.info.id === lastUser.id)!
+        const result = await SessionCompaction.process({
+          messages: [...sourceMsgs, currentUserMsg],
+          parentID: lastUser.id,
+          abort,
+          sessionID,
+          auto: false,
         })
         if (result === "stop") break
         continue

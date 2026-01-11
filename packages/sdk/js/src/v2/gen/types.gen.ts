@@ -419,6 +419,14 @@ export type CompactionPart = {
   auto: boolean
 }
 
+export type BranchPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "branch"
+  sourceSessionID: string
+}
+
 export type Part =
   | TextPart
   | {
@@ -441,6 +449,7 @@ export type Part =
   | AgentPart
   | RetryPart
   | CompactionPart
+  | BranchPart
 
 export type EventMessagePartUpdated = {
   type: "message.part.updated"
@@ -2904,6 +2913,32 @@ export type SessionForkResponses = {
 }
 
 export type SessionForkResponse = SessionForkResponses[keyof SessionForkResponses]
+
+export type SessionBranchData = {
+  body?: {
+    model: {
+      providerID: string
+      modelID: string
+    }
+    agent: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/branch"
+}
+
+export type SessionBranchResponses = {
+  /**
+   * 200
+   */
+  200: Session
+}
+
+export type SessionBranchResponse = SessionBranchResponses[keyof SessionBranchResponses]
 
 export type SessionAbortData = {
   body?: never

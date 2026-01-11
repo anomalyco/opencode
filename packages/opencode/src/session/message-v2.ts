@@ -163,6 +163,14 @@ export namespace MessageV2 {
   })
   export type CompactionPart = z.infer<typeof CompactionPart>
 
+  export const BranchPart = PartBase.extend({
+    type: z.literal("branch"),
+    sourceSessionID: z.string(),
+  }).meta({
+    ref: "BranchPart",
+  })
+  export type BranchPart = z.infer<typeof BranchPart>
+
   export const SubtaskPart = PartBase.extend({
     type: z.literal("subtask"),
     prompt: z.string(),
@@ -334,6 +342,7 @@ export namespace MessageV2 {
       AgentPart,
       RetryPart,
       CompactionPart,
+      BranchPart,
     ])
     .meta({
       ref: "Part",

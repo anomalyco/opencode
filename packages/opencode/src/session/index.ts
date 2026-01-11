@@ -179,6 +179,56 @@ export namespace Session {
     },
   )
 
+  export const branch = fn(
+    z.object({
+      sourceSessionID: Identifier.schema("session"),
+      model: z.object({
+        providerID: z.string(),
+        modelID: z.string(),
+      }),
+      agent: z.string(),
+    }),
+    async (input) => {
+      log.info("branch", { sourceSessionID: input.sourceSessionID })
+
+      const sourceSession = await get(input.sourceSessionID)
+      const msgs = await messages({ sessionID: input.sourceSessionID })
+      if (msgs.length === 0) {
+        throw new Error("Cannot branch from empty session")
+      }
+
+      const title = isDefaultTitle(sourceSession.title)
+        ? "Branch - " + new Date().toISOString()
+        : "Branch: " + sourceSession.title
+
+      const newSession = await createNext({
+        directory: Instance.directory,
+        title,
+      })
+
+      const userMsg = await updateMessage({
+        id: Identifier.ascending("message"),
+        role: "user",
+        sessionID: newSession.id,
+        model: input.model,
+        agent: input.agent,
+        time: {
+          created: Date.now(),
+        },
+      })
+
+      await updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMsg.id,
+        sessionID: newSession.id,
+        type: "branch",
+        sourceSessionID: input.sourceSessionID,
+      })
+
+      return newSession
+    },
+  )
+
   export const touch = fn(Identifier.schema("session"), async (sessionID) => {
     await update(sessionID, (draft) => {
       draft.time.updated = Date.now()

@@ -92,6 +92,7 @@ import type {
   QuestionReplyResponses,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionBranchResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -1094,6 +1095,48 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<SessionForkResponses, unknown, ThrowOnError>({
       url: "/session/{sessionID}/fork",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Branch session
+   *
+   * Create a new child session with compacted context from the current session.
+   */
+  public branch<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      model?: {
+        providerID: string
+        modelID: string
+      }
+      agent?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "model" },
+            { in: "body", key: "agent" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionBranchResponses, unknown, ThrowOnError>({
+      url: "/session/{sessionID}/branch",
       ...options,
       ...params,
       headers: {
