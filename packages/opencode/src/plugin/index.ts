@@ -34,13 +34,10 @@ export namespace Plugin {
       $: Bun.$,
     }
 
-    // Load internal plugins first
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      for (const plugin of INTERNAL_PLUGINS) {
-        log.info("loading internal plugin", { name: plugin.name })
-        const init = await plugin(input)
-        hooks.push(init)
-      }
+    for (const plugin of INTERNAL_PLUGINS) {
+      log.info("loading internal plugin", { name: plugin.name })
+      const init = await plugin(input)
+      hooks.push(init)
     }
 
     const plugins = [...(config.plugin ?? [])]
