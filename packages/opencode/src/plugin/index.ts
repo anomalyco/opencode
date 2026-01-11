@@ -1,17 +1,16 @@
-import type { Hooks as HooksV1, PluginInput as PluginInputV1, Plugin as PluginInstance } from "@opencode-ai/plugin"
-import type { Hooks as HooksV2, PluginInput as PluginInputV2 } from "@opencode-ai/plugin/v2"
+import type { PluginInput, Hooks } from "@opencode-ai/plugin"
+import type { Plugin as PluginFn } from "@opencode-ai/plugin"
 import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient as createOpencodeClientV1 } from "@opencode-ai/sdk"
 import { createOpencodeClient as createOpencodeClientV2 } from "@opencode-ai/sdk/v2"
+import type { OpencodeClient as OpencodeClientV2 } from "@opencode-ai/sdk/v2"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
-
-type Hooks = HooksV1 | HooksV2
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -19,10 +18,24 @@ export namespace Plugin {
   const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.8"]
 
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
+  const INTERNAL_PLUGINS = [CodexAuthPlugin]
+
+  type UnifiedClient = PluginInput["client"] & { v2: OpencodeClientV2 }
+
+  function createUnifiedClient(v1: PluginInput["client"], v2: OpencodeClientV2): UnifiedClient {
+    return new Proxy(v1, {
+      get(target, prop) {
+        if (prop === "v2") {
+          return v2
+        }
+        // Forward all other properties to v1 client
+        return (target as unknown as Record<PropertyKey, unknown>)[prop]
+      },
+    }) as UnifiedClient
+  }
 
   const state = Instance.state(async () => {
-    // Create both v1 and v2 clients for backward compatibility
+    // Create both v1 and v2 clients
     const clientV1 = createOpencodeClientV1({
       baseUrl: "http://localhost:4096",
       // @ts-ignore - fetch type incompatibility
@@ -37,7 +50,10 @@ export namespace Plugin {
     const config = await Config.get()
     const hooks: Hooks[] = []
 
-    // Base input shared between v1 and v2
+    // Create unified client with .v2 accessor
+    const unifiedClient = createUnifiedClient(clientV1, clientV2)
+
+    // Base input shared between v1 and v2 plugins
     const baseInput = {
       project: Instance.project,
       worktree: Instance.worktree,
@@ -46,14 +62,13 @@ export namespace Plugin {
       $: Bun.$,
     }
 
-    const inputV1: PluginInputV1 = { client: clientV1, ...baseInput }
-    const inputV2: PluginInputV2 = { client: clientV2, ...baseInput }
+    const input: PluginInput = { client: unifiedClient, ...baseInput }
 
-    // Load internal plugins first (use v2 client)
+    // Load internal plugins first
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       for (const plugin of INTERNAL_PLUGINS) {
         log.info("loading internal plugin", { name: plugin.name })
-        const init = await plugin(inputV1)
+        const init = await plugin(input)
         hooks.push(init)
       }
     }
@@ -79,31 +94,23 @@ export namespace Plugin {
       }
       const mod = await import(plugin)
 
-      // Check if plugin exports version = 2 for v2 SDK
-      const isV2Plugin = mod.version === 2
-
-      log.info("detected plugin version", { path: plugin, version: isV2Plugin ? 2 : 1 })
-
       // Prevent duplicate initialization when plugins export the same function
       // as both a named export and default export (e.g., `export const X` and `export default X`).
       // Object.entries(mod) would return both entries pointing to the same function reference.
-      const seen = new Set<Function>()
+      const seen = new Set<PluginFn>()
       for (const [_name, fn] of Object.entries(mod)) {
         if (typeof fn !== "function") continue
-        if (seen.has(fn)) continue
-        seen.add(fn)
-        // Call with appropriate input based on plugin version
-        const init = isV2Plugin
-          ? await (fn as (input: PluginInputV2) => Promise<HooksV2>)(inputV2)
-          : await (fn as (input: PluginInputV1) => Promise<HooksV1>)(inputV1)
+        const pluginFn = fn as PluginFn
+        if (seen.has(pluginFn)) continue
+        seen.add(pluginFn)
+        const init = await pluginFn(input)
         hooks.push(init)
       }
     }
 
     return {
       hooks,
-      inputV1,
-      inputV2,
+      input,
     }
   })
 
