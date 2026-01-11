@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@sureshsankaran/context-drain",
+  "version": "1.0.1",
+  "description": "Context Drain Plugin for OpenCode - Intelligent context management with SQLite-backed memory",
+  "type": "module",
+  "license": "MIT",
+  "author": "Suresh Sankaran",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "context-management",
+    "sqlite",
+    "memory"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "^22.0.0",
+    "@types/node": "^22.10.0",
+    "@types/bun": "^1.1.0",
+    "typescript": "^5.7.0"
+  },
+  "peerDependencies": {
+    "bun": ">=1.0.0"
+  }
+}
