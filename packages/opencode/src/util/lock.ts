@@ -95,4 +95,18 @@ export namespace Lock {
       }
     })
   }
+
+  export function tryWrite(key: string): Disposable | null {
+    const lock = get(key)
+    if (!lock.writer && lock.readers === 0) {
+      lock.writer = true
+      return {
+        [Symbol.dispose]: () => {
+          lock.writer = false
+          process(key)
+        },
+      }
+    }
+    return null
+  }
 }
