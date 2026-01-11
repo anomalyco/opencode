@@ -49,6 +49,9 @@ import {
   FileVisual,
   SortableTerminalTab,
   NewSessionView,
+  MAIN_WORKTREE,
+  CREATE_WORKTREE,
+  BRANCH_PREFIX,
 } from "@/components/session"
 import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
@@ -1203,15 +1206,35 @@ export default function Page() {
               <Match when={true}>
                 <NewSessionView
                   worktree={newSessionWorktree()}
-                  onWorktreeChange={(value) => {
-                    if (value === "create") {
+                  onWorktreeChange={async (value) => {
+                    if (value === CREATE_WORKTREE) {
                       setStore("newSessionWorktree", value)
                       return
                     }
 
-                    setStore("newSessionWorktree", "main")
+                    // Handle branch checkout
+                    if (value.startsWith(BRANCH_PREFIX)) {
+                      const branchName = value.slice(BRANCH_PREFIX.length)
+                      const result = await sdk.client.vcs.checkout({ checkoutInput: { branch: branchName } })
+                      if (!result.data?.success) {
+                        showToast({
+                          title: "Failed to checkout branch",
+                          description: result.data?.error ?? "Unknown error",
+                          variant: "error",
+                        })
+                        return
+                      }
+                      showToast({
+                        title: "Switched branch",
+                        description: `Now on branch ${branchName}`,
+                      })
+                      setStore("newSessionWorktree", MAIN_WORKTREE)
+                      return
+                    }
 
-                    const target = value === "main" ? sync.project?.worktree : value
+                    setStore("newSessionWorktree", MAIN_WORKTREE)
+
+                    const target = value === MAIN_WORKTREE ? sync.project?.worktree : value
                     if (!target) return
                     if (target === sync.data.path.directory) return
                     layout.projects.open(target)

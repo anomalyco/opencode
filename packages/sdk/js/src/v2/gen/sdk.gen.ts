@@ -10,6 +10,7 @@ import type {
   Auth as Auth2,
   AuthSetErrors,
   AuthSetResponses,
+  CheckoutInput,
   CommandListResponses,
   Config as Config2,
   ConfigGetResponses,
@@ -157,6 +158,8 @@ import type {
   TuiSelectSessionResponses,
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
+  VcsBranchesResponses,
+  VcsCheckoutResponses,
   VcsGetResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -768,6 +771,60 @@ export class Vcs extends HeyApiClient {
       url: "/vcs",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * List branches
+   *
+   * Get a list of recent git branches sorted by commit date.
+   */
+  public branches<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VcsBranchesResponses, unknown, ThrowOnError>({
+      url: "/vcs/branches",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Checkout branch
+   *
+   * Switch to a different git branch.
+   */
+  public checkout<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      checkoutInput?: CheckoutInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "checkoutInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VcsCheckoutResponses, unknown, ThrowOnError>({
+      url: "/vcs/checkout",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

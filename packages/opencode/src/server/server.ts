@@ -695,6 +695,52 @@ export namespace Server {
           },
         )
         .get(
+          "/vcs/branches",
+          describeRoute({
+            summary: "List branches",
+            description: "Get a list of recent git branches sorted by commit date.",
+            operationId: "vcs.branches",
+            responses: {
+              200: {
+                description: "List of branches",
+                content: {
+                  "application/json": {
+                    schema: resolver(Vcs.BranchInfo.array()),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            const branches = await Vcs.branches()
+            return c.json(branches)
+          },
+        )
+        .post(
+          "/vcs/checkout",
+          describeRoute({
+            summary: "Checkout branch",
+            description: "Switch to a different git branch.",
+            operationId: "vcs.checkout",
+            responses: {
+              200: {
+                description: "Checkout result",
+                content: {
+                  "application/json": {
+                    schema: resolver(Vcs.CheckoutResult),
+                  },
+                },
+              },
+            },
+          }),
+          validator("json", Vcs.CheckoutInput),
+          async (c) => {
+            const input = c.req.valid("json")
+            const result = await Vcs.checkout(input.branch)
+            return c.json(result)
+          },
+        )
+        .get(
           "/session",
           describeRoute({
             summary: "List sessions",

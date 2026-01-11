@@ -15,6 +15,7 @@ import {
   type McpStatus,
   type LspStatus,
   type VcsInfo,
+  type BranchInfo,
   type PermissionRequest,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
@@ -53,6 +54,7 @@ type State = {
   }
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
+  branches: BranchInfo[]
   limit: number
   message: {
     [sessionID: string]: Message[]
@@ -99,6 +101,7 @@ function createGlobalSync() {
         mcp: {},
         lsp: [],
         vcs: undefined,
+        branches: [],
         limit: 5,
         message: {},
         part: {},
@@ -173,6 +176,7 @@ function createGlobalSync() {
           sdk.mcp.status().then((x) => setStore("mcp", x.data!)),
           sdk.lsp.status().then((x) => setStore("lsp", x.data!)),
           sdk.vcs.get().then((x) => setStore("vcs", x.data)),
+          sdk.vcs.branches().then((x) => setStore("branches", Array.isArray(x.data) ? x.data : [])),
           sdk.permission.list().then((x) => {
             const grouped: Record<string, PermissionRequest[]> = {}
             for (const perm of x.data ?? []) {
@@ -354,6 +358,13 @@ function createGlobalSync() {
       }
       case "vcs.branch.updated": {
         setStore("vcs", { branch: event.properties.branch })
+        // Refresh branches list when branch changes
+        const sdk = createOpencodeClient({
+          baseUrl: globalSDK.url,
+          directory,
+          throwOnError: true,
+        })
+        sdk.vcs.branches().then((x) => setStore("branches", Array.isArray(x.data) ? x.data : []))
         break
       }
       case "permission.asked": {

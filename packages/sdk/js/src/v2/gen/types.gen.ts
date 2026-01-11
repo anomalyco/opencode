@@ -1790,6 +1790,21 @@ export type VcsInfo = {
   branch: string
 }
 
+export type BranchInfo = {
+  name: string
+  current: boolean
+}
+
+export type CheckoutResult = {
+  success: boolean
+  branch: string
+  error?: string
+}
+
+export type CheckoutInput = {
+  branch: string
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -2579,6 +2594,42 @@ export type VcsGetResponses = {
 }
 
 export type VcsGetResponse = VcsGetResponses[keyof VcsGetResponses]
+
+export type VcsBranchesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/vcs/branches"
+}
+
+export type VcsBranchesResponses = {
+  /**
+   * List of branches
+   */
+  200: Array<BranchInfo>
+}
+
+export type VcsBranchesResponse = VcsBranchesResponses[keyof VcsBranchesResponses]
+
+export type VcsCheckoutData = {
+  body?: CheckoutInput
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/vcs/checkout"
+}
+
+export type VcsCheckoutResponses = {
+  /**
+   * Checkout result
+   */
+  200: CheckoutResult
+}
+
+export type VcsCheckoutResponse = VcsCheckoutResponses[keyof VcsCheckoutResponses]
 
 export type SessionListData = {
   body?: never
