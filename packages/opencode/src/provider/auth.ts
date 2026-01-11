@@ -30,7 +30,7 @@ export namespace ProviderAuth {
 
   export async function methods() {
     const s = await state().then((x) => x.methods)
-    return mapValues(s, (x) =>
+    return mapValues(s, (x: NonNullable<Hooks["auth"]>) =>
       x.methods.map(
         (y): Method => ({
           type: y.type,
@@ -78,42 +78,48 @@ export namespace ProviderAuth {
       code: z.string().optional(),
     }),
     async (input) => {
+      const clearPending = () => state().then((s) => delete s.pending[input.providerID])
       const match = await state().then((s) => s.pending[input.providerID])
       if (!match) throw new OauthMissing({ providerID: input.providerID })
-      let result
+      if (match.method === "code" && !input.code) throw new OauthCodeMissing({ providerID: input.providerID })
 
-      if (match.method === "code") {
-        if (!input.code) throw new OauthCodeMissing({ providerID: input.providerID })
-        result = await match.callback(input.code)
-      }
+      return (async () => {
+        const result = await (match.method === "code" ? match.callback(input.code!) : match.callback())
 
-      if (match.method === "auto") {
-        result = await match.callback()
-      }
+        if (!result || result.type !== "success") {
+          throw new OauthCallbackFailed({})
+        }
 
-      if (result?.type === "success") {
+        const providerID =
+          "provider" in result && typeof result.provider === "string" && result.provider
+            ? result.provider
+            : input.providerID
+
         if ("key" in result) {
-          await Auth.set(input.providerID, {
+          await Auth.set(providerID, {
             type: "api",
             key: result.key,
           })
         }
+
         if ("refresh" in result) {
+          const accountId =
+            "accountId" in result && typeof result.accountId === "string" ? result.accountId : undefined
+          const enterpriseUrl =
+            "enterpriseUrl" in result && typeof result.enterpriseUrl === "string" ? result.enterpriseUrl : undefined
+
           const info: Auth.Info = {
             type: "oauth",
             access: result.access,
             refresh: result.refresh,
             expires: result.expires,
+            ...(accountId ? { accountId } : {}),
+            ...(enterpriseUrl ? { enterpriseUrl } : {}),
           }
-          if (result.accountId) {
-            info.accountId = result.accountId
-          }
-          await Auth.set(input.providerID, info)
-        }
-        return
-      }
 
-      throw new OauthCallbackFailed({})
+          await Auth.set(providerID, info)
+        }
+      })().finally(clearPending)
     },
   )
 
