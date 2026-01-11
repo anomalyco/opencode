@@ -38,10 +38,21 @@ if (identifier.startsWith("wrk_")) {
         workspaceID: UserTable.workspaceID,
         workspaceName: WorkspaceTable.name,
         role: UserTable.role,
+        subscribed: SubscriptionTable.timeCreated,
       })
       .from(UserTable)
-      .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
-      .where(eq(UserTable.accountID, accountID)),
+      .rightJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
+      .leftJoin(SubscriptionTable, eq(SubscriptionTable.userID, UserTable.id))
+      .where(eq(UserTable.accountID, accountID))
+      .then((rows) =>
+        rows.map((row) => ({
+          userID: row.userID,
+          workspaceID: row.workspaceID,
+          workspaceName: row.workspaceName,
+          role: row.role,
+          subscribed: formatDate(row.subscribed),
+        })),
+      ),
   )
 
   // Get all payments for these workspaces
@@ -102,6 +113,8 @@ async function printWorkspace(workspaceID: string) {
       .select({
         balance: BillingTable.balance,
         customerID: BillingTable.customerID,
+        subscriptionID: BillingTable.subscriptionID,
+        subscriptionCouponID: BillingTable.subscriptionCouponID,
       })
       .from(BillingTable)
       .where(eq(BillingTable.workspaceID, workspace.id))
@@ -138,6 +151,7 @@ async function printWorkspace(workspaceID: string) {
       ),
   )
 
+  /*
   await printTable("Usage", (tx) =>
     tx
       .select({
@@ -163,6 +177,7 @@ async function printWorkspace(workspaceID: string) {
         })),
       ),
   )
+        */
 }
 
 function formatMicroCents(value: number | null | undefined) {
