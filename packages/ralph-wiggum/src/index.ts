@@ -15,6 +15,9 @@
  * 3. Feed the SAME original prompt back each iteration
  * 4. Show iteration count in system message
  * 5. Write state to ~/.config/opencode/state/ralph-wiggum.json (or custom path) for verification
+ *
+ * Environment Variables:
+ *   OPENCODE_SKIP_LOCAL_RALPH=1  # Skip this plugin (use when global plugin is preferred)
  */
 
 import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "fs"
@@ -453,7 +456,7 @@ ${s.prompt}
 **IMPORTANT: You CANNOT approve if critical/high priority e2e tests are missing or any tests are failing.**`
 }
 
-export default async function ralphWiggum(input: {
+async function ralphWiggum(input: {
   client: any
   project: string
   worktree: string
@@ -461,6 +464,12 @@ export default async function ralphWiggum(input: {
   serverUrl: string
   $: any
 }) {
+  // Skip this plugin if OPENCODE_SKIP_LOCAL_RALPH is set
+  // This allows using a global plugin version instead of a local symlinked one
+  if (process.env.OPENCODE_SKIP_LOCAL_RALPH) {
+    return {}
+  }
+
   return {
     command: {
       "ralph-loop": {
@@ -754,3 +763,5 @@ Begin working on the task now.`,
     },
   }
 }
+
+export default ralphWiggum
