@@ -38,9 +38,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: "",
       })
       const { theme } = useTheme()
+
+      createEffect(() => {
+        const list = agents()
+        if (list.length === 0) return
+        if (!list.some((x) => x.name === agentStore.current)) setAgentStore("current", list[0].name)
+      })
       const colors = createMemo(() => [
         theme.secondary,
         theme.accent,
