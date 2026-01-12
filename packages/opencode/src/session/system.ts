@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { Log } from "../util/log"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -17,6 +18,8 @@ import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_CODEX_INSTRUCTIONS from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 import { Flag } from "@/flag/flag"
+
+const log = Log.create({ service: "system-prompt" })
 
 export namespace SystemPrompt {
   export function header(providerID: string) {
@@ -80,11 +83,14 @@ export namespace SystemPrompt {
     const config = await Config.get()
     const paths = new Set<string>()
 
-    for (const localRuleFile of LOCAL_RULE_FILES) {
-      const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
-      if (matches.length > 0) {
-        matches.forEach((path) => paths.add(path))
-        break
+    // Only scan local rule files when project discovery is enabled
+    if (!Flag.OPENCODE_DISABLE_PROJECT_DISCOVERY) {
+      for (const localRuleFile of LOCAL_RULE_FILES) {
+        const matches = await Filesystem.findUp(localRuleFile, Instance.directory, Instance.worktree)
+        if (matches.length > 0) {
+          matches.forEach((path) => paths.add(path))
+          break
+        }
       }
     }
 
@@ -115,7 +121,24 @@ export namespace SystemPrompt {
             }),
           ).catch(() => [])
         } else {
-          matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+          // Relative path handling
+          if (Flag.OPENCODE_DISABLE_PROJECT_DISCOVERY) {
+            if (Flag.OPENCODE_CONFIG_DIR) {
+              // Resolve against trusted config dir (don't traverse up)
+              matches = await Filesystem.globUp(
+                instruction,
+                Flag.OPENCODE_CONFIG_DIR,
+                Flag.OPENCODE_CONFIG_DIR
+              ).catch(() => [])
+            } else {
+              // No trusted base for relative path - skip with warning (Law 4: Fail Loud)
+              log.warn(`Skipping relative instruction "${instruction}" - no OPENCODE_CONFIG_DIR set while project discovery is disabled`)
+              continue
+            }
+          } else {
+            // Normal behavior - resolve from project
+            matches = await Filesystem.globUp(instruction, Instance.directory, Instance.worktree).catch(() => [])
+          }
         }
         matches.forEach((path) => paths.add(path))
       }
