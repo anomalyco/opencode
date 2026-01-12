@@ -54,23 +54,15 @@ export const ExitPlanModeTool = Tool.define("exit_plan_mode", {
         } as { status: string; planID: string; filePath: string; feedback?: string },
       }
     } else {
-      // Plan was rejected
+      // Plan was rejected - interrupt the conversation
       await Plan.setStatus(ctx.sessionID, "rejected")
 
       const feedbackMessage = result.feedback
-        ? `The user rejected your plan with the following feedback:\n\n${result.feedback}\n\nPlease revise your plan based on this feedback and call exit_plan_mode again when ready.`
-        : "The user rejected your plan without specific feedback. Please review and revise your plan, then call exit_plan_mode again when ready."
+        ? `The user rejected your plan with the following feedback:\n\n${result.feedback}`
+        : "The user dismissed the plan review."
 
-      return {
-        title: "Plan rejected",
-        output: feedbackMessage,
-        metadata: {
-          status: "rejected",
-          planID: plan.id,
-          filePath: plan.filePath,
-          feedback: result.feedback,
-        } as { status: string; planID: string; filePath: string; feedback?: string },
-      }
+      // Throw to interrupt the conversation
+      throw new Error(feedbackMessage)
     }
   },
 })
