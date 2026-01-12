@@ -142,10 +142,14 @@ export namespace Format {
   }
 
   export function dispose() {
-    for (const unsub of unsubscribers) {
-      unsub()
+    const toUnsubscribe = unsubscribers.splice(0)
+    for (const unsub of toUnsubscribe) {
+      try {
+        unsub()
+      } catch (error) {
+        log.error("failed to unsubscribe format handler", { error })
+      }
     }
-    unsubscribers.length = 0
     log.info("disposed format subscriptions")
   }
 }

@@ -77,10 +77,14 @@ export namespace ShareNext {
 
   export function dispose() {
     disposed = true
-    for (const unsub of unsubscribers) {
-      unsub()
+    const toUnsubscribe = unsubscribers.splice(0)
+    for (const unsub of toUnsubscribe) {
+      try {
+        unsub()
+      } catch (error) {
+        log.error("failed to unsubscribe", { error })
+      }
     }
-    unsubscribers.splice(0)
     // Clear pending timeouts
     for (const entry of queue.values()) {
       clearTimeout(entry.timeout)

@@ -123,10 +123,14 @@ export namespace Plugin {
   }
 
   export function dispose() {
-    for (const unsub of unsubscribers) {
-      unsub()
+    const toUnsubscribe = unsubscribers.splice(0)
+    for (const unsub of toUnsubscribe) {
+      try {
+        unsub()
+      } catch (error) {
+        log.error("failed to unsubscribe plugin handler", { error })
+      }
     }
-    unsubscribers.splice(0)
     log.info("disposed plugin subscriptions")
   }
 }

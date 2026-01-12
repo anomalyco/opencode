@@ -63,7 +63,7 @@ export namespace ACP {
       })
     }
 
-    private cleanupSession(sessionId: string) {
+    private cleanupSessionEventSubscription(sessionId: string) {
       const controller = this.sessionAbortControllers.get(sessionId)
       if (controller) {
         controller.abort()
@@ -77,7 +77,7 @@ export namespace ACP {
       const directory = session.cwd
 
       // Cleanup any existing subscription for this session
-      this.cleanupSession(sessionId)
+      this.cleanupSessionEventSubscription(sessionId)
 
       // Create abort controller for this session's event subscription
       const controller = new AbortController()
@@ -986,7 +986,7 @@ export namespace ACP {
     async cancel(params: CancelNotification) {
       const session = this.sessionManager.get(params.sessionId)
       // Cleanup event subscription for this session
-      this.cleanupSession(params.sessionId)
+      this.cleanupSessionEventSubscription(params.sessionId)
       await this.config.sdk.session.abort(
         {
           sessionID: params.sessionId,
@@ -999,7 +999,7 @@ export namespace ACP {
     dispose() {
       // Cleanup all session event subscriptions
       for (const sessionId of this.sessionAbortControllers.keys()) {
-        this.cleanupSession(sessionId)
+        this.cleanupSessionEventSubscription(sessionId)
       }
       log.info("disposed all event subscriptions")
     }

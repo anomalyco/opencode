@@ -7,7 +7,7 @@ import { ACP } from "../../src/acp/agent"
  */
 
 describe("ACP.Agent session cleanup", () => {
-  test("cleanupSession removes abort controller", () => {
+  test("cleanupSessionEventSubscription removes abort controller", () => {
     // Create a mock connection and config
     const mockConnection = {
       requestPermission: async () => ({ outcome: { outcome: "selected", optionId: "once" } }),
@@ -50,7 +50,7 @@ describe("ACP.Agent session cleanup", () => {
 
     // Call cleanup
     // @ts-expect-error - accessing private for testing
-    agent.cleanupSession("test-session-1")
+    agent.cleanupSessionEventSubscription("test-session-1")
 
     expect(controllers.size).toBe(0)
     expect(controller.signal.aborted).toBe(true)
@@ -139,26 +139,28 @@ describe("ACP.Agent session cleanup", () => {
     const existingController = new AbortController()
     controllers.set("session-1", existingController)
 
-    // Setup event subscriptions for the same session
-    const mockSession = { id: "session-1", cwd: "/test" }
-    // @ts-expect-error - accessing private for testing
-    agent.setupEventSubscriptions(mockSession)
+    try {
+      // Setup event subscriptions for the same session
+      const mockSession = { id: "session-1", cwd: "/test" }
+      // @ts-expect-error - accessing private for testing
+      agent.setupEventSubscriptions(mockSession)
 
-    // The existing controller should be aborted
-    expect(existingController.signal.aborted).toBe(true)
+      // The existing controller should be aborted
+      expect(existingController.signal.aborted).toBe(true)
 
-    // A new controller should exist
-    expect(controllers.has("session-1")).toBe(true)
-    const newController = controllers.get("session-1")
-    expect(newController).not.toBe(existingController)
-    expect(newController?.signal.aborted).toBe(false)
-
-    // Cleanup - dispose the agent and abort all active generators
-    agent.dispose()
-    for (const genController of activeGenerators) {
-      genController.abort()
+      // A new controller should exist
+      expect(controllers.has("session-1")).toBe(true)
+      const newController = controllers.get("session-1")
+      expect(newController).not.toBe(existingController)
+      expect(newController?.signal.aborted).toBe(false)
+    } finally {
+      // Cleanup - dispose the agent and abort all active generators
+      agent.dispose()
+      for (const genController of activeGenerators) {
+        genController.abort()
+      }
+      // Give generators time to exit cleanly
+      await new Promise((r) => setTimeout(r, 50))
     }
-    // Give generators time to exit cleanly
-    await new Promise((r) => setTimeout(r, 50))
   })
 })

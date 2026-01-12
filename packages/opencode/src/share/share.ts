@@ -84,10 +84,14 @@ export namespace Share {
 
   export function dispose() {
     disposed = true
-    for (const unsub of unsubscribers) {
-      unsub()
+    const toUnsubscribe = unsubscribers.splice(0)
+    for (const unsub of toUnsubscribe) {
+      try {
+        unsub()
+      } catch (error) {
+        log.error("failed to unsubscribe", { error })
+      }
     }
-    unsubscribers.splice(0)
     pending.clear()
     queue = Promise.resolve()
     log.info("disposed share subscriptions")
