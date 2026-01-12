@@ -31,7 +31,13 @@
       hashesFile = "${./nix}/hashes.json";
       hashesData =
         if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
-      nodeModulesHash = hashesData.nodeModules or defaultNodeModules;
+      # Support both per-system hashes and legacy single hash
+      nodeModulesHashFor =
+        system:
+        if builtins.isAttrs hashesData.nodeModules then
+          hashesData.nodeModules.${system} or defaultNodeModules
+        else
+          hashesData.nodeModules or defaultNodeModules;
       modelsDev = forEachSystem (
         system:
         let
@@ -64,7 +70,7 @@
         let
           pkgs = pkgsFor system;
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
-            hash = nodeModulesHash;
+            hash = nodeModulesHashFor system;
           };
           mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
           mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
