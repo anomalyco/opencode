@@ -237,6 +237,7 @@ export namespace Provider {
                 "nova-lite",
                 "nova-pro",
                 "nova-premier",
+                "nova-2",
                 "claude",
                 "deepseek",
               ].some((m) => modelID.includes(m))
