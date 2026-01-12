@@ -34,6 +34,17 @@ export function SessionHeader() {
   const sync = useSync()
 
   const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+  const project = createMemo(() => {
+    const directory = projectDirectory()
+    if (!directory) return
+    return layout.projects.list().find((p) => p.worktree === directory || p.sandboxes?.includes(directory))
+  })
+  const name = createMemo(() => {
+    const current = project()
+    if (current) return current.name || getFilename(current.worktree)
+    return getFilename(projectDirectory())
+  })
+  const hotkey = createMemo(() => command.keybind("file.open"))
 
   const sessions = createMemo(() => (sync.data.session ?? []).filter((s) => !s.parentID))
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
@@ -58,87 +69,29 @@ export function SessionHeader() {
     navigate(`/${params.dir}/session/${session.id}`)
   }
 
-  const leftMount = createMemo(() => document.getElementById("opencode-titlebar-left"))
+  const centerMount = createMemo(() => document.getElementById("opencode-titlebar-center"))
   const rightMount = createMemo(() => document.getElementById("opencode-titlebar-right"))
 
   return (
     <>
-      <Show when={leftMount()}>
+      <Show when={centerMount()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <div class="flex items-center gap-3 min-w-0">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="hidden xl:flex items-center gap-2">
-                  <Select
-                    options={worktrees()}
-                    current={sync.project?.worktree ?? projectDirectory()}
-                    label={(x) => getFilename(x)}
-                    onSelect={(x) => (x ? navigateToProject(x) : undefined)}
-                    class="text-14-regular text-text-base"
-                    variant="ghost"
-                  >
-                    {/* @ts-ignore */}
-                    {(i) => (
-                      <div class="flex items-center gap-2">
-                        <Icon name="folder" size="small" />
-                        <div class="text-text-strong">{getFilename(i)}</div>
-                      </div>
-                    )}
-                  </Select>
-                  <div class="text-text-weaker">/</div>
-                </div>
-                <Show
-                  when={parentSession()}
-                  fallback={
-                    <>
-                      <Select
-                        options={sessions()}
-                        current={currentSession()}
-                        placeholder="New session"
-                        label={(x) => x.title}
-                        value={(x) => x.id}
-                        onSelect={navigateToSession}
-                        class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
-                        variant="ghost"
-                      />
-                    </>
-                  }
-                >
-                  <div class="flex items-center gap-2 min-w-0">
-                    <Select
-                      options={sessions()}
-                      current={parentSession()}
-                      placeholder="Back to parent session"
-                      label={(x) => x.title}
-                      value={(x) => x.id}
-                      onSelect={(session) => {
-                        const currentParent = parentSession()
-                        if (session && currentParent && session.id !== currentParent.id) {
-                          navigateToSession(session)
-                        }
-                      }}
-                      class="text-14-regular text-text-base max-w-[calc(100vw-180px)] md:max-w-md"
-                      variant="ghost"
-                    />
-                    <div class="text-text-weaker">/</div>
-                    <Tooltip value="Back to parent session">
-                      <button
-                        type="button"
-                        class="flex items-center justify-center gap-1 p-1 rounded hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active transition-colors flex-shrink-0"
-                        onClick={() => navigateToSession(parentSession())}
-                      >
-                        <Icon name="arrow-left" size="small" class="text-icon-base" />
-                      </button>
-                    </Tooltip>
-                  </div>
-                </Show>
-              </div>
-              <Show when={currentSession() && !parentSession()}>
-                <TooltipKeybind class="hidden xl:block" title="New session" keybind={command.keybind("session.new")}>
-                  <IconButton as={A} href={`/${params.dir}/session`} icon="edit-small-2" variant="ghost" />
-                </TooltipKeybind>
+            <button
+              type="button"
+              class="hidden md:flex w-[320px] h-7 px-1.5 items-center gap-2 rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              onClick={() => command.trigger("file.open")}
+            >
+              <Icon name="magnifying-glass" size="small" class="text-text-weak" />
+              <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate">Search {name()}</span>
+              <Show when={hotkey()}>
+                {(keybind) => (
+                  <span class="shrink-0 flex items-center justify-center h-5 px-2 rounded-md border border-border-weak-base bg-surface-base text-12-medium text-text-weak">
+                    {keybind()}
+                  </span>
+                )}
               </Show>
-            </div>
+            </button>
           </Portal>
         )}
       </Show>
