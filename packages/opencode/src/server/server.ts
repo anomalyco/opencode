@@ -31,6 +31,7 @@ import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
 import { Global } from "../global"
 import { ProjectRoute } from "./project"
+import { ExperimentalRoute } from "./experimental"
 import { ToolRegistry } from "../tool/registry"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import { SessionPrompt } from "../session/prompt"
@@ -75,6 +76,7 @@ export namespace Server {
   }
 
   const app = new Hono()
+  app.route("/experimental", ExperimentalRoute)
   export const App: () => Hono = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
