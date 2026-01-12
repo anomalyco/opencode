@@ -51,6 +51,7 @@
     "fuzzysort": "catalog:",
     "katex": "0.16.27",
     "luxon": "catalog:",
+    "dompurify": "catalog:",
     "marked": "catalog:",
     "marked-katex-extension": "5.1.6",
     "marked-shiki": "catalog:",
