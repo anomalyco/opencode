@@ -1030,6 +1030,10 @@ export namespace Config {
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      respect_gitignore: z
+        .boolean()
+        .optional()
+        .describe("Respect .gitignore when searching files. Set to false to include gitignored files. Default: true"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),

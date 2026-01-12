@@ -210,12 +210,14 @@ export namespace Ripgrep {
     follow?: boolean
     maxDepth?: number
     signal?: AbortSignal
+    noIgnore?: boolean
   }) {
     input.signal?.throwIfAborted()
 
     const args = [await filepath(), "--files", "--glob=!.git/*"]
     if (input.follow !== false) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
+    if (input.noIgnore) args.push("--no-ignore")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
     if (input.glob) {
       for (const g of input.glob) {
@@ -379,9 +381,11 @@ export namespace Ripgrep {
     glob?: string[]
     limit?: number
     follow?: boolean
+    noIgnore?: boolean
   }) {
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
     if (input.follow !== false) args.push("--follow")
+    if (input.noIgnore) args.push("--no-ignore")
 
     if (input.glob) {
       for (const g of input.glob) {

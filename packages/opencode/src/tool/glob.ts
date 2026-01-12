@@ -5,6 +5,7 @@ import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
+import { Config } from "../config/config"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -32,6 +33,7 @@ export const GlobTool = Tool.define("glob", {
     search = path.isAbsolute(search) ? search : path.resolve(Instance.directory, search)
     await assertExternalDirectory(ctx, search, { kind: "directory" })
 
+    const cfg = await Config.get()
     const limit = 100
     const files = []
     let truncated = false
@@ -39,6 +41,7 @@ export const GlobTool = Tool.define("glob", {
       cwd: search,
       glob: [params.pattern],
       signal: ctx.abort,
+      noIgnore: cfg.respect_gitignore === false,
     })) {
       if (files.length >= limit) {
         truncated = true

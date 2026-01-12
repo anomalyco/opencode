@@ -6,6 +6,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { Config } from "../config/config"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -36,6 +37,7 @@ export const GrepTool = Tool.define("grep", {
     searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(Instance.directory, searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })
 
+    const cfg = await Config.get()
     const rgPath = await Ripgrep.filepath()
     const args = [
       "-nH",
@@ -46,6 +48,7 @@ export const GrepTool = Tool.define("grep", {
       "--regexp",
       params.pattern,
     ]
+    if (cfg.respect_gitignore === false) args.push("--no-ignore")
     if (params.include) {
       args.push("--glob", params.include)
     }
