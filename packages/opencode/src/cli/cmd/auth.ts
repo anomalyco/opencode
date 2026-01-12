@@ -167,6 +167,31 @@ export const AuthCommand = cmd({
   async handler() {},
 })
 
+export type AuthListEntry = {
+  providerID: string
+  type: "api" | "oauth" | "wellknown" | "config"
+}
+
+export async function collectAuthListEntries(): Promise<AuthListEntry[]> {
+  const entries: AuthListEntry[] = []
+  const authEntries = Object.entries(await Auth.all())
+  for (const [providerID, result] of authEntries) {
+    entries.push({ providerID, type: result.type })
+  }
+
+  const seen = new Set(entries.map((entry) => entry.providerID))
+  const config = await Config.get()
+
+  for (const [providerID, provider] of Object.entries(config.provider ?? {})) {
+    const apiKey = provider.options?.apiKey
+    if (typeof apiKey !== "string" || apiKey.trim() === "") continue
+    if (seen.has(providerID)) continue
+    entries.push({ providerID, type: "config" })
+  }
+
+  return entries
+}
+
 export const AuthListCommand = cmd({
   command: "list",
   aliases: ["ls"],
@@ -177,12 +202,12 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
+    const results = await collectAuthListEntries()
     const database = await ModelsDev.get()
 
-    for (const [providerID, result] of results) {
-      const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+    for (const entry of results) {
+      const name = database[entry.providerID]?.name || entry.providerID
+      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${entry.type}`)
     }
 
     prompts.outro(`${results.length} credentials`)
