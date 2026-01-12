@@ -327,7 +327,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <div
                 data-slot="user-message-attachment"
                 data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                data-clickable={file.mime.startsWith("image/") && !!file.url}
                 onClick={() => {
                   if (file.mime.startsWith("image/") && file.url) {
                     openImagePreview(file.url, file.filename)

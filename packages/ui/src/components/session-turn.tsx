@@ -5,6 +5,7 @@ import {
   type PermissionRequest,
   TextPart,
   ToolPart,
+  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -373,6 +374,7 @@ export function SessionTurn(
     diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
+    userMessageHovered: false,
   })
 
   createEffect(
@@ -473,6 +475,8 @@ export function SessionTurn(
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
                 style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
+                onMouseEnter={() => setStore("userMessageHovered", true)}
+                onMouseLeave={() => setStore("userMessageHovered", false)}
               >
                 <Switch>
                   <Match when={isShellMode()}>
@@ -491,6 +495,15 @@ export function SessionTurn(
                               <h1>{msg().summary?.title}</h1>
                             </Match>
                           </Switch>
+                        </div>
+                        <div data-slot="session-turn-user-badges" data-visible={store.userMessageHovered}>
+                          <Show when={(msg() as UserMessage).agent}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
+                          </Show>
+                          <Show when={(msg() as UserMessage).model?.modelID}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).model?.modelID}</span>
+                          </Show>
+                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
                         </div>
                       </div>
                     </div>
