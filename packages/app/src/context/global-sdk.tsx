@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 
@@ -9,12 +9,10 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
   name: "GlobalSDK",
   init: () => {
     const server = useServer()
-    const abort = new AbortController()
+    let abort = new AbortController()
+    let reconnectTimeout: ReturnType<typeof setTimeout> | undefined
+    let isConnected = false
 
-    const eventSdk = createOpencodeClient({
-      baseUrl: server.url,
-      signal: abort.signal,
-    })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
     }>()
@@ -63,33 +61,67 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       flush()
     }
 
-    void (async () => {
-      const events = await eventSdk.global.event()
-      let yielded = Date.now()
-      for await (const event of events.stream) {
-        const directory = event.directory ?? "global"
-        const payload = event.payload
-        const k = key(directory, payload)
-        if (k) {
-          const i = coalesced.get(k)
-          if (i !== undefined) {
-            queue[i] = undefined
-          }
-          coalesced.set(k, queue.length)
-        }
-        queue.push({ directory, payload })
-        schedule()
-
-        if (Date.now() - yielded < 8) continue
-        yielded = Date.now()
-        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const startEventStream = async () => {
+      if (abort.signal.aborted) {
+        abort = new AbortController()
       }
-    })()
-      .finally(stop)
-      .catch(() => undefined)
+
+      const eventSdk = createOpencodeClient({
+        baseUrl: server.url,
+        signal: abort.signal,
+      })
+
+      try {
+        isConnected = true
+        const events = await eventSdk.global.event()
+        let yielded = Date.now()
+        for await (const event of events.stream) {
+          const directory = event.directory ?? "global"
+          const payload = event.payload
+          const k = key(directory, payload)
+          if (k) {
+            const i = coalesced.get(k)
+            if (i !== undefined) {
+              queue[i] = undefined
+            }
+            coalesced.set(k, queue.length)
+          }
+          queue.push({ directory, payload })
+          schedule()
+
+          if (Date.now() - yielded < 8) continue
+          yielded = Date.now()
+          await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        }
+      } catch {
+        isConnected = false
+        if (!abort.signal.aborted) {
+          reconnectTimeout = setTimeout(() => startEventStream(), 1000)
+        }
+      } finally {
+        stop()
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !isConnected) {
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout)
+          reconnectTimeout = undefined
+        }
+        startEventStream()
+      }
+    }
+
+    onMount(() => {
+      document.addEventListener("visibilitychange", handleVisibilityChange)
+      startEventStream()
+    })
 
     onCleanup(() => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
       abort.abort()
+      if (reconnectTimeout) clearTimeout(reconnectTimeout)
       stop()
     })
 

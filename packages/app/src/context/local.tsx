@@ -552,11 +552,29 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })()
 
+    const settings = (() => {
+      const [store, setStore, _, settingsReady] = persisted(
+        Persist.global("settings", ["settings.v1"]),
+        createStore({
+          mobileSendOnEnter: false,
+        }),
+      )
+
+      return {
+        ready: settingsReady,
+        mobileSendOnEnter: createMemo(() => store.mobileSendOnEnter),
+        setMobileSendOnEnter(value: boolean) {
+          setStore("mobileSendOnEnter", value)
+        },
+      }
+    })()
+
     const result = {
       slug: createMemo(() => base64Encode(sdk.directory)),
       model,
       agent,
       file,
+      settings,
     }
     return result
   },

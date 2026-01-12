@@ -460,6 +460,15 @@ function createGlobalSync() {
   }
 
   onMount(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        bootstrap()
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    onCleanup(() => document.removeEventListener("visibilitychange", handleVisibilityChange))
+
     bootstrap()
   })
 

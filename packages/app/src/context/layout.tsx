@@ -266,6 +266,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       )
     })
 
+    createEffect(() => {
+      const recentProjects = globalSync.data.project
+        .filter((p) => p.worktree && !p.worktree.includes("opencode-test"))
+        .toSorted((a, b) => {
+          const aTime = a.time?.updated ?? a.time?.created ?? 0
+          const bTime = b.time?.updated ?? b.time?.created ?? 0
+          return bTime - aTime
+        })
+        .slice(0, 5)
+
+      const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000
+
+      for (const project of recentProjects) {
+        const existing = server.projects.list().find((x) => x.worktree === project.worktree)
+        if (!existing) {
+          const updated = project.time?.updated ?? project.time?.created ?? 0
+          if (updated > fourHoursAgo) {
+            server.projects.open(project.worktree)
+          }
+        }
+      }
+    })
+
     return {
       ready,
       projects: {
