@@ -9,8 +9,8 @@ export const config = {
   github: {
     repoUrl: "https://github.com/anomalyco/opencode",
     starsFormatted: {
-      compact: "50K",
-      full: "50,000",
+      compact: "60K",
+      full: "60,000",
     },
   },
 
