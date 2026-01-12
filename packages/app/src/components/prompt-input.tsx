@@ -264,6 +264,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
 
+  const isMobile = createMemo(() => {
+    if (typeof window === "undefined") return false
+    return (
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      ("ontouchstart" in window && window.innerWidth < 768)
+    )
+  })
+
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
 
@@ -948,6 +956,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
     if (event.key === "Enter" && !event.shiftKey) {
+      if (isMobile() && !local.settings.mobileSendOnEnter()) {
+        if (!event.ctrlKey && !event.metaKey) {
+          return
+        }
+      }
       handleSubmit(event)
     }
     if (event.key === "Escape") {
@@ -1521,22 +1534,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "w-full px-5 py-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "w-full px-3 md:px-5 py-3 pr-12 md:pr-16 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 px-5 py-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute top-0 inset-x-0 px-3 md:px-5 py-3 pr-12 md:pr-16 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {store.mode === "shell"
                 ? "Enter shell command..."
                 : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between">
-          <div class="flex items-center justify-start gap-0.5">
+        <div class="relative px-1.5 py-1.5 md:p-3 flex items-center justify-between">
+          <div class="flex items-center justify-start gap-0 md:gap-0.5 min-w-0 overflow-hidden shrink">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -1551,7 +1564,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class="capitalize"
+                    class="capitalize px-1 md:px-2"
                     variant="ghost"
                   />
                 </TooltipKeybind>
@@ -1559,7 +1572,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   when={providers.paid().length > 0}
                   fallback={
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
-                      <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
+                      <Button as="div" variant="ghost" class="px-1 md:px-2" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />
                       </Button>
@@ -1568,7 +1581,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 >
                   <ModelSelectorPopover>
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
-                      <Button as="div" variant="ghost">
+                      <Button as="div" variant="ghost" class="px-1 md:px-2">
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />
                       </Button>
@@ -1583,7 +1596,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <Button
                       variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block"
+                      class="hidden md:inline-flex text-text-base _hidden group-hover/prompt-input:inline-block"
                       onClick={() => local.model.variant.cycle()}
                     >
                       <span class="capitalize text-12-regular">{local.model.variant.current() ?? "Default"}</span>
@@ -1616,7 +1629,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-2 bottom-2">
+          <div class="flex items-center gap-1 md:gap-3 shrink-0">
             <input
               ref={fileInputRef}
               type="file"
@@ -1628,7 +1641,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1 md:gap-2">
               <SessionContextUsage />
               <Show when={store.mode === "normal"}>
                 <Tooltip placement="top" value="Attach file">
@@ -1649,6 +1662,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <span class="text-icon-base text-12-medium text-[10px]!">ESC</span>
                     </div>
                   </Match>
+                  <Match when={isMobile() && !local.settings.mobileSendOnEnter()}>
+                    <span>Tap to send</span>
+                  </Match>
                   <Match when={true}>
                     <div class="flex items-center gap-2">
                       <span>Send</span>
@@ -1658,13 +1674,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </Switch>
               }
             >
-              <IconButton
+              <Button
                 type="submit"
                 disabled={!prompt.dirty() && !working()}
-                icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="h-6 w-4.5"
-              />
+                class="size-6 p-0"
+              >
+                <Icon name={working() ? "stop" : "arrow-up"} size="small" />
+              </Button>
             </Tooltip>
           </div>
         </div>

@@ -955,9 +955,14 @@ export default function Page() {
     const attemptScroll = (retries = 0) => {
       const hash = window.location.hash.slice(1)
       if (!hash) {
-        if (retries < 10 && scroller && scroller.scrollHeight <= scroller.clientHeight) {
-          requestAnimationFrame(() => attemptScroll(retries + 1))
-          return
+        if (retries < 30 && scroller) {
+          const notFullyRendered = scroller.scrollHeight <= scroller.clientHeight
+          const notAtBottom = scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 10
+          if (notFullyRendered || notAtBottom) {
+            autoScroll.forceScrollToBottom()
+            setTimeout(() => attemptScroll(retries + 1), 50)
+            return
+          }
         }
         autoScroll.forceScrollToBottom()
         return

@@ -14,7 +14,7 @@ import {
   type JSX,
 } from "solid-js"
 import { DateTime } from "luxon"
-import { A, useNavigate, useParams } from "@solidjs/router"
+import { A, useNavigate, useParams, useLocation } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
@@ -698,6 +698,17 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  const location = useLocation()
+  let prevPathname: string | undefined
+
+  createEffect(() => {
+    const currentPathname = location.pathname
+    if (prevPathname !== undefined && prevPathname !== currentPathname) {
+      layout.mobileSidebar.hide()
+    }
+    prevPathname = currentPathname
+  })
+
   createEffect(() => {
     if (!params.dir || !params.id) return
     const directory = base64Decode(params.dir)
@@ -852,6 +863,34 @@ export default function Layout(props: ParentProps) {
       const status = sessionStore.session_status[props.session.id]
       return status?.type === "busy" || status?.type === "retry"
     })
+
+    let touchStartY = 0
+    let isTouchScrolling = false
+    const touchScrollThreshold = 10
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartY = e.touches[0].clientY
+      isTouchScrolling = false
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const deltaY = Math.abs(e.touches[0].clientY - touchStartY)
+      if (deltaY > touchScrollThreshold) {
+        isTouchScrolling = true
+      }
+    }
+
+    const handleClick = (e: MouseEvent) => {
+      if (isTouchScrolling) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      if (props.mobile) {
+        layout.mobileSidebar.hide()
+      }
+    }
+
     return (
       <>
         <div
@@ -865,7 +904,9 @@ export default function Layout(props: ParentProps) {
               class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
               onMouseEnter={() => prefetchSession(props.session, "high")}
               onFocus={() => prefetchSession(props.session, "high")}
-              onClick={() => props.mobile && layout.mobileSidebar.hide()}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onClick={handleClick}
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
                 <span
@@ -1006,7 +1047,7 @@ export default function Layout(props: ParentProps) {
                     </DropdownMenu.Portal>
                   </DropdownMenu>
                   <TooltipKeybind placement="top" title="New session" keybind={command.keybind("session.new")}>
-                    <IconButton as={A} href={`${defaultWorktree()}/session`} icon="plus-small" variant="ghost" />
+                    <IconButton as={A} href={`${defaultWorktree()}/session`} icon="plus-small" variant="ghost" onClick={() => props.mobile && layout.mobileSidebar.hide()} />
                   </TooltipKeybind>
                 </div>
               </Button>
@@ -1033,6 +1074,7 @@ export default function Layout(props: ParentProps) {
                             <A
                               href={`${defaultWorktree()}/session`}
                               class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
+                              onClick={() => props.mobile && layout.mobileSidebar.hide()}
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
                                 <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
