@@ -94,6 +94,7 @@ export function Home() {
   return (
     <>
       <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
+        <box height={3} />
         <Logo />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1}>
           <Prompt
@@ -104,11 +105,11 @@ export function Home() {
             hint={Hint}
           />
         </box>
-        <Show when={showTips()}>
-          <box width="100%" maxWidth={75} paddingTop={2} alignItems="center">
+        <box height={3} width="100%" maxWidth={75} alignItems="center" paddingTop={2}>
+          <Show when={showTips()}>
             <Tips />
-          </box>
-        </Show>
+          </Show>
+        </box>
         <Toast />
       </box>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
