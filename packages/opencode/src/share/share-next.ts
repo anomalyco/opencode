@@ -80,7 +80,7 @@ export namespace ShareNext {
     for (const unsub of unsubscribers) {
       unsub()
     }
-    unsubscribers.length = 0
+    unsubscribers.splice(0)
     // Clear pending timeouts
     for (const entry of queue.values()) {
       clearTimeout(entry.timeout)
@@ -227,7 +227,8 @@ export namespace ShareNext {
   /** @internal Test helper to add items to queue for testing dispose cleanup */
   export function _addToQueueForTesting(sessionID: string) {
     const dataMap = new Map<string, Data>()
-    const timeout = setTimeout(() => {}, 10000)
+    // Use short timeout for tests - this is a no-op callback that won't cause issues if it fires
+    const timeout = setTimeout(() => {}, 100)
     queue.set(sessionID, { timeout, data: dataMap })
   }
 }

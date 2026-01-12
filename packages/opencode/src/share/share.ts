@@ -15,7 +15,7 @@ export namespace Share {
   const unsubscribers: Array<() => void> = []
 
   export async function sync(key: string, content: any) {
-    // Skip if disposed
+    // Skip if disposed - check at entry point
     if (disposed) return
     const [root, ...splits] = key.split("/")
     if (root !== "session") return
@@ -23,15 +23,19 @@ export namespace Share {
     if (sub === "share") return
     const share = await Session.getShare(sessionID).catch(() => {})
     if (!share) return
+    // Re-check disposed after async operation
+    if (disposed) return
     const { secret } = share
     pending.set(key, content)
     queue = queue
       .then(async () => {
-        // Check if disposed before processing
+        // Check disposed at start of queued operation
         if (disposed) return
         const content = pending.get(key)
         if (content === undefined) return
         pending.delete(key)
+        // Final check before network request
+        if (disposed) return
 
         return fetch(`${URL}/share_sync`, {
           method: "POST",
@@ -83,7 +87,7 @@ export namespace Share {
     for (const unsub of unsubscribers) {
       unsub()
     }
-    unsubscribers.length = 0
+    unsubscribers.splice(0)
     pending.clear()
     queue = Promise.resolve()
     log.info("disposed share subscriptions")

@@ -112,7 +112,8 @@ export namespace Bus {
   /** @internal Test helper to get total subscription count across all event types */
   export function _getTotalSubscriptionCount(): number {
     let total = 0
-    for (const subs of state().subscriptions.values()) {
+    // Use Array.from to snapshot values in case of concurrent modification
+    for (const subs of Array.from(state().subscriptions.values())) {
       total += subs.length
     }
     return total

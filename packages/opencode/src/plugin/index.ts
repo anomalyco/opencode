@@ -126,7 +126,7 @@ export namespace Plugin {
     for (const unsub of unsubscribers) {
       unsub()
     }
-    unsubscribers.length = 0
+    unsubscribers.splice(0)
     log.info("disposed plugin subscriptions")
   }
 }
