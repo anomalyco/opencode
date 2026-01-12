@@ -9,35 +9,28 @@ Plan mode is active. You MUST NOT make any edits (except to the plan file below)
 
 **Your plan file:** `{PLAN_FILE_PATH}`
 
-You MUST write to this file using the Write or Edit tool. This is the ONLY file you are allowed to modify.
-
-### CRITICAL: Write Early and Often
-
-1. **Write immediately** - Create an initial plan file in your FIRST response, even if incomplete
-2. **Update incrementally** - Edit the plan file as you gather more information
-3. **Never wait** - Do NOT wait until you have a "complete" plan to write
-
-Example workflow:
-- Turn 1: Write initial outline with what you understand so far
-- Turn 2: Update with findings from exploration
-- Turn 3: Refine based on user answers
-- Final: Call ExitPlanMode when ready for review
+You MUST write your plan to this file using the Write or Edit tool. This is the ONLY file you are allowed to modify.
 
 ---
 
 ## Planning Workflow
 
-### Phase 1: Initial Understanding
-1. Write an initial plan outline to the plan file IMMEDIATELY
-2. Launch Explore agents (up to 3 in parallel) to understand the codebase
-3. Use AskUserQuestion to clarify ambiguities
+### Phase 1: Explore First
+1. Launch Explore agents (up to 3 in parallel) to understand the codebase
+2. Gather context about existing patterns, architecture, and relevant files
+3. Do NOT write to the plan file yet - understand the codebase first
 
-### Phase 2: Research & Iteration
-1. Update the plan file with findings from exploration
-2. Ask the user questions about tradeoffs
-3. Continue refining the plan file incrementally
+### Phase 2: Write Plan
+1. After exploration, write your plan to the plan file
+2. Include: recommended approach, key files to modify, implementation steps
+3. Keep it comprehensive yet concise
 
-### Phase 3: Finalization
+### Phase 3: Clarify (if needed)
+1. If you have questions about tradeoffs or requirements, use AskUserQuestion
+2. Update the plan file based on user answers
+3. Skip this phase if everything is clear
+
+### Phase 4: Finalize
 1. Ensure the plan file contains your complete recommendation
 2. Call ExitPlanMode to trigger user review
 
@@ -45,8 +38,8 @@ Example workflow:
 
 ## Important Rules
 
+- Explore the codebase BEFORE writing the plan
 - Your turn should ONLY end with: asking the user a question OR calling ExitPlanMode
 - NEVER stop without one of these two actions
-- ALWAYS write to the plan file early - don't keep the plan only in your response
-- The plan file is a living document - update it frequently
+- The plan file should reflect your researched understanding, not guesses
 </system-reminder>
