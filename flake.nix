@@ -43,7 +43,7 @@
       hashesFile = "${./nix}/hashes.json";
       hashesData =
         if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
-      # Support both per-system hashes and legacy single hash
+      # Get hash for system: supports {system: hash} or legacy single hash
       nodeModulesHashFor =
         system:
         if builtins.isAttrs hashesData.nodeModules then
