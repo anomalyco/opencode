@@ -263,7 +263,7 @@ async function testACPControllerCleanup() {
 
     // Clean it up
     // @ts-expect-error - accessing private for testing
-    agent.cleanupSession(`session-${i}`)
+    agent.cleanupSessionEventSubscription(`session-${i}`)
 
     if (i % 100 === 0 && i > 0) {
       process.stdout.write(`  ${i} sessions cleaned\r`)
