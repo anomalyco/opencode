@@ -43,7 +43,7 @@ async function main() {
 
   // Configure git identity
   await $`git config user.name "Aiden Cline"`
-  await $`git config user.email "63023139+rekram1-node@users.noreply.github.com "`
+  await $`git config user.email "63023139+rekram1-node@users.noreply.github.com"`
 
   // Sync fork with upstream (force reset to match exactly)
   console.log(`🔄 Syncing fork with upstream...`)
