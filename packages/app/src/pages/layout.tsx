@@ -1245,11 +1245,8 @@ export default function Layout(props: ParentProps) {
     <div class="relative flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <div class="flex-1 min-h-0 flex">
         <div
-          classList={{
-            "hidden xl:block": true,
-            "relative shrink-0": true,
-          }}
-          style={{ width: layout.sidebar.opened() ? `${layout.sidebar.width()}px` : "48px" }}
+          class="relative shrink-0"
+          style={{ width: layout.sidebar.opened() ? `min(${layout.sidebar.width()}px, 25vw)` : "48px" }}
         >
           <div
             classList={{
