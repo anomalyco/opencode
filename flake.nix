@@ -28,22 +28,16 @@
         "x86_64-darwin" = "bun-darwin-x64";
       };
 
-      # Parse "bun-{os}-{cpu}" to {os, cpu}, fallback to {os="*", cpu="*"}
+      # Parse "bun-{os}-{cpu}" to {os, cpu}
       parseBunTarget =
         target:
-        if target == null then
-          {
-            os = "*";
-            cpu = "*";
-          }
-        else
-          let
-            parts = lib.splitString "-" target;
-          in
-          {
-            os = builtins.elemAt parts 1;
-            cpu = builtins.elemAt parts 2;
-          };
+        let
+          parts = lib.splitString "-" target;
+        in
+        {
+          os = builtins.elemAt parts 1;
+          cpu = builtins.elemAt parts 2;
+        };
 
       defaultNodeModules = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       hashesFile = "${./nix}/hashes.json";
@@ -87,7 +81,7 @@
         system:
         let
           pkgs = pkgsFor system;
-          bunPlatform = parseBunTarget (bunTarget.${system} or null);
+          bunPlatform = parseBunTarget bunTarget.${system};
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = nodeModulesHashFor system;
             bunCpu = bunPlatform.cpu;
