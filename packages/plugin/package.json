@@ -9,8 +9,14 @@
     "build": "tsc"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./tool": "./src/tool.ts"
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./tool": {
+      "import": "./dist/tool.js",
+      "types": "./dist/tool.d.ts"
+    }
   },
   "files": [
     "dist"
