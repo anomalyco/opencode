@@ -13,7 +13,7 @@ import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Logo } from "@opencode-ai/ui/logo"
-import { Suspense, createResource, ParentProps } from "solid-js"
+import { createResource, ParentProps } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
@@ -292,10 +292,7 @@ render(() => {
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: ParentProps) {
-  const [status] = createResource(async () => {
-    if (window.__OPENCODE__?.serverReady) return
-    return await invoke("ensure_server_started")
-  })
+  const [status] = createResource(() => invoke("ensure_server_ready"))
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
@@ -304,7 +301,7 @@ function ServerGate(props: ParentProps) {
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
           <Logo class="w-xl opacity-12 animate-pulse" />
-          <div class="mt-8 text-14-regular text-text-weak">Starting server...</div>
+          <div class="mt-8 text-14-regular text-text-weak">Initializing...</div>
         </div>
       }
     >
