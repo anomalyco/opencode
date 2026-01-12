@@ -23,6 +23,7 @@ export namespace Question {
       question: z.string().describe("Complete question"),
       header: z.string().max(12).describe("Very short label (max 12 chars)"),
       options: z.array(Option).describe("Available choices"),
+      multiple: z.boolean().optional().describe("Allow selecting multiple choices"),
     })
     .meta({
       ref: "QuestionInfo",
@@ -46,8 +47,15 @@ export namespace Question {
     })
   export type Request = z.infer<typeof Request>
 
+  export const Answer = z.array(z.string()).meta({
+    ref: "QuestionAnswer",
+  })
+  export type Answer = z.infer<typeof Answer>
+
   export const Reply = z.object({
-    answers: z.array(z.string()).describe("User answers in order of questions"),
+    answers: z
+      .array(Answer)
+      .describe("User answers in order of questions (each answer is an array of selected labels)"),
   })
   export type Reply = z.infer<typeof Reply>
 
@@ -58,7 +66,7 @@ export namespace Question {
       z.object({
         sessionID: z.string(),
         requestID: z.string(),
-        answers: z.array(z.string()),
+        answers: z.array(Answer),
       }),
     ),
     Rejected: BusEvent.define(
@@ -75,7 +83,7 @@ export namespace Question {
       string,
       {
         info: Request
-        resolve: (answers: string[]) => void
+        resolve: (answers: Answer[]) => void
         reject: (e: any) => void
       }
     > = {}
@@ -89,13 +97,13 @@ export namespace Question {
     sessionID: string
     questions: Info[]
     tool?: { messageID: string; callID: string }
-  }): Promise<string[]> {
+  }): Promise<Answer[]> {
     const s = await state()
     const id = Identifier.ascending("question")
 
     log.info("asking", { id, questions: input.questions.length })
 
-    return new Promise<string[]>((resolve, reject) => {
+    return new Promise<Answer[]>((resolve, reject) => {
       const info: Request = {
         id,
         sessionID: input.sessionID,
@@ -111,7 +119,7 @@ export namespace Question {
     })
   }
 
-  export async function reply(input: { requestID: string; answers: string[] }): Promise<void> {
+  export async function reply(input: { requestID: string; answers: Answer[] }): Promise<void> {
     const s = await state()
     const existing = s.pending[input.requestID]
     if (!existing) {

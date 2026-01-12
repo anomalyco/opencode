@@ -15,7 +15,12 @@ export const QuestionTool = Tool.define("question", {
       tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
     })
 
-    const formatted = params.questions.map((q, i) => `"${q.question}"="${answers[i] ?? "Unanswered"}"`).join(", ")
+    function format(answer: Question.Answer | undefined) {
+      if (!answer?.length) return "Unanswered"
+      return answer.join(", ")
+    }
+
+    const formatted = params.questions.map((q, i) => `"${q.question}"="${format(answers[i])}"`).join(", ")
 
     return {
       title: `Asked ${params.questions.length} question${params.questions.length > 1 ? "s" : ""}`,

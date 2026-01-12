@@ -140,8 +140,15 @@ export namespace Ripgrep {
     return renderTree(truncated)
   }
 
-  export async function search(input: { cwd: string; pattern: string; glob?: string[]; limit?: number }) {
+  export async function search(input: {
+    cwd: string
+    pattern: string
+    glob?: string[]
+    limit?: number
+    follow?: boolean
+  }) {
     const args = ["--json", "--hidden", "--glob=!.git/*"]
+    if (input.follow !== false) args.push("--follow")
 
     for (const g of input.glob ?? []) {
       args.push(`--glob=${g}`)

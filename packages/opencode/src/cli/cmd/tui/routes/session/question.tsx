@@ -4,7 +4,7 @@ import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme } from "../../context/theme"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
@@ -17,11 +17,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const bindings = useTextareaKeybindings()
 
   const questions = createMemo(() => props.request.questions)
-  const single = createMemo(() => questions().length === 1)
-  const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single)
+  const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
+  const tabs = createMemo(() => (single() ? 1 : questions().length + 1)) // questions + confirm tab (no confirm for single select)
   const [store, setStore] = createStore({
     tab: 0,
-    answers: [] as string[],
+    answers: [] as QuestionAnswer[],
     custom: [] as string[],
     selected: 0,
     editing: false,
@@ -34,10 +34,15 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const options = createMemo(() => question()?.options ?? [])
   const other = createMemo(() => store.selected === options().length)
   const input = createMemo(() => store.custom[store.tab] ?? "")
+  const multi = createMemo(() => question()?.multiple === true)
+  const customPicked = createMemo(() => {
+    const value = input()
+    if (!value) return false
+    return store.answers[store.tab]?.includes(value) ?? false
+  })
 
   function submit() {
-    // Fill in empty answers with empty strings
-    const answers = questions().map((_, i) => store.answers[i] ?? "")
+    const answers = questions().map((_, i) => store.answers[i] ?? [])
     sdk.client.question.reply({
       requestID: props.request.id,
       answers,
@@ -52,7 +57,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
   function pick(answer: string, custom: boolean = false) {
     const answers = [...store.answers]
-    answers[store.tab] = answer
+    answers[store.tab] = [answer]
     setStore("answers", answers)
     if (custom) {
       const inputs = [...store.custom]
@@ -62,12 +67,55 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     if (single()) {
       sdk.client.question.reply({
         requestID: props.request.id,
-        answers: [answer],
+        answers: [[answer]],
       })
       return
     }
     setStore("tab", store.tab + 1)
     setStore("selected", 0)
+  }
+
+  function toggle(answer: string) {
+    const existing = store.answers[store.tab] ?? []
+    const next = [...existing]
+    const index = next.indexOf(answer)
+    if (index === -1) next.push(answer)
+    if (index !== -1) next.splice(index, 1)
+    const answers = [...store.answers]
+    answers[store.tab] = next
+    setStore("answers", answers)
+  }
+
+  function moveTo(index: number) {
+    setStore("selected", index)
+  }
+
+  function selectTab(index: number) {
+    setStore("tab", index)
+    setStore("selected", 0)
+  }
+
+  function selectOption() {
+    if (other()) {
+      if (!multi()) {
+        setStore("editing", true)
+        return
+      }
+      const value = input()
+      if (value && customPicked()) {
+        toggle(value)
+        return
+      }
+      setStore("editing", true)
+      return
+    }
+    const opt = options()[store.selected]
+    if (!opt) return
+    if (multi()) {
+      toggle(opt.label)
+      return
+    }
+    pick(opt.label)
   }
 
   const dialog = useDialog()
@@ -82,11 +130,49 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       }
       if (evt.name === "return") {
         evt.preventDefault()
-        const text = textarea?.plainText?.trim()
-        if (text) {
-          pick(text, true)
+        const text = textarea?.plainText?.trim() ?? ""
+        const prev = store.custom[store.tab]
+
+        if (!text) {
+          if (prev) {
+            const inputs = [...store.custom]
+            inputs[store.tab] = ""
+            setStore("custom", inputs)
+          }
+
+          const answers = [...store.answers]
+          if (prev) {
+            answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
+          }
+          if (!prev) {
+            answers[store.tab] = []
+          }
+          setStore("answers", answers)
           setStore("editing", false)
+          return
         }
+
+        if (multi()) {
+          const inputs = [...store.custom]
+          inputs[store.tab] = text
+          setStore("custom", inputs)
+
+          const existing = store.answers[store.tab] ?? []
+          const next = [...existing]
+          if (prev) {
+            const index = next.indexOf(prev)
+            if (index !== -1) next.splice(index, 1)
+          }
+          if (!next.includes(text)) next.push(text)
+          const answers = [...store.answers]
+          answers[store.tab] = next
+          setStore("answers", answers)
+          setStore("editing", false)
+          return
+        }
+
+        pick(text, true)
+        setStore("editing", false)
         return
       }
       // Let textarea handle all other keys
@@ -95,16 +181,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
     if (evt.name === "left" || evt.name === "h") {
       evt.preventDefault()
-      const next = (store.tab - 1 + tabs()) % tabs()
-      setStore("tab", next)
-      setStore("selected", 0)
+      selectTab((store.tab - 1 + tabs()) % tabs())
     }
 
     if (evt.name === "right" || evt.name === "l") {
       evt.preventDefault()
-      const next = (store.tab + 1) % tabs()
-      setStore("tab", next)
-      setStore("selected", 0)
+      selectTab((store.tab + 1) % tabs())
     }
 
     if (confirm()) {
@@ -122,24 +204,17 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
       if (evt.name === "up" || evt.name === "k") {
         evt.preventDefault()
-        setStore("selected", (store.selected - 1 + total) % total)
+        moveTo((store.selected - 1 + total) % total)
       }
 
       if (evt.name === "down" || evt.name === "j") {
         evt.preventDefault()
-        setStore("selected", (store.selected + 1) % total)
+        moveTo((store.selected + 1) % total)
       }
 
       if (evt.name === "return") {
         evt.preventDefault()
-        if (other()) {
-          setStore("editing", true)
-        } else {
-          const opt = opts[store.selected]
-          if (opt) {
-            pick(opt.label)
-          }
-        }
+        selectOption()
       }
 
       if (evt.name === "escape" || keybind.match("app_exit", evt)) {
@@ -162,12 +237,15 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             <For each={questions()}>
               {(q, index) => {
                 const isActive = () => index() === store.tab
-                const isAnswered = () => store.answers[index()] !== undefined
+                const isAnswered = () => {
+                  return (store.answers[index()]?.length ?? 0) > 0
+                }
                 return (
                   <box
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
+                    onMouseUp={() => selectTab(index())}
                   >
                     <text fg={isActive() ? theme.selectedListItemText : isAnswered() ? theme.text : theme.textMuted}>
                       {q.header}
@@ -176,7 +254,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 )
               }}
             </For>
-            <box paddingLeft={1} paddingRight={1} backgroundColor={confirm() ? theme.accent : theme.backgroundElement}>
+            <box
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={confirm() ? theme.accent : theme.backgroundElement}
+              onMouseUp={() => selectTab(questions().length)}
+            >
               <text fg={confirm() ? theme.selectedListItemText : theme.textMuted}>Confirm</text>
             </box>
           </box>
@@ -185,15 +268,18 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         <Show when={!confirm()}>
           <box paddingLeft={1} gap={1}>
             <box>
-              <text fg={theme.text}>{question()?.question}</text>
+              <text fg={theme.text}>
+                {question()?.question}
+                {multi() ? " (select all that apply)" : ""}
+              </text>
             </box>
             <box>
               <For each={options()}>
                 {(opt, i) => {
                   const active = () => i() === store.selected
-                  const picked = () => store.answers[store.tab] === opt.label
+                  const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
                   return (
-                    <box>
+                    <box onMouseOver={() => moveTo(i())} onMouseUp={() => selectOption()}>
                       <box flexDirection="row" gap={1}>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
@@ -209,20 +295,21 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   )
                 }}
               </For>
-              <box>
+              <box onMouseOver={() => moveTo(options().length)} onMouseUp={() => selectOption()}>
                 <box flexDirection="row" gap={1}>
                   <box backgroundColor={other() ? theme.backgroundElement : undefined}>
-                    <text fg={other() ? theme.secondary : input() ? theme.success : theme.text}>
+                    <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
                       {options().length + 1}. Type your own answer
                     </text>
                   </box>
-                  <text fg={theme.success}>{input() ? "✓" : ""}</text>
+                  <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
                 </box>
                 <Show when={store.editing}>
                   <box paddingLeft={3}>
                     <textarea
                       ref={(val: TextareaRenderable) => (textarea = val)}
                       focused
+                      initialValue={input()}
                       placeholder="Type your own answer"
                       textColor={theme.text}
                       focusedTextColor={theme.text}
@@ -247,11 +334,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           </box>
           <For each={questions()}>
             {(q, index) => {
-              const answer = () => store.answers[index()]
+              const value = () => store.answers[index()]?.join(", ") ?? ""
+              const answered = () => Boolean(value())
               return (
                 <box flexDirection="row" gap={1} paddingLeft={1}>
                   <text fg={theme.textMuted}>{q.header}:</text>
-                  <text fg={answer() ? theme.text : theme.error}>{answer() ?? "(not answered)"}</text>
+                  <text fg={answered() ? theme.text : theme.error}>{answered() ? value() : "(not answered)"}</text>
                 </box>
               )
             }}
@@ -279,8 +367,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             </text>
           </Show>
           <text fg={theme.text}>
-            enter <span style={{ fg: theme.textMuted }}>{confirm() ? "submit" : single() ? "submit" : "confirm"}</span>
+            enter{" "}
+            <span style={{ fg: theme.textMuted }}>
+              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
+            </span>
           </text>
+
           <text fg={theme.text}>
             esc <span style={{ fg: theme.textMuted }}>dismiss</span>
           </text>

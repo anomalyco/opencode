@@ -4,9 +4,9 @@ import { Resource } from "@opencode-ai/console-resource"
 
 export namespace BlackData {
   const Schema = z.object({
-    monthlyLimit: z.number().int(),
-    intervalLimit: z.number().int(),
-    intervalLength: z.number().int(),
+    fixedLimit: z.number().int(),
+    rollingLimit: z.number().int(),
+    rollingWindow: z.number().int(),
   })
 
   export const validate = fn(Schema, (input) => {
