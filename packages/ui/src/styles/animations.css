@@ -71,10 +71,6 @@
   [data-slot="session-turn-summary-section"],
   [data-component="reasoning-part"],
   [data-slot="task-tool-item"],
-  [data-slot="accordion-content"],
-  [data-slot="accordion-item"],
-  [data-slot="collapsible-content"],
-  [data-slot="message-nav-tooltip"],
   [data-slot="message-nav-tooltip"][data-expanded],
   [data-slot="message-nav-tooltip"][data-closed] {
     animation: none !important;
