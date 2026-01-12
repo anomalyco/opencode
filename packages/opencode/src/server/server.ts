@@ -1457,7 +1457,7 @@ export namespace Server {
             void SessionPrompt.prompt({ ...body, sessionID }).catch((error) => {
               log.error("prompt_async failed", { error, sessionID })
             })
-            return c.text("", 204)
+            return c.body(null, 204)
           },
         )
         .post(
