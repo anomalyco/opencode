@@ -21,7 +21,6 @@ import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
-import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
@@ -81,7 +80,6 @@ const cli = yargs(hideBin(process.argv))
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
-  .command(TuiSpawnCommand)
   .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
