@@ -83,7 +83,6 @@ export namespace Server {
           log.error("failed", {
             error: err,
           })
-          if (err instanceof HTTPException) return err.getResponse()
           if (err instanceof NamedError) {
             let status: ContentfulStatusCode
             if (err instanceof Storage.NotFoundError) status = 404
@@ -92,6 +91,7 @@ export namespace Server {
             else status = 500
             return c.json(err.toObject(), { status })
           }
+          if (err instanceof HTTPException) return err.getResponse()
           const message = err instanceof Error && err.stack ? err.stack : err.toString()
           return c.json(new NamedError.Unknown({ message }).toObject(), {
             status: 500,

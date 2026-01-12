@@ -33,6 +33,16 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ---
 
+### Authentication
+
+Set `OPENCODE_PASSWORD` to protect the server with HTTP basic auth. The username is always `opencode`, and the password is the value of `OPENCODE_PASSWORD`. This applies to both `opencode serve` and `opencode web`.
+
+```bash
+OPENCODE_PASSWORD=your-password opencode serve
+```
+
+---
+
 ### How it works
 
 When you run `opencode` it starts a TUI and a server. Where the TUI is the
