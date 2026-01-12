@@ -46,27 +46,24 @@ export namespace Skill {
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {
-      let md
-      try {
-        md = await ConfigMarkdown.parse(match)
-      } catch (err) {
-        if (ConfigMarkdown.FrontmatterError.isInstance(err)) {
-          log.error("failed to parse skill frontmatter", {
-            path: err.data.path,
-            message: err.data.message,
-          })
-          const relativePath = path.relative(Instance.directory, match)
-          Bus.publish(TuiEvent.ToastShow, {
-            title: "Skill Error",
-            message: `Failed to parse ${relativePath}: ${err.data.message.split(":")[0]}`,
-            variant: "error",
-            duration: 8000,
-          })
-        } else {
+      const md = await ConfigMarkdown.parse(match).catch((err) => {
+        if (!ConfigMarkdown.FrontmatterError.isInstance(err)) {
           log.error("failed to load skill", { path: match, error: err })
+          return undefined
         }
-        return
-      }
+        log.error("failed to parse skill frontmatter", {
+          path: err.data.path,
+          message: err.data.message,
+        })
+        const relativePath = path.relative(Instance.directory, match)
+        Bus.publish(TuiEvent.ToastShow, {
+          title: "Skill Error",
+          message: `Failed to parse ${relativePath}: ${err.data.message.split(":")[0]}`,
+          variant: "error",
+          duration: 8000,
+        })
+        return undefined
+      })
 
       if (!md) {
         return
