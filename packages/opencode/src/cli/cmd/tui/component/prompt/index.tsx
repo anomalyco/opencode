@@ -865,10 +865,13 @@ export function Prompt(props: PromptProps) {
 
                   // "/" at position 0 opens command menu - pass through to autocomplete
                   // "@" triggers file/agent autocomplete - pass through
+                  // "!" at position 0 triggers shell mode - pass through
                   if (e.name === "/" && input.cursorOffset === 0) {
                     // Let it fall through to autocomplete handling
                   } else if (e.name === "@") {
                     // Let it fall through to autocomplete handling
+                  } else if (e.name === "!" && input.cursorOffset === 0) {
+                    // Let it fall through to shell mode handling
                   } else {
                     // Handle vi mode key
                     const keyEvent: PromptKeyEvent = {

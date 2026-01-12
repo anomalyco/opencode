@@ -414,8 +414,15 @@ export function useViBasic(options: ViBasicOptions): ViBasicResult {
     // REPLACE MODE
     if (replaceMode()) {
       setReplaceMode(false)
-      if (key.length === 1 && !evt.ctrl && !evt.meta && key !== "escape") {
-        const char = key
+      // Handle special key names: "space" -> " ", "tab" -> "\t"
+      const replaceChar = key === "space" ? " " : key === "tab" ? "\t" : key
+      if (
+        (replaceChar.length === 1 || key === "space" || key === "tab") &&
+        !evt.ctrl &&
+        !evt.meta &&
+        key !== "escape"
+      ) {
+        const char = replaceChar
         const action = () => {
           textarea.deleteChar()
           textarea.insertText(char)
