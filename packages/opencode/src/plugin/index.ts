@@ -13,7 +13,7 @@ import { OpenRouterAuthPlugin } from "./openrouter"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.8"]
+  const BUILTIN = ["opencode-copilot-auth@0.0.12", "opencode-anthropic-auth@0.0.8"]
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, OpenRouterAuthPlugin]

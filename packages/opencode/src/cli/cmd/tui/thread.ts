@@ -34,15 +34,9 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
   return fn as typeof fetch
 }
 
-function createEventSource(client: RpcClient, directory: string): EventSource {
+function createEventSource(client: RpcClient): EventSource {
   return {
-    on: (handler) =>
-      client.on<Event>("event", (event) => {
-        handler(event)
-        if (event.type === "server.instance.disposed") {
-          client.call("subscribe", { directory }).catch(() => {})
-        }
-      }),
+    on: (handler) => client.on<Event>("event", handler),
   }
 }
 
@@ -131,9 +125,6 @@ export const TuiThreadCommand = cmd({
       networkOpts.port !== 0 ||
       networkOpts.hostname !== "127.0.0.1"
 
-    // Subscribe to events from worker
-    await client.call("subscribe", { directory: cwd })
-
     let url: string
     let customFetch: typeof fetch | undefined
     let events: EventSource | undefined
@@ -146,7 +137,7 @@ export const TuiThreadCommand = cmd({
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
       customFetch = createWorkerFetch(client)
-      events = createEventSource(client, cwd)
+      events = createEventSource(client)
     }
 
     const tuiPromise = tui({
