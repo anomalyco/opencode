@@ -1,4 +1,6 @@
 [data-component="logo-mark"] {
-  width: 16px;
+  width: 100%;
+  max-width: 16px;
   aspect-ratio: 4/5;
+  height: auto;
 }
