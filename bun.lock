@@ -424,6 +424,7 @@
         "@tailwindcss/vite": "catalog:",
         "@tsconfig/node22": "catalog:",
         "@types/bun": "catalog:",
+        "@types/dompurify": "catalog:",
         "@types/katex": "0.16.7",
         "@types/luxon": "catalog:",
         "tailwindcss": "catalog:",
@@ -503,6 +504,7 @@
     "@tsconfig/bun": "1.0.9",
     "@tsconfig/node22": "22.0.2",
     "@types/bun": "1.3.4",
+    "@types/dompurify": "3.2.0",
     "@types/luxon": "3.7.1",
     "@types/node": "22.13.9",
     "@typescript/native-preview": "7.0.0-dev.20251207.1",
@@ -1767,6 +1769,8 @@
     "@types/debug": ["@types/debug@4.1.12", "", { "dependencies": { "@types/ms": "*" } }, "sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ=="],
 
     "@types/deep-eql": ["@types/deep-eql@4.0.2", "", {}, "sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw=="],
+
+    "@types/dompurify": ["@types/dompurify@3.2.0", "", { "dependencies": { "dompurify": "*" } }, "sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg=="],
 
     "@types/estree": ["@types/estree@1.0.8", "", {}, "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="],
 

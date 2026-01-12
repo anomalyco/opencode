@@ -2,13 +2,31 @@ import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
-import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
+
+  async function fetchModelsData() {
+    const envPath = Bun.env.MODELS_DEV_API_JSON
+    if (envPath) {
+      const file = Bun.file(envPath)
+      if (await file.exists()) {
+        return await file.json()
+      }
+    }
+    const res = await fetch("https://models.dev/api.json", {
+      headers: {
+        "User-Agent": Installation.USER_AGENT,
+      },
+    }).catch(() => null)
+    if (res && res.ok) {
+      return await res.json()
+    }
+    return {}
+  }
 
   export const Model = z.object({
     id: z.string(),
@@ -80,8 +98,7 @@ export namespace ModelsDev {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
     if (result) return result as Record<string, Provider>
-    const json = await data()
-    return JSON.parse(json) as Record<string, Provider>
+    return (await fetchModelsData()) as Record<string, Provider>
   }
 
   export async function refresh() {
