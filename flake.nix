@@ -28,8 +28,7 @@
         "x86_64-darwin" = "bun-darwin-x64";
       };
 
-      # Extract OS and CPU from bunTarget (e.g., "bun-linux-x64" -> {os="linux"; cpu="x64"})
-      # Returns {os="*"; cpu="*"} as fallback for unknown systems
+      # Parse "bun-{os}-{cpu}" to {os, cpu}, fallback to {os="*", cpu="*"}
       parseBunTarget =
         target:
         if target == null then
@@ -50,7 +49,7 @@
       hashesFile = "${./nix}/hashes.json";
       hashesData =
         if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
-      # Get hash for system: supports {system: hash} or legacy single hash
+      # Lookup hash: supports per-system ({system: hash}) or single hash
       nodeModulesHashFor =
         system:
         if builtins.isAttrs hashesData.nodeModules then
