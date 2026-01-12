@@ -114,10 +114,18 @@ export const createClient = (config: Config = {}): Client => {
         case "arrayBuffer":
         case "blob":
         case "formData":
-        case "json":
         case "text":
           data = await response[parseAs]()
           break
+        case "json": {
+          const text = await response.text()
+          if (!text.trim()) {
+            data = {}
+          } else {
+            data = JSON.parse(text)
+          }
+          break
+        }
         case "stream":
           return opts.responseStyle === "data"
             ? response.body
