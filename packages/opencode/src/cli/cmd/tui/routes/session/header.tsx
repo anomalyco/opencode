@@ -1,10 +1,11 @@
-import { type Accessor, createMemo, Match, Show, Switch } from "solid-js"
+import { type Accessor, createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { pipe, sumBy } from "remeda"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
+import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
 
 const Title = (props: { session: Accessor<Session> }) => {
@@ -59,6 +60,8 @@ export function Header() {
 
   const { theme } = useTheme()
   const keybind = useKeybind()
+  const command = useCommandDialog()
+  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
 
   return (
     <box flexShrink={0}>
@@ -79,15 +82,36 @@ export function Header() {
               <text fg={theme.text}>
                 <b>Subagent session</b>
               </text>
-              <text fg={theme.text}>
-                Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
-              </text>
-              <text fg={theme.text}>
-                Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
-              </text>
-              <text fg={theme.text}>
-                Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
-              </text>
+              <box
+                onMouseOver={() => setHover("parent")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.parent")}
+                backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("prev")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.child.previous")}
+                backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("next")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.child.next")}
+                backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
+                </text>
+              </box>
               <box flexGrow={1} flexShrink={1} />
               <ContextInfo context={context} cost={cost} />
             </box>
