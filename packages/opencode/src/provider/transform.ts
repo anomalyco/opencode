@@ -369,6 +369,10 @@ export namespace ProviderTransform {
       case "@ai-sdk/deepinfra":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
       case "@ai-sdk/openai-compatible":
+        if (model.providerID === "friendli" || model.api.url?.includes("friendli")) {
+          // Friendli uses chat_template_kwargs instead of reasoningEffort; variants must be defined explicitly in config
+          return {}
+        }
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/azure":
@@ -632,6 +636,18 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+    if (model.providerID === "friendli" || model.api.url?.includes("friendli")) {
+      const { thinking: _thinking, ...cleanOptions } = options ?? {}
+      return {
+        [model.providerID]: {
+          ...cleanOptions,
+          // Models released before Dec 2025 have reasoning parsing disabled for backward compatibility.
+          // Explicit injection required until all serverless models are upgraded.
+          parse_reasoning: true,
+        },
+      }
+    }
+
     const key = sdkKey(model.api.npm) ?? model.providerID
     return { [key]: options }
   }
@@ -679,6 +695,38 @@ export namespace ProviderTransform {
       }
     }
     */
+
+    if (model.providerID === "friendli" || model.api.url?.includes("friendli")) {
+      // Friendli JSON Schema constraints: https://friendli.ai/docs/guides/structured-outputs
+      const SUPPORTED_FORMATS = ["uuid", "date-time", "date", "time"]
+      const UNSUPPORTED_STRING_KEYS = ["minLength", "maxLength"]
+      const UNSUPPORTED_NUMBER_KEYS = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"]
+      const UNSUPPORTED_COMPOSITION = ["allOf", "oneOf", "not"]
+
+      const sanitize = (obj: any, parentType?: string): any => {
+        if (obj === null || typeof obj !== "object") return obj
+        if (Array.isArray(obj)) return obj.map((item) => sanitize(item, parentType))
+
+        const result: any = {}
+        const type = obj.type as string | undefined
+
+        for (const [key, value] of Object.entries(obj)) {
+          if ((type === "string" || parentType === "string") && UNSUPPORTED_STRING_KEYS.includes(key)) continue
+          if (type === "number" && UNSUPPORTED_NUMBER_KEYS.includes(key)) continue
+          if (key === "format" && typeof value === "string" && !SUPPORTED_FORMATS.includes(value)) continue
+          if (key === "minItems" && typeof value === "number" && value > 1) {
+            result[key] = 1
+            continue
+          }
+          if (key === "maxItems" || key === "additionalProperties") continue
+          if (UNSUPPORTED_COMPOSITION.includes(key)) continue
+
+          result[key] = typeof value === "object" && value !== null ? sanitize(value, type) : value
+        }
+        return result
+      }
+      schema = sanitize(schema)
+    }
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
