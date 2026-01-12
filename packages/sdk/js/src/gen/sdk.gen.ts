@@ -36,6 +36,9 @@ import type {
   ToolListData,
   ToolListResponses,
   ToolListErrors,
+  ToolExecuteData,
+  ToolExecuteResponses,
+  ToolExecuteErrors,
   InstanceDisposeData,
   InstanceDisposeResponses,
   PathGetData,
@@ -388,6 +391,17 @@ class Tool extends _HeyApiClient {
     return (options.client ?? this._client).get<ToolListResponses, ToolListErrors, ThrowOnError>({
       url: "/experimental/tool",
       ...options,
+    })
+  }
+
+  public execute<ThrowOnError extends boolean = false>(options?: Options<ToolExecuteData, ThrowOnError>) {
+    return (options?.client ?? this._client).post<ToolExecuteResponses, ToolExecuteErrors, ThrowOnError>({
+      url: "/experimental/tool/execute",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
     })
   }
 }
