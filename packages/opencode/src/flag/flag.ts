@@ -20,6 +20,7 @@ export namespace Flag {
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS")
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
   export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
+  export const OPENCODE_PASSWORD = process.env["OPENCODE_PASSWORD"]
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
