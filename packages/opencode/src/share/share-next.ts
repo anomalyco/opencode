@@ -10,13 +10,22 @@ import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
+  let disposed = false
+
+  // Store unsubscribe functions for cleanup
+  const unsubscribers: Array<() => void> = []
 
   async function url() {
     return Config.get().then((x) => x.enterprise?.url ?? "https://opncd.ai")
   }
 
   export async function init() {
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
+    // Clean up any existing subscriptions before adding new ones
+    dispose()
+    disposed = false
+
+    const unsub1 = Bus.subscribe(Session.Event.Updated, async (evt) => {
+      if (disposed) return
       await sync(evt.properties.info.id, [
         {
           type: "session",
@@ -24,7 +33,8 @@ export namespace ShareNext {
         },
       ])
     })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+    const unsub2 = Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+      if (disposed) return
       await sync(evt.properties.info.sessionID, [
         {
           type: "message",
@@ -44,7 +54,8 @@ export namespace ShareNext {
         ])
       }
     })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+    const unsub3 = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+      if (disposed) return
       await sync(evt.properties.part.sessionID, [
         {
           type: "part",
@@ -52,7 +63,8 @@ export namespace ShareNext {
         },
       ])
     })
-    Bus.subscribe(Session.Event.Diff, async (evt) => {
+    const unsub4 = Bus.subscribe(Session.Event.Diff, async (evt) => {
+      if (disposed) return
       await sync(evt.properties.sessionID, [
         {
           type: "session_diff",
@@ -60,6 +72,21 @@ export namespace ShareNext {
         },
       ])
     })
+    unsubscribers.push(unsub1, unsub2, unsub3, unsub4)
+  }
+
+  export function dispose() {
+    disposed = true
+    for (const unsub of unsubscribers) {
+      unsub()
+    }
+    unsubscribers.length = 0
+    // Clear pending timeouts
+    for (const entry of queue.values()) {
+      clearTimeout(entry.timeout)
+    }
+    queue.clear()
+    log.info("disposed share-next subscriptions")
   }
 
   export async function create(sessionID: string) {
@@ -190,5 +217,17 @@ export namespace ShareNext {
         data: models,
       },
     ])
+  }
+
+  /** @internal Test helper to get queue size */
+  export function _getQueueSize(): number {
+    return queue.size
+  }
+
+  /** @internal Test helper to add items to queue for testing dispose cleanup */
+  export function _addToQueueForTesting(sessionID: string) {
+    const dataMap = new Map<string, Data>()
+    const timeout = setTimeout(() => {}, 10000)
+    queue.set(sessionID, { timeout, data: dataMap })
   }
 }

@@ -102,4 +102,19 @@ export namespace Bus {
       match.splice(index, 1)
     }
   }
+
+  /** @internal Test helper to get subscription count for a specific event type */
+  export function _getSubscriptionCount(type: string): number {
+    const match = state().subscriptions.get(type)
+    return match?.length ?? 0
+  }
+
+  /** @internal Test helper to get total subscription count across all event types */
+  export function _getTotalSubscriptionCount(): number {
+    let total = 0
+    for (const subs of state().subscriptions.values()) {
+      total += subs.length
+    }
+    return total
+  }
 }

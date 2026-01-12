@@ -9,8 +9,14 @@ export namespace Share {
 
   let queue: Promise<void> = Promise.resolve()
   const pending = new Map<string, any>()
+  let disposed = false
+
+  // Store unsubscribe functions for cleanup
+  const unsubscribers: Array<() => void> = []
 
   export async function sync(key: string, content: any) {
+    // Skip if disposed
+    if (disposed) return
     const [root, ...splits] = key.split("/")
     if (root !== "session") return
     const [sub, sessionID] = splits
@@ -21,6 +27,8 @@ export namespace Share {
     pending.set(key, content)
     queue = queue
       .then(async () => {
+        // Check if disposed before processing
+        if (disposed) return
         const content = pending.get(key)
         if (content === undefined) return
         pending.delete(key)
@@ -46,13 +54,17 @@ export namespace Share {
   }
 
   export function init() {
-    Bus.subscribe(Session.Event.Updated, async (evt) => {
+    // Clean up any existing subscriptions before adding new ones
+    dispose()
+    disposed = false
+
+    const unsub1 = Bus.subscribe(Session.Event.Updated, async (evt) => {
       await sync("session/info/" + evt.properties.info.id, evt.properties.info)
     })
-    Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
+    const unsub2 = Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
       await sync("session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id, evt.properties.info)
     })
-    Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+    const unsub3 = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
       await sync(
         "session/part/" +
           evt.properties.part.sessionID +
@@ -63,6 +75,18 @@ export namespace Share {
         evt.properties.part,
       )
     })
+    unsubscribers.push(unsub1, unsub2, unsub3)
+  }
+
+  export function dispose() {
+    disposed = true
+    for (const unsub of unsubscribers) {
+      unsub()
+    }
+    unsubscribers.length = 0
+    pending.clear()
+    queue = Promise.resolve()
+    log.info("disposed share subscriptions")
   }
 
   export const URL =

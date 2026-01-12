@@ -99,14 +99,19 @@ export namespace Plugin {
     return state().then((x) => x.hooks)
   }
 
+  // Store unsubscribe functions for cleanup
+  const unsubscribers: Array<() => void> = []
+
   export async function init() {
+    // Clean up any existing subscriptions before adding new ones
+    dispose()
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
     for (const hook of hooks) {
       // @ts-expect-error this is because we haven't moved plugin to sdk v2
       await hook.config?.(config)
     }
-    Bus.subscribeAll(async (input) => {
+    const unsub = Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {
         hook["event"]?.({
@@ -114,5 +119,14 @@ export namespace Plugin {
         })
       }
     })
+    unsubscribers.push(unsub)
+  }
+
+  export function dispose() {
+    for (const unsub of unsubscribers) {
+      unsub()
+    }
+    unsubscribers.length = 0
+    log.info("disposed plugin subscriptions")
   }
 }
