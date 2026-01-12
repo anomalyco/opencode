@@ -17313,6 +17313,46 @@
       }
     }
   },
+  "minimax-coding-plan": {
+    "id": "minimax-coding-plan",
+    "env": ["MINIMAX_API_KEY"],
+    "npm": "@ai-sdk/anthropic",
+    "api": "https://api.minimax.io/anthropic/v1",
+    "name": "MiniMax Coding Plan",
+    "doc": "https://platform.minimax.io/docs/guides/quickstart",
+    "models": {
+      "MiniMax-M2": {
+        "id": "MiniMax-M2",
+        "name": "MiniMax-M2",
+        "family": "minimax",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "release_date": "2025-10-27",
+        "last_updated": "2025-10-27",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0 },
+        "limit": { "context": 196608, "output": 128000 }
+      },
+      "MiniMax-M2.1": {
+        "id": "MiniMax-M2.1",
+        "name": "MiniMax-M2.1",
+        "family": "minimax",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "release_date": "2025-12-23",
+        "last_updated": "2025-12-23",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0 },
+        "limit": { "context": 204800, "output": 131072 }
+      }
+    }
+  },
   "google": {
     "id": "google",
     "env": ["GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"],
@@ -21262,6 +21302,46 @@
         "modalities": { "input": ["text"], "output": ["text"] },
         "open_weights": true,
         "cost": { "input": 0.3, "output": 1.2 },
+        "limit": { "context": 196608, "output": 128000 }
+      }
+    }
+  },
+  "minimax-cn-coding-plan": {
+    "id": "minimax-cn-coding-plan",
+    "env": ["MINIMAX_API_KEY"],
+    "npm": "@ai-sdk/anthropic",
+    "api": "https://api.minimaxi.com/anthropic/v1",
+    "name": "MiniMax Coding Plan (China)",
+    "doc": "https://platform.minimaxi.com/docs/guides/quickstart",
+    "models": {
+      "MiniMax-M2.1": {
+        "id": "MiniMax-M2.1",
+        "name": "MiniMax-M2.1",
+        "family": "minimax",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "release_date": "2025-12-23",
+        "last_updated": "2025-12-23",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0 },
+        "limit": { "context": 204800, "output": 131072 }
+      },
+      "MiniMax-M2": {
+        "id": "MiniMax-M2",
+        "name": "MiniMax-M2",
+        "family": "minimax",
+        "attachment": false,
+        "reasoning": true,
+        "tool_call": true,
+        "temperature": true,
+        "release_date": "2025-10-27",
+        "last_updated": "2025-10-27",
+        "modalities": { "input": ["text"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0, "output": 0 },
         "limit": { "context": 196608, "output": 128000 }
       }
     }
