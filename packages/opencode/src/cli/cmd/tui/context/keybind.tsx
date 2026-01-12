@@ -4,9 +4,26 @@ import { Keybind } from "@/util/keybind"
 import { pipe, mapValues } from "remeda"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 import type { ParsedKey, Renderable } from "@opentui/core"
+import { dlopen } from "bun:ffi"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { createSimpleContext } from "./helper"
+
+const win = process.platform === "win32"
+const user32 = win
+  ? dlopen("user32.dll", {
+      GetAsyncKeyState: {
+        args: ["i32"],
+        returns: "i16",
+      },
+    } as const)
+  : undefined
+
+const shiftdown = () => {
+  if (!user32) return false
+  const state = user32.symbols.GetAsyncKeyState(0x10)
+  return (state & 0x8000) !== 0
+}
 
 export const { use: useKeybind, provider: KeybindProvider } = createSimpleContext({
   name: "Keybind",
@@ -50,6 +67,19 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
     }
 
     useKeyboard(async (evt) => {
+      if (
+        win &&
+        evt.name === "return" &&
+        !evt.shift &&
+        !evt.ctrl &&
+        !evt.meta &&
+        !evt.super &&
+        !evt.hyper &&
+        shiftdown()
+      ) {
+        evt.shift = true
+      }
+
       if (!store.leader && result.match("leader", evt)) {
         leader(true)
         return
