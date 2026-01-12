@@ -8,6 +8,26 @@ export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
   inactive?: boolean
 }
 
+export interface TooltipKeybindProps extends Omit<TooltipProps, "value"> {
+  title: string
+  keybind: string
+}
+
+export function TooltipKeybind(props: TooltipKeybindProps) {
+  const [local, others] = splitProps(props, ["title", "keybind"])
+  return (
+    <Tooltip
+      {...others}
+      value={
+        <div data-slot="tooltip-keybind">
+          <span>{local.title}</span>
+          <span data-slot="tooltip-keybind-key">{local.keybind}</span>
+        </div>
+      }
+    />
+  )
+}
+
 export function Tooltip(props: TooltipProps) {
   const [open, setOpen] = createSignal(false)
   const [local, others] = splitProps(props, ["children", "class", "inactive"])

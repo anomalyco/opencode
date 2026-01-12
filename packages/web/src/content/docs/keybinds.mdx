@@ -14,12 +14,16 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "editor_open": "<leader>e",
     "theme_list": "<leader>t",
     "sidebar_toggle": "<leader>b",
+    "scrollbar_toggle": "none",
     "username_toggle": "none",
     "status_view": "<leader>s",
+    "tool_details": "none",
     "session_export": "<leader>x",
     "session_new": "<leader>n",
     "session_list": "<leader>l",
     "session_timeline": "<leader>g",
+    "session_fork": "none",
+    "session_rename": "none",
     "session_share": "none",
     "session_unshare": "none",
     "session_interrupt": "escape",
@@ -43,6 +47,9 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "model_list": "<leader>m",
     "model_cycle_recent": "f2",
     "model_cycle_recent_reverse": "shift+f2",
+    "model_cycle_favorite": "none",
+    "model_cycle_favorite_reverse": "none",
+    "variant_cycle": "ctrl+t",
     "command_list": "ctrl+p",
     "agent_list": "<leader>a",
     "agent_cycle": "tab",
@@ -86,7 +93,9 @@ OpenCode has a list of keybinds that you can customize through the OpenCode conf
     "input_delete_word_backward": "ctrl+w,ctrl+backspace,alt+backspace",
     "history_previous": "up",
     "history_next": "down",
-    "terminal_suspend": "ctrl+z"
+    "terminal_suspend": "ctrl+z",
+    "terminal_title_toggle": "none",
+    "tips_toggle": "<leader>h"
   }
 }
 ```
@@ -115,6 +124,28 @@ You can disable a keybind by adding the key to your config with a value of "none
   }
 }
 ```
+
+---
+
+## Desktop prompt shortcuts
+
+The OpenCode desktop app prompt input supports common Readline/Emacs-style shortcuts for editing text. These are built-in and currently not configurable via `opencode.json`.
+
+| Shortcut | Action                                   |
+| -------- | ---------------------------------------- |
+| `ctrl+a` | Move to start of current line            |
+| `ctrl+e` | Move to end of current line              |
+| `ctrl+b` | Move cursor back one character           |
+| `ctrl+f` | Move cursor forward one character        |
+| `alt+b`  | Move cursor back one word                |
+| `alt+f`  | Move cursor forward one word             |
+| `ctrl+d` | Delete character under cursor            |
+| `ctrl+k` | Kill to end of line                      |
+| `ctrl+u` | Kill to start of line                    |
+| `ctrl+w` | Kill previous word                       |
+| `alt+d`  | Kill next word                           |
+| `ctrl+t` | Transpose characters                     |
+| `ctrl+g` | Cancel popovers / abort running response |
 
 ---
 

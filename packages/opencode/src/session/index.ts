@@ -18,6 +18,7 @@ import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 
 import type { Provider } from "@/provider/provider"
+import { PermissionNext } from "@/permission/next"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -62,6 +63,7 @@ export namespace Session {
         compacting: z.number().optional(),
         archived: z.number().optional(),
       }),
+      permission: PermissionNext.Ruleset.optional(),
       revert: z
         .object({
           messageID: z.string(),
@@ -126,6 +128,7 @@ export namespace Session {
       .object({
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
+        permission: Info.shape.permission,
       })
       .optional(),
     async (input) => {
@@ -133,6 +136,7 @@ export namespace Session {
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
+        permission: input?.permission,
       })
     },
   )
@@ -147,12 +151,19 @@ export namespace Session {
         directory: Instance.directory,
       })
       const msgs = await messages({ sessionID: input.sessionID })
+      const idMap = new Map<string, string>()
+
       for (const msg of msgs) {
         if (input.messageID && msg.info.id >= input.messageID) break
+        const newID = Identifier.ascending("message")
+        idMap.set(msg.info.id, newID)
+
+        const parentID = msg.info.role === "assistant" && msg.info.parentID ? idMap.get(msg.info.parentID) : undefined
         const cloned = await updateMessage({
           ...msg.info,
           sessionID: session.id,
-          id: Identifier.ascending("message"),
+          id: newID,
+          ...(parentID && { parentID }),
         })
 
         for (const part of msg.parts) {
@@ -174,7 +185,13 @@ export namespace Session {
     })
   })
 
-  export async function createNext(input: { id?: string; title?: string; parentID?: string; directory: string }) {
+  export async function createNext(input: {
+    id?: string
+    title?: string
+    parentID?: string
+    directory: string
+    permission?: PermissionNext.Ruleset
+  }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
       version: Installation.VERSION,
@@ -182,6 +199,7 @@ export namespace Session {
       directory: input.directory,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
+      permission: input.permission,
       time: {
         created: Date.now(),
         updated: Date.now(),

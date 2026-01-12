@@ -21,7 +21,7 @@ export async function GET({ params: { platform } }: APIEvent) {
   const assetName = assetNames[platform]
   if (!assetName) return new Response("Not Found", { status: 404 })
 
-  const resp = await fetch(`https://github.com/sst/opencode/releases/latest/download/${assetName}`, {
+  const resp = await fetch(`https://github.com/anomalyco/opencode/releases/latest/download/${assetName}`, {
     cf: {
       // in case gh releases has rate limits
       cacheTtl: 60 * 60 * 24,

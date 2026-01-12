@@ -230,6 +230,10 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 We are using `osascript` to run AppleScript on macOS. Here we are using it to send notifications.
 
+:::note
+If you’re using the OpenCode desktop app, it can send system notifications automatically when a response is ready or when a session errors.
+:::
+
 ---
 
 ### .env protection
@@ -281,6 +285,25 @@ The `tool` helper creates a custom tool that opencode can call. It takes a Zod s
 - `execute`: Function that runs when the tool is called
 
 Your custom tools will be available to opencode alongside built-in tools.
+
+---
+
+### Logging
+
+Use `client.app.log()` instead of `console.log` for structured logging:
+
+```ts title=".opencode/plugin/my-plugin.ts"
+export const MyPlugin = async ({ client }) => {
+  await client.app.log({
+    service: "my-plugin",
+    level: "info",
+    message: "Plugin initialized",
+    extra: { foo: "bar" },
+  })
+}
+```
+
+Levels: `debug`, `info`, `warn`, `error`. See [SDK documentation](https://opencode.ai/docs/sdk) for details.
 
 ---
 
