@@ -8,6 +8,7 @@ import { Persist, persisted } from "@/utils/persist"
 export type LocalPTY = {
   id: string
   title: string
+  titleNumber: number
   rows?: number
   cols?: number
   buffer?: string
@@ -42,8 +43,21 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
     new() {
+      const existingTitleNumbers = new Set(
+        store.all
+          .map((pty) => {
+            const match = pty.titleNumber
+            return match
+          })
+      )
+
+      let nextNumber = 1
+      while (existingTitleNumbers.has(nextNumber)) {
+        nextNumber++
+      }
+
       sdk.client.pty
-        .create({ title: `Terminal ${store.all.length + 1}` })
+      .create({ title: `Terminal ${nextNumber}` })
         .then((pty) => {
           const id = pty.data?.id
           if (!id) return
@@ -52,6 +66,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
             {
               id,
               title: pty.data?.title ?? "Terminal",
+              titleNumber: nextNumber,
             },
           ])
           setStore("active", id)
