@@ -280,7 +280,9 @@ export default function () {
                                   <div class="text-12-regular text-text-base">{model()?.name ?? modelID()}</div>
                                 </div>
                                 <div class="text-12-regular text-text-weaker">
-                                  {DateTime.fromMillis(info().time.created).toFormat("dd MMM yyyy, HH:mm")}
+                                  {DateTime.fromMillis(activeMessage()?.time.created ?? info().time.created).toFormat(
+                                    "dd MMM yyyy, HH:mm",
+                                  )}
                                 </div>
                               </div>
                             </div>
