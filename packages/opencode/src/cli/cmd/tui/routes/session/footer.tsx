@@ -1,10 +1,11 @@
-import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
+import { createMemo, createResource, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/dialog-model"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { Antigravity } from "@/antigravity"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -19,6 +20,29 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
+
+  // Check if antigravity provider is configured
+  const hasAntigravity = createMemo(() => sync.data.provider.some((p) => p.id === "antigravity"))
+
+  // Check proxy status periodically
+  const [proxyStatus, { refetch: refetchProxy }] = createResource(
+    () => hasAntigravity(),
+    async (has) => {
+      if (!has) return null
+      const running = await Antigravity.isRunning()
+      if (!running) return { running: false, accounts: 0 }
+      const status = await Antigravity.getStatus()
+      return status ? { running: true, accounts: status.accounts.length } : { running: false, accounts: 0 }
+    },
+  )
+
+  // Refresh proxy status every 30 seconds
+  onMount(() => {
+    const interval = setInterval(() => {
+      if (hasAntigravity()) refetchProxy()
+    }, 30000)
+    onCleanup(() => clearInterval(interval))
+  })
 
   const [store, setStore] = createStore({
     welcome: false,
@@ -61,6 +85,12 @@ export function Footer() {
               <text fg={theme.warning}>
                 <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
                 {permissions().length > 1 ? "s" : ""}
+              </text>
+            </Show>
+            <Show when={hasAntigravity() && proxyStatus()}>
+              <text fg={theme.text}>
+                <span style={{ fg: proxyStatus()?.running ? theme.success : theme.error }}>◈</span>{" "}
+                {proxyStatus()?.running ? `AG ${proxyStatus()?.accounts}` : "AG ✗"}
               </text>
             </Show>
             <text fg={theme.text}>

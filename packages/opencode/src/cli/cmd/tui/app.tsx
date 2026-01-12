@@ -17,6 +17,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogAntigravity } from "@tui/component/dialog-antigravity"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -436,6 +437,14 @@ function App() {
       suggested: !connected(),
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
+      title: "Antigravity proxy",
+      value: "antigravity.status",
+      onSelect: () => {
+        dialog.replace(() => <DialogAntigravity />)
       },
       category: "Provider",
     },

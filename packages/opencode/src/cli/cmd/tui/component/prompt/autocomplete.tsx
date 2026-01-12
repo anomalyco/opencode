@@ -475,6 +475,17 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("provider.connect"),
       },
       {
+        display: "/antigravity",
+        aliases: ["/ag", "/proxy"],
+        description: "manage Antigravity proxy (free Claude/Gemini)",
+        onSelect: () => command.trigger("antigravity.status"),
+      },
+      {
+        display: "/quota",
+        description: "show Antigravity model quotas",
+        onSelect: () => command.trigger("antigravity.status"),
+      },
+      {
         display: "/help",
         description: "show help",
         onSelect: () => command.trigger("help.show"),
