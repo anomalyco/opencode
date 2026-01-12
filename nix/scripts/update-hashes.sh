@@ -37,12 +37,9 @@ write_node_modules_hash() {
   local temp
   temp=$(mktemp)
   
-  # Check if nodeModules is already an object (per-system format)
   if jq -e '.nodeModules | type == "object"' "$HASH_FILE" >/dev/null 2>&1; then
-    # Per-system format: set hash for specific system
     jq --arg system "$system" --arg value "$value" '.nodeModules[$system] = $value' "$HASH_FILE" >"$temp"
   else
-    # Legacy single hash or first run: convert to per-system format
     jq --arg system "$system" --arg value "$value" '.nodeModules = {($system): $value}' "$HASH_FILE" >"$temp"
   fi
   
