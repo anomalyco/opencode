@@ -54,7 +54,7 @@ export const ProjectRoute = new Hono()
     "/:projectID",
     describeRoute({
       summary: "Update project",
-      description: "Update project properties such as name, icon and color.",
+      description: "Update project properties such as name, icon, color, and memory.",
       operationId: "project.update",
       responses: {
         200: {

@@ -27,6 +27,7 @@ export type Project = {
     url?: string
     color?: string
   }
+  memory?: string
   time: {
     created: number
     updated: number
@@ -677,6 +678,30 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventTuiModelSwitch = {
+  type: "tui.model.switch"
+  properties: {
+    /**
+     * Provider ID (e.g., antigravity)
+     */
+    providerID: string
+    /**
+     * Model ID (e.g., claude-sonnet-4-5-thinking)
+     */
+    modelID: string
+  }
+}
+
+export type EventTuiAgentSwitch = {
+  type: "tui.agent.switch"
+  properties: {
+    /**
+     * Agent name or key to switch to
+     */
+    agent: string
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -727,6 +752,7 @@ export type Session = {
     archived?: number
   }
   permission?: PermissionRuleset
+  rules?: string
   revert?: {
     messageID: string
     partID?: string
@@ -865,6 +891,8 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventTuiModelSwitch
+  | EventTuiAgentSwitch
   | EventMcpToolsChanged
   | EventCommandExecuted
   | EventSessionCreated
@@ -2173,6 +2201,7 @@ export type ProjectUpdateData = {
       url?: string
       color?: string
     }
+    memory?: string
   }
   path: {
     projectID: string
@@ -2739,6 +2768,7 @@ export type SessionGetResponse = SessionGetResponses[keyof SessionGetResponses]
 export type SessionUpdateData = {
   body?: {
     title?: string
+    rules?: string
     time?: {
       archived?: number
     }
@@ -4606,7 +4636,13 @@ export type TuiShowToastResponses = {
 export type TuiShowToastResponse = TuiShowToastResponses[keyof TuiShowToastResponses]
 
 export type TuiPublishData = {
-  body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+  body?:
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
+    | EventTuiModelSwitch
+    | EventTuiAgentSwitch
   path?: never
   query?: {
     directory?: string

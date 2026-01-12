@@ -28,6 +28,7 @@ export namespace Project {
           color: z.string().optional(),
         })
         .optional(),
+      memory: z.string().optional(),
       time: z.object({
         created: z.number(),
         updated: z.number(),
@@ -280,10 +281,12 @@ export namespace Project {
       projectID: z.string(),
       name: z.string().optional(),
       icon: Info.shape.icon.optional(),
+      memory: z.string().optional(),
     }),
     async (input) => {
       const result = await Storage.update<Info>(["project", input.projectID], (draft) => {
         if (input.name !== undefined) draft.name = input.name
+        if (input.memory !== undefined) draft.memory = input.memory
         if (input.icon !== undefined) {
           draft.icon = {
             ...draft.icon,

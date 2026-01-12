@@ -593,7 +593,7 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom()), ...SystemPrompt.session(session.rules)],
+        system: [...(await SystemPrompt.environment()), ...SystemPrompt.memory(), ...(await SystemPrompt.custom()), ...SystemPrompt.session(session.rules)],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep

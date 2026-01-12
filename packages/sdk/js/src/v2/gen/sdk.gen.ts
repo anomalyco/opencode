@@ -17,7 +17,9 @@ import type {
   ConfigUpdateErrors,
   ConfigUpdateResponses,
   EventSubscribeResponses,
+  EventTuiAgentSwitch,
   EventTuiCommandExecute,
+  EventTuiModelSwitch,
   EventTuiPromptAppend,
   EventTuiSessionSelect,
   EventTuiToastShow,
@@ -287,7 +289,7 @@ export class Project extends HeyApiClient {
   /**
    * Update project
    *
-   * Update project properties such as name, icon and color.
+   * Update project properties such as name, icon, color, and memory.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters: {
@@ -298,6 +300,7 @@ export class Project extends HeyApiClient {
         url?: string
         color?: string
       }
+      memory?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -310,6 +313,7 @@ export class Project extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "name" },
             { in: "body", key: "icon" },
+            { in: "body", key: "memory" },
           ],
         },
       ],
@@ -935,6 +939,7 @@ export class Session extends HeyApiClient {
       sessionID: string
       directory?: string
       title?: string
+      rules?: string
       time?: {
         archived?: number
       }
@@ -949,6 +954,7 @@ export class Session extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "body", key: "title" },
+            { in: "body", key: "rules" },
             { in: "body", key: "time" },
           ],
         },
@@ -2898,7 +2904,13 @@ export class Tui extends HeyApiClient {
   public publish<ThrowOnError extends boolean = false>(
     parameters?: {
       directory?: string
-      body?: EventTuiPromptAppend | EventTuiCommandExecute | EventTuiToastShow | EventTuiSessionSelect
+      body?:
+        | EventTuiPromptAppend
+        | EventTuiCommandExecute
+        | EventTuiToastShow
+        | EventTuiSessionSelect
+        | EventTuiModelSwitch
+        | EventTuiAgentSwitch
     },
     options?: Options<never, ThrowOnError>,
   ) {

@@ -140,4 +140,17 @@ export namespace SystemPrompt {
     if (!rules || !rules.trim()) return []
     return ["Session rules:\n" + rules.trim()]
   }
+
+  export function memory() {
+    const project = Instance.project
+    if (!project.memory || !project.memory.trim()) return []
+    return [
+      [
+        "Project Memory (persistent context from previous sessions):",
+        "<memory>",
+        project.memory.trim(),
+        "</memory>",
+      ].join("\n"),
+    ]
+  }
 }

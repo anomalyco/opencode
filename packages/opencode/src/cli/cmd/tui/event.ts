@@ -43,4 +43,17 @@ export const TuiEvent = {
       sessionID: z.string().regex(/^ses/).describe("Session ID to navigate to"),
     }),
   ),
+  ModelSwitch: BusEvent.define(
+    "tui.model.switch",
+    z.object({
+      providerID: z.string().describe("Provider ID (e.g., antigravity)"),
+      modelID: z.string().describe("Model ID (e.g., claude-sonnet-4-5-thinking)"),
+    }),
+  ),
+  AgentSwitch: BusEvent.define(
+    "tui.agent.switch",
+    z.object({
+      agent: z.string().describe("Agent name or key to switch to"),
+    }),
+  ),
 }

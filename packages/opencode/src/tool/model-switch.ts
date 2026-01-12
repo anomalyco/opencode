@@ -1,20 +1,10 @@
 import { z } from "zod"
 import { Tool } from "./tool"
 import { Bus } from "../bus"
-import { BusEvent } from "../bus/bus-event"
+import { TuiEvent } from "../cli/cmd/tui/event"
 import { Log } from "../util/log"
 
 const log = Log.create({ service: "model-switch-tool" })
-
-// Event that TUI listens to for model switching
-export const ModelSwitchEvent = BusEvent.define(
-  "model.switch",
-  z.object({
-    sessionID: z.string(),
-    providerID: z.string(),
-    modelID: z.string(),
-  })
-)
 
 export const ModelSwitchTool = Tool.define("model_switch", {
   description: `Switch the current model to a different one.
@@ -40,9 +30,8 @@ Example flow:
   async execute({ provider, model }, ctx) {
     log.info("switching model", { provider, model, sessionID: ctx.sessionID })
 
-    // Publish event for TUI to pick up
-    Bus.publish(ModelSwitchEvent, {
-      sessionID: ctx.sessionID,
+    // Publish TuiEvent for TUI to pick up
+    await Bus.publish(TuiEvent.ModelSwitch, {
       providerID: provider,
       modelID: model,
     })

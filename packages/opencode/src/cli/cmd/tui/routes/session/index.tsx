@@ -58,6 +58,7 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogSessionRules } from "../../component/dialog-session-rules"
+import { DialogProjectMemory } from "../../component/dialog-project-memory"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -833,6 +834,44 @@ export function Session() {
           })
         }
         dialog.clear()
+      },
+    },
+    {
+      title: "Fast model (Gemini 3 Flash)",
+      value: "model.preset.fast",
+      category: "Model",
+      onSelect: (dialog) => {
+        local.model.set({ providerID: "antigravity", modelID: "gemini-3-flash" }, { recent: true })
+        toast.show({ message: "Switched to Gemini 3 Flash (fast)", variant: "info" })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Smart model (Gemini 3 Pro High)",
+      value: "model.preset.smart",
+      category: "Model",
+      onSelect: (dialog) => {
+        local.model.set({ providerID: "antigravity", modelID: "gemini-3-pro-high" }, { recent: true })
+        toast.show({ message: "Switched to Gemini 3 Pro High (smart)", variant: "info" })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Thinking model (Claude Sonnet 4.5)",
+      value: "model.preset.think",
+      category: "Model",
+      onSelect: (dialog) => {
+        local.model.set({ providerID: "antigravity", modelID: "claude-sonnet-4-5-thinking" }, { recent: true })
+        toast.show({ message: "Switched to Claude Sonnet 4.5 Thinking", variant: "info" })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Project memory",
+      value: "project.memory",
+      category: "Project",
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogProjectMemory />)
       },
     },
   ])

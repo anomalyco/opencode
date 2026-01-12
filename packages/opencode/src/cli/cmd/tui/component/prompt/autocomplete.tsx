@@ -440,6 +440,26 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("mcp.list"),
       },
       {
+        display: "/memory",
+        description: "edit project memory",
+        onSelect: () => command.trigger("project.memory"),
+      },
+      {
+        display: "/fast",
+        description: "switch to fast model (Gemini 3 Flash)",
+        onSelect: () => command.trigger("model.preset.fast"),
+      },
+      {
+        display: "/smart",
+        description: "switch to smart model (Gemini 3 Pro High)",
+        onSelect: () => command.trigger("model.preset.smart"),
+      },
+      {
+        display: "/think",
+        description: "switch to thinking model (Claude Sonnet 4.5)",
+        onSelect: () => command.trigger("model.preset.think"),
+      },
+      {
         display: "/theme",
         description: "toggle theme",
         onSelect: () => command.trigger("theme.switch"),

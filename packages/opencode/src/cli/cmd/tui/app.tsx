@@ -275,17 +275,25 @@ function App() {
   })
 
   // Listen for model switch events from the model_switch tool
-  sdk.event.listen((e) => {
-    const event = e.details as { type: string; properties: Record<string, unknown> }
-    if (event.type === "model.switch") {
-      const { providerID, modelID } = event.properties as { providerID: string; modelID: string }
-      local.model.set({ providerID, modelID }, { recent: true })
-      toast.show({
-        message: `Switched to ${providerID}/${modelID}`,
-        variant: "info",
-        duration: 3000,
-      })
-    }
+  sdk.event.on(TuiEvent.ModelSwitch.type, (evt) => {
+    const { providerID, modelID } = evt.properties
+    local.model.set({ providerID, modelID }, { recent: true })
+    toast.show({
+      message: `Switched to ${providerID}/${modelID}`,
+      variant: "info",
+      duration: 3000,
+    })
+  })
+
+  // Listen for agent switch events from the agent_switch tool
+  sdk.event.on(TuiEvent.AgentSwitch.type, (evt) => {
+    const { agent } = evt.properties
+    local.agent.set(agent)
+    toast.show({
+      message: `Switched to ${agent} agent`,
+      variant: "info",
+      duration: 3000,
+    })
   })
 
   createEffect(
