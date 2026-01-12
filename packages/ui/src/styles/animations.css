@@ -66,17 +66,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-component="session-turn"],
-  [data-slot="session-turn-summary-section"],
-  [data-component="reasoning-part"],
-  [data-slot="task-tool-item"],
-  [data-slot="message-nav-tooltip"][data-expanded],
-  [data-slot="message-nav-tooltip"][data-closed] {
-    animation: none !important;
-  }
-}
-
 .fade-up-text {
   animation: fadeUp 0.4s ease-out forwards;
   opacity: 0;
