@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, batch } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -33,7 +33,7 @@ import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
@@ -167,6 +167,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const permission = usePermission()
+  const [searchParams] = useSearchParams()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -301,6 +302,57 @@ export default function Page() {
         if (!msg) return
         if (msg.agent) local.agent.set(msg.agent)
         if (msg.model) local.model.set(msg.model)
+      },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => ({
+        agents: local.agent.list(),
+        models: local.model.list(),
+        sessionId: params.id,
+      }),
+      (current, prev) => {
+        if (current.sessionId) return
+
+        const wasNotReady = !prev || prev.agents.length === 0 || prev.models.length === 0
+        const isNowReady = current.agents.length > 0 && current.models.length > 0
+
+        if (!wasNotReady || !isNowReady) return
+
+        batch(() => {
+          const agentParam = Array.isArray(searchParams.agent) ? searchParams.agent[0] : searchParams.agent
+          if (agentParam) {
+            const agentName = agentParam.toLowerCase()
+            if (current.agents.some((a) => a.name === agentName)) {
+              local.agent.set(agentName)
+            }
+          }
+
+          const modelParam = Array.isArray(searchParams.model) ? searchParams.model[0] : searchParams.model
+          if (modelParam) {
+            const [providerID, ...rest] = modelParam.toLowerCase().split("/")
+            const modelID = rest.join("/")
+            if (providerID && modelID) {
+              if (current.models.some((m) => m.provider.id === providerID && m.id === modelID)) {
+                local.model.set({ providerID, modelID }, { recent: true })
+              }
+            }
+          }
+
+          const variantParam = Array.isArray(searchParams.variant) ? searchParams.variant[0] : searchParams.variant
+          if (variantParam) {
+            const variants = local.model.variant.list()
+            const variantName = variantParam.toLowerCase()
+            if (variants.some((v) => v.toLowerCase() === variantName)) {
+              const exactVariant = variants.find((v) => v.toLowerCase() === variantName)
+              if (exactVariant) {
+                local.model.variant.set(exactVariant)
+              }
+            }
+          }
+        })
       },
     ),
   )
