@@ -35,6 +35,13 @@ jobs:
       - name: Setup Nix
         uses: DeterminateSystems/nix-installer-action@v21
 
+      - name: Test macOS terminal restoration
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          echo "Testing macOS terminal restoration..."
+          node ./script/macos-terminal-test.js
+
       - name: Build desktop via flake
         run: |
           set -euo pipefail

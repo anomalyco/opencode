@@ -154,6 +154,13 @@ jobs:
           workspaces: packages/desktop/src-tauri
           shared-key: ${{ matrix.settings.target }}
 
+      - name: Test macOS terminal restoration
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          echo "Testing macOS terminal restoration..."
+          node ./script/macos-terminal-test.js
+
       - name: Prepare
         run: |
           cd packages/desktop
