@@ -184,4 +184,37 @@ export namespace Plan {
     await Storage.remove(["plan", sessionID])
     log.info("removed", { sessionID })
   }
+
+  /**
+   * Delete a plan completely (both storage and file).
+   */
+  export async function deletePlan(sessionID: string): Promise<void> {
+    const filePath = getFilePath(sessionID)
+    await fs.unlink(filePath).catch(() => {})
+    await Storage.remove(["plan", sessionID]).catch(() => {})
+    log.info("deleted", { sessionID, filePath })
+  }
+
+  /**
+   * Write content to a plan file.
+   * Also ensures the plan exists in storage.
+   */
+  export async function writeContent(sessionID: string, content: string): Promise<void> {
+    await ensureDirectory()
+    const filePath = getFilePath(sessionID)
+    await fs.writeFile(filePath, content, "utf-8")
+
+    // Ensure plan exists in storage
+    try {
+      await get(sessionID)
+    } catch (e) {
+      if (Storage.NotFoundError.isInstance(e)) {
+        await create(sessionID)
+      } else {
+        throw e
+      }
+    }
+
+    log.info("wrote content", { sessionID, filePath, length: content.length })
+  }
 }

@@ -8,6 +8,7 @@ import { splitWhen } from "remeda"
 import { Storage } from "../storage/storage"
 import { Bus } from "../bus"
 import { SessionPrompt } from "./prompt"
+import { Plan } from "./plan"
 
 export namespace SessionRevert {
   const log = Log.create({ service: "session.revert" })
@@ -57,6 +58,15 @@ export namespace SessionRevert {
       revert.snapshot = session.revert?.snapshot ?? (await Snapshot.track())
       await Snapshot.revert(patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
+
+      // Save current plan file content before revert (plan files are outside git worktree)
+      // Then delete the plan file so the AI can create a fresh one if needed
+      const planContent = await Plan.readContent(input.sessionID).catch(() => null)
+      if (planContent !== null) {
+        revert.planContent = planContent
+        await Plan.deletePlan(input.sessionID).catch(() => {})
+      }
+
       return Session.update(input.sessionID, (draft) => {
         draft.revert = revert
       })
@@ -70,6 +80,12 @@ export namespace SessionRevert {
     const session = await Session.get(input.sessionID)
     if (!session.revert) return session
     if (session.revert.snapshot) await Snapshot.restore(session.revert.snapshot)
+
+    // Restore plan file content if it was saved during revert
+    if (session.revert.planContent !== undefined) {
+      await Plan.writeContent(input.sessionID, session.revert.planContent).catch(() => {})
+    }
+
     const next = await Session.update(input.sessionID, (draft) => {
       draft.revert = undefined
     })

@@ -74,6 +74,7 @@ export namespace Session {
           partID: z.string().optional(),
           snapshot: z.string().optional(),
           diff: z.string().optional(),
+          planContent: z.string().optional(), // Plan file content before revert
         })
         .optional(),
     })
