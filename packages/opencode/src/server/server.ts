@@ -1429,7 +1429,7 @@ export namespace Server {
             return stream(c, async (stream) => {
               const sessionID = c.req.valid("param").sessionID
               const body = c.req.valid("json")
-              const msg = await SessionPrompt.prompt({ ...body, sessionID })
+              const msg = await SessionPrompt.prompt({ ...body, sessionID }).catch(() => null)
               stream.write(JSON.stringify(msg))
             })
           },
