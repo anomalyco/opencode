@@ -28,7 +28,7 @@
         "x86_64-darwin" = "bun-darwin-x64";
       };
 
-      # Parse bunTarget to extract OS and CPU for bun install flags
+      # Extract OS and CPU from bunTarget (e.g., "bun-linux-x64" -> {os="linux"; cpu="x64"})
       parseBunTarget =
         target:
         let
