@@ -28,6 +28,7 @@ export namespace SessionRevert {
 
     let revert: Session.Info["revert"]
     const patches: Snapshot.Patch[] = []
+    const planPatches: { beforeContent: string | null }[] = []
     for (const msg of all) {
       if (msg.info.role === "user") lastUser = msg.info
       const remaining = []
@@ -35,6 +36,9 @@ export namespace SessionRevert {
         if (revert) {
           if (part.type === "patch") {
             patches.push(part)
+          }
+          if (part.type === "plan-patch") {
+            planPatches.push(part)
           }
           continue
         }
@@ -60,12 +64,23 @@ export namespace SessionRevert {
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
 
       // Save current plan file content for unrevert (plan files are outside git worktree)
-      // We save the content but DON'T delete the file - the file stays as-is during revert
-      // If user unreverts, we restore this saved content
-      const planContent = await Plan.readContent(input.sessionID).catch(() => null)
-      if (planContent !== null) {
-        revert.planContent = planContent
+      const currentPlanContent = await Plan.readContent(input.sessionID).catch(() => null)
+      if (currentPlanContent !== null) {
+        revert.planContent = currentPlanContent
       }
+
+      // Restore plan content from plan patches collected after the revert point
+      if (planPatches.length > 0) {
+        // First plan-patch after revert point has the content from before the change
+        const targetContent = planPatches[0].beforeContent
+        if (targetContent !== null) {
+          await Plan.writeContent(input.sessionID, targetContent)
+        } else {
+          // Plan didn't exist at that point - delete it
+          await Plan.deletePlan(input.sessionID)
+        }
+      }
+      // If no planPatches, plan wasn't modified after revert point - keep as-is
 
       return Session.update(input.sessionID, (draft) => {
         draft.revert = revert

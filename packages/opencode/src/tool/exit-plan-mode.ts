@@ -4,6 +4,7 @@ import { Plan } from "../session/plan"
 import { PlanReview } from "../session/plan-review"
 import { MessageV2 } from "../session/message-v2"
 import { Session } from "../session"
+import { PermissionNext } from "../permission/next"
 import DESCRIPTION from "./exit-plan-mode.txt"
 
 export const ExitPlanModeTool = Tool.define("exit_plan_mode", {
@@ -53,16 +54,26 @@ export const ExitPlanModeTool = Tool.define("exit_plan_mode", {
           filePath: plan.filePath,
         } as { status: string; planID: string; filePath: string; feedback?: string },
       }
-    } else {
-      // Plan was rejected - interrupt the conversation
+    } else if (result.feedback) {
+      // Plan was rejected with feedback - let AI revise
       await Plan.setStatus(ctx.sessionID, "rejected")
 
-      const feedbackMessage = result.feedback
-        ? `The user rejected your plan with the following feedback:\n\n${result.feedback}`
-        : "The user dismissed the plan review."
+      return {
+        title: "Plan rejected - revision requested",
+        output: `The user rejected your plan with the following feedback:\n\n${result.feedback}\n\nPlease revise your plan based on this feedback and call exit_plan_mode again when ready.`,
+        metadata: {
+          status: "rejected",
+          planID: plan.id,
+          filePath: plan.filePath,
+          feedback: result.feedback,
+        } as { status: string; planID: string; filePath: string; feedback?: string },
+      }
+    } else {
+      // Plan was dismissed without feedback - interrupt the conversation
+      await Plan.setStatus(ctx.sessionID, "rejected")
 
-      // Throw to interrupt the conversation
-      throw new Error(feedbackMessage)
+      // Throw RejectedError to interrupt the agent loop
+      throw new PermissionNext.RejectedError()
     }
   },
 })

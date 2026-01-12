@@ -45,10 +45,12 @@ export namespace ShareNext {
       }
     })
     Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+      // Skip internal parts that aren't meant for external sharing
+      if (evt.properties.part.type === "plan-patch") return
       await sync(evt.properties.part.sessionID, [
         {
           type: "part",
-          data: evt.properties.part,
+          data: evt.properties.part as SDK.Part,
         },
       ])
     })
@@ -180,7 +182,11 @@ export namespace ShareNext {
         type: "message" as const,
         data: x.info,
       })),
-      ...messages.flatMap((x) => x.parts.map((y) => ({ type: "part" as const, data: y }))),
+      ...messages.flatMap((x) =>
+        x.parts
+          .filter((y) => y.type !== "plan-patch")
+          .map((y) => ({ type: "part" as const, data: y as SDK.Part })),
+      ),
       {
         type: "session_diff",
         data: diffs,

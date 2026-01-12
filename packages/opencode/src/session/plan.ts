@@ -48,7 +48,6 @@ export namespace Plan {
 
   /**
    * Get the plan file path for a session.
-   * Uses the session ID to create a unique, session-scoped file path.
    * Returns the absolute path in the global plan directory.
    */
   export function getFilePath(sessionID: string): string {

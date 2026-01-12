@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { Plan } from "./plan"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -31,6 +32,7 @@ export namespace SessionProcessor {
   }) {
     const toolcalls: Record<string, MessageV2.ToolPart> = {}
     let snapshot: string | undefined
+    let planContentAtStart: string | null | undefined
     let blocked = false
     let attempt = 0
     let needsCompaction = false
@@ -224,6 +226,7 @@ export namespace SessionProcessor {
 
                 case "start-step":
                   snapshot = await Snapshot.track()
+                  planContentAtStart = await Plan.readContent(input.sessionID).catch(() => null)
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -266,6 +269,20 @@ export namespace SessionProcessor {
                       })
                     }
                     snapshot = undefined
+                  }
+                  // Check if plan file changed during this step
+                  if (planContentAtStart !== undefined) {
+                    const planContentNow = await Plan.readContent(input.sessionID).catch(() => null)
+                    if (planContentAtStart !== planContentNow) {
+                      await Session.updatePart({
+                        id: Identifier.ascending("part"),
+                        messageID: input.assistantMessage.id,
+                        sessionID: input.sessionID,
+                        type: "plan-patch",
+                        beforeContent: planContentAtStart,
+                      })
+                    }
+                    planContentAtStart = undefined
                   }
                   SessionSummary.summarize({
                     sessionID: input.sessionID,

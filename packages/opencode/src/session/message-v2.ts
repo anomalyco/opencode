@@ -58,6 +58,14 @@ export namespace MessageV2 {
   })
   export type PatchPart = z.infer<typeof PatchPart>
 
+  export const PlanPatchPart = PartBase.extend({
+    type: z.literal("plan-patch"),
+    beforeContent: z.string().nullable(),
+  }).meta({
+    ref: "PlanPatchPart",
+  })
+  export type PlanPatchPart = z.infer<typeof PlanPatchPart>
+
   export const TextPart = PartBase.extend({
     type: z.literal("text"),
     text: z.string(),
@@ -337,6 +345,7 @@ export namespace MessageV2 {
       StepFinishPart,
       SnapshotPart,
       PatchPart,
+      PlanPatchPart,
       AgentPart,
       RetryPart,
       CompactionPart,
