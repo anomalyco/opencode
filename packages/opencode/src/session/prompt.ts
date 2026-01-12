@@ -316,6 +316,9 @@ export namespace SessionPrompt {
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
         const taskTool = await TaskTool.init()
+        const taskModel = task.model
+          ? await Provider.getModel(task.model.providerID, task.model.modelID)
+          : model
         const assistantMessage = (await Session.updateMessage({
           id: Identifier.ascending("message"),
           role: "assistant",
@@ -334,8 +337,8 @@ export namespace SessionPrompt {
             reasoning: 0,
             cache: { read: 0, write: 0 },
           },
-          modelID: model.id,
-          providerID: model.providerID,
+          modelID: taskModel.id,
+          providerID: taskModel.providerID,
           time: {
             created: Date.now(),
           },
@@ -1505,7 +1508,7 @@ export namespace SessionPrompt {
     }
     template = template.trim()
 
-    const model = await (async () => {
+    const taskModel = await (async () => {
       if (command.model) {
         return Provider.parseModel(command.model)
       }
@@ -1520,7 +1523,7 @@ export namespace SessionPrompt {
     })()
 
     try {
-      await Provider.getModel(model.providerID, model.modelID)
+      await Provider.getModel(taskModel.providerID, taskModel.modelID)
     } catch (e) {
       if (Provider.ModelNotFoundError.isInstance(e)) {
         const { providerID, modelID, suggestions } = e.data
@@ -1553,6 +1556,10 @@ export namespace SessionPrompt {
             agent: agent.name,
             description: command.description ?? "",
             command: input.command,
+            model: {
+              providerID: taskModel.providerID,
+              modelID: taskModel.modelID,
+            },
             // TODO: how can we make task tool accept a more complex input?
             prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
           },
@@ -1560,11 +1567,12 @@ export namespace SessionPrompt {
       : [...templateParts, ...(input.parts ?? [])]
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
+    const userModel = isSubtask ? await lastModel(input.sessionID) : taskModel
 
     const result = (await prompt({
       sessionID: input.sessionID,
       messageID: input.messageID,
-      model,
+      model: userModel,
       agent: userAgent,
       parts,
       variant: input.variant,
