@@ -5,11 +5,11 @@
  * The proxy provides an Anthropic-compatible API backed by Google's Antigravity service.
  */
 
-import { spawn, type ChildProcess } from "child_process"
+import { spawn, exec, type ChildProcess } from "child_process"
 import { Log } from "../util/log"
 import { homedir } from "os"
 import { join } from "path"
-import { existsSync } from "fs"
+import { existsSync, writeFileSync, readFileSync } from "fs"
 
 export namespace Antigravity {
   const log = Log.create({ service: "antigravity" })
@@ -18,8 +18,17 @@ export namespace Antigravity {
   const PROXY_PACKAGE = "antigravity-claude-proxy@latest"
   const CONFIG_DIR = join(homedir(), ".config", "antigravity-proxy")
   const ACCOUNTS_FILE = join(CONFIG_DIR, "accounts.json")
+  const CLOSECODE_CONFIG_DIR = join(homedir(), ".config", "closecode")
+  const ANTIGRAVITY_STATE_FILE = join(CLOSECODE_CONFIG_DIR, "antigravity-state.json")
 
   let proxyProcess: ChildProcess | null = null
+
+  interface AntigravityState {
+    enabled: boolean
+    autoStart: boolean
+    port: number
+    setupComplete: boolean
+  }
 
   export interface ProxyStatus {
     running: boolean
@@ -329,5 +338,179 @@ export namespace Antigravity {
       return `${hours}h ${minutes % 60}m`
     }
     return `${minutes}m`
+  }
+
+  /**
+   * Get the saved state for Antigravity
+   */
+  export function getState(): AntigravityState {
+    try {
+      if (existsSync(ANTIGRAVITY_STATE_FILE)) {
+        const data = readFileSync(ANTIGRAVITY_STATE_FILE, "utf-8")
+        return JSON.parse(data)
+      }
+    } catch (error) {
+      log.error("Failed to read antigravity state", { error })
+    }
+    return {
+      enabled: false,
+      autoStart: true,
+      port: DEFAULT_PORT,
+      setupComplete: false,
+    }
+  }
+
+  /**
+   * Save the state for Antigravity
+   */
+  export function saveState(state: Partial<AntigravityState>): void {
+    try {
+      const currentState = getState()
+      const newState = { ...currentState, ...state }
+      
+      // Ensure config directory exists
+      const { mkdirSync } = require("fs")
+      mkdirSync(CLOSECODE_CONFIG_DIR, { recursive: true })
+      
+      writeFileSync(ANTIGRAVITY_STATE_FILE, JSON.stringify(newState, null, 2))
+      log.info("Saved antigravity state", { state: newState })
+    } catch (error) {
+      log.error("Failed to save antigravity state", { error })
+    }
+  }
+
+  /**
+   * Check if Antigravity is enabled and should auto-start
+   */
+  export function shouldAutoStart(): boolean {
+    const state = getState()
+    return state.enabled && state.autoStart && state.setupComplete
+  }
+
+  /**
+   * Open a new terminal window to run the proxy setup
+   * This allows the user to interactively log in with Google
+   */
+  export async function openSetupTerminal(port = DEFAULT_PORT): Promise<boolean> {
+    return new Promise((resolve) => {
+      const platform = process.platform
+      const command = `npx ${PROXY_PACKAGE} start`
+      
+      let terminalCmd: string | undefined
+      let terminalArgs: string[] | undefined
+
+      if (platform === "linux") {
+        // Try common Linux terminal emulators
+        // Check for Wayland-native terminals first (for Hyprland)
+        const terminals = [
+          { cmd: "foot", args: ["-e", "bash", "-c", `${command}; echo '\\nPress Enter to close...'; read`] },
+          { cmd: "kitty", args: ["--hold", "-e", "bash", "-c", command] },
+          { cmd: "alacritty", args: ["-e", "bash", "-c", `${command}; echo '\\nPress Enter to close...'; read`] },
+          { cmd: "gnome-terminal", args: ["--", "bash", "-c", `${command}; echo '\\nPress Enter to close...'; read`] },
+          { cmd: "konsole", args: ["-e", "bash", "-c", `${command}; echo '\\nPress Enter to close...'; read`] },
+          { cmd: "xterm", args: ["-hold", "-e", command] },
+        ]
+
+        // Find the first available terminal
+        for (const term of terminals) {
+          try {
+            const { execSync } = require("child_process")
+            execSync(`which ${term.cmd}`, { stdio: "ignore" })
+            terminalCmd = term.cmd
+            terminalArgs = term.args
+            break
+          } catch {
+            continue
+          }
+        }
+
+        if (!terminalCmd || !terminalArgs) {
+          log.error("No terminal emulator found")
+          resolve(false)
+          return
+        }
+      } else if (platform === "darwin") {
+        // macOS - use osascript to open Terminal.app
+        terminalCmd = "osascript"
+        terminalArgs = [
+          "-e",
+          `tell application "Terminal" to do script "${command}"`,
+          "-e",
+          `tell application "Terminal" to activate`,
+        ]
+      } else if (platform === "win32") {
+        // Windows - use start to open cmd
+        terminalCmd = "cmd"
+        terminalArgs = ["/c", "start", "cmd", "/k", command]
+      } else {
+        log.error("Unsupported platform for terminal launch", { platform })
+        resolve(false)
+        return
+      }
+
+      log.info("Opening setup terminal", { terminalCmd, terminalArgs })
+
+      const proc = spawn(terminalCmd, terminalArgs, {
+        detached: true,
+        stdio: "ignore",
+      })
+
+      proc.unref()
+
+      proc.on("error", (error) => {
+        log.error("Failed to open terminal", { error })
+        resolve(false)
+      })
+
+      // Terminal was spawned successfully
+      setTimeout(() => resolve(true), 500)
+    })
+  }
+
+  /**
+   * Start the proxy in the background (for auto-start on app launch)
+   * Returns true if proxy is running (either started or was already running)
+   */
+  export async function autoStart(port = DEFAULT_PORT): Promise<boolean> {
+    if (!shouldAutoStart()) {
+      return false
+    }
+
+    if (await isRunning(port)) {
+      log.info("Proxy already running (auto-start check)", { port })
+      return true
+    }
+
+    // Check if accounts are configured - if not, don't auto-start
+    if (!hasAccounts()) {
+      log.info("No accounts configured, skipping auto-start")
+      return false
+    }
+
+    log.info("Auto-starting antigravity proxy", { port })
+    return await start(port)
+  }
+
+  /**
+   * Complete the setup process
+   */
+  export function completeSetup(port = DEFAULT_PORT): void {
+    saveState({
+      enabled: true,
+      autoStart: true,
+      port,
+      setupComplete: true,
+    })
+  }
+
+  /**
+   * Disable Antigravity
+   */
+  export function disable(): void {
+    saveState({
+      enabled: false,
+      autoStart: false,
+      setupComplete: false,
+    })
   }
 }

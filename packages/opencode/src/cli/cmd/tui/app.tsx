@@ -34,6 +34,7 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { Antigravity } from "@/antigravity"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -260,6 +261,19 @@ function App() {
         })
       }
     })
+
+    // Auto-start Antigravity proxy if configured
+    if (Antigravity.shouldAutoStart()) {
+      Antigravity.autoStart().then((started) => {
+        if (started) {
+          toast.show({
+            message: "Antigravity proxy started",
+            variant: "info",
+            duration: 2000,
+          })
+        }
+      })
+    }
   })
 
   let continued = false

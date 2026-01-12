@@ -13,13 +13,16 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { DialogAntigravitySetup } from "./dialog-antigravity-setup"
+import { Antigravity } from "@/antigravity"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  anthropic: 1,
-  "github-copilot": 2,
-  openai: 3,
-  google: 4,
+  antigravity: 0,
+  opencode: 1,
+  anthropic: 2,
+  "github-copilot": 3,
+  openai: 4,
+  google: 5,
 }
 
 export function createDialogProviderOptions() {
@@ -27,7 +30,30 @@ export function createDialogProviderOptions() {
   const dialog = useDialog()
   const sdk = useSDK()
   const options = createMemo(() => {
-    return pipe(
+    // Add Antigravity as a special provider option at the top
+    const antigravityOption = {
+      title: "Antigravity (Free Claude/Gemini)",
+      value: "antigravity",
+      description: "(Free via Google Cloud Code)",
+      category: "Popular",
+      async onSelect() {
+        // Check if already set up
+        const state = Antigravity.getState()
+        if (state.setupComplete) {
+          // Already set up - check if running, if not start it
+          const running = await Antigravity.isRunning()
+          if (!running) {
+            await Antigravity.start()
+          }
+          dialog.replace(() => <DialogModel providerID="antigravity" />)
+        } else {
+          // First time setup
+          dialog.replace(() => <DialogAntigravitySetup />)
+        }
+      },
+    }
+
+    const providerOptions = pipe(
       sync.data.provider_next.all,
       sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
       map((provider) => ({
@@ -88,6 +114,8 @@ export function createDialogProviderOptions() {
         },
       })),
     )
+
+    return [antigravityOption, ...providerOptions]
   })
   return options
 }
