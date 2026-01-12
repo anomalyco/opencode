@@ -1,4 +1,5 @@
 import z from "zod"
+import path from "path"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
@@ -8,6 +9,8 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { exists } from "fs/promises"
 import { Flag } from "@/flag/flag"
+import { Bus } from "@/bus"
+import { TuiEvent } from "@/cli/cmd/tui/event"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -43,7 +46,28 @@ export namespace Skill {
     const skills: Record<string, Info> = {}
 
     const addSkill = async (match: string) => {
-      const md = await ConfigMarkdown.parse(match)
+      let md
+      try {
+        md = await ConfigMarkdown.parse(match)
+      } catch (err) {
+        if (ConfigMarkdown.FrontmatterError.isInstance(err)) {
+          log.error("failed to parse skill frontmatter", {
+            path: err.data.path,
+            message: err.data.message,
+          })
+          const relativePath = path.relative(Instance.directory, match)
+          Bus.publish(TuiEvent.ToastShow, {
+            title: "Skill Error",
+            message: `Failed to parse ${relativePath}: ${err.data.message.split(":")[0]}`,
+            variant: "error",
+            duration: 8000,
+          })
+        } else {
+          log.error("failed to load skill", { path: match, error: err })
+        }
+        return
+      }
+
       if (!md) {
         return
       }
