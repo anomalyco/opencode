@@ -11,6 +11,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { loadTheme } from "../theme-loader"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -134,6 +135,15 @@ export const RunCommand = cmd({
     }
 
     const execute = async (sdk: OpencodeClient, sessionID: string) => {
+      let theme
+      try {
+        const configResult = await sdk.config.get()
+        const themeName = configResult.data?.theme
+        theme = loadTheme(themeName)
+      } catch {
+        theme = loadTheme()
+      }
+
       const printEvent = (color: string, type: string, title: string) => {
         UI.println(
           color + `|`,
@@ -185,7 +195,7 @@ export const RunCommand = cmd({
               if (outputJsonEvent("text", { part })) continue
               const isPiped = !process.stdout.isTTY
               if (!isPiped) UI.println()
-              process.stdout.write((isPiped ? part.text : UI.markdown(part.text)) + EOL)
+              process.stdout.write((isPiped ? part.text : UI.markdown(part.text, theme)) + EOL)
               if (!isPiped) UI.println()
             }
           }

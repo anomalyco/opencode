@@ -13,6 +13,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
+
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
@@ -25,7 +26,9 @@ import {
   type ScrollAcceleration,
   TextAttributes,
   RGBA,
+  StyledText,
 } from "@opentui/core"
+import { Index } from "solid-js"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
 import { useLocal } from "@tui/context/local"
@@ -73,6 +76,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { renderMarkdownThemedStyled, parseMarkdownSegments } from "@/cli/markdown-renderer"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1280,23 +1284,113 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   )
 }
 
+// ============================================================================
+// Markdown Rendering Components
+// ============================================================================
+
+const LANGS: Record<string, string> = {
+  js: "javascript",
+  ts: "typescript",
+  jsx: "typescript",
+  tsx: "typescript",
+  py: "python",
+  rb: "ruby",
+  sh: "shell",
+  bash: "shell",
+  zsh: "shell",
+  yml: "yaml",
+  md: "markdown",
+}
+
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const tui = useTheme()
+
+  // Parse markdown into segments - use Index to prevent recreation
+  const segments = createMemo(() => parseMarkdownSegments(props.part.text?.trim() ?? ""))
+
   return (
-    <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={syntax()}
-          content={props.part.text.trim()}
-          conceal={ctx.conceal()}
-          fg={theme.text}
-        />
+    <Show when={props.part.text?.trim()}>
+      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0} flexDirection="column">
+        <Index each={segments()}>
+          {(segment) => (
+            <Show
+              when={segment().type === "code"}
+              fallback={<Prose segment={segment() as any} theme={tui.theme} width={ctx.width - 3} />}
+            >
+              <CodeBlock segment={segment() as any} syntax={tui.syntax()} />
+            </Show>
+          )}
+        </Index>
       </box>
     </Show>
+  )
+}
+
+// Render text segments with custom renderer (tables, inline formatting)
+function Prose(props: { segment: { type: "text"; content: string }; theme: any; width: number }) {
+  let el: any
+  const styled = createMemo(() => {
+    if (!props.segment.content) return new StyledText([])
+    const result = renderMarkdownThemedStyled(props.segment.content, props.theme, { cols: props.width })
+    return new StyledText(
+      result.chunks.map((c) => ({
+        __isChunk: true as const,
+        text: c.text,
+        fg: c.fg ? RGBA.fromInts(c.fg.r, c.fg.g, c.fg.b, c.fg.a) : props.theme.text,
+        bg: c.bg ? RGBA.fromInts(c.bg.r, c.bg.g, c.bg.b, c.bg.a) : undefined,
+        attributes: c.attributes,
+      })),
+    )
+  })
+  createEffect(() => {
+    if (el) el.content = styled()
+  })
+  return <text ref={el} />
+}
+
+// Render code blocks with tree-sitter highlighting
+function CodeBlock(props: { segment: { type: "code"; content: string; language: string }; syntax: any }) {
+  const ctx = use()
+  const lang = () => LANGS[props.segment.language] || props.segment.language
+
+  return (
+    <box paddingLeft={2}>
+      <code
+        filetype={lang()}
+        content={props.segment.content}
+        syntaxStyle={props.syntax}
+        drawUnstyledText={true}
+        streaming={false}
+        conceal={ctx.conceal()}
+      />
+    </box>
+  )
+}
+
+// Prose and Diff components kept for potential future use with stable rendering
+function Diff(props: { content: string; theme: ReturnType<typeof useTheme>["theme"] }) {
+  let el: any
+  const styled = createMemo(() => {
+    const chunks = props.content.split("\n").map((line) => {
+      const t = line.trim()
+      const fg = t.startsWith("+")
+        ? props.theme.diffAdded
+        : t.startsWith("-")
+          ? props.theme.diffRemoved
+          : props.theme.markdownCodeBlock
+      return { __isChunk: true as const, text: "  " + line + "\n", fg }
+    })
+    return new StyledText(chunks)
+  })
+  createEffect(() => {
+    if (el) el.content = styled()
+  })
+  // Don't pass fg prop - chunks already have colors
+  return (
+    <box paddingLeft={2}>
+      <text ref={el} />
+    </box>
   )
 }
 
