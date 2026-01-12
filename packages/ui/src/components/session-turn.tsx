@@ -5,13 +5,14 @@ import {
   type PermissionRequest,
   TextPart,
   ToolPart,
+  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { DiffChanges } from "./diff-changes"
 import { Typewriter } from "./typewriter"
@@ -21,6 +22,8 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
+import { Tooltip } from "./tooltip"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
@@ -328,6 +331,15 @@ export function SessionTurn(
   const hasDiffs = createMemo(() => message()?.summary?.diffs?.length)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
 
+  const [responseCopied, setResponseCopied] = createSignal(false)
+  const handleCopyResponse = async () => {
+    const content = response()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setResponseCopied(true)
+    setTimeout(() => setResponseCopied(false), 2000)
+  }
+
   function duration() {
     const msg = message()
     if (!msg) return ""
@@ -362,6 +374,7 @@ export function SessionTurn(
     diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
+    userMessageHovered: false,
   })
 
   createEffect(
@@ -462,6 +475,8 @@ export function SessionTurn(
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
                 style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
+                onMouseEnter={() => setStore("userMessageHovered", true)}
+                onMouseLeave={() => setStore("userMessageHovered", false)}
               >
                 <Switch>
                   <Match when={isShellMode()}>
@@ -480,6 +495,15 @@ export function SessionTurn(
                               <h1>{msg().summary?.title}</h1>
                             </Match>
                           </Switch>
+                        </div>
+                        <div data-slot="session-turn-user-badges" data-visible={store.userMessageHovered}>
+                          <Show when={(msg() as UserMessage).agent}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
+                          </Show>
+                          <Show when={(msg() as UserMessage).model?.modelID}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).model?.modelID}</span>
+                          </Show>
+                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
                         </div>
                       </div>
                     </div>
@@ -556,6 +580,15 @@ export function SessionTurn(
                     {/* Response */}
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
+                        <div data-slot="session-turn-summary-copy">
+                          <Tooltip value={responseCopied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
+                            <IconButton
+                              icon={responseCopied() ? "check" : "copy"}
+                              variant="secondary"
+                              onClick={handleCopyResponse}
+                            />
+                          </Tooltip>
+                        </div>
                         <div data-slot="session-turn-summary-header">
                           <h2 data-slot="session-turn-summary-title">Response</h2>
                           <Markdown

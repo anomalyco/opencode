@@ -33,18 +33,9 @@ const Loading = () => <div class="size-full flex items-center justify-center tex
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; port?: number; serverReady?: boolean }
+    __OPENCODE__?: { updaterEnabled?: boolean; port?: number; serverReady?: boolean; serverUrl?: string }
   }
 }
-
-const defaultServerUrl = iife(() => {
-  if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
-  if (window.__OPENCODE__) return `http://127.0.0.1:${window.__OPENCODE__.port}`
-  if (import.meta.env.DEV)
-    return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
-
-  return window.location.origin
-})
 
 export function AppBaseProviders(props: ParentProps) {
   return (
@@ -75,6 +66,16 @@ function ServerKey(props: ParentProps) {
 }
 
 export function AppInterface() {
+  const defaultServerUrl = iife(() => {
+    if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+    if (window.__OPENCODE__?.serverUrl) return window.__OPENCODE__.serverUrl
+    if (window.__OPENCODE__?.port) return `http://127.0.0.1:${window.__OPENCODE__.port}`
+    if (import.meta.env.DEV)
+      return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
+
+    return window.location.origin
+  })
+
   return (
     <ServerProvider defaultUrl={defaultServerUrl}>
       <ServerKey>

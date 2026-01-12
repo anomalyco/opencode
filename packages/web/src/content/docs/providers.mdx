@@ -6,7 +6,7 @@ description: Using any LLM provider in OpenCode.
 import config from "../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
+OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
@@ -80,8 +80,7 @@ If you are new, we recommend starting with OpenCode Zen.
    /models
    ```
 
-It works like any other provider in OpenCode. And is completely optional to use
-it.
+It works like any other provider in OpenCode and is completely optional to use.
 
 ---
 
@@ -229,7 +228,7 @@ We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-p
    └
    ```
 
-3. Now all the the Anthropic models should be available when you use the `/models` command.
+3. Now all the Anthropic models should be available when you use the `/models` command.
 
    ```txt
    /models
@@ -1074,28 +1073,34 @@ To use Ollama Cloud with OpenCode:
 
 ### OpenAI
 
-1. Head over to the [OpenAI Platform console](https://platform.openai.com/api-keys), click **Create new secret key**, and copy the key.
+We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
-2. Run the `/connect` command and search for OpenAI.
+1. Once you've signed up, run the `/connect` command and select OpenAI.
 
    ```txt
    /connect
    ```
 
-3. Enter the API key for the provider.
+2. Here you can select the **ChatGPT Plus/Pro** option and it'll open your browser
+   and ask you to authenticate.
 
    ```txt
-   ┌ API key
+   ┌ Select auth method
    │
-   │
-   └ enter
+   │ ChatGPT Plus/Pro
+   │ Manually enter API Key
+   └
    ```
 
-4. Run the `/models` command to select the one you want.
+3. Now all the OpenAI models should be available when you use the `/models` command.
 
    ```txt
    /models
    ```
+
+##### Using API keys
+
+If you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
 
 ---
 
