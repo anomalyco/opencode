@@ -38,6 +38,8 @@ import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
+import { Tooltip } from "./tooltip"
+import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 
 interface Diagnostic {
@@ -278,6 +280,7 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
   const dialog = useDialog()
+  const [copied, setCopied] = createSignal(false)
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
@@ -307,6 +310,14 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
   }
 
+  const handleCopy = async () => {
+    const content = text()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div data-component="user-message">
       <Show when={attachments().length > 0}>
@@ -316,7 +327,6 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               <div
                 data-slot="user-message-attachment"
                 data-type={file.mime.startsWith("image/") ? "image" : "file"}
-                data-clickable={file.mime.startsWith("image/") && !!file.url}
                 onClick={() => {
                   if (file.mime.startsWith("image/") && file.url) {
                     openImagePreview(file.url, file.filename)
@@ -341,6 +351,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       <Show when={text()}>
         <div data-slot="user-message-text">
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          <div data-slot="user-message-copy-wrapper">
+            <Tooltip value={copied() ? "Copied!" : "Copy"} placement="top" gutter={8}>
+              <IconButton icon={copied() ? "check" : "copy"} variant="secondary" onClick={handleCopy} />
+            </Tooltip>
+          </div>
         </div>
       </Show>
     </div>

@@ -31,6 +31,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -644,6 +645,15 @@ export default function Page() {
           providerID: model.provider.id,
         })
       },
+    },
+    {
+      id: "session.fork",
+      title: "Fork from message",
+      description: "Create a new session from a previous message",
+      category: "Session",
+      slash: "fork",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: () => dialog.show(() => <DialogFork />),
     },
   ])
 
