@@ -934,6 +934,7 @@ export namespace Server {
             "json",
             z.object({
               title: z.string().optional(),
+              rules: z.string().optional(),
               time: z
                 .object({
                   archived: z.number().optional(),
@@ -948,6 +949,9 @@ export namespace Server {
             const updatedSession = await Session.update(sessionID, (session) => {
               if (updates.title !== undefined) {
                 session.title = updates.title
+              }
+              if (updates.rules !== undefined) {
+                session.rules = updates.rules || undefined
               }
               if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
             })
@@ -1427,10 +1431,19 @@ export namespace Server {
             c.status(200)
             c.header("Content-Type", "application/json")
             return stream(c, async (stream) => {
-              const sessionID = c.req.valid("param").sessionID
-              const body = c.req.valid("json")
-              const msg = await SessionPrompt.prompt({ ...body, sessionID })
-              stream.write(JSON.stringify(msg))
+              try {
+                const sessionID = c.req.valid("param").sessionID
+                const body = c.req.valid("json")
+                const msg = await SessionPrompt.prompt({ ...body, sessionID })
+                stream.write(JSON.stringify(msg))
+              } catch (err) {
+                log.error("session.prompt stream error", { error: err })
+                const errorObj =
+                  err instanceof NamedError
+                    ? err.toObject()
+                    : new NamedError.Unknown({ message: err instanceof Error ? err.message : String(err) }).toObject()
+                stream.write(JSON.stringify({ error: errorObj }))
+              }
             })
           },
         )

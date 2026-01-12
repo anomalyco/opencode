@@ -2,9 +2,21 @@ import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 
-const LOGO_LEFT = [`                   `, `█▀▀█ █▀▀█ █▀▀█ █▀▀▄`, `█░░█ █░░█ █▀▀▀ █░░█`, `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀  ▀`]
+// CLOSE in muted, CODE in bold
+// Letters: C L O S E | C O D E
+const LOGO_LEFT = [
+  `                     `,
+  `█▀▀▀ █░░░ █▀▀█ █▀▀▀ █▀▀▀`,
+  `█░░░ █░░░ █░░█ ▀▀▀█ █▀▀▀`,
+  `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`
+]
 
-const LOGO_RIGHT = [`             ▄     `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`, `█░░░ █░░█ █░░█ █▀▀▀`, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`]
+const LOGO_RIGHT = [
+  `                 `,
+  `█▀▀▀ █▀▀█ █▀▀▄ █▀▀▀`,
+  `█░░░ █░░█ █░░█ █▀▀▀`,
+  `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`
+]
 
 export function Logo() {
   const { theme } = useTheme()

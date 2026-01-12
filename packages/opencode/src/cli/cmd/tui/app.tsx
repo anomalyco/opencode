@@ -221,20 +221,20 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle("ClosedCode")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle("ClosedCode")
         return
       }
 
       // Truncate title to 40 chars max
       const title = session.title.length > 40 ? session.title.slice(0, 37) + "..." : session.title
-      renderer.setTerminalTitle(`OC | ${title}`)
+      renderer.setTerminalTitle(`CC | ${title}`)
     }
   })
 
@@ -271,6 +271,20 @@ function App() {
     if (match) {
       continued = true
       route.navigate({ type: "session", sessionID: match })
+    }
+  })
+
+  // Listen for model switch events from the model_switch tool
+  sdk.event.listen((e) => {
+    const event = e.details as { type: string; properties: Record<string, unknown> }
+    if (event.type === "model.switch") {
+      const { providerID, modelID } = event.properties as { providerID: string; modelID: string }
+      local.model.set({ providerID, modelID }, { recent: true })
+      toast.show({
+        message: `Switched to ${providerID}/${modelID}`,
+        variant: "info",
+        duration: 3000,
+      })
     }
   })
 

@@ -179,13 +179,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
-        return (
-          getFirstValidModel(
-            () => modelStore.model[a.name],
-            () => a.model,
-            fallbackModel,
-          ) ?? undefined
-        )
+        return getFirstValidModel(
+          () => modelStore.model[a.name],
+          () => a.model,
+          fallbackModel,
+        ) ?? undefined
       })
 
       return {

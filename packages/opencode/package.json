@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.1.14",
-  "name": "opencode",
+  "name": "closedcode",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -18,7 +18,7 @@
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "closedcode": "./bin/closedcode"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -96,6 +96,7 @@
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
+    "express": "5.2.1",
     "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",

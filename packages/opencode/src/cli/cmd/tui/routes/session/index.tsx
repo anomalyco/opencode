@@ -57,6 +57,7 @@ import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
+import { DialogSessionRules } from "../../component/dialog-session-rules"
 import { Sidebar } from "./sidebar"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
@@ -91,6 +92,7 @@ const context = createContext<{
   sessionID: string
   conceal: () => boolean
   showThinking: () => boolean
+  hideAGThinking: () => boolean
   showTimestamps: () => boolean
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
@@ -140,6 +142,7 @@ export function Session() {
   const [sidebarOpen, setSidebarOpen] = createSignal(false)
   const [conceal, setConceal] = createSignal(true)
   const [showThinking, setShowThinking] = kv.signal("thinking_visibility", true)
+  const [hideAGThinking, setHideAGThinking] = kv.signal("hide_ag_thinking", false)
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
@@ -310,6 +313,15 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         dialog.replace(() => <DialogSessionRename session={route.sessionID} />)
+      },
+    },
+    {
+      title: "Session rules",
+      value: "session.rules",
+      keybind: "session_rules",
+      category: "Session",
+      onSelect: (dialog) => {
+        dialog.replace(() => <DialogSessionRules session={route.sessionID} />)
       },
     },
     {
@@ -488,6 +500,15 @@ export function Session() {
       category: "Session",
       onSelect: (dialog) => {
         setShowThinking((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: hideAGThinking() ? "Show AG thinking" : "Hide AG thinking",
+      value: "session.toggle.ag_thinking",
+      category: "Session",
+      onSelect: (dialog) => {
+        setHideAGThinking((prev) => !prev)
         dialog.clear()
       },
     },
@@ -780,7 +801,7 @@ export function Session() {
       value: "session.child.next",
       keybind: "session_child_cycle",
       category: "Session",
-      disabled: true,
+      disabled: children().length <= 1,
       onSelect: (dialog) => {
         moveChild(1)
         dialog.clear()
@@ -791,7 +812,7 @@ export function Session() {
       value: "session.child.previous",
       keybind: "session_child_cycle_reverse",
       category: "Session",
-      disabled: true,
+      disabled: children().length <= 1,
       onSelect: (dialog) => {
         moveChild(-1)
         dialog.clear()
@@ -802,7 +823,7 @@ export function Session() {
       value: "session.parent",
       keybind: "session_parent",
       category: "Session",
-      disabled: true,
+      disabled: !session()?.parentID,
       onSelect: (dialog) => {
         const parentID = session()?.parentID
         if (parentID) {
@@ -878,6 +899,7 @@ export function Session() {
         sessionID: route.sessionID,
         conceal,
         showThinking,
+        hideAGThinking,
         showTimestamps,
         showDetails,
         diffWrapMode,
@@ -1282,20 +1304,70 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 
 function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
   const ctx = use()
-  const { theme, syntax } = useTheme()
+  const { theme, syntax, subtleSyntax } = useTheme()
+  
+  // Parse <thinking> tags from text content (for providers that embed thinking in text)
+  // Handles both complete and streaming (unclosed) thinking blocks
+  const parsedContent = createMemo(() => {
+    const text = props.part.text.trim()
+    
+    // Check for complete thinking block first
+    const completeMatch = text.match(/<thinking>([\s\S]*?)<\/thinking>/i)
+    if (completeMatch) {
+      const thinking = completeMatch[1].trim()
+      const mainText = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim()
+      return { thinking, text: mainText, isStreaming: false }
+    }
+    
+    // Check for streaming/unclosed thinking block
+    const streamingMatch = text.match(/<thinking>([\s\S]*)$/i)
+    if (streamingMatch) {
+      const thinking = streamingMatch[1].trim()
+      const mainText = text.replace(/<thinking>[\s\S]*$/gi, '').trim()
+      return { thinking, text: mainText, isStreaming: true }
+    }
+    
+    return { thinking: null, text, isStreaming: false }
+  })
+  
   return (
-    <Show when={props.part.text.trim()}>
-      <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={syntax()}
-          content={props.part.text.trim()}
-          conceal={ctx.conceal()}
-          fg={theme.text}
-        />
-      </box>
+    <Show when={parsedContent().thinking || parsedContent().text}>
+      <>
+        <Show when={parsedContent().thinking && ctx.showThinking() && !ctx.hideAGThinking()}>
+          <box
+            id={"thinking-" + props.part.id}
+            paddingLeft={2}
+            marginTop={1}
+            flexDirection="column"
+            border={["left"]}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.backgroundElement}
+          >
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={subtleSyntax()}
+              content={"_Thinking" + (parsedContent().isStreaming ? "..._\n" : ":_\n") + parsedContent().thinking}
+              conceal={ctx.conceal()}
+              fg={theme.textMuted}
+            />
+          </box>
+        </Show>
+        <Show when={parsedContent().text}>
+          <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={syntax()}
+              content={parsedContent().text}
+              conceal={ctx.conceal()}
+              fg={theme.text}
+            />
+          </box>
+        </Show>
+      </>
     </Show>
   )
 }

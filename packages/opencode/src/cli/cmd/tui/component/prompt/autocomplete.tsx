@@ -361,6 +361,11 @@ export function Autocomplete(props: {
           onSelect: () => command.trigger("session.rename"),
         },
         {
+          display: "/rules",
+          description: "set session rules",
+          onSelect: () => command.trigger("session.rules"),
+        },
+        {
           display: "/copy",
           description: "copy session transcript to clipboard",
           onSelect: () => command.trigger("session.copy"),
@@ -402,6 +407,11 @@ export function Autocomplete(props: {
         aliases: ["/clear"],
         description: "create a new session",
         onSelect: () => command.trigger("session.new"),
+      },
+      {
+        display: "/agthinking",
+        description: "toggle AG thinking visibility",
+        onSelect: () => command.trigger("session.toggle.ag_thinking"),
       },
       {
         display: "/models",

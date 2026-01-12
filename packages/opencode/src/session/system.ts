@@ -135,4 +135,9 @@ export namespace SystemPrompt {
     )
     return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
   }
+
+  export function session(rules: string | undefined) {
+    if (!rules || !rules.trim()) return []
+    return ["Session rules:\n" + rules.trim()]
+  }
 }

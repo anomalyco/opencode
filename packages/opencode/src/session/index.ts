@@ -64,6 +64,7 @@ export namespace Session {
         archived: z.number().optional(),
       }),
       permission: PermissionNext.Ruleset.optional(),
+      rules: z.string().optional(),
       revert: z
         .object({
           messageID: z.string(),

@@ -228,7 +228,11 @@ export namespace Agent {
   })
 
   export async function get(agent: string) {
-    return state().then((x) => x[agent])
+    const agents = await state()
+    // Direct key lookup first, then by display name
+    const result = agents[agent] ?? Object.values(agents).find((a) => a.name === agent)
+    if (!result) throw new Error(`Agent not found: ${agent}`)
+    return result
   }
 
   export async function list() {
@@ -241,7 +245,13 @@ export namespace Agent {
   }
 
   export async function defaultAgent() {
-    return state().then((x) => Object.keys(x)[0])
+    const cfg = await Config.get()
+    const agents = await state()
+    // Use configured default_agent if it exists, otherwise fall back to "build"
+    if (cfg.default_agent && agents[cfg.default_agent]) {
+      return cfg.default_agent
+    }
+    return "build"
   }
 
   export async function generate(input: { description: string; model?: { providerID: string; modelID: string } }) {

@@ -162,9 +162,17 @@ export const createClient = (config: Config = {}): Client => {
         case "arrayBuffer":
         case "blob":
         case "formData":
-        case "json":
         case "text":
           data = await response[parseAs]()
+          break
+        case "json":
+          try {
+            data = await response.json()
+          } catch (e) {
+            // Handle empty or invalid JSON response
+            const text = await response.clone().text().catch(() => "")
+            throw new Error(`Invalid JSON response: ${text || "(empty body)"}`)
+          }
           break
         case "stream":
           return opts.responseStyle === "data"
