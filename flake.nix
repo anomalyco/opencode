@@ -39,17 +39,16 @@
           cpu = builtins.elemAt parts 2;
         };
 
-      defaultNodeModules = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       hashesFile = "${./nix}/hashes.json";
       hashesData =
         if builtins.pathExists hashesFile then builtins.fromJSON (builtins.readFile hashesFile) else { };
-      # Lookup hash: supports per-system ({system: hash}) or single hash
+      # Lookup hash: supports per-system ({system: hash}) or legacy single hash
       nodeModulesHashFor =
         system:
         if builtins.isAttrs hashesData.nodeModules then
-          hashesData.nodeModules.${system} or defaultNodeModules
+          hashesData.nodeModules.${system}
         else
-          hashesData.nodeModules or defaultNodeModules;
+          hashesData.nodeModules;
       modelsDev = forEachSystem (
         system:
         let
