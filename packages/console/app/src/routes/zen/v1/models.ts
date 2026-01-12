@@ -7,7 +7,7 @@ import { ZenData } from "@opencode-ai/console-core/model.js"
 
 export async function OPTIONS(input: APIEvent) {
   return new Response(null, {
-    status: 200,
+    status: 204,
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
