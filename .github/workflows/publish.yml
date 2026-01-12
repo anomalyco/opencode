@@ -92,7 +92,7 @@ jobs:
 
   publish-tauri:
     needs: publish
-    continue-on-error: true
+    continue-on-error: false
     strategy:
       fail-fast: false
       matrix:
