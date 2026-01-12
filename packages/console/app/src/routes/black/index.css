@@ -131,6 +131,188 @@
         text-decoration: none;
       }
 
+      [data-slot="pricing"] {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        width: 100%;
+        max-width: 540px;
+        padding: 0 20px;
+
+        @media (min-width: 768px) {
+          padding: 0;
+        }
+      }
+
+      [data-slot="pricing-card"] {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.17);
+        border-radius: 4px;
+        text-decoration: none;
+        transition: border-color 0.15s ease;
+        background: transparent;
+        cursor: pointer;
+        text-align: left;
+
+        &:hover {
+          border-color: rgba(255, 255, 255, 0.35);
+        }
+
+        [data-slot="icon"] {
+          color: rgba(255, 255, 255, 0.59);
+        }
+
+        [data-slot="price"] {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: baseline;
+          gap: 8px;
+        }
+
+        [data-slot="amount"] {
+          color: rgba(255, 255, 255, 0.92);
+          font-size: 24px;
+          font-weight: 500;
+        }
+
+        [data-slot="period"] {
+          color: rgba(255, 255, 255, 0.59);
+          font-size: 14px;
+        }
+
+        [data-slot="multiplier"] {
+          color: rgba(255, 255, 255, 0.39);
+          font-size: 14px;
+
+          &::before {
+            content: "·";
+            margin-right: 8px;
+          }
+        }
+      }
+
+      [data-slot="selected-plan"] {
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+        width: fit-content;
+        max-width: calc(100% - 40px);
+        margin: 0 auto;
+      }
+
+      [data-slot="selected-card"] {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.17);
+        border-radius: 4px;
+        width: fit-content;
+
+        [data-slot="icon"] {
+          color: rgba(255, 255, 255, 0.59);
+        }
+
+        [data-slot="price"] {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: baseline;
+          gap: 8px;
+        }
+
+        [data-slot="amount"] {
+          color: rgba(255, 255, 255, 0.92);
+          font-size: 24px;
+          font-weight: 500;
+        }
+
+        [data-slot="period"] {
+          color: rgba(255, 255, 255, 0.59);
+          font-size: 14px;
+        }
+
+        [data-slot="multiplier"] {
+          color: rgba(255, 255, 255, 0.39);
+          font-size: 14px;
+
+          &::before {
+            content: "·";
+            margin-right: 8px;
+          }
+        }
+
+        [data-slot="terms"] {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          text-align: left;
+
+          li {
+            color: rgba(255, 255, 255, 0.59);
+            font-size: 13px;
+            line-height: 1.5;
+            padding-left: 16px;
+            position: relative;
+            white-space: nowrap;
+
+            &::before {
+              content: "▪";
+              position: absolute;
+              left: 0;
+              color: rgba(255, 255, 255, 0.39);
+            }
+          }
+        }
+
+        [data-slot="actions"] {
+          display: flex;
+          gap: 16px;
+          margin-top: 8px;
+
+          button,
+          a {
+            flex: 1;
+            display: inline-flex;
+            height: 48px;
+            padding: 0 16px;
+            justify-content: center;
+            align-items: center;
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 16px;
+            font-weight: 400;
+            text-decoration: none;
+            cursor: pointer;
+          }
+
+          [data-slot="cancel"] {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.17);
+            color: rgba(255, 255, 255, 0.92);
+
+            &:hover {
+              border-color: rgba(255, 255, 255, 0.35);
+            }
+          }
+
+          [data-slot="continue"] {
+            background: rgba(255, 255, 255, 0.17);
+            border: 1px solid rgba(255, 255, 255, 0.17);
+            color: rgba(255, 255, 255, 0.59);
+
+            &:hover {
+              background: rgba(255, 255, 255, 0.25);
+            }
+          }
+        }
+      }
+
       [data-slot="fine-print"] {
         color: rgba(255, 255, 255, 0.39);
         text-align: center;
@@ -138,6 +320,12 @@
         font-style: normal;
         font-weight: 400;
         line-height: 160%; /* 20.8px */
+        font-style: italic;
+
+        a {
+          color: rgba(255, 255, 255, 0.39);
+          text-decoration: underline;
+        }
       }
     }
   }
