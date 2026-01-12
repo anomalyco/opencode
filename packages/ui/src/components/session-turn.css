@@ -28,6 +28,11 @@
     min-width: 0;
     gap: 28px;
     overflow-anchor: none;
+
+    &:hover [data-slot="session-turn-user-badges"] {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
   [data-slot="session-turn-user-badges"] {
@@ -38,25 +43,21 @@
     opacity: 0;
     transition: opacity 0.15s ease;
     pointer-events: none;
-
-    &[data-visible="true"] {
-      opacity: 1;
-      pointer-events: auto;
-    }
   }
 
   [data-slot="session-turn-badge"] {
     display: inline-flex;
     align-items: center;
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     font-family: var(--font-family-mono);
     font-size: var(--font-size-x-small);
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-normal);
     white-space: nowrap;
-    color: var(--text-base);
-    background: var(--surface-raised-base);
+    color: var(--smoke-dark-11);
+    background: var(--smoke-dark-5);
+    box-shadow: var(--shadow-md);
   }
 
   [data-slot="session-turn-sticky-title"] {
