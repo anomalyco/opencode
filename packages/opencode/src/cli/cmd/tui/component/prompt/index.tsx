@@ -217,7 +217,7 @@ export function Prompt(props: PromptProps) {
           if (store.interrupt >= 2) {
             sdk.client.session.abort({
               sessionID: props.sessionID,
-            })
+            }).catch(() => {})
             setStore("interrupt", 0)
           }
           dialog.clear()
