@@ -117,6 +117,10 @@ export function DialogSelectServer() {
     select(value, true)
   }
 
+  async function handleRemove(url: string) {
+      server.remove(url)
+  }
+
   return (
     <Dialog title="Servers" description="Switch which OpenCode server this app connects to.">
       <div class="flex flex-col gap-4 pb-4">
@@ -151,10 +155,10 @@ export function DialogSelectServer() {
                 <IconButton
                   icon="circle-x"
                   variant="ghost"
-                  class="opacity-0 group-hover/item:opacity-100 transition-opacity shrink-0"
+                  class="bg-transparent transition-opacity shrink-0 hover:scale-110"
                   onClick={(e) => {
                     e.stopPropagation()
-                    server.remove(i)
+                    handleRemove(i)
                   }}
                 />
               </Show>
