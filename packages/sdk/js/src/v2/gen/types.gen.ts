@@ -1767,6 +1767,14 @@ export type ToolListItem = {
 
 export type ToolList = Array<ToolListItem>
 
+export type ToolExecuteResult = {
+  title: string
+  output: string
+  metadata?: {
+    [key: string]: unknown
+  }
+}
+
 export type Path = {
   home: string
   state: string
@@ -2480,6 +2488,68 @@ export type ToolListResponses = {
 }
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
+
+export type ToolExecuteData = {
+  body?: {
+    /**
+     * Session ID for context
+     */
+    sessionID: string
+    /**
+     * Message ID for context
+     */
+    messageID: string
+    /**
+     * Provider ID for tool filtering
+     */
+    providerID: string
+    /**
+     * Tool ID to execute
+     */
+    toolID: string
+    /**
+     * Tool arguments
+     */
+    args: {
+      [key: string]: unknown
+    }
+    /**
+     * Agent name (optional)
+     */
+    agent?: string
+    /**
+     * Tool call ID (optional)
+     */
+    callID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/tool/execute"
+}
+
+export type ToolExecuteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ToolExecuteError = ToolExecuteErrors[keyof ToolExecuteErrors]
+
+export type ToolExecuteResponses = {
+  /**
+   * Tool execution result
+   */
+  200: ToolExecuteResult
+}
+
+export type ToolExecuteResponse = ToolExecuteResponses[keyof ToolExecuteResponses]
 
 export type InstanceDisposeData = {
   body?: never

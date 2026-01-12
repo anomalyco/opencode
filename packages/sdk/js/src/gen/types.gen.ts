@@ -1996,6 +1996,52 @@ export type ToolListResponses = {
 
 export type ToolListResponse = ToolListResponses[keyof ToolListResponses]
 
+export type ToolExecuteData = {
+  body?: {
+    agent?: string
+    args?: {
+      [key: string]: unknown
+    }
+    messageID?: string
+    providerID?: string
+    sessionID?: string
+    toolID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/experimental/tool/execute"
+}
+
+export type ToolExecuteErrors = {
+  /**
+   * Bad request
+   */
+  400: string
+  /**
+   * Tool not found
+   */
+  404: string
+  /**
+   * Tool execution failed
+   */
+  500: string
+}
+
+export type ToolExecuteError = ToolExecuteErrors[keyof ToolExecuteErrors]
+
+export type ToolExecuteResponses = {
+  /**
+   * Tool execution result
+   */
+  200: {
+    output?: string
+  }
+}
+
+export type ToolExecuteResponse = ToolExecuteResponses[keyof ToolExecuteResponses]
+
 export type InstanceDisposeData = {
   body?: never
   path?: never
