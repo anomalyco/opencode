@@ -16,6 +16,7 @@ use tauri::{
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::StoreExt;
 use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
@@ -301,6 +302,7 @@ pub fn run() {
                 .unwrap_or(LogicalSize::new(1920, 1080));
 
             // Create window immediately with serverReady = false
+            #[allow(unused_mut)]
             let mut window_builder =
                 WebviewWindow::builder(&app, "main", WebviewUrl::App("/".into()))
                     .title("OpenCode")
