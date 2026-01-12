@@ -29,15 +29,22 @@
       };
 
       # Extract OS and CPU from bunTarget (e.g., "bun-linux-x64" -> {os="linux"; cpu="x64"})
+      # Returns {os="*"; cpu="*"} as fallback for unknown systems
       parseBunTarget =
         target:
-        let
-          parts = lib.splitString "-" target;
-        in
-        {
-          os = builtins.elemAt parts 1;
-          cpu = builtins.elemAt parts 2;
-        };
+        if target == null then
+          {
+            os = "*";
+            cpu = "*";
+          }
+        else
+          let
+            parts = lib.splitString "-" target;
+          in
+          {
+            os = builtins.elemAt parts 1;
+            cpu = builtins.elemAt parts 2;
+          };
 
       defaultNodeModules = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       hashesFile = "${./nix}/hashes.json";
@@ -81,7 +88,7 @@
         system:
         let
           pkgs = pkgsFor system;
-          bunPlatform = parseBunTarget bunTarget.${system};
+          bunPlatform = parseBunTarget (bunTarget.${system} or null);
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = nodeModulesHashFor system;
             bunCpu = bunPlatform.cpu;
