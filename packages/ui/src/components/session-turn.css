@@ -40,6 +40,8 @@
     right: 0;
     display: flex;
     gap: 6px;
+    padding-left: 16px;
+    background: linear-gradient(to right, transparent, var(--background-stronger) 12px);
     opacity: 0;
     transition: opacity 0.15s ease;
     pointer-events: none;
@@ -49,15 +51,14 @@
     display: inline-flex;
     align-items: center;
     padding: 2px 6px;
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
     font-family: var(--font-family-mono);
     font-size: var(--font-size-x-small);
     font-weight: var(--font-weight-medium);
     line-height: var(--line-height-normal);
     white-space: nowrap;
-    color: var(--smoke-dark-11);
-    background: var(--smoke-dark-5);
-    box-shadow: var(--shadow-md);
+    color: var(--text-base);
+    background: var(--surface-raised-base);
   }
 
   [data-slot="session-turn-sticky-title"] {
