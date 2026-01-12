@@ -23,6 +23,8 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { HoverCard } from "@opencode-ai/ui/hover-card"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -55,6 +57,8 @@ import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { DialogEditProject } from "@/components/dialog-edit-project"
+import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
@@ -814,20 +818,24 @@ export default function Layout(props: ParentProps) {
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
-      <div class={`relative size-10 shrink-0 ${props.class ?? ""}`}>
-        <Avatar
-          fallback={name()}
-          src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
-          {...getAvatarColors(props.project.icon?.color)}
-          class="size-full rounded-lg"
-          style={
-            notifications().length > 0 && props.notify ? { "-webkit-mask-image": mask, "mask-image": mask } : undefined
-          }
-        />
+      <div class={`relative size-8 shrink-0 rounded-sm ${props.class ?? ""}`}>
+        <div class="size-full rounded-sm overflow-clip">
+          <Avatar
+            fallback={name()}
+            src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.url}
+            {...getAvatarColors(props.project.icon?.color)}
+            class="size-full rounded-sm"
+            style={
+              notifications().length > 0 && props.notify
+                ? { "-webkit-mask-image": mask, "mask-image": mask }
+                : undefined
+            }
+          />
+        </div>
         <Show when={notifications().length > 0 && props.notify}>
           <div
             classList={{
-              "absolute -top-0.5 -right-0.5 size-2 rounded-full": true,
+              "absolute -top-px -right-px size-2 rounded-full z-10": true,
               "bg-icon-critical-base": hasError(),
               "bg-text-interactive-base": !hasError(),
             }}
@@ -837,7 +845,7 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const SessionItem = (props: { session: Session; slug: string; mobile?: boolean }): JSX.Element => {
+  const SessionItem = (props: { session: Session; slug: string; mobile?: boolean; dense?: boolean }): JSX.Element => {
     const notification = useNotification()
     const notifications = createMemo(() => notification.session.unseen(props.session.id))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
@@ -859,47 +867,62 @@ export default function Layout(props: ParentProps) {
       return status?.type === "busy" || status?.type === "retry"
     })
 
+    const tint = createMemo(() => {
+      const messages = sessionStore.message[props.session.id]
+      if (!messages) return undefined
+      const user = messages
+        .slice()
+        .reverse()
+        .find((m) => m.role === "user")
+      if (!user?.agent) return undefined
+
+      const agent = sessionStore.agent.find((a) => a.name === user.agent)
+      return agent?.color
+    })
+
     return (
       <div
         data-session-id={props.session.id}
-        class="group/session relative w-full rounded-md cursor-default transition-colors
+        class="group/session relative w-full rounded-md cursor-default transition-colors px-3
                hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
       >
         <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
           <A
             href={`${props.slug}/session/${props.session.id}`}
-            class="flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1 transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7"
+            class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
             onMouseEnter={() => prefetchSession(props.session, "high")}
             onFocus={() => prefetchSession(props.session, "high")}
           >
-            <span
-              classList={{
-                "text-14-regular text-text-strong overflow-hidden text-ellipsis truncate": true,
-                "animate-pulse": isWorking(),
-              }}
-            >
-              {props.session.title}
-            </span>
-            <div class="shrink-0 flex items-center gap-2">
-              <Switch>
-                <Match when={isWorking()}>
-                  <Spinner class="size-2.5" />
-                </Match>
-                <Match when={hasPermissions()}>
-                  <div class="size-1.5 rounded-full bg-surface-warning-strong" />
-                </Match>
-                <Match when={hasError()}>
-                  <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
-                </Match>
-                <Match when={notifications().length > 0}>
-                  <div class="size-1.5 rounded-full bg-text-interactive-base" />
-                </Match>
-              </Switch>
+            <div class="flex items-center gap-1 w-full">
+              <div
+                class="shrink-0 size-6 flex items-center justify-center"
+                style={{ color: tint() ?? "var(--icon-interactive-base)" }}
+              >
+                <Switch>
+                  <Match when={isWorking()}>
+                    <Spinner class="size-[15px]" />
+                  </Match>
+                  <Match when={hasPermissions()}>
+                    <div class="size-1.5 rounded-full bg-surface-warning-strong" />
+                  </Match>
+                  <Match when={hasError()}>
+                    <div class="size-1.5 rounded-full bg-text-diff-delete-base" />
+                  </Match>
+                  <Match when={notifications().length > 0}>
+                    <div class="size-1.5 rounded-full bg-text-interactive-base" />
+                  </Match>
+                </Switch>
+              </div>
+              <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
+                {props.session.title}
+              </span>
               <Show when={props.session.summary}>{(summary) => <DiffChanges changes={summary()} />}</Show>
             </div>
           </A>
         </Tooltip>
-        <div class="hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute top-1 right-1">
+        <div
+          class={`hidden group-hover/session:flex group-active/session:flex group-focus-within/session:flex text-text-base gap-1 items-center absolute ${props.dense ? "top-0.5 right-0.5" : "top-1 right-1"}`}
+        >
           <TooltipKeybind
             placement={props.mobile ? "bottom" : "right"}
             title="Archive session"
@@ -914,26 +937,81 @@ export default function Layout(props: ParentProps) {
 
   const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
-    const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
     const selected = createMemo(() => {
       const current = params.dir ? base64Decode(params.dir) : ""
       return props.project.worktree === current || props.project.sandboxes?.includes(current)
     })
 
+    const workspaces = createMemo(() => workspaceIds(props.project).slice(0, 2))
+    const label = (directory: string) => {
+      const [data] = globalSync.child(directory)
+      const kind = directory === props.project.worktree ? "local" : "sandbox"
+      const name = data.vcs?.branch ?? getFilename(directory)
+      return `${kind} : ${name}`
+    }
+
+    const sessions = (directory: string) => {
+      const [data] = globalSync.child(directory)
+      return data.session
+        .filter((session) => session.directory === data.path.directory)
+        .filter((session) => !session.parentID)
+        .toSorted(sortSessions)
+        .slice(0, 2)
+    }
+
+    const trigger = (
+      <button
+        type="button"
+        classList={{
+          "flex items-center justify-center size-10 p-1 rounded-md border transition-colors cursor-default": true,
+          "bg-surface-base-hover border-icon-strong-base": selected(),
+          "bg-transparent border-transparent hover:bg-surface-base-hover hover:border-border-weak-base": !selected(),
+        }}
+        onClick={() => navigateToProject(props.project.worktree)}
+      >
+        <ProjectIcon project={props.project} notify />
+      </button>
+    )
+
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <Tooltip placement={props.mobile ? "bottom" : "right"} value={name()}>
-          <Button
-            variant="ghost"
-            size="large"
-            class="flex items-center justify-center p-0 size-12 rounded-xl"
-            data-selected={selected()}
-            onClick={() => navigateToProject(props.project.worktree)}
-          >
-            <ProjectIcon project={props.project} notify />
-          </Button>
-        </Tooltip>
+        <HoverCard openDelay={0} closeDelay={0} placement="right-start" gutter={10} trigger={trigger}>
+          <div class="-m-3 flex flex-col w-72">
+            <div class="px-3 py-2 text-12-medium text-text-strong">Recent sessions</div>
+            <div class="px-2 pb-2 flex flex-col gap-2">
+              <For each={workspaces()}>
+                {(directory) => (
+                  <div class="flex flex-col gap-1">
+                    <div class="px-2 py-0.5 flex items-center gap-1 min-w-0">
+                      <div class="shrink-0 size-6 flex items-center justify-center">
+                        <Icon name="branch" size="small" class="text-icon-base" />
+                      </div>
+                      <span class="truncate text-14-medium text-text-strong">{label(directory)}</span>
+                    </div>
+                    <For each={sessions(directory)}>
+                      {(session) => (
+                        <SessionItem session={session} slug={base64Encode(directory)} dense mobile={props.mobile} />
+                      )}
+                    </For>
+                  </div>
+                )}
+              </For>
+            </div>
+            <div class="px-2 py-2 border-t border-border-weak-base">
+              <Button
+                variant="ghost"
+                class="flex w-full text-left justify-start text-text-base px-2"
+                onClick={() => {
+                  layout.sidebar.open()
+                  navigateToProject(props.project.worktree)
+                }}
+              >
+                View all sessions
+              </Button>
+            </div>
+          </div>
+        </HoverCard>
       </div>
     )
   }
@@ -967,7 +1045,7 @@ export default function Layout(props: ParentProps) {
     return (
       <Show when={label()}>
         {(value) => (
-          <div class="bg-background-base rounded-md px-2 py-1 text-12-medium text-text-strong">{value()}</div>
+          <div class="bg-background-base rounded-md px-2 py-1 text-14-medium text-text-strong">{value()}</div>
         )}
       </Show>
     )
@@ -1003,39 +1081,59 @@ export default function Layout(props: ParentProps) {
         <Collapsible
           variant="ghost"
           open={open()}
-          class="gap-1.5 shrink-0"
+          class="shrink-0"
           onOpenChange={(value) => setStore("workspaceExpanded", props.directory, value)}
         >
-          <Collapsible.Trigger class="group/trigger flex items-center justify-between w-full px-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
-            <div class="flex items-center gap-2 min-w-0">
-              <Icon
-                name="chevron-right"
-                size="small"
-                class="text-text-subtle transition-transform duration-50 group-data-[expanded]/trigger:rotate-90"
-              />
-              <span class="truncate text-12-medium text-text-strong">{title()}</span>
+          <div class="px-2 py-1">
+            <div class="group/trigger relative">
+              <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+                <div class="flex items-center gap-1 min-w-0">
+                  <div class="flex items-center justify-center shrink-0 size-6">
+                    <Icon name="branch" size="small" />
+                  </div>
+                  <span class="truncate text-14-medium text-text-strong">{title()}</span>
+                  <Icon
+                    name={open() ? "chevron-down" : "chevron-right"}
+                    size="small"
+                    class="shrink-0 text-icon-base opacity-0 transition-opacity group-hover/trigger:opacity-100 group-focus-within/trigger:opacity-100"
+                  />
+                </div>
+              </Collapsible.Trigger>
+              <div class="absolute right-1 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 pointer-events-none group-hover/trigger:flex group-focus-within/trigger:flex">
+                <Tooltip class="pointer-events-auto" value="More options" placement="top">
+                  <IconButton icon="dot-grid" variant="ghost" class="size-6 rounded-md" />
+                </Tooltip>
+                <Tooltip class="pointer-events-auto" value="New session" placement="top">
+                  <IconButton
+                    icon="plus-small"
+                    variant="ghost"
+                    class="size-6 rounded-md"
+                    onClick={() => navigate(`/${slug()}/session`)}
+                  />
+                </Tooltip>
+              </div>
             </div>
-          </Collapsible.Trigger>
+          </div>
           <Collapsible.Content>
-            <nav class="flex flex-col gap-1 pl-2">
-              <For each={sessions()}>
-                {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
-              </For>
+            <nav class="flex flex-col gap-1 px-2">
               <Button
                 as={A}
                 href={`${slug()}/session`}
                 variant="ghost"
                 size="large"
-                icon="plus-small"
-                class="flex w-full text-left justify-start text-text-base rounded-md px-3"
+                icon="edit"
+                class="hidden _flex w-full text-left justify-start text-text-base rounded-md px-3"
               >
                 New session
               </Button>
+              <For each={sessions()}>
+                {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
+              </For>
               <Show when={hasMore()}>
                 <div class="relative w-full py-1">
                   <Button
                     variant="ghost"
-                    class="flex w-full text-left justify-start text-12-medium opacity-50 px-3.5"
+                    class="flex w-full text-left justify-start text-12-medium text-text-weak px-10"
                     size="large"
                     onClick={loadMore}
                   >
@@ -1050,9 +1148,53 @@ export default function Layout(props: ParentProps) {
     )
   }
 
+  const LocalWorkspace = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
+    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.project.worktree)
+    const slug = createMemo(() => base64Encode(props.project.worktree))
+    const sessions = createMemo(() =>
+      workspaceStore.session
+        .filter((session) => session.directory === workspaceStore.path.directory)
+        .filter((session) => !session.parentID)
+        .toSorted(sortSessions),
+    )
+    const hasMore = createMemo(() => workspaceStore.session.length >= workspaceStore.limit)
+    const loadMore = async () => {
+      setWorkspaceStore("limit", (limit) => limit + 5)
+      await globalSync.project.loadSessions(props.project.worktree)
+    }
+
+    return (
+      <div
+        ref={(el) => {
+          if (!props.mobile) scrollContainerRef = el
+        }}
+        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
+      >
+        <nav class="flex flex-col gap-1 px-2">
+          <For each={sessions()}>
+            {(session) => <SessionItem session={session} slug={slug()} mobile={props.mobile} />}
+          </For>
+          <Show when={hasMore()}>
+            <div class="relative w-full py-1">
+              <Button
+                variant="ghost"
+                class="flex w-full text-left justify-start text-12-medium text-text-weak px-10"
+                size="large"
+                onClick={loadMore}
+              >
+                Load more
+              </Button>
+            </div>
+          </Show>
+        </nav>
+      </div>
+    )
+  }
+
   const SidebarContent = (sidebarProps: { mobile?: boolean }) => {
     const expanded = () => sidebarProps.mobile || layout.sidebar.opened()
 
+    const sync = useGlobalSync()
     const project = createMemo(() => currentProject())
     const projectName = createMemo(() => {
       const current = project()
@@ -1091,9 +1233,11 @@ export default function Layout(props: ParentProps) {
       navigate(`/${base64Encode(created.directory)}/session`)
     }
 
+    const homedir = createMemo(() => sync.data.path.home)
+
     return (
       <div class="flex h-full w-full overflow-hidden">
-        <div class="w-16 shrink-0 bg-background-base border-r border-border-weak-base flex flex-col items-center overflow-hidden">
+        <div class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden">
           <div class="flex-1 min-h-0 w-full">
             <DragDropProvider
               onDragStart={handleDragStart}
@@ -1103,7 +1247,7 @@ export default function Layout(props: ParentProps) {
             >
               <DragDropSensors />
               <ConstrainDragXAxis />
-              <div class="h-full w-full flex flex-col items-center gap-2 px-2 py-3 overflow-y-auto no-scrollbar">
+              <div class="h-full w-full flex flex-col items-center gap-3 px-3 py-2 overflow-y-auto no-scrollbar">
                 <SortableProvider ids={layout.projects.list().map((p) => p.worktree)}>
                   <For each={layout.projects.list()}>
                     {(project) => <SortableProject project={project} mobile={sidebarProps.mobile} />}
@@ -1120,7 +1264,7 @@ export default function Layout(props: ParentProps) {
                     </div>
                   }
                 >
-                  <IconButton icon="plus" variant="ghost" class="size-12 rounded-xl" onClick={chooseProject} />
+                  <IconButton icon="plus" variant="ghost" size="large" onClick={chooseProject} />
                 </Tooltip>
               </div>
               <DragOverlay>
@@ -1128,12 +1272,25 @@ export default function Layout(props: ParentProps) {
               </DragOverlay>
             </DragDropProvider>
           </div>
+          <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
+            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings">
+              <IconButton icon="settings-gear" variant="ghost" size="large" onClick={command.show} />
+            </Tooltip>
+            <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
+              <IconButton
+                icon="help"
+                variant="ghost"
+                size="large"
+                onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+              />
+            </Tooltip>
+          </div>
         </div>
 
         <Show when={expanded()}>
           <div
             classList={{
-              "flex flex-col min-h-0 bg-background-base border-r border-border-weak-base": true,
+              "flex flex-col min-h-0 bg-background-stronger border border-border-weak-base rounded-tl-sm": true,
               "flex-1 min-w-0": sidebarProps.mobile,
             }}
             style={{ width: sidebarProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
@@ -1141,69 +1298,125 @@ export default function Layout(props: ParentProps) {
             <Show when={project()}>
               {(p) => (
                 <>
-                  <div class="shrink-0 h-12 flex items-center justify-between px-3 border-b border-border-weak-base">
-                    <div class="min-w-0 truncate text-14-medium text-text-strong">{projectName()}</div>
-                    <Button variant="ghost" size="large" icon="plus-small" onClick={createWorkspace}>
-                      New workspace
-                    </Button>
+                  <div class="shrink-0 px-2 py-1">
+                    <div class="flex items-start justify-between gap-2 p-2">
+                      <div class="flex flex-col min-w-0">
+                        <span class="text-16-medium text-text-strong truncate">{projectName()}</span>
+                        <Tooltip placement="right" value={project()?.worktree} class="shrink-0">
+                          <span class="text-12-regular text-text-base truncate">
+                            {project()?.worktree.replace(homedir(), "~")}
+                          </span>
+                        </Tooltip>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenu.Trigger
+                          as={IconButton}
+                          icon="dot-grid"
+                          variant="ghost"
+                          class="shrink-0 size-6 rounded-md"
+                        />
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content>
+                            <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p()} />)}>
+                              <DropdownMenu.ItemLabel>Edit project</DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item onSelect={() => closeProject(p().worktree)}>
+                              <DropdownMenu.ItemLabel>Close project</DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item onSelect={() => layout.sidebar.toggleWorkspaces()}>
+                              <DropdownMenu.ItemLabel>
+                                {layout.sidebar.workspaces() ? "Disable workspaces" : "Enable workspaces"}
+                              </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu>
+                    </div>
                   </div>
 
-                  <div class="flex-1 min-h-0">
-                    <DragDropProvider
-                      onDragStart={handleWorkspaceDragStart}
-                      onDragEnd={handleWorkspaceDragEnd}
-                      onDragOver={handleWorkspaceDragOver}
-                      collisionDetector={closestCenter}
-                    >
-                      <DragDropSensors />
-                      <ConstrainDragXAxis />
-                      <div
-                        ref={(el) => {
-                          if (!sidebarProps.mobile) scrollContainerRef = el
-                        }}
-                        class="h-full w-full flex flex-col gap-2 px-2 py-2 overflow-y-auto no-scrollbar"
-                      >
-                        <SortableProvider ids={workspaces()}>
-                          <For each={workspaces()}>
-                            {(directory) => (
-                              <SortableWorkspace directory={directory} project={p()} mobile={sidebarProps.mobile} />
-                            )}
-                          </For>
-                        </SortableProvider>
+                  <Show
+                    when={layout.sidebar.workspaces()}
+                    fallback={
+                      <>
+                        <div class="py-4 px-3">
+                          <Button
+                            size="large"
+                            icon="plus-small"
+                            class="w-full"
+                            onClick={() => {
+                              navigate(`/${base64Encode(p().worktree)}/session`)
+                              layout.mobileSidebar.hide()
+                            }}
+                          >
+                            New session
+                          </Button>
+                        </div>
+                        <div class="flex-1 min-h-0">
+                          <LocalWorkspace project={p()} mobile={sidebarProps.mobile} />
+                        </div>
+                      </>
+                    }
+                  >
+                    <>
+                      <div class="py-4 px-3">
+                        <Button size="large" icon="plus-small" class="w-full" onClick={createWorkspace}>
+                          New workspace
+                        </Button>
                       </div>
-                      <DragOverlay>
-                        <WorkspaceDragOverlay />
-                      </DragOverlay>
-                    </DragDropProvider>
-                  </div>
+                      <div class="flex-1 min-h-0">
+                        <DragDropProvider
+                          onDragStart={handleWorkspaceDragStart}
+                          onDragEnd={handleWorkspaceDragEnd}
+                          onDragOver={handleWorkspaceDragOver}
+                          collisionDetector={closestCenter}
+                        >
+                          <DragDropSensors />
+                          <ConstrainDragXAxis />
+                          <div
+                            ref={(el) => {
+                              if (!sidebarProps.mobile) scrollContainerRef = el
+                            }}
+                            class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar"
+                          >
+                            <SortableProvider ids={workspaces()}>
+                              <For each={workspaces()}>
+                                {(directory) => (
+                                  <SortableWorkspace directory={directory} project={p()} mobile={sidebarProps.mobile} />
+                                )}
+                              </For>
+                            </SortableProvider>
+                          </div>
+                          <DragOverlay>
+                            <WorkspaceDragOverlay />
+                          </DragOverlay>
+                        </DragDropProvider>
+                      </div>
+                    </>
+                  </Show>
                 </>
               )}
             </Show>
             <Show when={!project()}>
-              <div class="p-3 text-12-regular text-text-weak">Open a project to see workspaces.</div>
+              <div class="p-3 text-12-regular text-text-weak">Open a project to see sessions.</div>
             </Show>
-            <Show when={providers.all().length > 0}>
-              <div class="shrink-0 px-2 py-3 border-t border-border-weak-base flex flex-col gap-1.5">
-                <Button
-                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
-                  variant="ghost"
-                  size="large"
-                  icon="plus"
-                  onClick={connectProvider}
-                >
-                  Connect provider
-                </Button>
-                <Button
-                  as={"a"}
-                  href="https://opencode.ai/desktop-feedback"
-                  target="_blank"
-                  class="flex w-full text-left justify-start text-text-base stroke-[1.5px] rounded-lg px-2"
-                  variant="ghost"
-                  size="large"
-                  icon="bubble-5"
-                >
-                  Share feedback
-                </Button>
+            <Show when={providers.all().length > 0 && providers.paid().length === 0}>
+              <div class="shrink-0 px-2 py-3 border-t border-border-weak-base">
+                <div class="rounded-md bg-background-base shadow-xs-border-base">
+                  <div class="p-3 flex flex-col gap-2">
+                    <div class="text-12-medium text-text-strong">Getting started</div>
+                    <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
+                    <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
+                  </div>
+                  <Button
+                    class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
+                    size="large"
+                    icon="plus"
+                    onClick={connectProvider}
+                  >
+                    Connect provider
+                  </Button>
+                </div>
               </div>
             </Show>
           </div>
@@ -1212,50 +1425,9 @@ export default function Layout(props: ParentProps) {
     )
   }
 
-  const isMac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
-  const reserveWindowButtons = createMemo(
-    () => platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux"),
-  )
-
   return (
-    <div class="relative flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
-      <header class="h-12 shrink-0 bg-background-base border-b border-border-weak-base flex items-center">
-        <div
-          classList={{
-            "flex items-center w-full min-w-0 pr-2": true,
-            "pl-2": !isMac(),
-          }}
-        >
-          <Show when={isMac()}>
-            <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
-          </Show>
-          <IconButton
-            icon="menu"
-            variant="ghost"
-            class="xl:hidden size-8 rounded-md"
-            onClick={layout.mobileSidebar.toggle}
-          />
-          <TooltipKeybind
-            class="hidden xl:flex shrink-0"
-            placement="bottom"
-            title="Toggle sidebar"
-            keybind={command.keybind("sidebar.toggle")}
-          >
-            <IconButton
-              icon={layout.sidebar.opened() ? "layout-left" : "layout-right"}
-              variant="ghost"
-              class="size-8 rounded-md"
-              onClick={layout.sidebar.toggle}
-            />
-          </TooltipKeybind>
-          <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
-          <div class="flex-1 h-full" data-tauri-drag-region />
-          <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0" />
-          <Show when={reserveWindowButtons()}>
-            <div class="w-[120px] h-full shrink-0" data-tauri-drag-region />
-          </Show>
-        </div>
-      </header>
+    <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      <Titlebar />
       <div class="flex-1 min-h-0 flex">
         <div
           classList={{
@@ -1282,7 +1454,7 @@ export default function Layout(props: ParentProps) {
         <div class="xl:hidden">
           <div
             classList={{
-              "fixed inset-0 bg-black/50 z-40 transition-opacity duration-200": true,
+              "fixed inset-0 z-40 transition-opacity duration-200": true,
               "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
               "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
@@ -1302,7 +1474,14 @@ export default function Layout(props: ParentProps) {
           </div>
         </div>
 
-        <main class="size-full overflow-x-hidden flex flex-col items-start contain-strict">{props.children}</main>
+        <main
+          classList={{
+            "size-full overflow-x-hidden flex flex-col items-start contain-strict border-t border-border-weak-base": true,
+            "border-l rounded-tl-sm": !layout.sidebar.opened(),
+          }}
+        >
+          {props.children}
+        </main>
       </div>
       <Toast.Region />
     </div>

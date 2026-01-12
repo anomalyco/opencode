@@ -53,6 +53,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         sidebar: {
           opened: false,
           width: 280,
+          workspaces: false,
         },
         terminal: {
           height: 280,
@@ -303,6 +304,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         width: createMemo(() => store.sidebar.width),
         resize(width: number) {
           setStore("sidebar", "width", width)
+        },
+        workspaces: createMemo(() => store.sidebar.workspaces ?? false),
+        setWorkspaces(value: boolean) {
+          setStore("sidebar", "workspaces", value)
+        },
+        toggleWorkspaces() {
+          setStore("sidebar", "workspaces", (x) => !x)
         },
       },
       terminal: {
