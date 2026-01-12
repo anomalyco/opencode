@@ -27,6 +27,7 @@ import { createColors, createFrames } from "../../ui/spinner.ts"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { DialogApproval } from "../dialog-approval"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
@@ -495,6 +496,19 @@ export function Prompt(props: PromptProps) {
       promptModelWarning()
       return
     }
+    let inputText = store.prompt.input
+    const isApproval = inputText.startsWith("/approval")
+    if (isApproval && !props.sessionID) {
+      toast.show({
+        variant: "warning",
+        message: "Open a session to update approvals",
+      })
+      input.extmarks.clear()
+      input.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      return
+    }
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -502,7 +516,6 @@ export function Prompt(props: PromptProps) {
           return sessionID
         })()
     const messageID = Identifier.ascending("message")
-    let inputText = store.prompt.input
 
     // Expand pasted text inline before submitting
     const allExtmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
@@ -527,7 +540,8 @@ export function Prompt(props: PromptProps) {
     const currentMode = store.mode
     const variant = local.model.variant.current()
 
-    if (store.mode === "shell") {
+    const isShell = store.mode === "shell"
+    if (isShell) {
       sdk.client.session.shell({
         sessionID,
         agent: local.agent.current().name,
@@ -538,50 +552,63 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
-    } else if (
-      inputText.startsWith("/") &&
-      iife(() => {
-        const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
-        return sync.data.command.some((x) => x.name === command)
-      })
-    ) {
-      let [command, ...args] = inputText.split(" ")
-      sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args.join(" "),
-        agent: local.agent.current().name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        messageID,
-        variant,
-        parts: nonTextParts
-          .filter((x) => x.type === "file")
-          .map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
-          })),
-      })
-    } else {
-      sdk.client.session.prompt({
-        sessionID,
-        ...selectedModel,
-        messageID,
-        agent: local.agent.current().name,
-        model: selectedModel,
-        variant,
-        parts: [
-          {
-            id: Identifier.ascending("part"),
-            type: "text",
-            text: inputText,
-          },
-          ...nonTextParts.map((x) => ({
-            id: Identifier.ascending("part"),
-            ...x,
-          })),
-        ],
-      })
+    }
+
+    if (!isShell) {
+      if (inputText.startsWith("/approval")) {
+        dialog.replace(() => <DialogApproval sessionID={sessionID} />)
+        input.extmarks.clear()
+        setStore("prompt", { input: "", parts: [] })
+        setStore("extmarkToPartIndex", new Map())
+        input.clear()
+        return
+      }
+
+      if (
+        inputText.startsWith("/") &&
+        iife(() => {
+          const command = inputText.split(" ")[0].slice(1)
+          console.log(command)
+          return sync.data.command.some((x) => x.name === command)
+        })
+      ) {
+        const [command, ...args] = inputText.split(" ")
+        sdk.client.session.command({
+          sessionID,
+          command: command.slice(1),
+          arguments: args.join(" "),
+          agent: local.agent.current().name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          messageID,
+          variant,
+          parts: nonTextParts
+            .filter((x) => x.type === "file")
+            .map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+        })
+      } else {
+        sdk.client.session.prompt({
+          sessionID,
+          ...selectedModel,
+          messageID,
+          agent: local.agent.current().name,
+          model: selectedModel,
+          variant,
+          parts: [
+            {
+              id: Identifier.ascending("part"),
+              type: "text",
+              text: inputText,
+            },
+            ...nonTextParts.map((x) => ({
+              id: Identifier.ascending("part"),
+              ...x,
+            })),
+          ],
+        })
+      }
     }
     history.append({
       ...store.prompt,

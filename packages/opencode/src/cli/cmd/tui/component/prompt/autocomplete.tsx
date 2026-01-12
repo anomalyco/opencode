@@ -404,6 +404,11 @@ export function Autocomplete(props: {
         onSelect: () => command.trigger("session.new"),
       },
       {
+        display: "/approval",
+        description: "set approval mode",
+        onSelect: () => command.trigger("session.approval"),
+      },
+      {
         display: "/models",
         description: "list models",
         onSelect: () => command.trigger("model.list"),

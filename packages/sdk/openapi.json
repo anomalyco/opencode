@@ -1339,6 +1339,9 @@
                         "type": "number"
                       }
                     }
+                  },
+                  "permission": {
+                    "$ref": "#/components/schemas/PermissionRuleset"
                   }
                 }
               }
