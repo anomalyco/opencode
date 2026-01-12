@@ -27,6 +27,18 @@
         "aarch64-darwin" = "bun-darwin-arm64";
         "x86_64-darwin" = "bun-darwin-x64";
       };
+
+      # Parse bunTarget to extract OS and CPU for bun install flags
+      parseBunTarget =
+        target:
+        let
+          parts = lib.splitString "-" target;
+        in
+        {
+          os = builtins.elemAt parts 1;
+          cpu = builtins.elemAt parts 2;
+        };
+
       defaultNodeModules = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
       hashesFile = "${./nix}/hashes.json";
       hashesData =
@@ -69,8 +81,11 @@
         system:
         let
           pkgs = pkgsFor system;
+          bunPlatform = parseBunTarget bunTarget.${system};
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = nodeModulesHashFor system;
+            bunCpu = bunPlatform.cpu;
+            bunOs = bunPlatform.os;
           };
           mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
           mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
