@@ -1,5 +1,15 @@
 import { RGBA } from "@opentui/core"
 
+export function isMacOSTerminal(): boolean {
+  return (
+    process.platform === "darwin" &&
+    (process.env.TERM_PROGRAM === "Apple_Terminal" ||
+      process.env.TERM_PROGRAM === "iTerm.app" ||
+      (process.env.TERM?.includes("xterm") ?? false) ||
+      (process.env.TERM?.includes("screen") ?? false))
+  )
+}
+
 export namespace Terminal {
   export type Colors = Awaited<ReturnType<typeof colors>>
   /**

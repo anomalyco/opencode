@@ -115,11 +115,58 @@ export function tui(input: {
       resolve()
     }
 
+    // macOS-specific signal handling
+    const setupSignalHandlers = (renderer: any) => {
+      // Handle Ctrl+C gracefully
+      const handleSigint = () => {
+        renderer.setTerminalTitle("")
+        renderer.destroy()
+        process.exit(0)
+      }
+
+      // Handle terminal closure
+      const handleSighup = () => {
+        renderer.setTerminalTitle("")
+        renderer.destroy()
+        process.exit(0)
+      }
+
+      // Handle termination signal
+      const handleSigterm = () => {
+        renderer.setTerminalTitle("")
+        renderer.destroy()
+        process.exit(0)
+      }
+
+      process.on("SIGINT", handleSigint)
+      process.on("SIGHUP", handleSighup)
+      process.on("SIGTERM", handleSigterm)
+
+      return () => {
+        process.off("SIGINT", handleSigint)
+        process.off("SIGHUP", handleSighup)
+        process.off("SIGTERM", handleSigterm)
+      }
+    }
+
     render(
       () => {
+        const renderer = useRenderer()
+        const cleanupSignalHandlers = setupSignalHandlers(renderer)
+
         return (
           <ErrorBoundary
-            fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
+            fallback={(error, reset) => (
+              <ErrorComponent
+                error={error}
+                reset={reset}
+                onExit={async () => {
+                  cleanupSignalHandlers()
+                  await onExit()
+                }}
+                mode={mode}
+              />
+            )}
           >
             <ArgsProvider {...input.args}>
               <ExitProvider onExit={onExit}>
@@ -514,9 +561,19 @@ function App() {
       keybind: "terminal_suspend",
       category: "System",
       onSelect: () => {
-        process.once("SIGCONT", () => {
+        // Enhanced macOS suspend handling
+        const resumeHandler = () => {
+          // Restore terminal state on macOS
+          process.stdout.write("\x1b[?47h") // Enable alternate screen
+          process.stdout.write("\x1b[?1049h") // Save cursor and use alternate screen buffer
           renderer.resume()
-        })
+        }
+
+        process.once("SIGCONT", resumeHandler)
+
+        // Clear alternate screen before suspend on macOS
+        process.stdout.write("\x1b[?1049l") // Use normal screen buffer
+        process.stdout.write("\x1b[?47l") // Disable alternate screen
 
         renderer.suspend()
         // pid=0 means send the signal to all processes in the process group
