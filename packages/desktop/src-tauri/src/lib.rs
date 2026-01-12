@@ -5,7 +5,7 @@ use cli::{install_cli, sync_cli};
 use futures::FutureExt;
 use std::{
     collections::VecDeque,
-    net::{SocketAddr, TcpListener},
+    net::TcpListener,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -13,7 +13,6 @@ use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl, Webvie
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
-use tokio::net::TcpSocket;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
 
@@ -23,13 +22,13 @@ const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 #[derive(Clone)]
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
-    status: futures::future::Shared<tokio::sync::oneshot::Receiver<Result<(), String>>>,
+    status: futures::future::Shared<tokio::sync::oneshot::Receiver<Result<String, String>>>,
 }
 
 impl ServerState {
     pub fn new(
         child: Option<CommandChild>,
-        status: tokio::sync::oneshot::Receiver<Result<(), String>>,
+        status: tokio::sync::oneshot::Receiver<Result<String, String>>,
     ) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
@@ -81,7 +80,7 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<(), String> {
+async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<String, String> {
     state
         .status
         .clone()
@@ -90,7 +89,7 @@ async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<(), String
 }
 
 #[tauri::command]
-async fn get_default_server_url(app: AppHandle) -> Result<Option<String>, String> {
+fn get_default_server_url(app: AppHandle) -> Result<Option<String>, String> {
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
@@ -185,17 +184,6 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
     child
 }
 
-async fn is_server_running(port: u32) -> bool {
-    TcpSocket::new_v4()
-        .unwrap()
-        .connect(SocketAddr::new(
-            "127.0.0.1".parse().expect("Failed to parse IP"),
-            port as u16,
-        ))
-        .await
-        .is_ok()
-}
-
 async fn check_server_health(url: &str) -> bool {
     let health_url = format!("{}/health", url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
@@ -212,12 +200,6 @@ async fn check_server_health(url: &str) -> bool {
         .await
         .map(|r| r.status().is_success())
         .unwrap_or(false)
-}
-
-fn get_configured_server_url(app: &AppHandle) -> Option<String> {
-    let store = app.store(SETTINGS_STORE).ok()?;
-    let value = store.get(DEFAULT_SERVER_URL_KEY)?;
-    value.as_str().map(String::from)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -283,7 +265,7 @@ pub fn run() {
                     .hidden_title(true);
             }
 
-            let window = window_builder.build().expect("Failed to create window");
+            window_builder.build().expect("Failed to create window");
 
             let (tx, rx) = tokio::sync::oneshot::channel();
             app.manage(ServerState::new(None, rx));
@@ -291,18 +273,25 @@ pub fn run() {
             {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    let cli_config = cli::get_config(&app).await;
+                    let mut custom_url = None;
 
-                    let res = match setup_server_connection(&app, &cli_config).await {
+                    if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
+                        println!("Using desktop-specific custom URL: {url}");
+                        custom_url = Some(url);
+                    }
+
+                    if custom_url.is_none()
+                        && let Some(cli_config) = cli::get_config(&app).await
+                        && let Some(url) = get_server_url_from_config(&cli_config)
+                    {
+                        println!("Using custom server URL from config: {url}");
+                        custom_url = Some(url);
+                    }
+
+                    let res = match setup_server_connection(&app, custom_url).await {
                         Ok((child, url)) => {
                             app.state::<ServerState>().set_child(child);
-
-                            let escaped_url = url.replace('\\', "\\\\").replace('"', "\\\"");
-                            let _ = window.eval(format!(
-                                "window.__OPENCODE__.serverUrl = \"{escaped_url}\";",
-                            ));
-
-                            Ok(())
+                            Ok(url)
                         }
                         Err(e) => Err(e),
                     };
@@ -339,7 +328,7 @@ pub fn run() {
         });
 }
 
-async fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
+fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
     let server = config.server.as_ref()?;
     let port = server.port?;
     println!("server.port found in OC config: {port}");
@@ -354,25 +343,12 @@ async fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 
 async fn setup_server_connection(
     app: &AppHandle,
-    cli_config: &Option<cli::Config>,
+    custom_url: Option<String>,
 ) -> Result<(Option<CommandChild>, String), String> {
-    let configured_url = if let Some(cli_config) = cli_config {
-        get_server_url_from_config(cli_config)
-            .await
-            .inspect(|url| println!("Using server URL from config: {url}"))
-    } else {
-        None
-    }
-    .or_else(|| {
-        get_configured_server_url(app)
-            .inspect(|url| println!("Using desktop-specific custom URL: {url}"))
-    });
-
-    // first we try connecting to the configured url
-    if let Some(ref url) = configured_url {
+    if let Some(url) = custom_url {
         loop {
-            if check_server_health(url).await {
-                println!("Connected to configured server: {}", url);
+            if check_server_health(&url).await {
+                println!("Connected to custom server: {}", url);
                 return Ok((None, url.clone()));
             }
 
@@ -396,8 +372,9 @@ async fn setup_server_connection(
     }
 
     let local_port = get_sidecar_port();
+    let local_url = format!("http://127.0.0.1:{local_port}");
 
-    if !is_server_running(local_port).await {
+    if !check_server_health(&local_url).await {
         match spawn_local_server(app, local_port).await {
             Ok(child) => Ok(Some(child)),
             Err(err) => Err(err),
@@ -405,11 +382,12 @@ async fn setup_server_connection(
     } else {
         Ok(None)
     }
-    .map(|child| (child, format!("http://127.0.0.1:{local_port}")))
+    .map(|child| (child, local_url))
 }
 
 async fn spawn_local_server(app: &AppHandle, port: u32) -> Result<CommandChild, String> {
     let child = spawn_sidecar(app, port);
+    let url = format!("http://127.0.0.1:{port}");
 
     let timestamp = Instant::now();
     loop {
@@ -422,7 +400,7 @@ async fn spawn_local_server(app: &AppHandle, port: u32) -> Result<CommandChild, 
 
         tokio::time::sleep(Duration::from_millis(10)).await;
 
-        if is_server_running(port).await {
+        if check_server_health(&url).await {
             println!("Server ready after {:?}", timestamp.elapsed());
             tokio::time::sleep(Duration::from_millis(10)).await;
             break Ok(child);
