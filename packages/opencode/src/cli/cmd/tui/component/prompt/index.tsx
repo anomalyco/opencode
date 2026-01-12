@@ -30,6 +30,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { resolvePastedContent } from "./paste"
 
 export type PromptProps = {
   sessionID?: string
@@ -861,12 +862,14 @@ export function Prompt(props: PromptProps) {
                 // Normalize line endings at the boundary
                 // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
                 // Replace CRLF first, then any remaining CR
-                const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-                const pastedContent = normalizedText.trim()
-                if (!pastedContent) {
+                const resolvedContent = await resolvePastedContent(event.text, Clipboard.read)
+
+                if (!resolvedContent) {
                   command.trigger("prompt.paste")
                   return
                 }
+
+                const pastedContent = resolvedContent
 
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
