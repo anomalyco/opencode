@@ -40,10 +40,6 @@
       border-color: var(--border-strong-base);
     }
 
-    &[data-clickable="true"] {
-      cursor: pointer;
-    }
-
     &[data-type="image"] {
       width: 48px;
       height: 48px;
