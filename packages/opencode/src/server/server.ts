@@ -937,6 +937,7 @@ export namespace Server {
               time: z
                 .object({
                   archived: z.number().optional(),
+                  pinned: z.number().nullable().optional(),
                 })
                 .optional(),
             }),
@@ -950,6 +951,9 @@ export namespace Server {
                 session.title = updates.title
               }
               if (updates.time?.archived !== undefined) session.time.archived = updates.time.archived
+              if (updates.time?.pinned !== undefined) {
+                session.time.pinned = updates.time.pinned === null ? undefined : updates.time.pinned
+              }
             })
 
             return c.json(updatedSession)

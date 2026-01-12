@@ -725,6 +725,7 @@ export type Session = {
     updated: number
     compacting?: number
     archived?: number
+    pinned?: number
   }
   permission?: PermissionRuleset
   revert?: {
@@ -969,6 +970,10 @@ export type KeybindsConfig = {
    * Unshare current session
    */
   session_unshare?: string
+  /**
+   * Pin/unpin session in list
+   */
+  session_pin?: string
   /**
    * Interrupt current session
    */
@@ -2741,6 +2746,7 @@ export type SessionUpdateData = {
     title?: string
     time?: {
       archived?: number
+      pinned?: number | null
     }
   }
   path: {

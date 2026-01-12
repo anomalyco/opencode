@@ -62,6 +62,7 @@ export namespace Session {
         updated: z.number(),
         compacting: z.number().optional(),
         archived: z.number().optional(),
+        pinned: z.number().optional(),
       }),
       permission: PermissionNext.Ruleset.optional(),
       revert: z

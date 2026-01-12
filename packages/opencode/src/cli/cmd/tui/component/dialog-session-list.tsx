@@ -30,6 +30,7 @@ export function DialogSessionList() {
   })
 
   const deleteKeybind = "ctrl+d"
+  const pinKeybind = "ctrl+b"
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
 
@@ -39,31 +40,43 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    return sessions()
-      .filter((x) => x.parentID === undefined)
+    const allSessions = sessions().filter((x) => x.parentID === undefined)
+
+    const pinned = allSessions
+      .filter((x) => x.time.pinned !== undefined)
+      .toSorted((a, b) => (b.time.pinned ?? 0) - (a.time.pinned ?? 0))
+
+    const unpinned = allSessions
+      .filter((x) => x.time.pinned === undefined)
       .toSorted((a, b) => b.time.updated - a.time.updated)
-      .map((x) => {
-        const date = new Date(x.time.updated)
-        let category = date.toDateString()
-        if (category === today) {
-          category = "Today"
-        }
-        const isDeleting = toDelete() === x.id
-        const status = sync.data.session_status?.[x.id]
-        const isWorking = status?.type === "busy"
-        return {
-          title: isDeleting ? `Press ${deleteKeybind} again to confirm` : x.title,
-          bg: isDeleting ? theme.error : undefined,
-          value: x.id,
-          category,
-          footer: Locale.time(x.time.updated),
-          gutter: isWorking ? (
-            <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
-              <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
-            </Show>
-          ) : undefined,
-        }
-      })
+
+    const mapSession = (session: typeof allSessions[number], category: string) => {
+      const isDeleting = toDelete() === session.id
+      const status = sync.data.session_status?.[session.id]
+      const isWorking = status?.type === "busy"
+      return {
+        title: isDeleting ? `Press ${deleteKeybind} again to confirm` : session.title,
+        bg: isDeleting ? theme.error : undefined,
+        value: session.id,
+        category,
+        footer: Locale.time(session.time.updated),
+        gutter: isWorking ? (
+          <Show when={kv.get("animations_enabled", true)} fallback={<text fg={theme.textMuted}>[⋯]</text>}>
+            <spinner frames={spinnerFrames} interval={80} color={theme.primary} />
+          </Show>
+        ) : undefined,
+      }
+    }
+
+    const pinnedOptions = pinned.map((x) => mapSession(x, "Bookmarks"))
+
+    const unpinnedOptions = unpinned.map((x) => {
+      const date = new Date(x.time.updated)
+      const category = date.toDateString() === today ? "Today" : date.toDateString()
+      return mapSession(x, category)
+    })
+
+    return [...pinnedOptions, ...unpinnedOptions]
   })
 
   onMount(() => {
@@ -107,6 +120,19 @@ export function DialogSessionList() {
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
+          },
+        },
+        {
+          keybind: Keybind.parse(pinKeybind)[0],
+          title: "bookmark",
+          onTrigger: async (option) => {
+            const session = sessions().find((s) => s.id === option.value)
+            if (!session) return
+            const isPinned = session.time.pinned !== undefined
+            await sdk.client.session.update({
+              sessionID: option.value,
+              time: { pinned: isPinned ? null : Date.now() },
+            })
           },
         },
       ]}

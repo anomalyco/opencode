@@ -629,6 +629,7 @@ export namespace Config {
       session_rename: z.string().optional().default("none").describe("Rename session"),
       session_share: z.string().optional().default("none").describe("Share current session"),
       session_unshare: z.string().optional().default("none").describe("Unshare current session"),
+      session_pin: z.string().optional().default("ctrl+b").describe("Bookmark/unbookmark session in list"),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_compact: z.string().optional().default("<leader>c").describe("Compact the session"),
       messages_page_up: z.string().optional().default("pageup").describe("Scroll messages up by one page"),
