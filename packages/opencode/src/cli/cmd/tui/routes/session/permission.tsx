@@ -394,6 +394,8 @@ function Prompt<const T extends Record<string, string>>(props: {
                 paddingLeft={1}
                 paddingRight={1}
                 backgroundColor={option === store.selected ? theme.warning : theme.backgroundMenu}
+                onMouseOver={() => setStore("selected", option)}
+                onMouseUp={() => props.onSelect(store.selected)}
               >
                 <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
                   {props.options[option]}
