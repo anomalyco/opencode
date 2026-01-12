@@ -98,9 +98,10 @@ export namespace Server {
           })
         })
         .use((c, next) => {
-          const password = Flag.OPENCODE_PASSWORD
+          const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
-          return basicAuth({ username: "opencode", password })(c, next)
+          const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+          return basicAuth({ username, password })(c, next)
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
