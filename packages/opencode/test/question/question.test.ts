@@ -298,3 +298,54 @@ test("list - returns empty when no pending", async () => {
     },
   })
 })
+
+// from tests
+
+test("ask - includes from in request when provided", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      Question.ask({
+        sessionID: "ses_test",
+        questions: [
+          {
+            question: "What would you like to do?",
+            header: "Action",
+            options: [{ label: "Option 1", description: "First option" }],
+          },
+        ],
+        from: "test-agent",
+      })
+
+      const pending = await Question.list()
+
+      expect(pending.length).toBe(1)
+      expect(pending[0].from).toBe("test-agent")
+    },
+  })
+})
+
+test("ask - from is undefined when not provided", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      Question.ask({
+        sessionID: "ses_test",
+        questions: [
+          {
+            question: "What would you like to do?",
+            header: "Action",
+            options: [{ label: "Option 1", description: "First option" }],
+          },
+        ],
+      })
+
+      const pending = await Question.list()
+
+      expect(pending.length).toBe(1)
+      expect(pending[0].from).toBeUndefined()
+    },
+  })
+})

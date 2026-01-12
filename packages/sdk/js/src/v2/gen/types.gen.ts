@@ -554,6 +554,10 @@ export type QuestionRequest = {
    * Questions to ask
    */
   questions: Array<QuestionInfo>
+  /**
+   * Identifier of who is asking the question (e.g. agent name)
+   */
+  from?: string
   tool?: {
     messageID: string
     callID: string

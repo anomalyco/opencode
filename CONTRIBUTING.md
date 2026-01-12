@@ -115,6 +115,34 @@ This runs `bun run --cwd packages/desktop build` automatically via Tauri’s `be
 
 Please try to follow the [style guide](./STYLE_GUIDE.md)
 
+### Running Tests
+
+Run the test suite from the `packages/opencode` directory:
+
+```bash
+bun test
+```
+
+To run a specific test file:
+
+```bash
+bun test test/tool/tool.test.ts
+```
+
+#### Test Environment Variables
+
+Environment variables prefixed with `OPENCODE_TEST_` can be used to alter test behavior. When tests start, any such variables are printed to the console for visibility.
+
+| Variable                 | Description                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| `OPENCODE_TEST_SKIP_GIT` | Skip git repository initialization in test fixtures (useful when commit signing is required) |
+
+Example:
+
+```bash
+OPENCODE_TEST_SKIP_GIT=1 bun test
+```
+
 ### Setting up a Debugger
 
 Bun debugging is currently rough around the edges. We hope this guide helps you get set up and avoid some pain points.

@@ -6,6 +6,24 @@ import fs from "fs/promises"
 import fsSync from "fs"
 import { afterAll } from "bun:test"
 
+// Print all OPENCODE_TEST_* env vars for visibility
+const testEnvVars = Object.entries(process.env)
+  .filter(([key]) => key.startsWith("OPENCODE_TEST_"))
+  .sort(([a], [b]) => a.localeCompare(b))
+
+if (testEnvVars.length > 0) {
+  const title = " Test Environment Variables "
+  const lines = testEnvVars.map(([key, value]) => `│ ${key}=${value}`)
+  const maxContentWidth = Math.max(title.length, ...lines.map((l) => l.length - 1))
+  const width = maxContentWidth + 1
+
+  console.log("\n┌" + "─" + title + "─".repeat(width - title.length - 1) + "┐")
+  for (const line of lines) {
+    console.log(line + " ".repeat(width - line.length + 1) + "│")
+  }
+  console.log("└" + "─".repeat(width) + "┘\n")
+}
+
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
 afterAll(() => {
