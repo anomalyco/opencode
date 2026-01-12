@@ -17,7 +17,7 @@
         "aarch64-darwin"
         "x86_64-darwin"
       ];
-      lib = nixpkgs.lib;
+      inherit (nixpkgs) lib;
       forEachSystem = lib.genAttrs systems;
       pkgsFor = system: nixpkgs.legacyPackages.${system};
       packageJson = builtins.fromJSON (builtins.readFile ./packages/opencode/package.json);
@@ -66,17 +66,29 @@
           mkNodeModules = pkgs.callPackage ./nix/node-modules.nix {
             hash = nodeModulesHash;
           };
-          mkPackage = pkgs.callPackage ./nix/opencode.nix { };
-        in
-        {
-          default = mkPackage {
-            version = packageJson.version;
+          mkOpencode = pkgs.callPackage ./nix/opencode.nix { };
+          mkDesktop = pkgs.callPackage ./nix/desktop.nix { };
+
+          opencodePkg = mkOpencode {
+            inherit (packageJson) version;
             src = ./.;
             scripts = ./nix/scripts;
             target = bunTarget.${system};
             modelsDev = "${modelsDev.${system}}/dist/_api.json";
-            mkNodeModules = mkNodeModules;
+            inherit mkNodeModules;
           };
+
+          desktopPkg = mkDesktop {
+            inherit (packageJson) version;
+            src = ./.;
+            scripts = ./nix/scripts;
+            mkNodeModules = mkNodeModules;
+            opencode = opencodePkg;
+          };
+        in
+        {
+          default = opencodePkg;
+          desktop = desktopPkg;
         }
       );
 

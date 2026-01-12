@@ -28,6 +28,7 @@ export type PluginInput = {
   project: Project
   directory: string
   worktree: string
+  serverUrl: URL
   $: BunShell
 }
 
@@ -113,6 +114,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                accountId?: string
               }
             | { key: string }
           ))
@@ -132,6 +134,7 @@ export type AuthOuathResult = { url: string; instructions: string } & (
                 refresh: string
                 access: string
                 expires: number
+                accountId?: string
               }
             | { key: string }
           ))
@@ -153,7 +156,13 @@ export interface Hooks {
    * Called when a new message is received
    */
   "chat.message"?: (
-    input: { sessionID: string; agent?: string; model?: { providerID: string; modelID: string }; messageID?: string },
+    input: {
+      sessionID: string
+      agent?: string
+      model?: { providerID: string; modelID: string }
+      messageID?: string
+      variant?: string
+    },
     output: { message: UserMessage; parts: Part[] },
   ) => Promise<void>
   /**
@@ -186,7 +195,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: {},
+    input: { sessionID: string },
     output: {
       system: string[]
     },

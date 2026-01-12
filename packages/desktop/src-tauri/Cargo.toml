@@ -3,7 +3,7 @@ name = "opencode-desktop"
 version = "0.0.0"
 description = "The open source AI coding agent"
 authors = ["Anomaly Innovations"]
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -28,12 +28,17 @@ tauri-plugin-store = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-http = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = "1.48.0"
 listeners = "0.3"
 tauri-plugin-os = "2"
+futures = "0.3.31"
+semver = "1.0.27"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"

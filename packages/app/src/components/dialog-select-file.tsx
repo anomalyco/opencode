@@ -6,25 +6,29 @@ import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 import { useLayout } from "@/context/layout"
-import { useLocal } from "@/context/local"
+import { useFile } from "@/context/file"
 
 export function DialogSelectFile() {
   const layout = useLayout()
-  const local = useLocal()
+  const file = useFile()
   const dialog = useDialog()
   const params = useParams()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
+  const view = createMemo(() => layout.view(sessionKey()))
   return (
     <Dialog title="Select file">
       <List
         search={{ placeholder: "Search files", autofocus: true }}
         emptyMessage="No files found"
-        items={local.file.searchFiles}
+        items={file.searchFiles}
         key={(x) => x}
         onSelect={(path) => {
           if (path) {
-            tabs().open("file://" + path)
+            const value = file.tab(path)
+            tabs().open(value)
+            file.load(path)
+            view().reviewPanel.open()
           }
           dialog.close()
         }}

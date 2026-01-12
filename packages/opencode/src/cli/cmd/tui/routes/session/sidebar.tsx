@@ -10,8 +10,9 @@ import { Installation } from "@/installation"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
+import { TodoItem } from "../../component/todo-item"
 
-export function Sidebar(props: { sessionID: string }) {
+export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
@@ -72,15 +73,15 @@ export function Sidebar(props: { sessionID: string }) {
       <box
         backgroundColor={theme.backgroundPanel}
         width={42}
-        height="100%"
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
         paddingRight={2}
+        position={props.overlay ? "absolute" : "relative"}
       >
         <scrollbox flexGrow={1}>
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <box>
+            <box paddingRight={1}>
               <text fg={theme.text}>
                 <b>{session().title}</b>
               </text>
@@ -215,13 +216,7 @@ export function Sidebar(props: { sessionID: string }) {
                   </text>
                 </box>
                 <Show when={todo().length <= 2 || expanded.todo}>
-                  <For each={todo()}>
-                    {(todo) => (
-                      <text style={{ fg: todo.status === "in_progress" ? theme.success : theme.textMuted }}>
-                        [{todo.status === "completed" ? "✓" : " "}] {todo.content}
-                      </text>
-                    )}
-                  </For>
+                  <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
                 </Show>
               </box>
             </Show>

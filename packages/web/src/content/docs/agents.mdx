@@ -42,7 +42,7 @@ OpenCode comes with two built-in subagents, **General** and **Explore**. We'll l
 
 ## Built-in
 
-OpenCode comes with two built-in primary agents and one built-in subagent.
+OpenCode comes with two built-in primary agents and two built-in subagents.
 
 ---
 
@@ -426,9 +426,9 @@ mode: subagent
 permission:
   edit: deny
   bash:
+    "*": ask
     "git diff": allow
     "git log*": allow
-    "*": ask
   webfetch: deny
 ---
 
@@ -470,7 +470,7 @@ This can take a glob pattern.
 ```
 
 And you can also use the `*` wildcard to manage permissions for all commands.
-Where the specific rule can override the `*` wildcard.
+Since the last matching rule takes precedence, put the `*` wildcard first and specific rules after.
 
 ```json title="opencode.json" {8}
 {
@@ -479,8 +479,8 @@ Where the specific rule can override the `*` wildcard.
     "build": {
       "permission": {
         "bash": {
-          "git status": "allow",
-          "*": "ask"
+          "*": "ask",
+          "git status": "allow"
         }
       }
     }
@@ -507,6 +507,62 @@ Control the agent's mode with the `mode` config. The `mode` option is used to de
 ```
 
 The `mode` option can be set to `primary`, `subagent`, or `all`. If no `mode` is specified, it defaults to `all`.
+
+---
+
+### Hidden
+
+Hide a subagent from the `@` autocomplete menu with `hidden: true`. Useful for internal subagents that should only be invoked programmatically by other agents via the Task tool.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "internal-helper": {
+      "mode": "subagent",
+      "hidden": true
+    }
+  }
+}
+```
+
+This only affects user visibility in the autocomplete menu. Hidden agents can still be invoked by the model via the Task tool if permissions allow.
+
+:::note
+Only applies to `mode: subagent` agents.
+:::
+
+---
+
+### Task permissions
+
+Control which subagents an agent can invoke via the Task tool with `permission.task`. Uses glob patterns for flexible matching.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "permission": {
+        "task": {
+          "*": "deny",
+          "orchestrator-*": "allow",
+          "code-reviewer": "ask"
+        }
+      }
+    }
+  }
+}
+```
+
+When set to `deny`, the subagent is removed from the Task tool description entirely, so the model won't attempt to invoke it.
+
+:::tip
+Rules are evaluated in order, and the **last matching rule wins**. In the example above, `orchestrator-planner` matches both `*` (deny) and `orchestrator-*` (allow), but since `orchestrator-*` comes after `*`, the result is `allow`.
+:::
+
+:::tip
+Users can always invoke any subagent directly via the `@` autocomplete menu, even if the agent's task permissions would deny it.
+:::
 
 ---
 
@@ -572,7 +628,7 @@ Here are some common use cases for different agents.
 Here are some examples agents you might find useful.
 
 :::tip
-Do you have an agent you'd like to share? [Submit a PR](https://github.com/sst/opencode).
+Do you have an agent you'd like to share? [Submit a PR](https://github.com/anomalyco/opencode).
 :::
 
 ---

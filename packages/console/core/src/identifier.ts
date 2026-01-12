@@ -5,11 +5,13 @@ export namespace Identifier {
   const prefixes = {
     account: "acc",
     auth: "aut",
+    benchmark: "ben",
     billing: "bil",
     key: "key",
     model: "mod",
     payment: "pay",
     provider: "prv",
+    subscription: "sub",
     usage: "usg",
     user: "usr",
     workspace: "wrk",

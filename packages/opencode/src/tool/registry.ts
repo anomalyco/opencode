@@ -1,8 +1,8 @@
+import { QuestionTool } from "./question"
 import { BashTool } from "./bash"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
-import { ListTool } from "./ls"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
@@ -24,6 +24,7 @@ import { CodeSearchTool } from "./codesearch"
 import { Flag } from "@/flag/flag"
 import { Log } from "@/util/log"
 import { LspTool } from "./lsp"
+import { Truncate } from "./truncation"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -60,15 +61,16 @@ export namespace ToolRegistry {
   function fromPlugin(id: string, def: ToolDefinition): Tool.Info {
     return {
       id,
-      init: async () => ({
+      init: async (initCtx) => ({
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
           const result = await def.execute(args as any, ctx)
+          const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
-            output: result,
-            metadata: {},
+            output: out.truncated ? out.content : result,
+            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
           }
         },
       }),
@@ -91,11 +93,11 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
+      ...(Flag.OPENCODE_CLIENT === "cli" ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
       GrepTool,
-      ListTool,
       EditTool,
       WriteTool,
       TaskTool,
@@ -134,29 +136,6 @@ export namespace ToolRegistry {
           }
         }),
     )
-    return result
-  }
-
-  export async function enabled(agent: Agent.Info): Promise<Record<string, boolean>> {
-    const result: Record<string, boolean> = {}
-
-    if (agent.permission.edit === "deny") {
-      result["edit"] = false
-      result["write"] = false
-    }
-    if (agent.permission.bash["*"] === "deny" && Object.keys(agent.permission.bash).length === 1) {
-      result["bash"] = false
-    }
-    if (agent.permission.webfetch === "deny") {
-      result["webfetch"] = false
-      result["codesearch"] = false
-      result["websearch"] = false
-    }
-    // Disable skill tool if all skills are denied
-    if (agent.permission.skill["*"] === "deny" && Object.keys(agent.permission.skill).length === 1) {
-      result["skill"] = false
-    }
-
     return result
   }
 }

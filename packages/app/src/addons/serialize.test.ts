@@ -242,6 +242,53 @@ describe("SerializeAddon", () => {
       expect(term2.buffer.active.getLine(2)?.translateToString(true)).toBe("total 42")
     })
 
+    test("serialized output should restore after Terminal.reset()", async () => {
+      const { term, addon } = createTerminal()
+
+      const content = [
+        "\x1b[1;32m❯\x1b[0m \x1b[34mcd\x1b[0m /some/path",
+        "\x1b[1;32m❯\x1b[0m \x1b[34mls\x1b[0m -la",
+        "total 42",
+      ].join("\r\n")
+
+      await writeAndWait(term, content)
+
+      const serialized = addon.serialize()
+
+      const { term: term2 } = createTerminal()
+      terminals.push(term2)
+      term2.reset()
+      await writeAndWait(term2, serialized)
+
+      expect(term2.buffer.active.getLine(0)?.translateToString(true)).toContain("cd /some/path")
+      expect(term2.buffer.active.getLine(1)?.translateToString(true)).toContain("ls -la")
+      expect(term2.buffer.active.getLine(2)?.translateToString(true)).toBe("total 42")
+    })
+
+    test("alternate buffer should round-trip without garbage", async () => {
+      const { term, addon } = createTerminal(20, 5)
+
+      await writeAndWait(term, "normal\r\n")
+      await writeAndWait(term, "\x1b[?1049h\x1b[HALT")
+
+      expect(term.buffer.active.type).toBe("alternate")
+
+      const serialized = addon.serialize()
+
+      const { term: term2 } = createTerminal(20, 5)
+      terminals.push(term2)
+      await writeAndWait(term2, serialized)
+
+      expect(term2.buffer.active.type).toBe("alternate")
+
+      const line = term2.buffer.active.getLine(0)
+      expect(line?.translateToString(true)).toBe("ALT")
+
+      // Ensure a cell beyond content isn't garbage
+      const cellCode = line?.getCell(10)?.getCode()
+      expect(cellCode === 0 || cellCode === 32).toBe(true)
+    })
+
     test("serialized output written to new terminal should match original colors", async () => {
       const { term, addon } = createTerminal(40, 5)
 

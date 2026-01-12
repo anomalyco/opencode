@@ -26,6 +26,7 @@ export interface CommandOption {
   suggested?: boolean
   disabled?: boolean
   onSelect?: (source?: "palette" | "keybind" | "slash") => void
+  onHighlight?: () => (() => void) | void
 }
 
 export function parseKeybind(config: string): Keybind[] {
@@ -115,6 +116,28 @@ export function formatKeybind(config: string): string {
 
 function DialogCommand(props: { options: CommandOption[] }) {
   const dialog = useDialog()
+  let cleanup: (() => void) | void
+  let committed = false
+
+  const handleMove = (option: CommandOption | undefined) => {
+    cleanup?.()
+    cleanup = option?.onHighlight?.()
+  }
+
+  const handleSelect = (option: CommandOption | undefined) => {
+    if (option) {
+      committed = true
+      cleanup = undefined
+      dialog.close()
+      option.onSelect?.("palette")
+    }
+  }
+
+  onCleanup(() => {
+    if (!committed) {
+      cleanup?.()
+    }
+  })
 
   return (
     <Dialog title="Commands">
@@ -125,12 +148,8 @@ function DialogCommand(props: { options: CommandOption[] }) {
         key={(x) => x?.id}
         filterKeys={["title", "description", "category"]}
         groupBy={(x) => x.category ?? ""}
-        onSelect={(option) => {
-          if (option) {
-            dialog.close()
-            option.onSelect?.("palette")
-          }
-        }}
+        onMove={handleMove}
+        onSelect={handleSelect}
       >
         {(option) => (
           <div class="w-full flex items-center justify-between gap-4">
@@ -158,8 +177,19 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const dialog = useDialog()
 
     const options = createMemo(() => {
-      const all = registrations().flatMap((x) => x())
+      const seen = new Set<string>()
+      const all: CommandOption[] = []
+
+      for (const reg of registrations()) {
+        for (const opt of reg()) {
+          if (seen.has(opt.id)) continue
+          seen.add(opt.id)
+          all.push(opt)
+        }
+      }
+
       const suggested = all.filter((x) => x.suggested && !x.disabled)
+
       return [
         ...suggested.map((x) => ({
           ...x,

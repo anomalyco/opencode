@@ -3,6 +3,7 @@ import { unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
+import { iife } from "@/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -16,6 +17,28 @@ function mimeToModality(mime: string): Modality | undefined {
 
 export namespace ProviderTransform {
   function normalizeMessages(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
+    // Anthropic rejects messages with empty content - filter out empty string messages
+    // and remove empty text/reasoning parts from array content
+    if (model.api.npm === "@ai-sdk/anthropic") {
+      msgs = msgs
+        .map((msg) => {
+          if (typeof msg.content === "string") {
+            if (msg.content === "") return undefined
+            return msg
+          }
+          if (!Array.isArray(msg.content)) return msg
+          const filtered = msg.content.filter((part) => {
+            if (part.type === "text" || part.type === "reasoning") {
+              return part.text !== ""
+            }
+            return true
+          })
+          if (filtered.length === 0) return undefined
+          return { ...msg, content: filtered }
+        })
+        .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+    }
+
     if (model.api.id.includes("claude")) {
       return msgs.map((msg) => {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
@@ -124,7 +147,7 @@ export namespace ProviderTransform {
         cacheControl: { type: "ephemeral" },
       },
       openrouter: {
-        cache_control: { type: "ephemeral" },
+        cacheControl: { type: "ephemeral" },
       },
       bedrock: {
         cachePoint: { type: "ephemeral" },
@@ -214,7 +237,7 @@ export namespace ProviderTransform {
     const id = model.id.toLowerCase()
     if (id.includes("qwen")) return 0.55
     if (id.includes("claude")) return undefined
-    if (id.includes("gemini-3-pro")) return 1.0
+    if (id.includes("gemini")) return 1.0
     if (id.includes("glm-4.6")) return 1.0
     if (id.includes("glm-4.7")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
@@ -229,16 +252,186 @@ export namespace ProviderTransform {
     const id = model.id.toLowerCase()
     if (id.includes("qwen")) return 1
     if (id.includes("minimax-m2")) {
-      if (id.includes("m2.1")) return 0.9
       return 0.95
     }
+    if (id.includes("gemini")) return 0.95
     return undefined
   }
 
   export function topK(model: Provider.Model) {
     const id = model.id.toLowerCase()
-    if (id.includes("minimax-m2")) return 20
+    if (id.includes("minimax-m2")) {
+      if (id.includes("m2.1")) return 40
+      return 20
+    }
+    if (id.includes("gemini")) return 64
     return undefined
+  }
+
+  const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
+  const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+
+  export function variants(model: Provider.Model): Record<string, Record<string, any>> {
+    if (!model.capabilities.reasoning) return {}
+
+    const id = model.id.toLowerCase()
+    if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
+
+    switch (model.api.npm) {
+      case "@openrouter/ai-sdk-provider":
+        if (!model.id.includes("gpt") && !model.id.includes("gemini-3") && !model.id.includes("grok-4")) return {}
+        return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
+
+      // TODO: YOU CANNOT SET max_tokens if this is set!!!
+      case "@ai-sdk/gateway":
+        return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+
+      case "@ai-sdk/cerebras":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
+      case "@ai-sdk/togetherai":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/togetherai
+      case "@ai-sdk/xai":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/xai
+      case "@ai-sdk/deepinfra":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
+      case "@ai-sdk/openai-compatible":
+        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+
+      case "@ai-sdk/azure":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
+        if (id === "o1-mini") return {}
+        const azureEfforts = ["low", "medium", "high"]
+        if (id.includes("gpt-5-") || id === "gpt-5") {
+          azureEfforts.unshift("minimal")
+        }
+        return Object.fromEntries(
+          azureEfforts.map((effort) => [
+            effort,
+            {
+              reasoningEffort: effort,
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
+          ]),
+        )
+      case "@ai-sdk/openai":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
+        if (id === "gpt-5-pro") return {}
+        const openaiEfforts = iife(() => {
+          if (id.includes("codex")) {
+            if (id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+            return WIDELY_SUPPORTED_EFFORTS
+          }
+          const arr = [...WIDELY_SUPPORTED_EFFORTS]
+          if (id.includes("gpt-5-") || id === "gpt-5") {
+            arr.unshift("minimal")
+          }
+          if (model.release_date >= "2025-11-13") {
+            arr.unshift("none")
+          }
+          if (model.release_date >= "2025-12-04") {
+            arr.push("xhigh")
+          }
+          return arr
+        })
+        return Object.fromEntries(
+          openaiEfforts.map((effort) => [
+            effort,
+            {
+              reasoningEffort: effort,
+              reasoningSummary: "auto",
+              include: ["reasoning.encrypted_content"],
+            },
+          ]),
+        )
+
+      case "@ai-sdk/anthropic":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
+        return {
+          high: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 16000,
+            },
+          },
+          max: {
+            thinking: {
+              type: "enabled",
+              budgetTokens: 31999,
+            },
+          },
+        }
+
+      case "@ai-sdk/amazon-bedrock":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
+        return Object.fromEntries(
+          WIDELY_SUPPORTED_EFFORTS.map((effort) => [
+            effort,
+            {
+              reasoningConfig: {
+                type: "enabled",
+                maxReasoningEffort: effort,
+              },
+            },
+          ]),
+        )
+
+      case "@ai-sdk/google-vertex":
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex
+      case "@ai-sdk/google":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai
+        if (id.includes("2.5")) {
+          return {
+            high: {
+              thinkingConfig: {
+                includeThoughts: true,
+                thinkingBudget: 16000,
+              },
+            },
+            max: {
+              thinkingConfig: {
+                includeThoughts: true,
+                thinkingBudget: 24576,
+              },
+            },
+          }
+        }
+        return Object.fromEntries(
+          ["low", "high"].map((effort) => [
+            effort,
+            {
+              includeThoughts: true,
+              thinkingLevel: effort,
+            },
+          ]),
+        )
+
+      case "@ai-sdk/mistral":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/mistral
+        return {}
+
+      case "@ai-sdk/cohere":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cohere
+        return {}
+
+      case "@ai-sdk/groq":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/groq
+        const groqEffort = ["none", ...WIDELY_SUPPORTED_EFFORTS]
+        return Object.fromEntries(
+          groqEffort.map((effort) => [
+            effort,
+            {
+              includeThoughts: true,
+              thinkingLevel: effort,
+            },
+          ]),
+        )
+
+      case "@ai-sdk/perplexity":
+        // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
+        return {}
+    }
+    return {}
   }
 
   export function options(
@@ -300,26 +493,31 @@ export namespace ProviderTransform {
   }
 
   export function smallOptions(model: Provider.Model) {
-    const options: Record<string, any> = {}
-
     if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
       if (model.api.id.includes("5.")) {
-        options["reasoningEffort"] = "low"
-      } else {
-        options["reasoningEffort"] = "minimal"
+        return { reasoningEffort: "low" }
       }
+      return { reasoningEffort: "minimal" }
     }
     if (model.providerID === "google") {
-      options["thinkingConfig"] = {
-        thinkingBudget: 0,
+      // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
+      if (model.api.id.includes("gemini-3")) {
+        return { thinkingConfig: { thinkingLevel: "minimal" } }
       }
+      return { thinkingConfig: { thinkingBudget: 0 } }
     }
-
-    return options
+    if (model.providerID === "openrouter") {
+      if (model.api.id.includes("google")) {
+        return { reasoning: { enabled: false } }
+      }
+      return { reasoningEffort: "minimal" }
+    }
+    return {}
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
     switch (model.api.npm) {
+      case "@ai-sdk/github-copilot":
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
         return {
@@ -333,6 +531,7 @@ export namespace ProviderTransform {
         return {
           ["anthropic" as string]: options,
         }
+      case "@ai-sdk/google-vertex":
       case "@ai-sdk/google":
         return {
           ["google" as string]: options,

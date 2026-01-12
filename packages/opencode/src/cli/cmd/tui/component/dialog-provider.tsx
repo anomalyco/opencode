@@ -5,10 +5,14 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "../context/sdk"
 import { DialogPrompt } from "../ui/dialog-prompt"
+import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
 import type { ProviderAuthAuthorization } from "@opencode-ai/sdk/v2"
 import { DialogModel } from "./dialog-model"
+import { useKeyboard } from "@opentui/solid"
+import { Clipboard } from "@tui/util/clipboard"
+import { useToast } from "../ui/toast"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -16,7 +20,6 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "github-copilot": 2,
   openai: 3,
   google: 4,
-  openrouter: 5,
 }
 
 export function createDialogProviderOptions() {
@@ -33,6 +36,7 @@ export function createDialogProviderOptions() {
         description: {
           opencode: "(Recommended)",
           anthropic: "(Claude Max or API key)",
+          openai: "(ChatGPT Plus/Pro or API key)",
         }[provider.id],
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
         async onSelect() {
@@ -104,6 +108,16 @@ function AutoMethod(props: AutoMethodProps) {
   const sdk = useSDK()
   const dialog = useDialog()
   const sync = useSync()
+  const toast = useToast()
+
+  useKeyboard((evt) => {
+    if (evt.name === "c" && !evt.ctrl && !evt.meta) {
+      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.url
+      Clipboard.copy(code)
+        .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+        .catch(toast.error)
+    }
+  })
 
   onMount(async () => {
     const result = await sdk.client.provider.oauth.callback({
@@ -128,10 +142,13 @@ function AutoMethod(props: AutoMethodProps) {
         <text fg={theme.textMuted}>esc</text>
       </box>
       <box gap={1}>
-        <text fg={theme.primary}>{props.authorization.url}</text>
+        <Link href={props.authorization.url} fg={theme.primary} />
         <text fg={theme.textMuted}>{props.authorization.instructions}</text>
       </box>
       <text fg={theme.textMuted}>Waiting for authorization...</text>
+      <text fg={theme.text}>
+        c <span style={{ fg: theme.textMuted }}>copy</span>
+      </text>
     </box>
   )
 }
@@ -170,7 +187,7 @@ function CodeMethod(props: CodeMethodProps) {
       description={() => (
         <box gap={1}>
           <text fg={theme.textMuted}>{props.authorization.instructions}</text>
-          <text fg={theme.primary}>{props.authorization.url}</text>
+          <Link href={props.authorization.url} fg={theme.primary} />
           <Show when={error()}>
             <text fg={theme.error}>Invalid code</text>
           </Show>

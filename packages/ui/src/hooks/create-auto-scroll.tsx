@@ -1,4 +1,4 @@
-import { batch, createEffect } from "solid-js"
+import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
@@ -8,128 +8,160 @@ export interface AutoScrollOptions {
 }
 
 export function createAutoScroll(options: AutoScrollOptions) {
-  let scrollRef: HTMLElement | undefined
+  let scroll: HTMLElement | undefined
+  let settling = false
+  let settleTimer: ReturnType<typeof setTimeout> | undefined
+  let down = false
+  let cleanup: (() => void) | undefined
+
   const [store, setStore] = createStore({
     contentRef: undefined as HTMLElement | undefined,
-    lastScrollTop: 0,
-    lastScrollHeight: 0,
-    lastContentWidth: 0,
-    autoScrolled: false,
     userScrolled: false,
-    reflowing: false,
   })
 
-  function scrollToBottom() {
-    if (!scrollRef || store.userScrolled || !options.working()) return
-    setStore("autoScrolled", true)
-    requestAnimationFrame(() => {
-      scrollRef?.scrollTo({ top: scrollRef.scrollHeight, behavior: "smooth" })
-      requestAnimationFrame(() => {
-        batch(() => {
-          setStore("lastScrollTop", scrollRef?.scrollTop ?? 0)
-          setStore("lastScrollHeight", scrollRef?.scrollHeight ?? 0)
-          setStore("autoScrolled", false)
-        })
-      })
-    })
+  const active = () => options.working() || settling
+
+  const distanceFromBottom = () => {
+    const el = scroll
+    if (!el) return 0
+    return el.scrollHeight - el.clientHeight - el.scrollTop
   }
 
-  function handleScroll() {
-    if (!scrollRef || store.autoScrolled) return
+  const scrollToBottomNow = (behavior: ScrollBehavior) => {
+    const el = scroll
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
+  }
 
-    const scrollTop = scrollRef.scrollTop
-    const scrollHeight = scrollRef.scrollHeight
+  const scrollToBottom = (force: boolean) => {
+    if (!force && !active()) return
+    if (!scroll) return
 
-    if (store.reflowing) {
-      batch(() => {
-        setStore("lastScrollTop", scrollTop)
-        setStore("lastScrollHeight", scrollHeight)
-      })
+    if (!force && store.userScrolled) return
+    if (force && store.userScrolled) setStore("userScrolled", false)
+
+    const distance = distanceFromBottom()
+    if (distance < 2) return
+
+    const behavior: ScrollBehavior = force || distance > 96 ? "auto" : "smooth"
+    scrollToBottomNow(behavior)
+  }
+
+  const stop = () => {
+    if (!active()) return
+    if (store.userScrolled) return
+
+    setStore("userScrolled", true)
+    options.onUserInteracted?.()
+  }
+
+  const handleWheel = (e: WheelEvent) => {
+    if (e.deltaY >= 0) return
+    stop()
+  }
+
+  const handlePointerUp = () => {
+    down = false
+    window.removeEventListener("pointerup", handlePointerUp)
+  }
+
+  const handlePointerDown = () => {
+    if (down) return
+    down = true
+    window.addEventListener("pointerup", handlePointerUp)
+  }
+
+  const handleTouchEnd = () => {
+    down = false
+    window.removeEventListener("touchend", handleTouchEnd)
+  }
+
+  const handleTouchStart = () => {
+    if (down) return
+    down = true
+    window.addEventListener("touchend", handleTouchEnd)
+  }
+
+  const handleScroll = () => {
+    if (!active()) return
+    if (!scroll) return
+
+    if (distanceFromBottom() < 10) {
+      if (store.userScrolled) setStore("userScrolled", false)
       return
     }
 
-    const scrollHeightChanged = Math.abs(scrollHeight - store.lastScrollHeight) > 10
-    const scrollTopDelta = scrollTop - store.lastScrollTop
-
-    // Handle reflow-caused scroll position changes
-    if (scrollHeightChanged && scrollTopDelta < 0) {
-      const heightRatio = store.lastScrollHeight > 0 ? scrollHeight / store.lastScrollHeight : 1
-      const expectedScrollTop = store.lastScrollTop * heightRatio
-      if (Math.abs(scrollTop - expectedScrollTop) < 100) {
-        batch(() => {
-          setStore("lastScrollTop", scrollTop)
-          setStore("lastScrollHeight", scrollHeight)
-        })
-        return
-      }
-    }
-
-    // Handle reset to top while working
-    const reset = scrollTop <= 0 && store.lastScrollTop > 0 && options.working() && !store.userScrolled
-    if (reset) {
-      batch(() => {
-        setStore("lastScrollTop", scrollTop)
-        setStore("lastScrollHeight", scrollHeight)
-      })
-      requestAnimationFrame(scrollToBottom)
-      return
-    }
-
-    // Detect intentional scroll up
-    const scrolledUp = scrollTop < store.lastScrollTop - 50 && !scrollHeightChanged
-    if (scrolledUp && options.working()) {
-      setStore("userScrolled", true)
-      options.onUserInteracted?.()
-    }
-
-    batch(() => {
-      setStore("lastScrollTop", scrollTop)
-      setStore("lastScrollHeight", scrollHeight)
-    })
+    if (down) stop()
   }
 
-  function handleInteraction() {
-    if (options.working()) {
-      setStore("userScrolled", true)
-      options.onUserInteracted?.()
-    }
+  const handleInteraction = () => {
+    stop()
   }
 
-  // Reset userScrolled when work completes
-  createEffect(() => {
-    if (!options.working()) setStore("userScrolled", false)
-  })
-
-  // Handle content resize
   createResizeObserver(
     () => store.contentRef,
-    ({ width }) => {
-      const widthChanged = Math.abs(width - store.lastContentWidth) > 5
-      if (widthChanged && store.lastContentWidth > 0) {
-        setStore("reflowing", true)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setStore("reflowing", false)
-            if (options.working() && !store.userScrolled) {
-              scrollToBottom()
-            }
-          })
-        })
-      } else if (!store.reflowing) {
-        scrollToBottom()
-      }
-      setStore("lastContentWidth", width)
+    () => {
+      if (!active()) return
+      if (store.userScrolled) return
+      scrollToBottom(false)
     },
   )
 
+  createEffect(
+    on(options.working, (working) => {
+      settling = false
+      if (settleTimer) clearTimeout(settleTimer)
+      settleTimer = undefined
+
+      setStore("userScrolled", false)
+
+      if (working) {
+        scrollToBottom(true)
+        return
+      }
+
+      settling = true
+      settleTimer = setTimeout(() => {
+        settling = false
+      }, 300)
+    }),
+  )
+
+  onCleanup(() => {
+    if (settleTimer) clearTimeout(settleTimer)
+    if (cleanup) cleanup()
+  })
+
   return {
     scrollRef: (el: HTMLElement | undefined) => {
-      scrollRef = el
+      if (cleanup) {
+        cleanup()
+        cleanup = undefined
+      }
+
+      scroll = el
+      down = false
+
+      if (!el) return
+
+      el.style.overflowAnchor = "none"
+      el.addEventListener("wheel", handleWheel, { passive: true })
+      el.addEventListener("pointerdown", handlePointerDown)
+      el.addEventListener("touchstart", handleTouchStart, { passive: true })
+
+      cleanup = () => {
+        el.removeEventListener("wheel", handleWheel)
+        el.removeEventListener("pointerdown", handlePointerDown)
+        el.removeEventListener("touchstart", handleTouchStart)
+        window.removeEventListener("pointerup", handlePointerUp)
+        window.removeEventListener("touchend", handleTouchEnd)
+      }
     },
     contentRef: (el: HTMLElement | undefined) => setStore("contentRef", el),
     handleScroll,
     handleInteraction,
-    scrollToBottom,
+    scrollToBottom: () => scrollToBottom(false),
+    forceScrollToBottom: () => scrollToBottom(true),
     userScrolled: () => store.userScrolled,
   }
 }

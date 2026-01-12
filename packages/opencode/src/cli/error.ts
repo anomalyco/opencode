@@ -47,9 +47,10 @@ export function FormatUnknownError(input: unknown): string {
 
   if (typeof input === "object" && input !== null) {
     try {
-      const json = JSON.stringify(input, null, 2)
-      if (json && json !== "{}") return json
-    } catch {}
+      return JSON.stringify(input, null, 2)
+    } catch {
+      return "Unexpected error (unserializable)"
+    }
   }
 
   return String(input)

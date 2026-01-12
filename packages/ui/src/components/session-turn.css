@@ -26,8 +26,37 @@
     align-items: flex-start;
     align-self: stretch;
     min-width: 0;
-    gap: 42px;
+    gap: 28px;
     overflow-anchor: none;
+  }
+
+  [data-slot="session-turn-user-badges"] {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    pointer-events: none;
+
+    &[data-visible="true"] {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
+  [data-slot="session-turn-badge"] {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-x-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-normal);
+    white-space: nowrap;
+    color: var(--text-base);
+    background: var(--surface-raised-base);
   }
 
   [data-slot="session-turn-sticky-title"] {
@@ -52,13 +81,15 @@
   [data-slot="session-turn-message-header"] {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 12px;
     align-self: stretch;
     height: 32px;
   }
 
   [data-slot="session-turn-message-content"] {
     margin-top: -18px;
+    max-width: 100%;
   }
 
   [data-slot="session-turn-message-title"] {
@@ -114,6 +145,12 @@
     font-size: 13px; /* text-12-medium */
     font-weight: 500;
     color: var(--text-weak);
+  }
+
+  [data-slot="session-turn-markdown"],
+  [data-slot="session-turn-accordion"] [data-slot="accordion-content"] {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   [data-slot="session-turn-markdown"] {
@@ -215,6 +252,22 @@
       &:nth-child(30) {
         animation-delay: 3s;
       }
+    }
+  }
+
+  [data-slot="session-turn-summary-section"] {
+    position: relative;
+
+    [data-slot="session-turn-summary-copy"] {
+      position: absolute;
+      top: 0;
+      right: 0;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    &:hover [data-slot="session-turn-summary-copy"] {
+      opacity: 1;
     }
   }
 
@@ -343,6 +396,8 @@
 
   .error-card {
     color: var(--text-on-critical-base);
+    max-height: 240px;
+    overflow-y: auto;
   }
 
   [data-slot="session-turn-collapsible-content-inner"] {
@@ -356,5 +411,13 @@
     > :first-child > [data-component="markdown"]:first-child {
       margin-top: 0;
     }
+  }
+
+  [data-slot="session-turn-permission-parts"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 }
