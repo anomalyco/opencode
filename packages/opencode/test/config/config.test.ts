@@ -229,6 +229,8 @@ test("handles command configuration", async () => {
               template: "test template",
               description: "test command",
               agent: "test_agent",
+              model: "test_model",
+              variant: "test_variant",
             },
           },
         }),
@@ -243,6 +245,8 @@ test("handles command configuration", async () => {
         template: "test template",
         description: "test command",
         agent: "test_agent",
+        model: "test_model",
+        variant: "test_variant",
       })
     },
   })
