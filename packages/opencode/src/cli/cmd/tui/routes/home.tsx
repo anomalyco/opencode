@@ -1,6 +1,7 @@
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { createMemo, Match, onMount, Show, Switch } from "solid-js"
 import { useTheme } from "@tui/context/theme"
+import { useKeybind } from "@tui/context/keybind"
 import { Logo } from "../component/logo"
 import { DidYouKnow, randomizeTip } from "../component/did-you-know"
 import { Locale } from "@/util/locale"
@@ -36,7 +37,6 @@ export function Home() {
   const isFirstTimeUser = createMemo(() => sync.data.session.length === 0)
   const tipsHidden = createMemo(() => kv.get("tips_hidden", false))
   const showTips = createMemo(() => {
-    return false
     // Don't show tips for first-time users
     if (isFirstTimeUser()) return false
     return !tipsHidden()
@@ -90,6 +90,8 @@ export function Home() {
   })
   const directory = useDirectory()
 
+  const keybind = useKeybind()
+
   return (
     <>
       <box flexGrow={1} justifyContent="center" alignItems="center" paddingLeft={2} paddingRight={2} gap={1}>
@@ -103,12 +105,22 @@ export function Home() {
             hint={Hint}
           />
         </box>
+        <Show when={!isFirstTimeUser()}>
+          <Show when={showTips()}>
+            <box width="100%" maxWidth={75} paddingTop={3} alignItems="center">
+              <DidYouKnow />
+            </box>
+          </Show>
+        </Show>
         <Toast />
       </box>
-      <Show when={!isFirstTimeUser()}>
-        <Show when={showTips()}>
-          <DidYouKnow />
-        </Show>
+      <Show when={showTips()}>
+        <box position="absolute" bottom={2} right={2}>
+          <text>
+            <span style={{ fg: theme.text }}>{keybind.print("tips_toggle")}</span>
+            <span style={{ fg: theme.textMuted }}> Hide tips</span>
+          </text>
+        </box>
       </Show>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0} gap={2}>
         <text fg={theme.textMuted}>{directory()}</text>
