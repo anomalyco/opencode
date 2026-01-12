@@ -402,7 +402,6 @@ async fn spawn_local_server(app: &AppHandle, port: u32) -> Result<CommandChild, 
 
         if check_server_health(&url).await {
             println!("Server ready after {:?}", timestamp.elapsed());
-            tokio::time::sleep(Duration::from_millis(10)).await;
             break Ok(child);
         }
     }
