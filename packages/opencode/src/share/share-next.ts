@@ -10,6 +10,8 @@ import type * as SDK from "@opencode-ai/sdk/v2"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
+  // Generation counter to invalidate in-flight operations from previous init cycles
+  let generation = 0
   let disposed = false
 
   // Store unsubscribe functions for cleanup
@@ -23,10 +25,12 @@ export namespace ShareNext {
     // Clean up any existing subscriptions before adding new ones
     dispose()
     disposed = false
+    // Increment generation so in-flight operations from previous cycle are invalidated
+    const gen = ++generation
 
     const unsub1 = Bus.subscribe(Session.Event.Updated, async (evt) => {
-      if (disposed) return
-      await sync(evt.properties.info.id, [
+      if (disposed || gen !== generation) return
+      await sync(gen, evt.properties.info.id, [
         {
           type: "session",
           data: evt.properties.info,
@@ -34,15 +38,16 @@ export namespace ShareNext {
       ])
     })
     const unsub2 = Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      if (disposed) return
-      await sync(evt.properties.info.sessionID, [
+      if (disposed || gen !== generation) return
+      await sync(gen, evt.properties.info.sessionID, [
         {
           type: "message",
           data: evt.properties.info,
         },
       ])
+      if (gen !== generation) return
       if (evt.properties.info.role === "user") {
-        await sync(evt.properties.info.sessionID, [
+        await sync(gen, evt.properties.info.sessionID, [
           {
             type: "model",
             data: [
@@ -55,8 +60,8 @@ export namespace ShareNext {
       }
     })
     const unsub3 = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
-      if (disposed) return
-      await sync(evt.properties.part.sessionID, [
+      if (disposed || gen !== generation) return
+      await sync(gen, evt.properties.part.sessionID, [
         {
           type: "part",
           data: evt.properties.part,
@@ -64,8 +69,8 @@ export namespace ShareNext {
       ])
     })
     const unsub4 = Bus.subscribe(Session.Event.Diff, async (evt) => {
-      if (disposed) return
-      await sync(evt.properties.sessionID, [
+      if (disposed || gen !== generation) return
+      await sync(gen, evt.properties.sessionID, [
         {
           type: "session_diff",
           data: evt.properties.diff,
@@ -141,7 +146,10 @@ export namespace ShareNext {
       }
 
   const queue = new Map<string, { timeout: NodeJS.Timeout; data: Map<string, Data> }>()
-  async function sync(sessionID: string, data: Data[]) {
+  async function sync(gen: number, sessionID: string, data: Data[]) {
+    // Check generation before any work
+    if (gen !== generation) return
+
     const existing = queue.get(sessionID)
     if (existing) {
       for (const item of data) {
@@ -156,11 +164,15 @@ export namespace ShareNext {
     }
 
     const timeout = setTimeout(async () => {
+      // Check generation before processing queued data
+      if (gen !== generation) return
       const queued = queue.get(sessionID)
       if (!queued) return
       queue.delete(sessionID)
       const share = await get(sessionID).catch(() => undefined)
       if (!share) return
+      // Check generation after async operation
+      if (gen !== generation) return
 
       await fetch(`${await url()}/api/share/${share.id}/sync`, {
         method: "POST",
@@ -193,17 +205,23 @@ export namespace ShareNext {
   }
 
   async function fullSync(sessionID: string) {
+    // Capture current generation for this sync operation
+    const gen = generation
     log.info("full sync", { sessionID })
     const session = await Session.get(sessionID)
+    if (gen !== generation) return
     const diffs = await Session.diff(sessionID)
+    if (gen !== generation) return
     const messages = await Array.fromAsync(MessageV2.stream(sessionID))
+    if (gen !== generation) return
     const models = await Promise.all(
       messages
         .filter((m) => m.info.role === "user")
         .map((m) => (m.info as SDK.UserMessage).model)
         .map((m) => Provider.getModel(m.providerID, m.modelID).then((m) => m)),
     )
-    await sync(sessionID, [
+    if (gen !== generation) return
+    await sync(gen, sessionID, [
       {
         type: "session",
         data: session,
