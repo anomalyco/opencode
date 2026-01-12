@@ -33,7 +33,7 @@ const Loading = () => <div class="size-full flex items-center justify-center tex
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; }
+    __OPENCODE__?: { updaterEnabled?: boolean }
   }
 }
 
@@ -67,13 +67,13 @@ function ServerKey(props: ParentProps) {
 
 export function AppInterface(props: { defaultUrl?: string }) {
   const defaultServerUrl = () => {
-    if (props.defaultUrl) return props.defaultUrl;
+    if (props.defaultUrl) return props.defaultUrl
     if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
     if (import.meta.env.DEV)
       return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
     return window.location.origin
-  };
+  }
 
   return (
     <ServerProvider defaultUrl={defaultServerUrl()}>

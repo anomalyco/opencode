@@ -282,11 +282,7 @@ render(() => {
         <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
       )}
       <AppBaseProviders>
-        <ServerGate>
-          {serverUrl =>
-            <AppInterface defaultUrl={serverUrl()} />
-          }
-        </ServerGate>
+        <ServerGate>{(serverUrl) => <AppInterface defaultUrl={serverUrl()} />}</ServerGate>
       </AppBaseProviders>
     </PlatformProvider>
   )
@@ -307,7 +303,7 @@ function ServerGate(props: { children: (url: Accessor<string>) => JSX.Element })
         </div>
       }
     >
-      {serverUrl => props.children(serverUrl)}
+      {(serverUrl) => props.children(serverUrl)}
     </Show>
   )
 }
