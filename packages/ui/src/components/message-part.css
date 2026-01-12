@@ -114,6 +114,7 @@
 [data-component="reasoning-part"] {
   width: 100%;
   opacity: 0.5;
+  animation: fadeUpDim 0.5s ease-out forwards;
 
   [data-component="markdown"] {
     margin-top: 24px;
@@ -320,6 +321,7 @@
     align-items: center;
     gap: 8px;
     color: var(--text-weak);
+    animation: slideInLeft 0.3s ease-out;
 
     [data-slot="icon-svg"] {
       flex-shrink: 0;

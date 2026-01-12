@@ -33,6 +33,54 @@
   }
 }
 
+@keyframes fadeUpDim {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 0.5;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutLeft {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="session-turn"],
+  [data-slot="session-turn-summary-section"],
+  [data-component="reasoning-part"],
+  [data-slot="task-tool-item"],
+  [data-slot="accordion-content"],
+  [data-slot="accordion-item"],
+  [data-slot="collapsible-content"],
+  [data-slot="message-nav-tooltip"],
+  [data-slot="message-nav-tooltip"][data-expanded],
+  [data-slot="message-nav-tooltip"][data-closed] {
+    animation: none !important;
+  }
+}
+
 .fade-up-text {
   animation: fadeUp 0.4s ease-out forwards;
   opacity: 0;

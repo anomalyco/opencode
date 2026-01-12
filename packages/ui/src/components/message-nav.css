@@ -93,6 +93,14 @@
 
 [data-slot="message-nav-tooltip"] {
   z-index: 1000;
+
+  &[data-expanded] {
+    animation: slideInLeft 0.15s ease-out;
+  }
+
+  &[data-closed] {
+    animation: slideOutLeft 0.1s ease-in forwards;
+  }
 }
 
 [data-slot="message-nav-tooltip-content"] {

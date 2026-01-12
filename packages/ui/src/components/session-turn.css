@@ -6,6 +6,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
+  animation: fadeUp 0.5s ease-out;
 
   [data-slot="session-turn-content"] {
     flex-grow: 1;
@@ -126,6 +127,7 @@
     gap: 24px;
     align-items: flex-start;
     align-self: stretch;
+    animation: fadeUp 0.5s ease-out;
   }
 
   [data-slot="session-turn-summary-header"] {
