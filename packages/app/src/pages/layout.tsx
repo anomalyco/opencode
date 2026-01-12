@@ -860,16 +860,16 @@ export default function Layout(props: ParentProps) {
                  hover:bg-surface-raised-base-hover focus-within:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-hover"
         >
           <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
-            <A
-              href={`${props.slug}/session/${props.session.id}`}
-              class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
-              onMouseEnter={() => prefetchSession(props.session, "high")}
-              onFocus={() => prefetchSession(props.session, "high")}
-            >
-                <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
+              <A
+                href={`${props.slug}/session/${props.session.id}`}
+                class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-6 py-1"
+                onMouseEnter={() => prefetchSession(props.session, "high")}
+                onFocus={() => prefetchSession(props.session, "high")}
+              >
+                <div class="flex items-center self-stretch gap-2 justify-between min-w-0">
                   <span
                     classList={{
-                      "text-14-regular text-text-strong break-words": true,
+                      "text-14-regular text-text-strong truncate min-w-0": true,
                       "animate-pulse": isWorking(),
                     }}
                   >
@@ -986,7 +986,9 @@ export default function Layout(props: ParentProps) {
                     expandable
                     notify={!isExpanded()}
                   />
-                  <span class="text-14-medium text-text-strong break-words">{name()}</span>
+                    <Tooltip placement="right" value={name()} inactive={showExpanded()}>
+                      <span class="text-14-medium text-text-strong truncate">{name()}</span>
+                    </Tooltip>
                 </Collapsible.Trigger>
                 <div class="flex invisible gap-1 items-center group-hover/session:visible has-[[data-expanded]]:visible">
                   <DropdownMenu>
