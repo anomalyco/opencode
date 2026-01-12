@@ -367,13 +367,15 @@ export const RunCommand = cmd({
     }
 
     await bootstrap(process.cwd(), async () => {
-      const server = Server.listen({ port: args.port ?? 0, hostname: "127.0.0.1" })
-      const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}` })
+      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init)
+        return Server.App().fetch(request)
+      }) as typeof globalThis.fetch
+      const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
 
       if (args.command) {
         const exists = await Command.get(args.command)
         if (!exists) {
-          server.stop()
           UI.error(`Command "${args.command}" not found`)
           process.exit(1)
         }
@@ -398,7 +400,6 @@ export const RunCommand = cmd({
       })()
 
       if (!sessionID) {
-        server.stop()
         UI.error("Session not found")
         process.exit(1)
       }
@@ -417,7 +418,6 @@ export const RunCommand = cmd({
       }
 
       await execute(sdk, sessionID)
-      server.stop()
     })
   },
 })
