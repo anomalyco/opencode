@@ -14,6 +14,7 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { Plan } from "./plan"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -164,6 +165,13 @@ export namespace SessionCompaction {
     })
 
     if (result === "continue" && input.auto) {
+      // Check if there's an active plan for this session
+      const plan = await Plan.get(input.sessionID).catch(() => null)
+      const continueText =
+        plan && plan.status === "approved"
+          ? `Continue with your tasks. Your plan is stored at: ${plan.filePath} - read it to refresh your memory of the current plan.`
+          : "Continue if you have next steps"
+
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -180,7 +188,7 @@ export namespace SessionCompaction {
         sessionID: input.sessionID,
         type: "text",
         synthetic: true,
-        text: "Continue if you have next steps",
+        text: continueText,
         time: {
           start: Date.now(),
           end: Date.now(),

@@ -121,7 +121,7 @@ export namespace PermissionNext {
       const s = await state()
       const { ruleset, ...request } = input
       for (const pattern of request.patterns ?? []) {
-        const rule = evaluate(request.permission, pattern, ruleset, s.approved)
+        const rule = evaluateWithSession(request.permission, pattern, request.sessionID, ruleset, s.approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny")
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
@@ -197,7 +197,9 @@ export namespace PermissionNext {
         for (const [id, pending] of Object.entries(s.pending)) {
           if (pending.info.sessionID !== sessionID) continue
           const ok = pending.info.patterns.every(
-            (pattern) => evaluate(pending.info.permission, pattern, s.approved).action === "allow",
+            (pattern) =>
+              evaluateWithSession(pending.info.permission, pattern, pending.info.sessionID, s.approved).action ===
+              "allow",
           )
           if (!ok) continue
           delete s.pending[id]
@@ -226,6 +228,24 @@ export namespace PermissionNext {
     return match ?? { action: "ask", permission, pattern: "*" }
   }
 
+  /** Evaluate with sessionID placeholder expansion for session-scoped patterns */
+  export function evaluateWithSession(
+    permission: string,
+    pattern: string,
+    sessionID: string,
+    ...rulesets: Ruleset[]
+  ): Rule {
+    const merged = merge(...rulesets)
+    log.info("evaluate", { permission, pattern, ruleset: merged, sessionID })
+
+    const match = merged.findLast((rule) => {
+      // Expand {sessionID} placeholder in rule patterns
+      const expandedPattern = rule.pattern.replace("{sessionID}", sessionID)
+      return Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, expandedPattern)
+    })
+    return match ?? { action: "ask", permission, pattern: "*" }
+  }
+
   const EDIT_TOOLS = ["edit", "write", "patch", "multiedit"]
 
   export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
@@ -233,6 +253,10 @@ export namespace PermissionNext {
     for (const tool of tools) {
       const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
 
+      // Find the last matching rule for this permission
+      // The logic is: if the last rule with pattern="*" denies, disable the tool
+      // BUT if there's a more specific allow rule AFTER the wildcard deny, don't disable
+      // (because findLast returns the last matching rule, which would be the allow)
       const rule = ruleset.findLast((r) => Wildcard.match(permission, r.permission))
       if (!rule) continue
       if (rule.pattern === "*" && rule.action === "deny") result.add(tool)

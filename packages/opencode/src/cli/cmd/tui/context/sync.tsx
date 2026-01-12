@@ -23,6 +23,9 @@ import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
+import type { PlanReview } from "@/session/plan-review"
+
+type PlanReviewRequest = PlanReview.Request
 import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
@@ -45,6 +48,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       question: {
         [sessionID: string]: QuestionRequest[]
+      }
+      plan_review: {
+        [sessionID: string]: PlanReviewRequest[]
       }
       config: Config
       session: Session[]
@@ -85,6 +91,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       agent: [],
       permission: {},
       question: {},
+      plan_review: {},
       command: [],
       provider: [],
       provider_default: {},
@@ -177,6 +184,44 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           }
           setStore(
             "question",
+            request.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 0, request)
+            }),
+          )
+          break
+        }
+
+        case "plan_review.approved":
+        case "plan_review.rejected": {
+          const requests = store.plan_review[event.properties.sessionID]
+          if (!requests) break
+          const match = Binary.search(requests, event.properties.requestID, (r) => r.id)
+          if (!match.found) break
+          setStore(
+            "plan_review",
+            event.properties.sessionID,
+            produce((draft) => {
+              draft.splice(match.index, 1)
+            }),
+          )
+          break
+        }
+
+        case "plan_review.requested": {
+          const request = event.properties
+          const requests = store.plan_review[request.sessionID]
+          if (!requests) {
+            setStore("plan_review", request.sessionID, [request])
+            break
+          }
+          const match = Binary.search(requests, request.id, (r) => r.id)
+          if (match.found) {
+            setStore("plan_review", request.sessionID, match.index, reconcile(request))
+            break
+          }
+          setStore(
+            "plan_review",
             request.sessionID,
             produce((draft) => {
               draft.splice(match.index, 0, request)

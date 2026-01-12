@@ -296,6 +296,33 @@ export namespace SessionPrompt {
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
         lastUser.id < lastAssistant.id
       ) {
+        // Check for plan→build transition (ExitPlanMode was approved)
+        // When approved, ExitPlanMode updates the user message's agent to "build"
+        // but the assistant message was still from the plan agent
+        if (lastAssistant.agent === "plan" && lastUser.agent === "build") {
+          log.info("plan→build transition detected, continuing with build agent", { sessionID })
+          // Create a synthetic continuation user message for the build agent
+          const continueMsg: MessageV2.User = {
+            id: Identifier.ascending("message"),
+            role: "user",
+            sessionID,
+            time: { created: Date.now() },
+            agent: "build",
+            model: lastUser.model,
+          }
+          await Session.updateMessage(continueMsg)
+          await Session.updatePart({
+            id: Identifier.ascending("part"),
+            messageID: continueMsg.id,
+            sessionID,
+            type: "text",
+            synthetic: true,
+            text: "Continue with the approved plan.",
+            time: { start: Date.now(), end: Date.now() },
+          })
+          // Don't exit - continue the loop with the new user message
+          continue
+        }
         log.info("exiting loop", { sessionID })
         break
       }

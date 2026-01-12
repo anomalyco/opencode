@@ -1,0 +1,12 @@
+Call this tool when you have finished writing your plan and are ready for user review.
+
+This tool will:
+1. Submit your plan for user review
+2. Block until the user approves or rejects the plan
+3. If approved, you will transition to build mode to implement the plan
+4. If rejected, you will receive feedback and should revise the plan
+
+Important:
+- Make sure your plan is complete and saved to the plan file before calling this tool
+- The user will see the contents of your plan file when reviewing
+- Do not call this tool until you are confident the plan is ready for review
