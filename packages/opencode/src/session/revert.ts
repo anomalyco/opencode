@@ -59,12 +59,12 @@ export namespace SessionRevert {
       await Snapshot.revert(patches)
       if (revert.snapshot) revert.diff = await Snapshot.diff(revert.snapshot)
 
-      // Save current plan file content before revert (plan files are outside git worktree)
-      // Then delete the plan file so the AI can create a fresh one if needed
+      // Save current plan file content for unrevert (plan files are outside git worktree)
+      // We save the content but DON'T delete the file - the file stays as-is during revert
+      // If user unreverts, we restore this saved content
       const planContent = await Plan.readContent(input.sessionID).catch(() => null)
       if (planContent !== null) {
         revert.planContent = planContent
-        await Plan.deletePlan(input.sessionID).catch(() => {})
       }
 
       return Session.update(input.sessionID, (draft) => {
