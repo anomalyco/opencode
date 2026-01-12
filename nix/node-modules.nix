@@ -7,6 +7,33 @@
   curl,
 }:
 args:
+let
+  inherit (stdenvNoCC.hostPlatform) system;
+
+  # Map Nix systems to Bun --cpu values
+  cpuMap = {
+    "aarch64-linux" = "arm64";
+    "x86_64-linux" = "x64";
+    "aarch64-darwin" = "arm64";
+    "x86_64-darwin" = "x64";
+    "i686-linux" = "ia32";
+    "armv7l-linux" = "arm";
+  };
+
+  # Map Nix systems to Bun --os values
+  osMap = {
+    "aarch64-linux" = "linux";
+    "x86_64-linux" = "linux";
+    "aarch64-darwin" = "darwin";
+    "x86_64-darwin" = "darwin";
+    "i686-linux" = "linux";
+    "armv7l-linux" = "linux";
+  };
+
+  # Fallback to "*" for unknown systems
+  targetCpu = cpuMap.${system} or "*";
+  targetOs = osMap.${system} or "*";
+in
 stdenvNoCC.mkDerivation {
   pname = "opencode-node_modules";
   inherit (args) version src;
@@ -29,8 +56,8 @@ stdenvNoCC.mkDerivation {
     export HOME=$(mktemp -d)
     export BUN_INSTALL_CACHE_DIR=$(mktemp -d)
     bun install \
-      --cpu="*" \
-      --os="*" \
+      --cpu="${targetCpu}" \
+      --os="${targetOs}" \
       --frozen-lockfile \
       --ignore-scripts \
       --no-progress \
