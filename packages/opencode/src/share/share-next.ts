@@ -85,11 +85,12 @@ export namespace ShareNext {
         log.error("failed to unsubscribe", { error })
       }
     }
-    // Clear pending timeouts
-    for (const entry of queue.values()) {
+    // Hardened: snapshot and clear atomically to avoid race during iteration
+    const pending = Array.from(queue.values())
+    queue.clear()
+    for (const entry of pending) {
       clearTimeout(entry.timeout)
     }
-    queue.clear()
     log.info("disposed share-next subscriptions")
   }
 
