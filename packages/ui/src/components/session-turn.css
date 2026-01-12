@@ -33,6 +33,7 @@
   [data-slot="session-turn-user-badges"] {
     position: absolute;
     right: 0;
+    display: flex;
     gap: 6px;
     opacity: 0;
     transition: opacity 0.15s ease;
