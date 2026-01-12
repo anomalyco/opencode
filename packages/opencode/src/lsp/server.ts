@@ -19,6 +19,41 @@ export namespace LSPServer {
       .then(() => true)
       .catch(() => false)
 
+  /**
+   * Detects if Lombok is a dependency in the Java project
+   * Checks pom.xml, build.gradle, and build.gradle.kts
+   */
+  async function detectLombokDependency(projectRoot: string): Promise<boolean> {
+    // Check pom.xml (Maven)
+    const pomPath = path.join(projectRoot, "pom.xml")
+    if (await pathExists(pomPath)) {
+      const content = await Bun.file(pomPath).text()
+      if (/<artifactId>\s*lombok\s*<\/artifactId>/.test(content)) {
+        return true
+      }
+    }
+
+    // Check build.gradle (Groovy DSL)
+    const gradlePath = path.join(projectRoot, "build.gradle")
+    if (await pathExists(gradlePath)) {
+      const content = await Bun.file(gradlePath).text()
+      if (/['"]org\.projectlombok:lombok[:'"]/.test(content)) {
+        return true
+      }
+    }
+
+    // Check build.gradle.kts (Kotlin DSL)
+    const gradleKtsPath = path.join(projectRoot, "build.gradle.kts")
+    if (await pathExists(gradleKtsPath)) {
+      const content = await Bun.file(gradleKtsPath).text()
+      if (/["']org\.projectlombok:lombok[:"']/.test(content)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
   export interface Handle {
     process: ChildProcessWithoutNullStreams
     initialization?: Record<string, any>
@@ -1176,6 +1211,72 @@ export namespace LSPServer {
         await fs.rm(path.join(distPath, archiveName), { force: true })
         log.info("JDTLS download and extraction completed")
       }
+
+      // ========================================
+      // LOMBOK HANDLING
+      // ========================================
+
+      // Auto-detect Lombok dependency
+      const lombokEnabled = await detectLombokDependency(root)
+      if (lombokEnabled) {
+        log.info("Lombok dependency detected in project, enabling automatically")
+      }
+
+      // Download Lombok if enabled
+      let lombokJarPath: string | undefined
+      if (lombokEnabled) {
+        const binDir = path.join(distPath, "bin")
+        lombokJarPath = path.join(binDir, "lombok.jar")
+        const lombokExists = await pathExists(lombokJarPath)
+
+        if (!lombokExists) {
+          if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) {
+            log.warn("Lombok required but download disabled by OPENCODE_DISABLE_LSP_DOWNLOAD flag")
+            lombokJarPath = undefined
+          } else {
+            log.info("Downloading Lombok for JDTLS")
+            const lombokURL = "https://projectlombok.org/downloads/lombok.jar"
+            const result = await $`curl -L -o '${lombokJarPath}' '${lombokURL}'`.quiet().nothrow()
+
+            if (result.exitCode !== 0) {
+              log.error("Failed to download Lombok. JDTLS will start without Lombok support.")
+              lombokJarPath = undefined
+            } else {
+              log.info("Lombok downloaded successfully")
+            }
+          }
+        } else {
+          log.info("Using existing Lombok jar")
+        }
+
+        // Verify the jar exists
+        if (lombokJarPath && !(await pathExists(lombokJarPath))) {
+          log.warn("Lombok jar not found at expected location, disabling Lombok support")
+          lombokJarPath = undefined
+        }
+      }
+
+      // Try using the wrapper script first (preferred approach)
+      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
+      const wrapperPath = path.join(distPath, "bin", "jdtls")
+      if (await pathExists(wrapperPath)) {
+        const args = [
+          // Add Lombok javaagent if enabled
+          ...(lombokJarPath ? [`--jvm-arg=-javaagent:${lombokJarPath}`] : []),
+          // Data directory
+          "-data",
+          dataDir,
+        ]
+        return {
+          process: spawn(wrapperPath, args, {
+            cwd: root,
+            env: process.env,
+          }),
+        }
+      }
+
+      // Fallback to direct Java execution
+      log.warn("JDTLS wrapper script not found at expected location. Falling back to direct Java execution.")
       const jarFileName = await $`ls org.eclipse.equinox.launcher_*.jar`
         .cwd(launcherDir)
         .quiet()
@@ -1201,11 +1302,14 @@ export namespace LSPServer {
           }
         })(),
       )
-      const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
+
       return {
         process: spawn(
           java,
           [
+            // Lombok javaagent MUST come BEFORE -jar
+            ...(lombokJarPath ? [`-javaagent:${lombokJarPath}`] : []),
+            // Then the -jar and launcher
             "-jar",
             launcherJar,
             "-configuration",
@@ -1222,6 +1326,7 @@ export namespace LSPServer {
           ],
           {
             cwd: root,
+            env: process.env,
           },
         ),
       }
