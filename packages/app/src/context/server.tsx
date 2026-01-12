@@ -6,6 +6,11 @@ import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
 
 type StoredProject = { worktree: string; expanded: boolean }
+type StoredState = {
+  active: string
+  list: string[]
+  projects: Record<string, StoredProject[]>
+}
 
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
@@ -36,18 +41,17 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
-      createStore({
-        list: [] as string[],
-        projects: {} as Record<string, StoredProject[]>,
+      createStore<StoredState>({
+        active: "",
+        list: [],
+        projects: {},
       }),
     )
-
-    const [active, setActiveRaw] = createSignal("")
 
     function setActive(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
-      setActiveRaw(url)
+      setStore("active", url)
     }
 
     function add(input: string) {
@@ -56,7 +60,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
       const fallback = normalizeServerUrl(props.defaultUrl)
       if (fallback && url === fallback) {
-        setActiveRaw(url)
+        setStore("active", url)
         return
       }
 
@@ -64,7 +68,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         if (!store.list.includes(url)) {
           setStore("list", store.list.length, url)
         }
-        setActiveRaw(url)
+        setStore("active", url)
       })
     }
 
@@ -73,23 +77,23 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!url) return
 
       const list = store.list.filter((x) => x !== url)
-      const next = active() === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : active()
+      const next = store.active === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : store.active
 
       batch(() => {
         setStore("list", list)
-        setActiveRaw(next)
+        setStore("active", next)
       })
     }
 
     createEffect(() => {
       if (!ready()) return
-      if (active()) return
+      if (store.active) return
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
-      setActiveRaw(url)
+      setStore("active", url)
     })
 
-    const isReady = createMemo(() => ready() && !!active())
+    const isReady = createMemo(() => ready() && !!store.active)
 
     const [healthy, setHealthy] = createSignal<boolean | undefined>(undefined)
 
@@ -106,7 +110,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     createEffect(() => {
-      const url = active()
+      const url = store.active
       if (!url) return
 
       setHealthy(undefined)
@@ -136,7 +140,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     })
 
-    const origin = createMemo(() => projectsKey(active()))
+    const origin = createMemo(() => projectsKey(store.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const isLocal = createMemo(() => origin() === "local")
 
@@ -145,10 +149,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       healthy,
       isLocal,
       get url() {
-        return active()
+        return store.active
       },
       get name() {
-        return serverDisplayName(active())
+        return serverDisplayName(store.active)
       },
       get list() {
         return store.list
