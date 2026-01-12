@@ -44,11 +44,10 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     active: createMemo(() => store.active),
     new() {
       const existingTitleNumbers = new Set(
-        store.all
-          .map((pty) => {
-            const match = pty.titleNumber
-            return match
-          })
+        store.all.map((pty) => {
+          const match = pty.titleNumber
+          return match
+        }),
       )
 
       let nextNumber = 1
@@ -57,7 +56,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       }
 
       sdk.client.pty
-      .create({ title: `Terminal ${nextNumber}` })
+        .create({ title: `Terminal ${nextNumber}` })
         .then((pty) => {
           const id = pty.data?.id
           if (!id) return
