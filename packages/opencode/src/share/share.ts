@@ -9,33 +9,35 @@ export namespace Share {
 
   let queue: Promise<void> = Promise.resolve()
   const pending = new Map<string, any>()
+  // Generation counter to invalidate in-flight operations from previous init cycles
+  let generation = 0
   let disposed = false
 
   // Store unsubscribe functions for cleanup
   const unsubscribers: Array<() => void> = []
 
-  export async function sync(key: string, content: any) {
-    // Skip if disposed - check at entry point
-    if (disposed) return
+  export async function sync(gen: number, key: string, content: any) {
+    // Skip if disposed or wrong generation
+    if (disposed || gen !== generation) return
     const [root, ...splits] = key.split("/")
     if (root !== "session") return
     const [sub, sessionID] = splits
     if (sub === "share") return
     const share = await Session.getShare(sessionID).catch(() => {})
     if (!share) return
-    // Re-check disposed after async operation
-    if (disposed) return
+    // Re-check after async operation
+    if (disposed || gen !== generation) return
     const { secret } = share
     pending.set(key, content)
     queue = queue
       .then(async () => {
-        // Check disposed at start of queued operation
-        if (disposed) return
+        // Check at start of queued operation
+        if (disposed || gen !== generation) return
         const content = pending.get(key)
         if (content === undefined) return
         pending.delete(key)
         // Final check before network request
-        if (disposed) return
+        if (disposed || gen !== generation) return
 
         return fetch(`${URL}/share_sync`, {
           method: "POST",
@@ -61,15 +63,22 @@ export namespace Share {
     // Clean up any existing subscriptions before adding new ones
     dispose()
     disposed = false
+    // Increment generation so in-flight operations from previous cycle are invalidated
+    const gen = ++generation
 
     const unsub1 = Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync("session/info/" + evt.properties.info.id, evt.properties.info)
+      await sync(gen, "session/info/" + evt.properties.info.id, evt.properties.info)
     })
     const unsub2 = Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync("session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id, evt.properties.info)
+      await sync(
+        gen,
+        "session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id,
+        evt.properties.info,
+      )
     })
     const unsub3 = Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
       await sync(
+        gen,
         "session/part/" +
           evt.properties.part.sessionID +
           "/" +
