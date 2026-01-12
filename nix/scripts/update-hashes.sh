@@ -33,9 +33,16 @@ trap cleanup EXIT
 
 write_node_modules_hash() {
   local value="$1"
+  local system="${2:-$SYSTEM}"
   local temp
   temp=$(mktemp)
-  jq --arg value "$value" '.nodeModules = $value' "$HASH_FILE" >"$temp"
+  
+  if jq -e '.nodeModules | type == "object"' "$HASH_FILE" >/dev/null 2>&1; then
+    jq --arg system "$system" --arg value "$value" '.nodeModules[$system] = $value' "$HASH_FILE" >"$temp"
+  else
+    jq --arg system "$system" --arg value "$value" '.nodeModules = {($system): $value}' "$HASH_FILE" >"$temp"
+  fi
+  
   mv "$temp" "$HASH_FILE"
 }
 

@@ -17,7 +17,7 @@ on:
       - "packages/*/package.json"
 
 jobs:
-  update:
+  update-linux:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
@@ -47,14 +47,14 @@ jobs:
           nix flake update
           echo "✅ flake.lock updated successfully"
 
-      - name: Update node_modules hash
+      - name: Update node_modules hash for x86_64-linux
         run: |
           set -euo pipefail
-          echo "🔄 Updating node_modules hash..."
+          echo "🔄 Updating node_modules hash for x86_64-linux..."
           nix/scripts/update-hashes.sh
-          echo "✅ node_modules hash updated successfully"
+          echo "✅ node_modules hash for x86_64-linux updated successfully"
 
-      - name: Commit hash changes
+      - name: Commit Linux hash changes
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
         run: |
@@ -65,7 +65,7 @@ jobs:
           summarize() {
             local status="$1"
             {
-              echo "### Nix Hash Update"
+              echo "### Nix Hash Update (x86_64-linux)"
               echo ""
               echo "- ref: ${GITHUB_REF_NAME}"
               echo "- status: ${status}"
@@ -89,7 +89,92 @@ jobs:
           echo "🔗 Staging files..."
           git add "${FILES[@]}"
           echo "💾 Committing changes..."
-          git commit -m "Update Nix flake.lock and hashes"
+          git commit -m "Update Nix flake.lock and x86_64-linux hash"
+          echo "✅ Changes committed"
+
+          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          echo "🌳 Pulling latest from branch: $BRANCH"
+          git pull --rebase origin "$BRANCH"
+          echo "🚀 Pushing changes to branch: $BRANCH"
+          git push origin HEAD:"$BRANCH"
+          echo "✅ Changes pushed successfully"
+
+          summarize "committed $(git rev-parse --short HEAD)"
+
+  update-macos:
+    needs: update-linux
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    env:
+      SYSTEM: aarch64-darwin
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - name: Setup Nix
+        uses: DeterminateSystems/nix-installer-action@v20
+
+      - name: Configure git
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "Github Action"
+
+      - name: Pull latest changes
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+          git pull origin "$BRANCH"
+
+      - name: Update node_modules hash for aarch64-darwin
+        run: |
+          set -euo pipefail
+          echo "🔄 Updating node_modules hash for aarch64-darwin..."
+          nix/scripts/update-hashes.sh
+          echo "✅ node_modules hash for aarch64-darwin updated successfully"
+
+      - name: Commit macOS hash changes
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          echo "🔍 Checking for changes in tracked Nix files..."
+
+          summarize() {
+            local status="$1"
+            {
+              echo "### Nix Hash Update (aarch64-darwin)"
+              echo ""
+              echo "- ref: ${GITHUB_REF_NAME}"
+              echo "- status: ${status}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "${GITHUB_SERVER_URL:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
+              echo "- run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          FILES=(nix/hashes.json)
+          STATUS="$(git status --short -- "${FILES[@]}" || true)"
+          if [ -z "$STATUS" ]; then
+            echo "✅ No changes detected. Hash is already up to date."
+            summarize "no changes"
+            exit 0
+          fi
+
+          echo "📝 Changes detected:"
+          echo "$STATUS"
+          echo "🔗 Staging files..."
+          git add "${FILES[@]}"
+          echo "💾 Committing changes..."
+          git commit -m "Update aarch64-darwin hash"
           echo "✅ Changes committed"
 
           BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
