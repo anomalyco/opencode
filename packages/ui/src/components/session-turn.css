@@ -31,9 +31,8 @@
   }
 
   [data-slot="session-turn-user-badges"] {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
+    position: absolute;
+    right: 0;
     gap: 6px;
     opacity: 0;
     transition: opacity 0.15s ease;
@@ -81,8 +80,6 @@
   [data-slot="session-turn-message-header"] {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
     align-self: stretch;
     height: 32px;
   }
