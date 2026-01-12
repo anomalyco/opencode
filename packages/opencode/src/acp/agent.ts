@@ -5,13 +5,18 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
+  type SessionInfo,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
@@ -362,6 +367,10 @@ export namespace ACP {
             embeddedContext: true,
             image: true,
           },
+          sessionCapabilities: {
+            fork: {},
+            list: {},
+          },
         },
         authMethods: [authMethod],
         agentInfo: {
@@ -431,25 +440,7 @@ export namespace ACP {
 
         this.setupEventSubscriptions(state)
 
-        // Replay session history
-        const messages = await this.sdk.session
-          .messages(
-            {
-              sessionID: sessionId,
-              directory,
-            },
-            { throwOnError: true },
-          )
-          .then((x) => x.data)
-          .catch((err) => {
-            log.error("unexpected error when fetching message", { error: err })
-            return undefined
-          })
-
-        for (const msg of messages ?? []) {
-          log.debug("replay message", msg)
-          await this.processMessage(msg)
-        }
+        await this.replaySession(sessionId, directory)
 
         return mode
       } catch (e) {
@@ -460,6 +451,92 @@ export namespace ACP {
           throw RequestError.authRequired()
         }
         throw e
+      }
+    }
+
+    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+      const input = params.cwd ? { directory: params.cwd } : undefined
+      const sessions = await this.sdk.session
+        .list(input, { throwOnError: true })
+        .then((x) => x.data ?? [])
+      const cursor = params.cursor ? Number(params.cursor) : undefined
+      const ordered = sessions.toSorted((left, right) => right.time.updated - left.time.updated)
+      const filtered =
+        cursor !== undefined && Number.isFinite(cursor)
+          ? ordered.filter((session) => session.time.updated < cursor)
+          : ordered
+      const limit = 100
+      const page = filtered.slice(0, limit)
+      const entries: SessionInfo[] = page.map((session) => ({
+        sessionId: session.id,
+        cwd: session.directory,
+        title: session.title,
+        updatedAt: new Date(session.time.updated).toISOString(),
+      }))
+      const next = filtered.length > limit ? String(page[page.length - 1]?.time.updated ?? "") : undefined
+      const response: ListSessionsResponse = {
+        sessions: entries,
+      }
+      if (next) response.nextCursor = next
+      return response
+    }
+
+    async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+      const directory = params.cwd
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+
+        const forked = await this.sdk.session
+          .fork(
+            {
+              sessionID: params.sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data!)
+
+        const sessionId = forked.id
+        const state = await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
+
+        const mode = await this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
+
+        this.setupEventSubscriptions(state)
+
+        return mode
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    private async replaySession(sessionId: string, directory: string) {
+      const messages = await this.sdk.session
+        .messages(
+          {
+            sessionID: sessionId,
+            directory,
+          },
+          { throwOnError: true },
+        )
+        .then((x) => x.data ?? [])
+
+      for (const msg of messages) {
+        log.debug("replay message", msg)
+        await this.processMessage(msg)
       }
     }
 
@@ -658,7 +735,7 @@ export namespace ACP {
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data?.providers ?? [])
       const entries = providers.sort((a, b) => {
         const nameA = a.name.toLowerCase()
         const nameB = b.name.toLowerCase()
