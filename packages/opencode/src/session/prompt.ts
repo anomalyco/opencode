@@ -34,6 +34,7 @@ import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
+import { Plan } from "./plan"
 import { NamedError } from "@opencode-ai/util/error"
 import { fn } from "@/util/fn"
 import { SessionProcessor } from "./processor"
@@ -1221,12 +1222,15 @@ export namespace SessionPrompt {
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
       if (input.agent.name === "plan") {
+        // Get or create plan to get the file path
+        const plan = await Plan.getOrCreate(input.session.id)
+        const planPrompt = PROMPT_PLAN.replace("{PLAN_FILE_PATH}", plan.filePath)
         userMessage.parts.push({
           id: Identifier.ascending("part"),
           messageID: userMessage.info.id,
           sessionID: userMessage.info.sessionID,
           type: "text",
-          text: PROMPT_PLAN,
+          text: planPrompt,
           synthetic: true,
         })
       }
@@ -1249,8 +1253,8 @@ export namespace SessionPrompt {
 
     // Switching from plan mode to build mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
-      const plan = Session.plan(input.session)
-      const exists = await Bun.file(plan).exists()
+      const planInfo = await Plan.getOrCreate(input.session.id)
+      const exists = await Bun.file(planInfo.filePath).exists()
       if (exists) {
         const part = await Session.updatePart({
           id: Identifier.ascending("part"),
@@ -1258,7 +1262,7 @@ export namespace SessionPrompt {
           sessionID: userMessage.info.sessionID,
           type: "text",
           text:
-            BUILD_SWITCH + "\n\n" + `A plan file exists at ${plan}. You should execute on the plan defined within it`,
+            BUILD_SWITCH + "\n\n" + `A plan file exists at ${planInfo.filePath}. You should execute on the plan defined within it`,
           synthetic: true,
         })
         userMessage.parts.push(part)
@@ -1268,9 +1272,9 @@ export namespace SessionPrompt {
 
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
-      const plan = Session.plan(input.session)
-      const exists = await Bun.file(plan).exists()
-      if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
+      const planInfo = await Plan.getOrCreate(input.session.id)
+      const exists = await Bun.file(planInfo.filePath).exists()
+      if (!exists) await fs.mkdir(path.dirname(planInfo.filePath), { recursive: true })
       const part = await Session.updatePart({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
@@ -1280,7 +1284,7 @@ export namespace SessionPrompt {
 Plan mode is active. The user indicated that they do not want you to execute yet -- you MUST NOT make any edits (with the exception of the plan file mentioned below), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supercedes any other instructions you have received.
 
 ## Plan File Info:
-${exists ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.` : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`}
+${exists ? `A plan file already exists at ${planInfo.filePath}. You can read it and make incremental edits using the edit tool.` : `No plan file exists yet. You should create your plan at ${planInfo.filePath} using the write tool.`}
 You should build your plan incrementally by writing to or editing this file. NOTE that this is the only file you are allowed to edit - other than this you are only allowed to take READ-ONLY actions.
 
 ## Plan Workflow
@@ -1338,11 +1342,11 @@ Goal: Write your final plan to the plan file (the only file you can edit).
 - Include the paths of critical files to be modified
 - Include a verification section describing how to test the changes end-to-end (run the code, use MCP tools, run tests)
 
-### Phase 5: Call plan_exit tool
-At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call plan_exit to indicate to the user that you are done planning.
-This is critical - your turn should only end with either asking the user a question or calling plan_exit. Do not stop unless it's for these 2 reasons.
+### Phase 5: Call exit_plan_mode tool
+At the very end of your turn, once you have asked the user questions and are happy with your final plan file - you should always call exit_plan_mode to indicate to the user that you are done planning.
+This is critical - your turn should only end with either asking the user a question or calling exit_plan_mode. Do not stop unless it's for these 2 reasons.
 
-**Important:** Use question tool to clarify requirements/approach, use plan_exit to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what plan_exit does.
+**Important:** Use question tool to clarify requirements/approach, use exit_plan_mode to request plan approval. Do NOT use question tool to ask "Is this plan okay?" - that's what exit_plan_mode does.
 
 NOTE: At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
 </system-reminder>`,
