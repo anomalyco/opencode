@@ -1506,6 +1506,16 @@ export namespace SessionPrompt {
     template = template.trim()
 
     const model = await (async () => {
+      if (!command.model && command.variant) {
+        const error = new NamedError.Unknown({
+          message: `Command "${input.command}" has a variant "${command.variant}" but no model defined.`,
+        })
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: error.toObject(),
+        })
+        throw error
+      }
       if (command.model) {
         return Provider.parseModel(command.model)
       }
@@ -1519,19 +1529,38 @@ export namespace SessionPrompt {
       return await lastModel(input.sessionID)
     })()
 
-    try {
-      await Provider.getModel(model.providerID, model.modelID)
-    } catch (e) {
-      if (Provider.ModelNotFoundError.isInstance(e)) {
-        const { providerID, modelID, suggestions } = e.data
-        const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+    const info = await (async () => {
+      try {
+        return await Provider.getModel(model.providerID, model.modelID)
+      } catch (e) {
+        if (Provider.ModelNotFoundError.isInstance(e)) {
+          const { providerID, modelID, suggestions } = e.data
+          const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+          Bus.publish(Session.Event.Error, {
+            sessionID: input.sessionID,
+            error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+          })
+        }
+        throw e
+      }
+    })()
+
+    if (command.variant) {
+      const variants = info.variants ?? {}
+      const available = Object.keys(variants)
+      if (!variants[command.variant]) {
+        const hint = available.length ? ` Available variants: ${available.join(", ")}` : ""
+        const error = new NamedError.Unknown({
+          message: `Variant not found: ${model.providerID}/${model.modelID} with variant "${command.variant}".${hint}`,
+        })
         Bus.publish(Session.Event.Error, {
           sessionID: input.sessionID,
-          error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+          error: error.toObject(),
         })
+        throw error
       }
-      throw e
     }
+
     const agent = await Agent.get(agentName)
     if (!agent) {
       const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
@@ -1565,7 +1594,7 @@ export namespace SessionPrompt {
       model,
       agent: agentName,
       parts,
-      variant: input.variant,
+      variant: command.variant ?? input.variant,
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {

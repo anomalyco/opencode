@@ -26,6 +26,7 @@ export namespace Command {
       description: z.string().optional(),
       agent: z.string().optional(),
       model: z.string().optional(),
+      variant: z.string().optional(),
       mcp: z.boolean().optional(),
       // workaround for zod not supporting async functions natively so we use getters
       // https://zod.dev/v4/changelog?id=zfunction
@@ -83,6 +84,7 @@ export namespace Command {
         name,
         agent: command.agent,
         model: command.model,
+        variant: command.variant,
         description: command.description,
         get template() {
           return command.template
