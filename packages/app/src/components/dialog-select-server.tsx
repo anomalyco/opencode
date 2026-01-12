@@ -118,7 +118,7 @@ export function DialogSelectServer() {
   }
 
   async function handleRemove(url: string) {
-      server.remove(url)
+    server.remove(url)
   }
 
   return (

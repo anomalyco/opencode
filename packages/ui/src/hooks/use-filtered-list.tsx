@@ -24,10 +24,11 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => {
       // When items is a function (not async filter function), call it to track changes
-      const itemsValue = typeof props.items === "function" 
-        ? (props.items as () => T[])() // Call synchronous function to track it
-        : props.items
-      
+      const itemsValue =
+        typeof props.items === "function"
+          ? (props.items as () => T[])() // Call synchronous function to track it
+          : props.items
+
       return {
         filter: store.filter,
         items: itemsValue,
