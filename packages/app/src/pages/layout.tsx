@@ -866,15 +866,15 @@ export default function Layout(props: ParentProps) {
               onMouseEnter={() => prefetchSession(props.session, "high")}
               onFocus={() => prefetchSession(props.session, "high")}
             >
-              <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
-                <span
-                  classList={{
-                    "text-14-regular text-text-strong overflow-hidden text-ellipsis truncate": true,
-                    "animate-pulse": isWorking(),
-                  }}
-                >
-                  {props.session.title}
-                </span>
+                <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
+                  <span
+                    classList={{
+                      "text-14-regular text-text-strong break-words": true,
+                      "animate-pulse": isWorking(),
+                    }}
+                  >
+                    {props.session.title}
+                  </span>
                 <div class="shrink-0 group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
                   <Switch>
                     <Match when={isWorking()}>
@@ -986,7 +986,7 @@ export default function Layout(props: ParentProps) {
                     expandable
                     notify={!isExpanded()}
                   />
-                  <span class="truncate text-14-medium text-text-strong">{name()}</span>
+                  <span class="text-14-medium text-text-strong break-words">{name()}</span>
                 </Collapsible.Trigger>
                 <div class="flex invisible gap-1 items-center group-hover/session:visible has-[[data-expanded]]:visible">
                   <DropdownMenu>
@@ -1034,9 +1034,9 @@ export default function Layout(props: ParentProps) {
                               class="flex flex-col gap-1 min-w-0 text-left w-full focus:outline-none"
                             >
                               <div class="flex items-center self-stretch gap-6 justify-between">
-                                <span class="text-14-regular text-text-strong overflow-hidden text-ellipsis truncate">
-                                  New session
-                                </span>
+                              <span class="text-14-regular text-text-strong break-words">
+                                New session
+                              </span>
                               </div>
                             </A>
                           </Tooltip>
