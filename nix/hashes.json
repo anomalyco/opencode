@@ -1,3 +1,6 @@
 {
-  "nodeModules": "sha256-FbV9MDkPXCSPO0TL3uYvkMmfVTDH9Lyr2r1ZolYdWW0="
+  "nodeModules": {
+    "x86_64-linux": "sha256-8nur5CuUCSV/SzD16hNXVoIlKsiPBXDzCnoITK0IhC4=",
+    "aarch64-darwin": "sha256-vD1g9dviI2nMBTTPwI87sK01hSZ+cdnmb1V72AdJYq4="
+  }
 }
