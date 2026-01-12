@@ -99,6 +99,7 @@ export const BashTool = Tool.define("bash", async () => {
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
           if (!child) continue
+
           if (
             child.type !== "command_name" &&
             child.type !== "word" &&
@@ -110,6 +111,8 @@ export const BashTool = Tool.define("bash", async () => {
           }
           command.push(child.text)
         }
+
+        if (command.length === 0) continue
 
         // not an exhaustive list, but covers most common cases
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
