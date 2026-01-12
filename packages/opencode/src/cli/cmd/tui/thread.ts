@@ -18,7 +18,13 @@ type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
 function createWorkerFetch(client: RpcClient): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const request = new Request(input, init)
+    let request: Request
+    try {
+      request = new Request(input, init)
+    } catch (e) {
+      console.error("Failed to create Request in createWorkerFetch:", { input, init, error: e })
+      throw e
+    }
     const body = request.body ? await request.text() : undefined
     const result = await client.call("fetch", {
       url: request.url,
@@ -40,7 +46,7 @@ function createEventSource(client: RpcClient, directory: string): EventSource {
       client.on<Event>("event", (event) => {
         handler(event)
         if (event.type === "server.instance.disposed") {
-          client.call("subscribe", { directory }).catch(() => {})
+          client.call("subscribe", { directory }).catch(() => { })
         }
       }),
   }
@@ -166,7 +172,7 @@ export const TuiThreadCommand = cmd({
     })
 
     setTimeout(() => {
-      client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+      client.call("checkUpgrade", { directory: cwd }).catch(() => { })
     }, 1000)
 
     await tuiPromise

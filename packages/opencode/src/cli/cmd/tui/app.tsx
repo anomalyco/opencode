@@ -372,6 +372,15 @@ function App() {
       },
     },
     {
+      title: "Switch agent",
+      value: "agents",
+      category: "Agent",
+      hidden: true,
+      onSelect: () => {
+        dialog.replace(() => <DialogAgent />)
+      },
+    },
+    {
       title: "Toggle MCPs",
       value: "mcp.list",
       category: "Agent",
@@ -456,7 +465,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => {})
+        open("https://opencode.ai/docs").catch(() => { })
         dialog.clear()
       },
       category: "System",
@@ -465,7 +474,7 @@ function App() {
       title: "Open WebUI",
       value: "webui.open",
       onSelect: () => {
-        open(sdk.url).catch(() => {})
+        open(sdk.url).catch(() => { })
         dialog.clear()
       },
       category: "System",

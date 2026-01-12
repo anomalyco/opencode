@@ -2,6 +2,8 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { Skill } from "../skill"
+
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -49,13 +51,12 @@ export namespace SystemPrompt {
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<files>`,
-        `  ${
-          project.vcs === "git" && false
-            ? await Ripgrep.tree({
-                cwd: Instance.directory,
-                limit: 200,
-              })
-            : ""
+        `  ${project.vcs === "git" && false
+          ? await Ripgrep.tree({
+            cwd: Instance.directory,
+            limit: 200,
+          })
+          : ""
         }`,
         `</files>`,
       ].join("\n"),
@@ -135,4 +136,29 @@ export namespace SystemPrompt {
     )
     return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
   }
+
+  export async function skills() {
+    const all = await Skill.allContent()
+    if (all.length === 0) return []
+
+    return [
+      [
+        `Before acting on any request, you MUST first review the following <skills> section.`,
+        `If a skill description matches your current task, you MUST adopt that skill's instructions immediately.`,
+        ``,
+        `<skills>`,
+        ...all.flatMap((skill) => [
+          `  <skill>`,
+          `    <name>${skill.name}</name>`,
+          `    <description>${skill.description}</description>`,
+          `    <instructions>`,
+          skill.content,
+          `    </instructions>`,
+          `  </skill>`,
+        ]),
+        `</skills>`,
+      ].join("\n"),
+    ]
+  }
 }
+

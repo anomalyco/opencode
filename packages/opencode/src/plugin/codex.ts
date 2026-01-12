@@ -467,16 +467,26 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             }
 
             // Rewrite URL to Codex endpoint
-            const parsed =
-              requestInput instanceof URL
-                ? requestInput
-                : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
-            const url =
-              parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
-                ? new URL(CODEX_API_ENDPOINT)
-                : parsed
+            let url: URL
+            try {
+              url =
+                requestInput instanceof URL
+                  ? requestInput
+                  : new URL(
+                    typeof requestInput === "string" ? requestInput : (requestInput as any).url,
+                    "http://opencode.internal",
+                  )
+            } catch (e) {
+              log.error("Failed to parse request URL in Codex plugin", { requestInput, error: e })
+              throw e
+            }
 
-            return fetch(url, {
+            const finalUrl =
+              url.pathname.includes("/v1/responses") || url.pathname.includes("/chat/completions")
+                ? new URL(CODEX_API_ENDPOINT)
+                : url
+
+            return fetch(finalUrl, {
               ...init,
               headers,
             })

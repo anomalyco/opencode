@@ -72,7 +72,7 @@ export namespace Server {
   }
 
   const app = new Hono()
-  export const App: () => Hono = lazy(
+  export const App = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
       app
@@ -2833,7 +2833,7 @@ export namespace Server {
           )
           return response
         }) as unknown as Hono,
-  )
+  ) as () => Hono
 
   export async function openapi() {
     // Cast to break excessive type recursion from long route chains

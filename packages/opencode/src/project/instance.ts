@@ -59,7 +59,7 @@ export const Instance = {
     if (Instance.worktree === "/") return false
     return Filesystem.contains(Instance.worktree, filepath)
   },
-  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
+  state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): (() => S) & { clear: () => void } {
     return State.create(() => Instance.directory, init, dispose)
   },
   async dispose() {
@@ -79,7 +79,7 @@ export const Instance = {
   async disposeAll() {
     Log.Default.info("disposing all instances")
     for (const [_key, value] of cache) {
-      const awaited = await value.catch(() => {})
+      const awaited = await value.catch(() => { })
       if (awaited) {
         await context.provide(await value, async () => {
           await Instance.dispose()

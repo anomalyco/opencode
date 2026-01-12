@@ -13,8 +13,16 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
+import { ConfigMarkdown } from "../config/markdown"
+import { Filesystem } from "../util/filesystem"
+import { Global } from "@/global"
+import fs, { exists } from "fs/promises"
+import path from "path"
+import { Flag } from "@/flag/flag"
+import { Log } from "../util/log"
 
 export namespace Agent {
+  const log = Log.create({ service: "agent" })
   export const Info = z
     .object({
       name: z.string(),
@@ -40,6 +48,9 @@ export namespace Agent {
       ref: "Agent",
     })
   export type Info = z.infer<typeof Info>
+
+  const OPENCODE_AGENT_GLOB = new Bun.Glob("{agent,agents}/**/*.md")
+  const CLAUDE_AGENT_GLOB = new Bun.Glob("agents/**/*.md")
 
   const state = Instance.state(async () => {
     const cfg = await Config.get()
@@ -182,25 +193,26 @@ export namespace Agent {
       },
     }
 
-    for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+    const apply = (key: string, value: any, prompt?: string) => {
       if (value.disable) {
         delete result[key]
-        continue
+        return
       }
       let item = result[key]
       if (!item)
         item = result[key] = {
           name: key,
           mode: "all",
+          hidden: false,
           permission: PermissionNext.merge(defaults, user),
           options: {},
           native: false,
         }
       if (value.model) item.model = Provider.parseModel(value.model)
-      item.prompt = value.prompt ?? item.prompt
+      item.prompt = prompt ?? value.prompt ?? item.prompt
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
-      item.topP = value.top_p ?? item.topP
+      item.topP = value.top_p ?? value.topP ?? item.topP
       item.mode = value.mode ?? item.mode
       item.color = value.color ?? item.color
       item.hidden = value.hidden ?? item.hidden
@@ -208,6 +220,73 @@ export namespace Agent {
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
+    }
+
+    for (const [key, value] of Object.entries(cfg.agent ?? {})) {
+      apply(key, value)
+    }
+
+    const addAgent = async (match: string) => {
+      const md = await ConfigMarkdown.parse(match)
+      if (!md) return
+      let name = path.basename(match, ".md")
+      const patterns = ["/.opencode/agents/", "/.opencode/agent/", "/agents/", "/agent/"]
+      const pattern = patterns.find((p) => match.includes(p))
+      const agentFolderPath = pattern ? match.split(pattern)[1] : name + ".md"
+
+      if (agentFolderPath.includes("/")) {
+        const relativePath = agentFolderPath.replace(".md", "")
+        const pathParts = relativePath.split("/")
+        name = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
+      }
+      apply(name, md.data, md.content.trim())
+    }
+
+    // Scan .claude/agents/ directories (project-level)
+    const claudeDirs = await Array.fromAsync(
+      Filesystem.up({
+        targets: [".claude"],
+        start: Instance.directory,
+        stop: Instance.worktree,
+      }),
+    )
+    // Also include global ~/.claude/agents/
+    const globalClaude = `${Global.Path.home}/.claude`
+    if (await exists(globalClaude)) {
+      claudeDirs.push(globalClaude)
+    }
+
+    if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+      for (const dir of claudeDirs) {
+        const matches = await Array.fromAsync(
+          CLAUDE_AGENT_GLOB.scan({
+            cwd: dir,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+            dot: true,
+          }),
+        ).catch((error) => {
+          log.error("failed .claude directory scan for agents", { dir, error })
+          return []
+        })
+
+        for (const match of matches) {
+          await addAgent(match)
+        }
+      }
+    }
+
+    // Scan .opencode/agent/ directories
+    for (const dir of await Config.directories()) {
+      for await (const match of OPENCODE_AGENT_GLOB.scan({
+        cwd: dir,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: true,
+      })) {
+        await addAgent(match)
+      }
     }
 
     // Ensure Truncate.DIR is allowed unless explicitly configured
@@ -280,5 +359,36 @@ export namespace Agent {
       }),
     })
     return result.object
+  }
+
+  export async function save(input: {
+    name: string
+    description?: string
+    systemPrompt: string
+    model?: { providerID: string; modelID: string }
+    mode?: "subagent" | "primary" | "all"
+  }) {
+    const dir = path.join(Instance.directory, ".opencode", "agents")
+    const filePath = path.join(dir, `${input.name}.md`)
+
+    const yaml = [
+      `name: ${input.name}`,
+      `description: "${input.description || ""}"`,
+      `mode: ${input.mode || "all"}`,
+      input.model ? `model: ${input.model.providerID}/${input.model.modelID}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n")
+
+    const content = `---\n${yaml}\n---\n\n${input.systemPrompt}`
+
+    if (!(await exists(dir))) {
+      await fs.mkdir(dir, { recursive: true })
+    }
+
+    await Bun.write(filePath, content)
+    log.info("saved agent", { path: filePath })
+
+    state.clear()
   }
 }

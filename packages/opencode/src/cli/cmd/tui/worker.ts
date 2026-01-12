@@ -40,11 +40,17 @@ let server: Bun.Server<BunWebSocketData> | undefined
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
-    const request = new Request(input.url, {
-      method: input.method,
-      headers: input.headers,
-      body: input.body,
-    })
+    let request: Request
+    try {
+      request = new Request(input.url, {
+        method: input.method,
+        headers: input.headers,
+        body: input.body,
+      })
+    } catch (e) {
+      Log.Default.error("failed to create request in rpc.fetch", { url: input.url, error: e })
+      throw e
+    }
     const response = await Server.App().fetch(request)
     const body = await response.text()
     return {
@@ -77,7 +83,7 @@ export const rpc = {
       directory: input.directory,
       init: InstanceBootstrap,
       fn: async () => {
-        await upgrade().catch(() => {})
+        await upgrade().catch(() => { })
       },
     })
   },

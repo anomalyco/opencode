@@ -548,13 +548,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
+            cache: {
+              read: model.cost.context_over_200k.cache_read ?? 0,
+              write: model.cost.context_over_200k.cache_write ?? 0,
+            },
+            input: model.cost.context_over_200k.input,
+            output: model.cost.context_over_200k.output,
+          }
           : undefined,
       },
       limit: {
@@ -903,7 +903,10 @@ export namespace Provider {
         options["includeUsage"] = true
       }
 
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
+      // Only set baseURL if model.api.url is a valid URL (contains "://")
+      if (!options["baseURL"] && model.api.url && model.api.url.includes("://")) {
+        options["baseURL"] = model.api.url
+      }
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
       if (model.headers)
         options["headers"] = {
@@ -932,11 +935,40 @@ export namespace Provider {
           opts.signal = combined
         }
 
-        return fetchFn(input, {
-          ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
-          timeout: false,
-        })
+        // Handle relative URLs by resolving them against baseURL
+        let finalInput = input
+        if (typeof input === "string" && !input.includes("://")) {
+          if (options["baseURL"] && options["baseURL"].includes("://")) {
+            try {
+              finalInput = new URL(input, options["baseURL"]).toString()
+            } catch (e) {
+              log.error("Failed to resolve relative URL", { input, baseURL: options["baseURL"], error: e })
+            }
+          } else {
+            // No valid baseURL available and input is a relative URL
+            throw new Error(
+              `Invalid URL "${input}" for provider "${model.providerID}". ` +
+              `The provider's API URL "${model.api.url || "(not set)"}" is not a valid URL. ` +
+              `Please fix the "api" field in your opencode.json config to be a full URL (e.g., "https://api.openai.com/v1") ` +
+              `or ensure you are logged in with the correct authentication method.`
+            )
+          }
+        }
+
+        try {
+          return await fetchFn(finalInput, {
+            ...opts,
+            // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+            timeout: false,
+          })
+        } catch (e) {
+          log.error("fetch failed in provider wrapper", {
+            url: typeof finalInput === "string" ? finalInput : (finalInput as Request).url,
+            method: opts.method,
+            error: e,
+          })
+          throw e
+        }
       }
 
       // Special case: google-vertex-anthropic uses a subpath import

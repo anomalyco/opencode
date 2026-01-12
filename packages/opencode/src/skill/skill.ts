@@ -124,4 +124,20 @@ export namespace Skill {
   export async function all() {
     return state().then((x) => Object.values(x))
   }
+
+  export async function allContent() {
+    const skills = await all()
+    const results = await Promise.all(
+      skills.map(async (skill) => {
+        const md = await ConfigMarkdown.parse(skill.location)
+        return {
+          name: skill.name,
+          description: skill.description,
+          content: md.content.trim(),
+        }
+      }),
+    )
+    return results
+  }
 }
+
