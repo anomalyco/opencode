@@ -25,6 +25,9 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       get ready() {
         return ready()
       },
+      get store() {
+        return kvStore
+      },
       signal<T>(name: string, defaultValue: T) {
         if (kvStore[name] === undefined) setKvStore(name, defaultValue)
         return [
