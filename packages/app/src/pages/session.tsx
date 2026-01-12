@@ -313,7 +313,10 @@ export default function Page() {
     turnStart: 0,
     mobileTab: "session" as "session" | "review",
     newSessionWorktree: "main",
-    promptHeight: 0,
+    // Initialize with a reasonable estimate to avoid layout jumps before ResizeObserver fires
+    // Mobile: pt-12(48) + input(~56) + toolbar(~40) + pb-4(16) = ~160px
+    // Desktop: pt-12(48) + input(~56) + toolbar(~40) + pb-8(32) = ~176px
+    promptHeight: 160,
   })
 
   const renderedUserMessages = createMemo(() => {
@@ -863,8 +866,10 @@ export default function Page() {
 
   createResizeObserver(
     () => promptDock,
-    ({ height }) => {
-      const next = Math.ceil(height)
+    () => {
+      // Use offsetHeight to get the full height including padding (pt-12, pb-4/pb-8)
+      // The callback's height is contentRect.height which excludes padding
+      const next = promptDock?.offsetHeight ?? 0
 
       if (next === store.promptHeight) return
 
@@ -947,9 +952,13 @@ export default function Page() {
     const ready = messagesReady()
     if (!sessionID || !ready) return
 
-    requestAnimationFrame(() => {
+    const attemptScroll = (retries = 0) => {
       const hash = window.location.hash.slice(1)
       if (!hash) {
+        if (retries < 10 && scroller && scroller.scrollHeight <= scroller.clientHeight) {
+          requestAnimationFrame(() => attemptScroll(retries + 1))
+          return
+        }
         autoScroll.forceScrollToBottom()
         return
       }
@@ -970,7 +979,9 @@ export default function Page() {
       }
 
       autoScroll.forceScrollToBottom()
-    })
+    }
+
+    requestAnimationFrame(() => attemptScroll())
   })
 
   createEffect(() => {
@@ -1079,7 +1090,7 @@ export default function Page() {
                               file.load(path)
                             }}
                             classes={{
-                              root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                              root: "pb-[calc(var(--prompt-height,10rem)+32px)]",
                               header: "px-4",
                               container: "px-4",
                             }}
@@ -1111,7 +1122,7 @@ export default function Page() {
                       >
                         <div
                           ref={autoScroll.contentRef}
-                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+                          class="flex flex-col gap-32 items-start justify-start pb-[var(--prompt-height,10rem)] transition-[margin]"
                           classList={{
                             "mt-0.5": !showTabs(),
                             "mt-0": showTabs(),
@@ -1163,9 +1174,9 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem)-64px)]":
+                                    "last:min-h-[calc(100vh-5.5rem-var(--prompt-height,10rem))] md:last:min-h-[calc(100vh-4.5rem-var(--prompt-height,10rem))]":
                                       platform.platform !== "desktop",
-                                    "last:min-h-[calc(100vh-7rem-var(--prompt-height,8rem)-64px)] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem)-64px)]":
+                                    "last:min-h-[calc(100vh-7rem-var(--prompt-height,10rem))] md:last:min-h-[calc(100vh-6rem-var(--prompt-height,10rem))]":
                                       platform.platform === "desktop",
                                   }}
                                 >

@@ -865,6 +865,7 @@ export default function Layout(props: ParentProps) {
               class="flex flex-col min-w-0 text-left w-full focus:outline-none pl-4 pr-2 py-1"
               onMouseEnter={() => prefetchSession(props.session, "high")}
               onFocus={() => prefetchSession(props.session, "high")}
+              onClick={() => props.mobile && layout.mobileSidebar.hide()}
             >
               <div class="flex items-center self-stretch gap-6 justify-between transition-[padding] group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7">
                 <span
@@ -1242,7 +1243,7 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+    <div class="relative flex-1 min-h-0 flex flex-col select-none overflow-x-hidden [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
       <div class="flex-1 min-h-0 flex">
         <div
           classList={{
