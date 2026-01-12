@@ -366,25 +366,30 @@ export const McpLogoutCommand = cmd({
   },
 })
 
-async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, scope: "global" | "project") {
-  const baseDir = scope === "global" ? Global.Path.config : Instance.worktree
+async function resolveConfigPath(baseDir: string) {
+  // Check for existing config files (prefer .jsonc over .json, check .opencode/ subdirectory too)
+  const candidates = [
+    path.join(baseDir, "opencode.json"),
+    path.join(baseDir, "opencode.jsonc"),
+    path.join(baseDir, ".opencode", "opencode.json"),
+    path.join(baseDir, ".opencode", "opencode.jsonc"),
+  ]
 
-  // Check for existing config files (prefer .jsonc over .json)
-  const jsoncPath = path.join(baseDir, "opencode.jsonc")
-  const jsonPath = path.join(baseDir, "opencode.json")
+  for (const candidate of candidates) {
+    if (await Bun.file(candidate).exists()) {
+      return candidate
+    }
+  }
 
-  const jsoncFile = Bun.file(jsoncPath)
-  const jsonFile = Bun.file(jsonPath)
+  // Default to opencode.json if none exist
+  return candidates[0]
+}
 
-  const jsoncExists = await jsoncFile.exists()
-  const jsonExists = await jsonFile.exists()
-
-  // Use existing file, or create .json if neither exists
-  const configPath = jsoncExists ? jsoncPath : jsonExists ? jsonPath : jsonPath
-  const file = jsoncExists ? jsoncFile : jsonExists ? jsonFile : jsonFile
+async function addMcpToConfig(name: string, mcpConfig: Config.Mcp, configPath: string) {
+  const file = Bun.file(configPath)
 
   let text = "{}"
-  if (jsoncExists || jsonExists) {
+  if (await file.exists()) {
     text = await file.text()
   }
 
@@ -411,26 +416,32 @@ export const McpAddCommand = cmd({
 
         const project = Instance.project
 
+        // Resolve config paths eagerly for hints
+        const [projectConfigPath, globalConfigPath] = await Promise.all([
+          resolveConfigPath(Instance.worktree),
+          resolveConfigPath(Global.Path.config),
+        ])
+
         // Determine scope
-        let scope: "global" | "project" = "global"
+        let configPath = globalConfigPath
         if (project.vcs === "git") {
           const scopeResult = await prompts.select({
             message: "Location",
             options: [
               {
                 label: "Current project",
-                value: "project" as const,
-                hint: path.join(Instance.worktree, "opencode.json"),
+                value: projectConfigPath,
+                hint: projectConfigPath,
               },
               {
                 label: "Global",
-                value: "global" as const,
-                hint: path.join(Global.Path.config, "opencode.json"),
+                value: globalConfigPath,
+                hint: globalConfigPath,
               },
             ],
           })
           if (prompts.isCancel(scopeResult)) throw new UI.CancelledError()
-          scope = scopeResult
+          configPath = scopeResult
         }
 
         const name = await prompts.text({
@@ -469,7 +480,7 @@ export const McpAddCommand = cmd({
             command: command.split(" "),
           }
 
-          const configPath = await addMcpToConfig(name, mcpConfig, scope)
+          await addMcpToConfig(name, mcpConfig, configPath)
           prompts.log.success(`MCP server "${name}" added to ${configPath}`)
           prompts.outro("MCP server added successfully")
           return
@@ -547,7 +558,7 @@ export const McpAddCommand = cmd({
             }
           }
 
-          const configPath = await addMcpToConfig(name, mcpConfig, scope)
+          await addMcpToConfig(name, mcpConfig, configPath)
           prompts.log.success(`MCP server "${name}" added to ${configPath}`)
         }
 
