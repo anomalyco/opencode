@@ -10,6 +10,7 @@ export namespace Truncate {
   export const MAX_LINES = 2000
   export const MAX_BYTES = 50 * 1024
   export const DIR = path.join(Global.Path.data, "tool-output")
+  export const GLOB = path.join(DIR, "*")
   const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 
   export type Result = { content: string; truncated: false } | { content: string; truncated: true; outputPath: string }
