@@ -55,8 +55,8 @@ export namespace Agent {
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
-        "*.env": "deny",
-        "*.env.*": "deny",
+        "*.env": "ask",
+        "*.env.*": "ask",
         "*.env.example": "allow",
       },
     })
