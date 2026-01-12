@@ -113,7 +113,6 @@
 
 [data-component="reasoning-part"] {
   width: 100%;
-  opacity: 0.5;
   animation: fadeUpDim 0.5s ease-out forwards;
 
   [data-component="markdown"] {
