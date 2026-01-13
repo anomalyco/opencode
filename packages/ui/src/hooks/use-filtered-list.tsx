@@ -24,7 +24,11 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => ({
       filter: store.filter,
-      items: typeof props.items === "function" ? undefined : props.items,
+      items: typeof props.items === "function"
+        ? props.items.length === 0
+          ? (props.items as () => T[])()
+          : undefined
+        : props.items,
     }),
     async ({ filter, items }) => {
       const needle = filter?.toLowerCase()
