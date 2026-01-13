@@ -25,6 +25,3 @@ target
 opencode-dev
 logs/
 *.bun-build
-
-# Internal documentation (not for public)
-AUTH_IMPLEMENTATION.md
