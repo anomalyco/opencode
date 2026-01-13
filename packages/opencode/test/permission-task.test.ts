@@ -1,5 +1,4 @@
 import { describe, test, expect } from "bun:test"
-
 import { PermissionNext } from "../src/permission/next"
 import { Config } from "../src/config/config"
 import { Instance } from "../src/project/instance"
@@ -48,7 +47,6 @@ describe("PermissionNext.evaluate for permission.task", () => {
   test("matches wildcard patterns with ask", () => {
     const ruleset = createRuleset({ "orchestrator-*": "ask" })
     expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset).action).toBe("ask")
-
     const globalRuleset = createRuleset({ "*": "ask" })
     expect(PermissionNext.evaluate("task", "code-reviewer", globalRuleset).action).toBe("ask")
   })
@@ -79,7 +77,6 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
 
   test("expands {sessionID} placeholder in pattern", () => {
     const ruleset = createRuleset({ "*/plan/{sessionID}.md": "allow" })
-
     expect(
       PermissionNext.evaluateWithSession("edit", "*/plan/session_abc123.md", "session_abc123", ruleset).action,
     ).toBe("allow")
@@ -87,7 +84,6 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
 
   test("does not match when sessionID differs", () => {
     const ruleset = createRuleset({ "*/plan/{sessionID}.md": "allow" })
-
     // Different session ID should not match the expanded pattern
     expect(
       PermissionNext.evaluateWithSession("edit", "*/plan/session_other.md", "session_abc123", ruleset).action,
@@ -96,7 +92,6 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
 
   test("works with wildcard before sessionID placeholder", () => {
     const ruleset = createRuleset({ "**/plan/{sessionID}/*": "allow" })
-
     expect(
       PermissionNext.evaluateWithSession("edit", "**/plan/session_xyz/step1.md", "session_xyz", ruleset).action,
     ).toBe("allow")
@@ -110,11 +105,10 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
       { permission: "edit", pattern: "*/plan/{sessionID}.md", action: "allow" },
       { permission: "edit", pattern: "*", action: "deny" },
     ]
-
     // Last matching rule wins - global deny should override session-scoped allow
-    expect(PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action).toBe(
-      "deny",
-    )
+    expect(
+      PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action,
+    ).toBe("deny")
   })
 
   test("global deny followed by session-scoped allow", () => {
@@ -122,14 +116,14 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
       { permission: "edit", pattern: "*", action: "deny" },
       { permission: "edit", pattern: "*/plan/{sessionID}.md", action: "allow" },
     ]
-
     // Last matching rule wins - session-scoped allow should override global deny
-    expect(PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action).toBe(
-      "allow",
-    )
-
+    expect(
+      PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", "session_abc", ruleset).action,
+    ).toBe("allow")
     // Other patterns still denied
-    expect(PermissionNext.evaluateWithSession("edit", "*/other/file.md", "session_abc", ruleset).action).toBe("deny")
+    expect(
+      PermissionNext.evaluateWithSession("edit", "*/other/file.md", "session_abc", ruleset).action,
+    ).toBe("deny")
   })
 
   test("returns ask when no match", () => {
@@ -138,7 +132,6 @@ describe("PermissionNext.evaluateWithSession for session-scoped patterns", () =>
 
   test("matches exact path without sessionID placeholder", () => {
     const ruleset = createRuleset({ "/allowed/path.ts": "allow" })
-
     expect(PermissionNext.evaluateWithSession("edit", "/allowed/path.ts", "any_session", ruleset).action).toBe("allow")
   })
 })
@@ -147,7 +140,6 @@ describe("PermissionNext.disabled for task tool", () => {
   // Note: The `disabled` function checks if a TOOL should be completely removed from the tool list.
   // It only disables a tool when there's a rule with `pattern: "*"` and `action: "deny"`.
   // It does NOT evaluate complex subagent patterns - those are handled at runtime by `evaluate`.
-
   const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): PermissionNext.Ruleset =>
     Object.entries(rules).map(([pattern, action]) => ({
       permission: "task",
@@ -162,9 +154,7 @@ describe("PermissionNext.disabled for task tool", () => {
       "orchestrator-*": "allow",
       "*": "deny",
     })
-
     const disabled = PermissionNext.disabled(["task", "bash", "read"], ruleset)
-
     // The task tool IS disabled because there's a pattern: "*" with action: "deny"
     expect(disabled.has("task")).toBe(true)
   })
@@ -174,18 +164,14 @@ describe("PermissionNext.disabled for task tool", () => {
       "orchestrator-*": "ask",
       "*": "deny",
     })
-
     const disabled = PermissionNext.disabled(["task"], ruleset)
-
     // The task tool IS disabled because there's a pattern: "*" with action: "deny"
     expect(disabled.has("task")).toBe(true)
   })
 
   test("task tool is disabled when global deny pattern exists", () => {
     const ruleset = createRuleset({ "*": "deny" })
-
     const disabled = PermissionNext.disabled(["task"], ruleset)
-
     expect(disabled.has("task")).toBe(true)
   })
 
@@ -196,16 +182,13 @@ describe("PermissionNext.disabled for task tool", () => {
       "orchestrator-*": "deny",
       general: "deny",
     })
-
     const disabled = PermissionNext.disabled(["task"], ruleset)
-
     // The task tool is NOT disabled because no rule has pattern: "*" with action: "deny"
     expect(disabled.has("task")).toBe(false)
   })
 
   test("task tool is enabled when no task rules exist (default ask)", () => {
     const disabled = PermissionNext.disabled(["task"], [])
-
     expect(disabled.has("task")).toBe(false)
   })
 
@@ -215,9 +198,7 @@ describe("PermissionNext.disabled for task tool", () => {
       "*": "deny",
       "orchestrator-coder": "allow",
     })
-
     const disabled = PermissionNext.disabled(["task"], ruleset)
-
     // The disabled() function uses findLast and checks if the last matching rule
     // has pattern: "*" and action: "deny". In this case, the last rule matching
     // "task" permission has pattern "orchestrator-coder", not "*", so not disabled
@@ -239,13 +220,11 @@ describe("permission.task with real config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
-
         // general and orchestrator-fast should be allowed, code-reviewer denied
         expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("allow")
         expect(PermissionNext.evaluate("task", "orchestrator-fast", ruleset).action).toBe("allow")
@@ -266,13 +245,11 @@ describe("permission.task with real config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
-
         // general and code-reviewer should be ask, orchestrator-* denied
         expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("ask")
         expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("ask")
@@ -293,16 +270,13 @@ describe("permission.task with real config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
-
         expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("allow")
         expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
-
         // Unspecified agents default to "ask"
         expect(PermissionNext.evaluate("task", "unknown-agent", ruleset).action).toBe("ask")
       },
@@ -323,26 +297,21 @@ describe("permission.task with real config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
-
         // Verify task permissions
         expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("allow")
         expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
-
         // Verify other tool permissions
         expect(PermissionNext.evaluate("bash", "*", ruleset).action).toBe("allow")
         expect(PermissionNext.evaluate("edit", "*", ruleset).action).toBe("ask")
-
         // Verify disabled tools
         const disabled = PermissionNext.disabled(["bash", "edit", "task"], ruleset)
         expect(disabled.has("bash")).toBe(false)
         expect(disabled.has("edit")).toBe(false)
-
         // task is NOT disabled because disabled() uses findLast, and the last rule
         // matching "task" permission is {pattern: "general", action: "allow"}, not pattern: "*"
         expect(disabled.has("task")).toBe(false)
@@ -363,18 +332,15 @@ describe("permission.task with real config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
-
         // Last matching rule wins - "*" deny is last, so all agents are denied
         expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("deny")
         expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
         expect(PermissionNext.evaluate("task", "unknown", ruleset).action).toBe("deny")
-
         // Since "*": "deny" is the last rule, disabled() finds it with findLast
         // and sees pattern: "*" with action: "deny", so task is disabled
         const disabled = PermissionNext.disabled(["task"], ruleset)
@@ -395,19 +361,15 @@ describe("permission.task with real config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
-
         // Evaluate uses findLast - "general" allow comes after "*" deny
         expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("allow")
-
         // Other agents still denied by the earlier "*" deny
         expect(PermissionNext.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
-
         // disabled() uses findLast and checks if the last rule has pattern: "*" with action: "deny"
         // In this case, the last rule is {pattern: "general", action: "allow"}, not pattern: "*"
         // So the task tool is NOT disabled (even though most subagents are denied)
@@ -432,24 +394,20 @@ describe("session-scoped permissions with config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
         const sessionID = "session_test123"
-
         // Session-scoped plan files should be allowed
         expect(
           PermissionNext.evaluateWithSession("edit", "**/plan/session_test123/step1.md", sessionID, ruleset).action,
         ).toBe("allow")
-
         // Other session's plan files should be denied (no match for session-scoped pattern)
         expect(
           PermissionNext.evaluateWithSession("edit", "**/plan/session_other/step1.md", sessionID, ruleset).action,
         ).toBe("deny")
-
         // Random files should be denied
         expect(PermissionNext.evaluateWithSession("edit", "/src/main.ts", sessionID, ruleset).action).toBe("deny")
       },
@@ -467,19 +425,16 @@ describe("session-scoped permissions with config files", () => {
         },
       },
     })
-
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
         const config = await Config.get()
         const ruleset = PermissionNext.fromConfig(config.permission ?? {})
         const sessionID = "session_abc"
-
         // evaluateWithSession expands the placeholder and matches
-        expect(PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", sessionID, ruleset).action).toBe(
-          "allow",
-        )
-
+        expect(
+          PermissionNext.evaluateWithSession("edit", "*/plan/session_abc.md", sessionID, ruleset).action,
+        ).toBe("allow")
         // Regular evaluate does NOT expand placeholder, so it won't match the literal path
         // (the pattern "*/plan/{sessionID}.md" won't match "*/plan/session_abc.md")
         expect(PermissionNext.evaluate("edit", "*/plan/session_abc.md", ruleset).action).toBe("ask")
