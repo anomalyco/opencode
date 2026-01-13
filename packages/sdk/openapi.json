@@ -8312,6 +8312,11 @@
             "default": "ctrl+v",
             "type": "string"
           },
+          "toggle_paste_summary": {
+            "description": "Toggle paste summary expansion in prompt",
+            "default": "ctrl+o",
+            "type": "string"
+          },
           "input_submit": {
             "description": "Submit input",
             "default": "return",

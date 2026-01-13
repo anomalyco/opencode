@@ -1087,6 +1087,10 @@ export type KeybindsConfig = {
    */
   input_paste?: string
   /**
+   * Toggle paste summary expansion in prompt
+   */
+  toggle_paste_summary?: string
+  /**
    * Submit input
    */
   input_submit?: string
