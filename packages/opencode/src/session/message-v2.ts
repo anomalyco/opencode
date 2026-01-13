@@ -6,6 +6,7 @@ import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
+import { Log } from "../util/log"
 import { Storage } from "@/storage/storage"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
@@ -659,7 +660,9 @@ export namespace MessageV2 {
             if (errMsg && typeof errMsg === "string") {
               return `${msg}: ${errMsg}`
             }
-          } catch {}
+          } catch (err) {
+            Log.Default.debug("Failed to parse error response body", { error: err })
+          }
 
           return `${msg}: ${e.responseBody}`
         }).trim()
