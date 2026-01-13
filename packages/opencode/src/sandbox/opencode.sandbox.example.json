@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "sandbox": {
+    "provider": "local",
+    "local": {},
+    "modal": {
+      "image": "python:3.11-slim",
+      "cpu": 1,
+      "memory": 512,
+      "timeout": 3600
+    },
+    "kubernetes": {
+      "namespace": "opencode-sandboxes",
+      "image": "ubuntu:22.04",
+      "cpu": "500m",
+      "memory": "512Mi"
+    }
+  }
+}
