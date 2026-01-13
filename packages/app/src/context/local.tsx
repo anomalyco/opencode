@@ -467,9 +467,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           .catch(() => {})
       }
 
-      const searchFiles = (query: string) => sdk.client.find.files({ query, dirs: "false" }).then((x) => x.data!)
-      const searchFilesAndDirectories = (query: string) =>
-        sdk.client.find.files({ query, dirs: "true" }).then((x) => x.data!)
+      const searchFiles = (query: string | undefined) => {
+        const safeQuery = query ?? ""
+        return sdk.client.find.files({ query: safeQuery, dirs: "false" }).then((x) => x.data!)
+      }
+      const searchFilesAndDirectories = (query: string | undefined) => {
+        const safeQuery = query ?? ""
+        return sdk.client.find.files({ query: safeQuery, dirs: "true" }).then((x) => x.data!)
+      }
 
       const unsub = sdk.event.listen((e) => {
         const event = e.details
