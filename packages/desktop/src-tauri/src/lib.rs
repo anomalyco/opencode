@@ -223,6 +223,11 @@ async fn check_server_health(url: &str, password: Option<&str>) -> bool {
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("killall")
+        .arg("opencode-cli")
+        .output();
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus existing window when another instance is launched
