@@ -96,27 +96,27 @@ impl JobObjectState {
 
 const MAX_LOG_ENTRIES: usize = 200;
 
-// #[tauri::command]
-// fn kill_sidecar(app: AppHandle) {
-//     let Some(server_state) = app.try_state::<ServerState>() else {
-//         println!("Server not running");
-//         return;
-//     };
+#[tauri::command]
+fn kill_sidecar(app: AppHandle) {
+    let Some(server_state) = app.try_state::<ServerState>() else {
+        println!("Server not running");
+        return;
+    };
 
-//     let Some(server_state) = server_state
-//         .child
-//         .lock()
-//         .expect("Failed to acquire mutex lock")
-//         .take()
-//     else {
-//         println!("Server state missing");
-//         return;
-//     };
+    let Some(server_state) = server_state
+        .child
+        .lock()
+        .expect("Failed to acquire mutex lock")
+        .take()
+    else {
+        println!("Server state missing");
+        return;
+    };
 
-//     let _ = server_state.kill();
+    let _ = server_state.kill();
 
-//     println!("Killed server");
-// }
+    println!("Killed server");
+}
 
 async fn get_logs(app: AppHandle) -> Result<String, String> {
     let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
@@ -394,7 +394,7 @@ pub fn run() {
 
                 // On Windows, the job object handles cleanup automatically (even on crash).
                 // We still call kill_sidecar as a belt-and-suspenders approach for graceful shutdown.
-                // kill_sidecar(app.clone());
+                kill_sidecar(app.clone());
             }
         });
 }
