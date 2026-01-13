@@ -60,7 +60,10 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    if (exitCode !== 0) {
+    // Non-zero exit code means an error occurred, but ripgrep might have
+    // returned some data regardless. In that case, the error was likely a soft
+    // error (like a broken symlink), rather than something fatal.
+    if (exitCode !== 0 && !output.trim()) {
       throw new Error(`ripgrep failed: ${errorOutput}`)
     }
 
