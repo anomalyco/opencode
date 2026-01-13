@@ -89,6 +89,9 @@ export const BashTool = Tool.define("bash", async () => {
       const patterns = new Set<string>()
       const always = new Set<string>()
 
+      // track effective working directory as cd commands change it
+      let effectiveCwd = cwd
+
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
         const command = []
@@ -112,12 +115,12 @@ export const BashTool = Tool.define("bash", async () => {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
-              .cwd(cwd)
+              .cwd(effectiveCwd)
               .quiet()
               .nothrow()
               .text()
               .then((x) => x.trim())
-            log.info("resolved path", { arg, resolved })
+            log.info("resolved path", { arg, resolved, effectiveCwd })
             if (resolved) {
               // Git Bash on Windows returns Unix-style paths like /c/Users/...
               const normalized =
@@ -125,6 +128,9 @@ export const BashTool = Tool.define("bash", async () => {
                   ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
                   : resolved
               if (!Instance.containsPath(normalized)) directories.add(normalized)
+
+              // update effective cwd after cd command
+              if (command[0] === "cd") effectiveCwd = normalized
             }
           }
         }

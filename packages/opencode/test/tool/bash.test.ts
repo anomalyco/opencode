@@ -230,6 +230,93 @@ describe("tool.bash permissions", () => {
       },
     })
   })
+
+  test("does not ask for external_directory permission when cd into subdir then cd back", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const subdir = path.join(tmp.path, "subdir")
+    await Bun.write(path.join(subdir, ".keep"), "")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "cd subdir && ls && cd ..",
+            description: "cd into subdir and back",
+          },
+          testCtx,
+        )
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeUndefined()
+      },
+    })
+  })
+
+  test("does not ask for external_directory when multiple cd commands stay within project", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const nested = path.join(tmp.path, "a", "b", "c")
+    await Bun.write(path.join(nested, ".keep"), "")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "cd a && cd b && cd c && cd .. && cd .. && cd ..",
+            description: "navigate through nested dirs and back to root",
+          },
+          testCtx,
+        )
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeUndefined()
+      },
+    })
+  })
+
+  test("asks for external_directory when cd actually leaves project", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const subdir = path.join(tmp.path, "subdir")
+    await Bun.write(path.join(subdir, ".keep"), "")
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
+        const testCtx = {
+          ...ctx,
+          ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
+            requests.push(req)
+          },
+        }
+        await bash.execute(
+          {
+            command: "cd subdir && cd ../.. && ls",
+            description: "cd into subdir then escape project",
+          },
+          testCtx,
+        )
+        const extDirReq = requests.find((r) => r.permission === "external_directory")
+        expect(extDirReq).toBeDefined()
+      },
+    })
+  })
 })
 
 describe("tool.bash truncation", () => {
