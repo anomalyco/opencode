@@ -121,6 +121,9 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const dialog = useDialog()
 
   useKeyboard((evt) => {
+    // Skip processing if a dialog (e.g., command palette) is open
+    if (dialog.stack.length > 0) return
+
     // When editing "Other" textarea
     if (store.editing && !confirm()) {
       if (evt.name === "escape") {
