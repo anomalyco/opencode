@@ -297,22 +297,20 @@ render(() => {
   const platform = createPlatform(() => serverPassword())
 
   return (
-    <>
-      {ostype() === "macos" && (
-        <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
-      )}
-      <PlatformProvider value={platform}>
-        <AppBaseProviders>
-          <ServerGate>
-            {(data) => {
-              setServerPassword(data().password)
+    <PlatformProvider value={platform}>
+      <AppBaseProviders>
+        {ostype() === "macos" && (
+          <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
+        )}
+        <ServerGate>
+          {(data) => {
+            setServerPassword(data().password)
 
-              return <AppInterface defaultUrl={data().url} />
-            }}
-          </ServerGate>
-        </AppBaseProviders>
-      </PlatformProvider>
-    </>
+            return <AppInterface defaultUrl={data().url} />
+          }}
+        </ServerGate>
+      </AppBaseProviders>
+    </PlatformProvider>
   )
 }, root!)
 
