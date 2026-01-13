@@ -62,7 +62,7 @@ export default function Black() {
                     <button type="button" onClick={() => setSelected(null)} data-slot="cancel">
                       Cancel
                     </button>
-                    <a href={`/black/subscribe?plan=${plan().id}`} data-slot="continue">
+                    <a href={`/black/subscribe/${plan().id}`} data-slot="continue">
                       Continue
                     </a>
                   </div>

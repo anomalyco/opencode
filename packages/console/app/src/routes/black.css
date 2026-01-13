@@ -460,6 +460,39 @@
         font-weight: 400;
       }
 
+      [data-slot="tax-id-section"] {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        [data-slot="label"] {
+          color: rgba(255, 255, 255, 0.59);
+          font-size: 14px;
+        }
+
+        [data-slot="input"] {
+          width: 100%;
+          height: 44px;
+          padding: 0 12px;
+          background: #1a1a1a;
+          border: 1px solid rgba(255, 255, 255, 0.17);
+          border-radius: 4px;
+          color: #ffffff;
+          font-family: var(--font-mono);
+          font-size: 14px;
+          outline: none;
+          transition: border-color 0.15s ease;
+
+          &::placeholder {
+            color: rgba(255, 255, 255, 0.39);
+          }
+
+          &:focus {
+            border-color: rgba(255, 255, 255, 0.35);
+          }
+        }
+      }
+
       [data-slot="checkout-form"] {
         display: flex;
         flex-direction: column;
@@ -498,6 +531,52 @@
         color: #d4a500;
         font-size: 14px;
         text-align: center;
+      }
+
+      [data-slot="success"] {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+
+        [data-slot="title"] {
+          color: rgba(255, 255, 255, 0.92);
+          font-size: 18px;
+          font-weight: 400;
+          margin: 0;
+        }
+
+        [data-slot="details"] {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+
+          > div {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 16px;
+          }
+
+          dt {
+            color: rgba(255, 255, 255, 0.59);
+            font-size: 14px;
+            font-weight: 400;
+          }
+
+          dd {
+            color: rgba(255, 255, 255, 0.92);
+            font-size: 14px;
+            font-weight: 400;
+            margin: 0;
+            text-align: right;
+          }
+        }
+
+        [data-slot="charge-notice"] {
+          color: #d4a500;
+          font-size: 14px;
+          text-align: left;
+        }
       }
 
       [data-slot="loading"] {

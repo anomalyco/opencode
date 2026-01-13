@@ -1,9 +1,9 @@
 import { Match, Switch } from "solid-js"
 
 export const plans = [
-  { id: "20", amount: 20, multiplier: null },
-  { id: "100", amount: 100, multiplier: "6x more usage than Black 20" },
-  { id: "200", amount: 200, multiplier: "21x more usage than Black 20" },
+  { id: "20", multiplier: null },
+  { id: "100", multiplier: "6x more usage than Black 20" },
+  { id: "200", multiplier: "21x more usage than Black 20" },
 ] as const
 
 export type Plan = (typeof plans)[number]
