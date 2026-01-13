@@ -138,7 +138,7 @@ export namespace Installation {
         break
       case "brew": {
         const formula = await getBrewFormula()
-        cmd = $`brew install ${formula}`.env({
+        cmd = $`brew upgrade ${formula}`.env({
           HOMEBREW_NO_AUTO_UPDATE: "1",
           ...process.env,
         })
