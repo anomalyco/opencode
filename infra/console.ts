@@ -163,6 +163,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
     ZEN_BLACK,
+    new sst.Secret("ZEN_SESSION_SECRET"),
     ...ZEN_MODELS,
     ...($dev
       ? [

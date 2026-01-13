@@ -8,11 +8,13 @@ import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
+import { Session } from "../session"
+import { NamedError } from "@opencode-ai/util/error"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.11", "opencode-anthropic-auth@0.0.8"]
+  const BUILTIN = ["opencode-copilot-auth@0.0.12", "opencode-anthropic-auth@0.0.8"]
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
@@ -34,13 +36,10 @@ export namespace Plugin {
       $: Bun.$,
     }
 
-    // Load internal plugins first
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      for (const plugin of INTERNAL_PLUGINS) {
-        log.info("loading internal plugin", { name: plugin.name })
-        const init = await plugin(input)
-        hooks.push(init)
-      }
+    for (const plugin of INTERNAL_PLUGINS) {
+      log.info("loading internal plugin", { name: plugin.name })
+      const init = await plugin(input)
+      hooks.push(init)
     }
 
     const plugins = [...(config.plugin ?? [])]
@@ -57,8 +56,21 @@ export namespace Plugin {
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
         plugin = await BunProc.install(pkg, version).catch((err) => {
-          if (builtin) return ""
-          throw err
+          if (!builtin) throw err
+
+          const message = err instanceof Error ? err.message : String(err)
+          log.error("failed to install builtin plugin", {
+            pkg,
+            version,
+            error: message,
+          })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
+            }).toObject(),
+          })
+
+          return ""
         })
         if (!plugin) continue
       }

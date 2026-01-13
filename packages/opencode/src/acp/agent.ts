@@ -35,6 +35,7 @@ import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { applyPatch } from "diff"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -109,6 +110,22 @@ export namespace ACP {
                     directory,
                   })
                   return
+                }
+                if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+                  const metadata = permission.metadata || {}
+                  const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
+                  const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+
+                  const content = await Bun.file(filepath).text()
+                  const newContent = getNewContent(content, diff)
+
+                  if (newContent) {
+                    this.connection.writeTextFile({
+                      sessionId: sessionId,
+                      path: filepath,
+                      content: newContent,
+                    })
+                  }
                 }
                 await this.config.sdk.permission.reply({
                   requestID: permission.id,
@@ -440,7 +457,25 @@ export namespace ACP {
 
         this.setupEventSubscriptions(state)
 
-        await this.replaySession(sessionId, directory)
+        // Replay session history
+        const messages = await this.sdk.session
+          .messages(
+            {
+              sessionID: sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch((err) => {
+            log.error("unexpected error when fetching message", { error: err })
+            return undefined
+          })
+
+        for (const msg of messages ?? []) {
+          log.debug("replay message", msg)
+          await this.processMessage(msg)
+        }
 
         return mode
       } catch (e) {
@@ -455,30 +490,41 @@ export namespace ACP {
     }
 
     async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
-      const input = params.cwd ? { directory: params.cwd } : undefined
-      const sessions = await this.sdk.session
-        .list(input, { throwOnError: true })
-        .then((x) => x.data ?? [])
-      const cursor = params.cursor ? Number(params.cursor) : undefined
-      const ordered = sessions.toSorted((left, right) => right.time.updated - left.time.updated)
-      const filtered =
-        cursor !== undefined && Number.isFinite(cursor)
-          ? ordered.filter((session) => session.time.updated < cursor)
-          : ordered
-      const limit = 100
-      const page = filtered.slice(0, limit)
-      const entries: SessionInfo[] = page.map((session) => ({
-        sessionId: session.id,
-        cwd: session.directory,
-        title: session.title,
-        updatedAt: new Date(session.time.updated).toISOString(),
-      }))
-      const next = filtered.length > limit ? String(page[page.length - 1]?.time.updated ?? "") : undefined
-      const response: ListSessionsResponse = {
-        sessions: entries,
+      try {
+        const input = params.cwd ? { directory: params.cwd } : undefined
+        const sessions = await this.sdk.session
+          .list(input, { throwOnError: true })
+          .then((x) => x.data ?? [])
+        const cursor = params.cursor ? Number(params.cursor) : undefined
+        const ordered = sessions.toSorted((left, right) => right.time.updated - left.time.updated)
+        const filtered =
+          cursor !== undefined && Number.isFinite(cursor)
+            ? ordered.filter((session) => session.time.updated < cursor)
+            : ordered
+        const limit = 100
+        const page = filtered.slice(0, limit)
+        const entries: SessionInfo[] = page.map((session) => ({
+          sessionId: session.id,
+          cwd: session.directory,
+          title: session.title,
+          updatedAt: new Date(session.time.updated).toISOString(),
+        }))
+        const last = page[page.length - 1]
+        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+        const response: ListSessionsResponse = {
+          sessions: entries,
+        }
+        if (next) response.nextCursor = next
+        return response
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
       }
-      if (next) response.nextCursor = next
-      return response
     }
 
     async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
@@ -496,7 +542,11 @@ export namespace ACP {
             },
             { throwOnError: true },
           )
-          .then((x) => x.data!)
+          .then((x) => x.data)
+
+        if (!forked) {
+          throw new Error("Fork session returned no data")
+        }
 
         const sessionId = forked.id
         const state = await this.sessionManager.load(sessionId, directory, mcpServers, model)
@@ -511,6 +561,26 @@ export namespace ACP {
 
         this.setupEventSubscriptions(state)
 
+        // Replay forked session history
+        const messages = await this.sdk.session
+          .messages(
+            {
+              sessionID: sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch((err) => {
+            log.error("unexpected error when fetching message", { error: err })
+            return undefined
+          })
+
+        for (const msg of messages ?? []) {
+          log.debug("replay message", msg)
+          await this.processMessage(msg)
+        }
+
         return mode
       } catch (e) {
         const error = MessageV2.fromError(e, {
@@ -520,23 +590,6 @@ export namespace ACP {
           throw RequestError.authRequired()
         }
         throw e
-      }
-    }
-
-    private async replaySession(sessionId: string, directory: string) {
-      const messages = await this.sdk.session
-        .messages(
-          {
-            sessionID: sessionId,
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((x) => x.data ?? [])
-
-      for (const msg of messages) {
-        log.debug("replay message", msg)
-        await this.processMessage(msg)
       }
     }
 
@@ -735,7 +788,7 @@ export namespace ACP {
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data?.providers ?? [])
+      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
       const entries = providers.sort((a, b) => {
         const nameA = a.name.toLowerCase()
         const nameB = b.name.toLowerCase()
@@ -1171,5 +1224,14 @@ export namespace ACP {
         text: uri,
       }
     }
+  }
+
+  function getNewContent(fileOriginal: string, unifiedDiff: string): string | undefined {
+    const result = applyPatch(fileOriginal, unifiedDiff)
+    if (result === false) {
+      log.error("Failed to apply unified diff (context mismatch)")
+      return undefined
+    }
+    return result
   }
 }
