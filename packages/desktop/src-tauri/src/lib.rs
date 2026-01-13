@@ -198,7 +198,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
 }
 
 async fn check_server_health(url: &str, password: Option<&str>) -> bool {
-    let health_url = format!("{}/health", url.trim_end_matches('/'));
+    let health_url = format!("{}/global/health", url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build();
@@ -222,6 +222,11 @@ async fn check_server_health(url: &str, password: Option<&str>) -> bool {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
+
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("killall")
+        .arg("opencode-cli")
+        .output();
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -441,7 +446,7 @@ async fn spawn_local_server(
 
     let timestamp = Instant::now();
     loop {
-        if timestamp.elapsed() > Duration::from_secs(7) {
+        if timestamp.elapsed() > Duration::from_secs(30) {
             break Err(format!(
                 "Failed to spawn OpenCode Server. Logs:\n{}",
                 get_logs(app.clone()).await.unwrap()
