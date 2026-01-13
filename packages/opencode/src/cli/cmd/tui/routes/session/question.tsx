@@ -86,9 +86,44 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     setStore("answers", answers)
   }
 
+  function moveTo(index: number) {
+    setStore("selected", index)
+  }
+
+  function selectTab(index: number) {
+    setStore("tab", index)
+    setStore("selected", 0)
+  }
+
+  function selectOption() {
+    if (other()) {
+      if (!multi()) {
+        setStore("editing", true)
+        return
+      }
+      const value = input()
+      if (value && customPicked()) {
+        toggle(value)
+        return
+      }
+      setStore("editing", true)
+      return
+    }
+    const opt = options()[store.selected]
+    if (!opt) return
+    if (multi()) {
+      toggle(opt.label)
+      return
+    }
+    pick(opt.label)
+  }
+
   const dialog = useDialog()
 
   useKeyboard((evt) => {
+    // Skip processing if a dialog (e.g., command palette) is open
+    if (dialog.stack.length > 0) return
+
     // When editing "Other" textarea
     if (store.editing && !confirm()) {
       if (evt.name === "escape") {
@@ -149,16 +184,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
     if (evt.name === "left" || evt.name === "h") {
       evt.preventDefault()
-      const next = (store.tab - 1 + tabs()) % tabs()
-      setStore("tab", next)
-      setStore("selected", 0)
+      selectTab((store.tab - 1 + tabs()) % tabs())
     }
 
     if (evt.name === "right" || evt.name === "l") {
       evt.preventDefault()
-      const next = (store.tab + 1) % tabs()
-      setStore("tab", next)
-      setStore("selected", 0)
+      selectTab((store.tab + 1) % tabs())
     }
 
     if (confirm()) {
@@ -176,36 +207,17 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
       if (evt.name === "up" || evt.name === "k") {
         evt.preventDefault()
-        setStore("selected", (store.selected - 1 + total) % total)
+        moveTo((store.selected - 1 + total) % total)
       }
 
       if (evt.name === "down" || evt.name === "j") {
         evt.preventDefault()
-        setStore("selected", (store.selected + 1) % total)
+        moveTo((store.selected + 1) % total)
       }
 
       if (evt.name === "return") {
         evt.preventDefault()
-        if (other()) {
-          if (!multi()) {
-            setStore("editing", true)
-            return
-          }
-          const value = input()
-          if (value && customPicked()) {
-            toggle(value)
-            return
-          }
-          setStore("editing", true)
-          return
-        }
-        const opt = opts[store.selected]
-        if (!opt) return
-        if (multi()) {
-          toggle(opt.label)
-          return
-        }
-        pick(opt.label)
+        selectOption()
       }
 
       if (evt.name === "escape" || keybind.match("app_exit", evt)) {
@@ -236,6 +248,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     paddingLeft={1}
                     paddingRight={1}
                     backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
+                    onMouseUp={() => selectTab(index())}
                   >
                     <text fg={isActive() ? theme.selectedListItemText : isAnswered() ? theme.text : theme.textMuted}>
                       {q.header}
@@ -244,7 +257,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 )
               }}
             </For>
-            <box paddingLeft={1} paddingRight={1} backgroundColor={confirm() ? theme.accent : theme.backgroundElement}>
+            <box
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={confirm() ? theme.accent : theme.backgroundElement}
+              onMouseUp={() => selectTab(questions().length)}
+            >
               <text fg={confirm() ? theme.selectedListItemText : theme.textMuted}>Confirm</text>
             </box>
           </box>
@@ -264,7 +282,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   const active = () => i() === store.selected
                   const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
                   return (
-                    <box>
+                    <box onMouseOver={() => moveTo(i())} onMouseUp={() => selectOption()}>
                       <box flexDirection="row" gap={1}>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
@@ -280,7 +298,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   )
                 }}
               </For>
-              <box>
+              <box onMouseOver={() => moveTo(options().length)} onMouseUp={() => selectOption()}>
                 <box flexDirection="row" gap={1}>
                   <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                     <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
