@@ -5,6 +5,7 @@ import {
   type PermissionRequest,
   TextPart,
   ToolPart,
+  UserMessage,
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -491,6 +492,15 @@ export function SessionTurn(
                               <h1>{msg().summary?.title}</h1>
                             </Match>
                           </Switch>
+                        </div>
+                        <div data-slot="session-turn-user-badges">
+                          <Show when={(msg() as UserMessage).agent}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
+                          </Show>
+                          <Show when={(msg() as UserMessage).model?.modelID}>
+                            <span data-slot="session-turn-badge">{(msg() as UserMessage).model?.modelID}</span>
+                          </Show>
+                          <span data-slot="session-turn-badge">{(msg() as UserMessage).variant || "default"}</span>
                         </div>
                       </div>
                     </div>
