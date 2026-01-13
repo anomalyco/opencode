@@ -1,19 +1,16 @@
 ## Style Guide
 
-- Try to keep things in one function unless composable or reusable
-- AVOID unnecessary destructuring of variables. instead of doing `const { a, b }
-= obj` just reference it as obj.a and obj.b. this preserves context
-- AVOID `try`/`catch` where possible
-- AVOID using `any` type
-- PREFER single word variable names where possible
-- Use as many bun apis as possible like Bun.file()
+- Keep things in one function unless composable or reusable
+- Avoid unnecessary destructuring. Instead of `const { a, b } = obj`, use `obj.a` and `obj.b` to preserve context
+- Avoid `try`/`catch` where possible
+- Avoid using the `any` type
+- Prefer single word variable names where possible
+- Use Bun APIs when possible, like `Bun.file()`
 
 # Avoid let statements
 
-we don't like let statements, especially combined with if/else statements.
-prefer const
-
-This is bad:
+We don't like `let` statements, especially combined with if/else statements.
+Prefer `const`.
 
 Good:
 
@@ -32,7 +29,7 @@ else foo = 2
 
 # Avoid else statements
 
-Prefer early returns or even using `iife` to avoid else statements
+Prefer early returns or using an `iife` to avoid else statements.
 
 Good:
 

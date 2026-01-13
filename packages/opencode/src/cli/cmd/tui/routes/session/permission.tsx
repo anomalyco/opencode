@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
-import { useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
@@ -11,6 +11,7 @@ import { useSync } from "../../context/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 
 type PermissionStage = "permission" | "always" | "reject"
@@ -32,7 +33,9 @@ function filetype(input?: string) {
 }
 
 function EditBody(props: { request: PermissionRequest }) {
-  const { theme, syntax } = useTheme()
+  const themeState = useTheme()
+  const theme = themeState.theme
+  const syntax = themeState.syntax
   const sync = useSync()
   const dimensions = useTerminalDimensions()
 
@@ -54,7 +57,7 @@ function EditBody(props: { request: PermissionRequest }) {
         <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
       </box>
       <Show when={diff()}>
-        <box maxHeight={Math.floor(dimensions().height / 4)} overflow="scroll">
+        <scrollbox height="100%">
           <diff
             diff={diff()}
             view={view()}
@@ -74,7 +77,7 @@ function EditBody(props: { request: PermissionRequest }) {
             addedLineNumberBg={theme.diffAddedLineNumberBg}
             removedLineNumberBg={theme.diffRemovedLineNumberBg}
           />
-        </box>
+        </scrollbox>
       </Show>
     </box>
   )
@@ -172,86 +175,95 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               message: message || undefined,
             })
           }}
-          onCancel={() => setStore("stage", "permission")}
+          onCancel={() => {
+            setStore("stage", "permission")
+          }}
         />
       </Match>
       <Match when={store.stage === "permission"}>
-        <Prompt
-          title="Permission required"
-          body={
-            <Switch>
-              <Match when={props.request.permission === "edit"}>
-                <EditBody request={props.request} />
-              </Match>
-              <Match when={props.request.permission === "read"}>
-                <TextBody icon="→" title={`Read ` + normalizePath(input().filePath as string)} />
-              </Match>
-              <Match when={props.request.permission === "glob"}>
-                <TextBody icon="✱" title={`Glob "` + (input().pattern ?? "") + `"`} />
-              </Match>
-              <Match when={props.request.permission === "grep"}>
-                <TextBody icon="✱" title={`Grep "` + (input().pattern ?? "") + `"`} />
-              </Match>
-              <Match when={props.request.permission === "list"}>
-                <TextBody icon="→" title={`List ` + normalizePath(input().path as string)} />
-              </Match>
-              <Match when={props.request.permission === "bash"}>
-                <TextBody
-                  icon="#"
-                  title={(input().description as string) ?? ""}
-                  description={("$ " + input().command) as string}
-                />
-              </Match>
-              <Match when={props.request.permission === "task"}>
-                <TextBody
-                  icon="#"
-                  title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task`}
-                  description={"◉ " + input().description}
-                />
-              </Match>
-              <Match when={props.request.permission === "webfetch"}>
-                <TextBody icon="%" title={`WebFetch ` + (input().url ?? "")} />
-              </Match>
-              <Match when={props.request.permission === "websearch"}>
-                <TextBody icon="◈" title={`Exa Web Search "` + (input().query ?? "") + `"`} />
-              </Match>
-              <Match when={props.request.permission === "codesearch"}>
-                <TextBody icon="◇" title={`Exa Code Search "` + (input().query ?? "") + `"`} />
-              </Match>
-              <Match when={props.request.permission === "external_directory"}>
-                <TextBody icon="←" title={`Access external directory ` + normalizePath(input().path as string)} />
-              </Match>
-              <Match when={props.request.permission === "doom_loop"}>
-                <TextBody icon="⟳" title="Continue after repeated failures" />
-              </Match>
-              <Match when={true}>
-                <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
-              </Match>
-            </Switch>
-          }
-          options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
-          escapeKey="reject"
-          onSelect={(option) => {
-            if (option === "always") {
-              setStore("stage", "always")
-              return
-            }
-            if (option === "reject") {
-              if (session()?.parentID) {
-                setStore("stage", "reject")
-                return
+        {(() => {
+          const body = (
+            <Prompt
+              title="Permission required"
+              body={
+                <Switch>
+                  <Match when={props.request.permission === "edit"}>
+                    <EditBody request={props.request} />
+                  </Match>
+                  <Match when={props.request.permission === "read"}>
+                    <TextBody icon="→" title={`Read ` + normalizePath(input().filePath as string)} />
+                  </Match>
+                  <Match when={props.request.permission === "glob"}>
+                    <TextBody icon="✱" title={`Glob "` + (input().pattern ?? "") + `"`} />
+                  </Match>
+                  <Match when={props.request.permission === "grep"}>
+                    <TextBody icon="✱" title={`Grep "` + (input().pattern ?? "") + `"`} />
+                  </Match>
+                  <Match when={props.request.permission === "list"}>
+                    <TextBody icon="→" title={`List ` + normalizePath(input().path as string)} />
+                  </Match>
+                  <Match when={props.request.permission === "bash"}>
+                    <TextBody
+                      icon="#"
+                      title={(input().description as string) ?? ""}
+                      description={("$ " + input().command) as string}
+                    />
+                  </Match>
+                  <Match when={props.request.permission === "task"}>
+                    <TextBody
+                      icon="#"
+                      title={`${Locale.titlecase((input().subagent_type as string) ?? "Unknown")} Task`}
+                      description={"◉ " + input().description}
+                    />
+                  </Match>
+                  <Match when={props.request.permission === "webfetch"}>
+                    <TextBody icon="%" title={`WebFetch ` + (input().url ?? "")} />
+                  </Match>
+                  <Match when={props.request.permission === "websearch"}>
+                    <TextBody icon="◈" title={`Exa Web Search "` + (input().query ?? "") + `"`} />
+                  </Match>
+                  <Match when={props.request.permission === "codesearch"}>
+                    <TextBody icon="◇" title={`Exa Code Search "` + (input().query ?? "") + `"`} />
+                  </Match>
+                  <Match when={props.request.permission === "external_directory"}>
+                    <TextBody icon="←" title={`Access external directory ` + normalizePath(input().path as string)} />
+                  </Match>
+                  <Match when={props.request.permission === "doom_loop"}>
+                    <TextBody icon="⟳" title="Continue after repeated failures" />
+                  </Match>
+                  <Match when={true}>
+                    <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
+                  </Match>
+                </Switch>
               }
-              sdk.client.permission.reply({
-                reply: "reject",
-                requestID: props.request.id,
-              })
-            }
-            sdk.client.permission.reply({
-              reply: "once",
-              requestID: props.request.id,
-            })
-          }}
-        />
+              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
+              escapeKey="reject"
+              fullscreen
+              onSelect={(option) => {
+                if (option === "always") {
+                  setStore("stage", "always")
+                  return
+                }
+                if (option === "reject") {
+                  if (session()?.parentID) {
+                    setStore("stage", "reject")
+                    return
+                  }
+                  sdk.client.permission.reply({
+                    reply: "reject",
+                    requestID: props.request.id,
+                  })
+                }
+                sdk.client.permission.reply({
+                  reply: "once",
+                  requestID: props.request.id,
+                })
+              }}
+            />
+          )
+
+          return body
+        })()}
       </Match>
     </Switch>
   )
@@ -327,14 +339,18 @@ function Prompt<const T extends Record<string, string>>(props: {
   body: JSX.Element
   options: T
   escapeKey?: keyof T
+  fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
   const keybind = useKeybind()
+  const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
+    expanded: false,
   })
+  const diffKey = Keybind.parse("ctrl+f")[0]
 
   useKeyboard((evt) => {
     if (evt.name === "left" || evt.name == "h") {
@@ -360,17 +376,36 @@ function Prompt<const T extends Record<string, string>>(props: {
       evt.preventDefault()
       props.onSelect(props.escapeKey)
     }
+
+    if (props.fullscreen && diffKey && Keybind.match(diffKey, keybind.parse(evt))) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      setStore("expanded", (v) => !v)
+    }
   })
 
-  return (
+  const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
+  const renderer = useRenderer()
+
+  const content = () => (
     <box
       backgroundColor={theme.backgroundPanel}
       border={["left"]}
       borderColor={theme.warning}
       customBorderChars={SplitBorder.customBorderChars}
+      {...(store.expanded
+        ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
+        : {
+            top: 0,
+            maxHeight: 15,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            position: "relative",
+          })}
     >
-      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
-        <box flexDirection="row" gap={1} paddingLeft={1}>
+      <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1} flexGrow={1}>
+        <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
           <text fg={theme.warning}>{"△"}</text>
           <text fg={theme.text}>{props.title}</text>
         </box>
@@ -403,6 +438,11 @@ function Prompt<const T extends Record<string, string>>(props: {
           </For>
         </box>
         <box flexDirection="row" gap={2}>
+          <Show when={props.fullscreen}>
+            <text fg={theme.text}>
+              {"ctrl+f"} <span style={{ fg: theme.textMuted }}>{hint()}</span>
+            </text>
+          </Show>
           <text fg={theme.text}>
             {"⇆"} <span style={{ fg: theme.textMuted }}>select</span>
           </text>
@@ -412,5 +452,11 @@ function Prompt<const T extends Record<string, string>>(props: {
         </box>
       </box>
     </box>
+  )
+
+  return (
+    <Show when={!store.expanded} fallback={<Portal>{content()}</Portal>}>
+      {content()}
+    </Show>
   )
 }
