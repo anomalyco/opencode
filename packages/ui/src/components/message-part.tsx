@@ -595,9 +595,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
           </div>
         </div>
       </Show>
-      <Show when={showQuestion() && questionRequest()}>
-        {(request) => <QuestionPrompt request={request()} sessionID={props.message.sessionID} />}
-      </Show>
+      <Show when={showQuestion() && questionRequest()}>{(request) => <QuestionPrompt request={request()} />}</Show>
     </div>
   )
 }
@@ -1117,7 +1115,7 @@ ToolRegistry.register({
   },
 })
 
-function QuestionPrompt(props: { request: QuestionRequest; sessionID: string }) {
+function QuestionPrompt(props: { request: QuestionRequest }) {
   const data = useData()
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -1356,5 +1354,3 @@ function QuestionPrompt(props: { request: QuestionRequest; sessionID: string }) 
     </div>
   )
 }
-
-export { QuestionPrompt }
