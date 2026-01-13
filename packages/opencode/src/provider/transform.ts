@@ -621,6 +621,35 @@ export namespace ProviderTransform {
     }
     */
 
+    // Ensure 'required' is always an array for object types to satisfy strict backends (e.g., SGLang)
+    const ensureRequiredField = (obj: any): any => {
+      if (obj === null || typeof obj !== "object") {
+        return obj
+      }
+
+      if (Array.isArray(obj)) {
+        return obj.map(ensureRequiredField)
+      }
+
+      const result: any = {}
+      for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === "object" && value !== null) {
+          result[key] = ensureRequiredField(value)
+        } else {
+          result[key] = value
+        }
+      }
+
+      // Add required: [] for object types that don't have it
+      if (result.type === "object" && !result.required) {
+        result.required = []
+      }
+
+      return result
+    }
+
+    schema = ensureRequiredField(schema)
+
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
       const sanitizeGemini = (obj: any): any => {

@@ -167,6 +167,106 @@ describe("ProviderTransform.maxOutputTokens", () => {
   })
 })
 
+describe("ProviderTransform.schema - required field for strict backends", () => {
+  const genericModel = {
+    providerID: "openai-compatible",
+    api: {
+      id: "custom-model",
+    },
+  } as any
+
+  test("adds required: [] to empty object schemas", () => {
+    const schema = {
+      type: "object",
+      properties: {},
+    } as any
+
+    const result = ProviderTransform.schema(genericModel, schema) as any
+
+    expect(result.required).toEqual([])
+  })
+
+  test("preserves existing required field", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+      required: ["name"],
+    } as any
+
+    const result = ProviderTransform.schema(genericModel, schema) as any
+
+    expect(result.required).toEqual(["name"])
+  })
+
+  test("adds required: [] to nested object schemas", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        nested: {
+          type: "object",
+          properties: {},
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(genericModel, schema) as any
+
+    expect(result.required).toEqual([])
+    expect(result.properties.nested.required).toEqual([])
+  })
+
+  test("handles deeply nested object schemas", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        level1: {
+          type: "object",
+          properties: {
+            level2: {
+              type: "object",
+              properties: {
+                value: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(genericModel, schema) as any
+
+    expect(result.required).toEqual([])
+    expect(result.properties.level1.required).toEqual([])
+    expect(result.properties.level1.properties.level2.required).toEqual([])
+  })
+
+  test("handles array of objects", () => {
+    const schema = {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {},
+      },
+    } as any
+
+    const result = ProviderTransform.schema(genericModel, schema) as any
+
+    expect(result.items.required).toEqual([])
+  })
+
+  test("does not add required to non-object types", () => {
+    const schema = {
+      type: "string",
+    } as any
+
+    const result = ProviderTransform.schema(genericModel, schema) as any
+
+    expect(result.required).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.schema - gemini array items", () => {
   test("adds missing items for array properties", () => {
     const geminiModel = {
