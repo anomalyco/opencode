@@ -24,6 +24,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [grouped, { refetch }] = createResource(
     () => {
       // When items is a function (not async filter function), call it to track changes
+      // Don't call async functions here - they'll be called in the fetcher with the filter
       const itemsValue =
         typeof props.items === "function"
           ? (props.items as () => T[])() // Call synchronous function to track it
@@ -36,7 +37,13 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     },
     async ({ filter, items }) => {
       const needle = filter?.toLowerCase()
-      const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
+      // Handle case where items is a Promise (from async function called without filter)
+      // In that case, we need to call the function again with the proper filter
+      const resolvedItems =
+        items instanceof Promise || !Array.isArray(items)
+          ? await (props.items as (filter: string) => T[] | Promise<T[]>)(needle ?? "")
+          : items
+      const all = resolvedItems || []
       const result = pipe(
         all,
         (x) => {
