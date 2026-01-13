@@ -124,11 +124,39 @@ export namespace MCP {
     })
   }
 
+  function coerceJsonStrings(args: Record<string, unknown>, schema: JSONSchema7): Record<string, unknown> {
+    const properties = schema.properties ?? {}
+    const result: Record<string, unknown> = { ...args }
+
+    for (const [key, value] of Object.entries(args)) {
+      if (typeof value !== "string") continue
+
+      const propSchema = properties[key]
+      if (!propSchema || typeof propSchema === "boolean") continue
+
+      const expectedType = propSchema.type
+      if (!expectedType) continue
+
+      const isArrayOrObject = expectedType === "array" || expectedType === "object"
+      if (!isArrayOrObject) continue
+
+      const trimmed = value.trim()
+      const looksLikeJson =
+        (trimmed.startsWith("[") && trimmed.endsWith("]")) || (trimmed.startsWith("{") && trimmed.endsWith("}"))
+      if (!looksLikeJson) continue
+
+      try {
+        result[key] = JSON.parse(value)
+      } catch {}
+    }
+
+    return result
+  }
+
   // Convert MCP tool definition to AI SDK Tool type
   async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
-    // Spread first, then override type to ensure it's always "object"
     const schema: JSONSchema7 = {
       ...(inputSchema as JSONSchema7),
       type: "object",
@@ -140,10 +168,11 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
+        const coerced = coerceJsonStrings(args as Record<string, unknown>, schema)
         return client.callTool(
           {
             name: mcpTool.name,
-            arguments: (args || {}) as Record<string, unknown>,
+            arguments: coerced,
           },
           CallToolResultSchema,
           {
