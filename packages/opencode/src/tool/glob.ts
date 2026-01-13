@@ -5,6 +5,7 @@ import DESCRIPTION from "./glob.txt"
 import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 export const GlobTool = Tool.define("glob", {
   description: DESCRIPTION,
@@ -35,23 +36,43 @@ export const GlobTool = Tool.define("glob", {
     const limit = 100
     const files = []
     let truncated = false
-    for await (const file of Ripgrep.files({
-      cwd: search,
-      glob: [params.pattern],
-    })) {
-      if (files.length >= limit) {
-        truncated = true
-        break
+    const isRemote = SandboxRuntime.isRemote()
+
+    if (isRemote) {
+      const rgPath = await Ripgrep.filepath()
+      const result = await SandboxRuntime.exec(rgPath, ["--files", "-g", params.pattern, search])
+      const lines = result.stdout.trim().split("\n").filter(Boolean)
+      for (const line of lines) {
+        if (files.length >= limit) {
+          truncated = true
+          break
+        }
+        const full = path.isAbsolute(line) ? line : path.resolve(search, line)
+        const stats = await SandboxRuntime.stat(full)
+        files.push({
+          path: full,
+          mtime: stats?.mtime.getTime() ?? 0,
+        })
       }
-      const full = path.resolve(search, file)
-      const stats = await Bun.file(full)
-        .stat()
-        .then((x) => x.mtime.getTime())
-        .catch(() => 0)
-      files.push({
-        path: full,
-        mtime: stats,
-      })
+    } else {
+      for await (const file of Ripgrep.files({
+        cwd: search,
+        glob: [params.pattern],
+      })) {
+        if (files.length >= limit) {
+          truncated = true
+          break
+        }
+        const full = path.resolve(search, file)
+        const stats = await Bun.file(full)
+          .stat()
+          .then((x) => x.mtime.getTime())
+          .catch(() => 0)
+        files.push({
+          path: full,
+          mtime: stats,
+        })
+      }
     }
     files.sort((a, b) => b.mtime - a.mtime)
 

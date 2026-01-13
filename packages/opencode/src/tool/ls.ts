@@ -5,6 +5,7 @@ import DESCRIPTION from "./ls.txt"
 import { Instance } from "../project/instance"
 import { Ripgrep } from "../file/ripgrep"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 export const IGNORE_PATTERNS = [
   "node_modules/",
@@ -56,9 +57,27 @@ export const ListTool = Tool.define("list", {
 
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
     const files = []
-    for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs })) {
-      files.push(file)
-      if (files.length >= LIMIT) break
+    const isRemote = SandboxRuntime.isRemote()
+
+    if (isRemote) {
+      const rgPath = await Ripgrep.filepath()
+      const args = ["--files"]
+      for (const glob of ignoreGlobs) {
+        args.push("-g", glob)
+      }
+      args.push(searchPath)
+      const result = await SandboxRuntime.exec(rgPath, args)
+      const lines = result.stdout.trim().split("\n").filter(Boolean)
+      for (const line of lines) {
+        const relative = path.relative(searchPath, line)
+        files.push(relative)
+        if (files.length >= LIMIT) break
+      }
+    } else {
+      for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs })) {
+        files.push(file)
+        if (files.length >= LIMIT) break
+      }
     }
 
     // Build directory structure

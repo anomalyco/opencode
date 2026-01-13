@@ -6,6 +6,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -43,14 +44,29 @@ export const GrepTool = Tool.define("grep", {
     }
     args.push(searchPath)
 
-    const proc = Bun.spawn([rgPath, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
+    const isRemote = SandboxRuntime.isRemote()
+    let output: string
+    let exitCode: number
 
-    const output = await new Response(proc.stdout).text()
-    const errorOutput = await new Response(proc.stderr).text()
-    const exitCode = await proc.exited
+    if (isRemote) {
+      const result = await SandboxRuntime.exec(rgPath, args)
+      output = result.stdout
+      exitCode = result.exitCode
+      if (exitCode !== 0 && exitCode !== 1) {
+        throw new Error(`ripgrep failed: ${result.stderr}`)
+      }
+    } else {
+      const proc = Bun.spawn([rgPath, ...args], {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      output = await new Response(proc.stdout).text()
+      const errorOutput = await new Response(proc.stderr).text()
+      exitCode = await proc.exited
+      if (exitCode !== 0 && exitCode !== 1) {
+        throw new Error(`ripgrep failed: ${errorOutput}`)
+      }
+    }
 
     if (exitCode === 1) {
       return {
@@ -60,11 +76,6 @@ export const GrepTool = Tool.define("grep", {
       }
     }
 
-    if (exitCode !== 0) {
-      throw new Error(`ripgrep failed: ${errorOutput}`)
-    }
-
-    // Handle both Unix (\n) and Windows (\r\n) line endings
     const lines = output.trim().split(/\r?\n/)
     const matches = []
 
@@ -77,8 +88,7 @@ export const GrepTool = Tool.define("grep", {
       const lineNum = parseInt(lineNumStr, 10)
       const lineText = lineTextParts.join("|")
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
+      const stats = isRemote ? await SandboxRuntime.stat(filePath) : await Bun.file(filePath).stat().catch(() => null)
       if (!stats) continue
 
       matches.push({
