@@ -271,6 +271,7 @@ export function Prompt(props: PromptProps) {
         keybind: "toggle_paste_summary",
         category: "Prompt",
         onSelect: (dialog) => {
+          if (!input.focused) return
           togglePasteSummary()
           dialog.clear()
         },
