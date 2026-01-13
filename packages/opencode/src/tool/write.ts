@@ -21,6 +21,14 @@ export const WriteTool = Tool.define("write", {
     content: z.string().describe("The content to write to the file"),
     filePath: z.string().describe("The absolute path to the file to write (must be absolute, not relative)"),
   }),
+  formatValidationError(error) {
+    if (error instanceof z.ZodError) {
+      return `Invalid parameters for tool 'write':\n${(error as any).errors
+        .map((e: z.ZodIssue) => `- ${e.path.join(".")}: ${e.message}`)
+        .join("\n")}\n\nMake sure to provide 'content' and 'filePath'.`
+    }
+    return `Invalid parameters for tool 'write': ${error}`
+  },
   async execute(params, ctx) {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filepath)
