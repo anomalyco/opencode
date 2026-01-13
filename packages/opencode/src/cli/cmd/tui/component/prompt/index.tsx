@@ -29,6 +29,7 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
+import { Log } from "@/util/log"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 
 export type PromptProps = {
@@ -898,7 +899,9 @@ export function Prompt(props: PromptProps) {
                         return
                       }
                     }
-                  } catch {}
+                  } catch (err) {
+                    Log.Default.debug("Failed to paste image, falling back to text", { error: err })
+                  }
                 }
 
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
