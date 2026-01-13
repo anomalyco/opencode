@@ -447,6 +447,7 @@ export interface ToolProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
+  locked?: boolean
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -576,6 +577,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
             status={part.state.status}
             hideDetails={props.hideDetails}
             forceOpen={forceOpen()}
+            locked={showPermission() || showQuestion()}
             defaultOpen={props.defaultOpen}
           />
         </Match>
@@ -1184,6 +1186,7 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
 
   function selectTab(index: number) {
     setStore("tab", index)
+    setStore("editing", false)
   }
 
   function selectOption(optIndex: number) {
