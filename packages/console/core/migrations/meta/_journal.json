@@ -358,6 +358,20 @@
       "when": 1767931290031,
       "tag": "0050_bumpy_mephistopheles",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "5",
+      "when": 1768341152722,
+      "tag": "0051_jazzy_green_goblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "5",
+      "when": 1768343920467,
+      "tag": "0052_aromatic_agent_zero",
+      "breakpoints": true
     }
   ]
 }

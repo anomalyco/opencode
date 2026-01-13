@@ -26,10 +26,4 @@ export const config = {
     commits: "6,500",
     monthlyUsers: "650,000",
   },
-
-  // Stripe
-  stripe: {
-    publishableKey:
-      "pk_live_51OhXSKEclFNgdHcR9dDfYGwQeKuPfKo0IjA5kWBQIXKMFhE8QFd9bYLdPZC6klRKEgEkxJYSKuZg9U3FKHdLnF4300F9qLqMgP",
-  },
 } as const

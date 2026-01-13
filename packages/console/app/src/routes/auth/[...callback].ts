@@ -5,6 +5,7 @@ import { useAuthSession } from "~/context/auth"
 
 export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
+
   try {
     const code = url.searchParams.get("code")
     if (!code) throw new Error("No code found")
@@ -27,7 +28,7 @@ export async function GET(input: APIEvent) {
         current: id,
       }
     })
-    return redirect("/auth")
+    return redirect(url.pathname === "/auth/callback" ? "/auth" : url.pathname.replace("/auth/callback", ""))
   } catch (e: any) {
     return new Response(
       JSON.stringify({

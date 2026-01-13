@@ -122,6 +122,7 @@ const ZEN_MODELS = [
 ]
 const ZEN_BLACK = new sst.Secret("ZEN_BLACK")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
+const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
   properties: { value: auth.url.apply((url) => url!) },
 })
@@ -177,6 +178,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     //VITE_DOCS_URL: web.url.apply((url) => url!),
     //VITE_API_URL: gateway.url.apply((url) => url!),
     VITE_AUTH_URL: auth.url.apply((url) => url!),
+    VITE_STRIPE_PUBLISHABLE_KEY: STRIPE_PUBLISHABLE_KEY.value,
   },
   transform: {
     server: {
