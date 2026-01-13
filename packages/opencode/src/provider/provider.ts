@@ -64,6 +64,30 @@ export namespace Provider {
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 
+  /**
+   * Executes an apiKeyCommand and returns the output as the API key.
+   * This allows dynamic API key retrieval from credential helpers or token services.
+   */
+  async function resolveApiKeyCommand(command: string[]): Promise<string | undefined> {
+    if (!command || command.length === 0) return undefined
+    try {
+      const proc = Bun.spawn(command, {
+        stdout: "pipe",
+        stderr: "pipe",
+      })
+      const code = await proc.exited
+      if (code !== 0) {
+        log.warn("apiKeyCommand failed", { command, exitCode: code })
+        return undefined
+      }
+      const stdout = await new Response(proc.stdout).text()
+      return stdout.trim()
+    } catch (e) {
+      log.warn("apiKeyCommand execution error", { command, error: e })
+      return undefined
+    }
+  }
+
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomLoader = (provider: Info) => Promise<{
     autoload: boolean
@@ -921,6 +945,12 @@ export namespace Provider {
 
       if (!options["baseURL"]) options["baseURL"] = model.api.url
       if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+      // If no apiKey yet, try apiKeyCommand
+      if (options["apiKey"] === undefined && options["apiKeyCommand"]) {
+        const key = await resolveApiKeyCommand(options["apiKeyCommand"])
+        if (key) options["apiKey"] = key
+        delete options["apiKeyCommand"] // Don't pass command to SDK
+      }
       if (model.headers)
         options["headers"] = {
           ...options["headers"],

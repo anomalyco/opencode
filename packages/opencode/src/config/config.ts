@@ -809,6 +809,12 @@ export namespace Config {
       options: z
         .object({
           apiKey: z.string().optional(),
+          apiKeyCommand: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Command to execute to get the API key dynamically. The command should output the API key to stdout. Example: ['my-auth-cli', 'get-token']",
+            ),
           baseURL: z.string().optional(),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
