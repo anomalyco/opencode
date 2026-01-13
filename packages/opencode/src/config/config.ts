@@ -999,6 +999,25 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      sandbox: z
+        .object({
+          provider: z.enum(["local", "modal", "kubernetes"]).optional().describe("Sandbox provider to use"),
+          modal: z
+            .object({
+              appName: z.string().optional().describe("Modal app name for sandboxes"),
+              timeout: z.number().optional().describe("Default timeout in seconds"),
+              image: z.string().optional().describe("Default image for Modal sandboxes"),
+            })
+            .optional(),
+          kubernetes: z
+            .object({
+              namespace: z.string().optional().describe("Kubernetes namespace for sandbox pods"),
+              image: z.string().optional().describe("Default image for Kubernetes sandboxes"),
+            })
+            .optional(),
+        })
+        .optional()
+        .describe("Sandbox configuration for isolated code execution"),
       experimental: z
         .object({
           hook: z
