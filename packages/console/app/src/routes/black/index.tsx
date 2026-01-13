@@ -1,11 +1,54 @@
-import { A, createAsync } from "@solidjs/router"
+import { A, createAsync, useSearchParams } from "@solidjs/router"
 import "./index.css"
 import { Title } from "@solidjs/meta"
 import { github } from "~/lib/github"
-import { createMemo, Match, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { config } from "~/config"
 
+const plans = [
+  { id: "20", amount: 20, multiplier: null },
+  { id: "100", amount: 100, multiplier: "6x more usage than Black 20" },
+  { id: "200", amount: 200, multiplier: "21x more usage than Black 20" },
+] as const
+
+function PlanIcon(props: { plan: string }) {
+  return (
+    <Switch>
+      <Match when={props.plan === "20"}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </Match>
+      <Match when={props.plan === "100"}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      </Match>
+      <Match when={props.plan === "200"}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="2" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="10" y="2" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="18" y="2" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="2" y="10" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="10" y="10" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="18" y="10" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="2" y="18" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="10" y="18" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+          <rect x="18" y="18" width="4" height="4" rx="0.5" stroke="currentColor" stroke-width="1" />
+        </svg>
+      </Match>
+    </Switch>
+  )
+}
+
 export default function Black() {
+  const [params] = useSearchParams()
+  const [selected, setSelected] = createSignal<string | null>(params.plan as string | null)
+  const selectedPlan = createMemo(() => plans.find((p) => p.id === selected()))
+
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
@@ -15,9 +58,6 @@ export default function Black() {
         }).format(githubData()!.stars!)
       : config.github.starsFormatted.compact,
   )
-
-  // TODO: Frank, toggle this based on availability
-  const available = false
 
   return (
     <div data-page="black">
@@ -148,17 +188,65 @@ export default function Black() {
             <p data-slot="subheading">Including Claude, GPT, Gemini, and more</p>
           </div>
           <Switch>
-            <Match when={available}>
-              <a href="/black/subscribe" data-slot="button">
-                Subscribe $200/mo
-              </a>
-              <p data-slot="fine-print">Fair usage limits apply</p>
+            <Match when={!selected()}>
+              <div data-slot="pricing">
+                <For each={plans}>
+                  {(plan) => (
+                    <button type="button" onClick={() => setSelected(plan.id)} data-slot="pricing-card">
+                      <div data-slot="icon">
+                        <PlanIcon plan={plan.id} />
+                      </div>
+                      <p data-slot="price">
+                        <span data-slot="amount">${plan.amount}</span> <span data-slot="period">per month</span>
+                        <Show when={plan.multiplier}>
+                          <span data-slot="multiplier">{plan.multiplier}</span>
+                        </Show>
+                      </p>
+                    </button>
+                  )}
+                </For>
+              </div>
+              <p data-slot="fine-print">
+                Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
+              </p>
             </Match>
-            <Match when={!available}>
-              <p data-slot="back-soon">We’ll be back soon with more availability.</p>
-              <a data-slot="follow-us" href="https://x.com/opencode" target="_blank">
-                Follow @opencode
-              </a>
+            <Match when={selectedPlan()}>
+              {(plan) => (
+                <div data-slot="selected-plan">
+                  <div data-slot="selected-card">
+                    <div data-slot="icon">
+                      <PlanIcon plan={plan().id} />
+                    </div>
+                    <p data-slot="price">
+                      <span data-slot="amount">${plan().amount}</span>{" "}
+                      <span data-slot="period">per person billed monthly</span>
+                      <Show when={plan().multiplier}>
+                        <span data-slot="multiplier">{plan().multiplier}</span>
+                      </Show>
+                    </p>
+                    <ul data-slot="terms">
+                      <li>Your subscription will not start immediately</li>
+                      <li>You will be added to the waitlist and activated soon</li>
+                      <li>Your card will be only charged when your subscription is activated</li>
+                      <li>Usage limits apply, heavily automated use may reach limits sooner</li>
+                      <li>Subscriptions for individuals, contact Enterprise for teams</li>
+                      <li>Limits may be adjusted and plans may be discontinued in the future</li>
+                      <li>Cancel your subscription at anytime</li>
+                    </ul>
+                    <div data-slot="actions">
+                      <button type="button" onClick={() => setSelected(null)} data-slot="cancel">
+                        Cancel
+                      </button>
+                      <a href={`/black/subscribe?plan=${plan().id}`} data-slot="continue">
+                        Continue
+                      </a>
+                    </div>
+                  </div>
+                  <p data-slot="fine-print">
+                    Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
+                  </p>
+                </div>
+              )}
             </Match>
           </Switch>
         </section>
