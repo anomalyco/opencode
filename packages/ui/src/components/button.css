@@ -123,13 +123,13 @@
 
   &[data-size="normal"] {
     height: 24px;
+    line-height: 24px;
     padding: 0 6px;
     &[data-icon] {
       padding: 0 12px 0 4px;
     }
 
     font-size: var(--font-size-small);
-    line-height: var(--line-height-large);
     gap: 6px;
 
     /* text-12-medium */
@@ -137,7 +137,6 @@
     font-size: var(--font-size-small);
     font-style: normal;
     font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large); /* 166.667% */
     letter-spacing: var(--letter-spacing-normal);
   }
 
