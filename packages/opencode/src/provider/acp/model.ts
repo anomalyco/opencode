@@ -568,11 +568,12 @@ function mapACPFinishReason(stopReason: string | undefined): LanguageModelV2Fini
  *
  * ACP uses different field names than OpenCode's tool UI expects:
  * - read tool: ACP sends "path", OpenCode UI expects "filePath"
+ * - edit tool: ACP sends "path", OpenCode UI expects "filePath"
  */
 function normalizeToolInput(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
   switch (toolName) {
     case "read":
-      // Map "path" to "filePath" for read tool
+    case "edit":
       if (input.path && !input.filePath) {
         return { ...input, filePath: input.path }
       }
