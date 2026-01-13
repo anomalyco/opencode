@@ -27,7 +27,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { Mark } from "@opencode-ai/ui/logo"
+import { ShopOSMark } from "@opencode-ai/ui/shopos-logo"
 import { getFilename } from "@opencode-ai/util/path"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Session } from "@opencode-ai/sdk/v2/client"
@@ -141,7 +141,7 @@ export default function Layout(props: ParentProps) {
           persistent: true,
           icon: "download",
           title: "Update available",
-          description: `A new version of OpenCode (${version}) is now available to install.`,
+          description: `A new version of ShopOS (${version}) is now available to install.`,
           actions: [
             {
               label: "Install and restart",
@@ -1096,7 +1096,7 @@ export default function Layout(props: ParentProps) {
               }}
             >
               <A href="/" class="shrink-0 h-8 flex items-center justify-start px-2 w-full" data-tauri-drag-region>
-                <Mark class="shrink-0" />
+                <ShopOSMark class="shrink-0" />
               </A>
             </div>
           </Show>
@@ -1172,7 +1172,7 @@ export default function Layout(props: ParentProps) {
               <div class="rounded-md bg-background-stronger shadow-xs-border-base">
                 <div class="p-3 flex flex-col gap-2">
                   <div class="text-12-medium text-text-strong">Getting started</div>
-                  <div class="text-text-base">OpenCode includes free models so you can start immediately.</div>
+                  <div class="text-text-base">ShopOS includes free models so you can start immediately.</div>
                   <div class="text-text-base">Connect any provider to use models, inc. Claude, GPT, Gemini etc.</div>
                 </div>
                 <Tooltip placement="right" value="Connect provider" inactive={expanded()}>
@@ -1297,7 +1297,7 @@ export default function Layout(props: ParentProps) {
                 class="shrink-0 h-8 flex items-center justify-start px-2 w-full"
                 onClick={() => layout.mobileSidebar.hide()}
               >
-                <Mark class="shrink-0" />
+                <ShopOSMark class="shrink-0" />
               </A>
             </div>
             <SidebarContent mobile />

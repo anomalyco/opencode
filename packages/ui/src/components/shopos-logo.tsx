@@ -43,9 +43,15 @@ export function ShopOSLogo(props: ShopOSLogoProps) {
   )
 }
 
-export function ShopOSMark() {
+export function ShopOSMark(props: { class?: string }) {
   return (
-    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" data-component="shopos-mark">
+    <svg
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      data-component="shopos-mark"
+      classList={{ [props.class ?? ""]: !!props.class }}
+    >
       <path
         d="M6 10L8 4H24L26 10M6 10V26C6 27.1 6.9 28 8 28H24C25.1 28 26 27.1 26 26V10M6 10H26"
         stroke="currentColor"
