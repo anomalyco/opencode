@@ -31,7 +31,7 @@ export namespace ToolRegistry {
 
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
-    const glob = new Bun.Glob("tool/*.{js,ts}")
+    const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
 
     for (const dir of await Config.directories()) {
       for await (const match of glob.scan({
@@ -93,7 +93,7 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
-      ...(Flag.OPENCODE_CLIENT === "cli" ? [QuestionTool] : []),
+      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
