@@ -25,9 +25,19 @@ export const ReadTool = Tool.define("read", {
     if (!path.isAbsolute(filepath)) {
       filepath = path.join(process.cwd(), filepath)
     }
-    const title = path.relative(Instance.worktree, filepath)
 
-    if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
+    let worktree: string | undefined
+    let directory: string | undefined
+    try {
+      worktree = Instance.worktree
+      directory = Instance.directory
+    } catch {
+      // Instance context not available
+    }
+
+    const title = worktree ? path.relative(worktree, filepath) : path.basename(filepath)
+
+    if (!ctx.extra?.["bypassCwdCheck"] && directory && !Filesystem.contains(directory, filepath)) {
       const parentDir = path.dirname(filepath)
       await ctx.ask({
         permission: "external_directory",
