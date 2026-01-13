@@ -54,9 +54,13 @@ export const SandboxContext = {
   async getOrCreateForSession(sessionId: string): Promise<Sandbox.Instance> {
     const existing = sessionSandboxes.get(sessionId)
     if (existing) {
-      const status = await existing.getStatus()
-      if (status === "running") {
-        return existing
+      try {
+        const status = await existing.getStatus()
+        if (status === "running") {
+          return existing
+        }
+      } catch (err) {
+        log.warn("failed to get sandbox status, will recreate", { sessionId, error: err })
       }
       sessionSandboxes.delete(sessionId)
     }
@@ -66,16 +70,24 @@ export const SandboxContext = {
 
     log.info("creating sandbox for session", { sessionId, provider: provider.type })
 
-    const instance = await provider.create({
-      sessionId,
-      projectId: Instance.project.id,
-      workdir: Instance.directory,
-      timeout: config.sandbox?.modal?.timeout,
-      image: config.sandbox?.modal?.image ?? config.sandbox?.kubernetes?.image,
-    } as Sandbox.Config)
+    try {
+      const instance = await provider.create({
+        sessionId,
+        projectId: Instance.project.id,
+        workdir: Instance.directory,
+        timeout: config.sandbox?.modal?.timeout,
+        image: config.sandbox?.modal?.image ?? config.sandbox?.kubernetes?.image,
+      } as Sandbox.Config)
 
-    sessionSandboxes.set(sessionId, instance)
-    return instance
+      sessionSandboxes.set(sessionId, instance)
+      return instance
+    } catch (err) {
+      log.error("failed to create sandbox", { sessionId, provider: provider.type, error: err })
+      throw new Sandbox.CreateError({
+        message: `Failed to create sandbox for session ${sessionId}: ${err instanceof Error ? err.message : String(err)}`,
+        provider: provider.type,
+      })
+    }
   },
 
   async getForSession(sessionId: string): Promise<Sandbox.Instance | undefined> {
@@ -86,8 +98,13 @@ export const SandboxContext = {
     const instance = sessionSandboxes.get(sessionId)
     if (instance) {
       log.info("terminating sandbox for session", { sessionId })
-      await instance.terminate()
-      sessionSandboxes.delete(sessionId)
+      try {
+        await instance.terminate()
+      } catch (err) {
+        log.error("failed to terminate sandbox", { sessionId, error: err })
+      } finally {
+        sessionSandboxes.delete(sessionId)
+      }
     }
   },
 
@@ -112,7 +129,11 @@ export const SandboxContext = {
   },
 
   isRemote(): boolean {
-    const provider = context.use().provider
-    return provider.type !== "local"
+    try {
+      const provider = context.use().provider
+      return provider.type !== "local"
+    } catch {
+      return false
+    }
   },
 }

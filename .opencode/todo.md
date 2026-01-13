@@ -18,7 +18,7 @@
 - [x] Add sandbox status to session info
 - [x] Add JSDoc documentation to public APIs
 - [x] Create README for sandbox module
-- [ ] Commit all changes
+- [x] Commit all changes
 
-## Remaining Work
-- [ ] Add error handling improvements (future enhancement)
+## Future Enhancements
+- [ ] Add error handling improvements

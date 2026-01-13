@@ -34,7 +34,15 @@ export const SandboxRuntime = {
     if (sessionId && SandboxContext.isRemote()) {
       const sandbox = await SandboxContext.getForSession(sessionId)
       if (sandbox) {
-        return sandbox.readFile(path)
+        try {
+          return await sandbox.readFile(path)
+        } catch (err) {
+          throw new Sandbox.FileError({
+            message: `Failed to read file: ${err instanceof Error ? err.message : String(err)}`,
+            path,
+            operation: "read",
+          })
+        }
       }
     }
     return fs.readFile(path, "utf-8")
@@ -57,8 +65,16 @@ export const SandboxRuntime = {
     if (sessionId && SandboxContext.isRemote()) {
       const sandbox = await SandboxContext.getForSession(sessionId)
       if (sandbox) {
-        await sandbox.writeFile(path, content)
-        return
+        try {
+          await sandbox.writeFile(path, content)
+          return
+        } catch (err) {
+          throw new Sandbox.FileError({
+            message: `Failed to write file: ${err instanceof Error ? err.message : String(err)}`,
+            path,
+            operation: "write",
+          })
+        }
       }
     }
     await fs.writeFile(path, content)
@@ -155,7 +171,14 @@ export const SandboxRuntime = {
     if (sessionId && SandboxContext.isRemote()) {
       const sandbox = await SandboxContext.getForSession(sessionId)
       if (sandbox) {
-        return sandbox.exec(command, args, options)
+        try {
+          return await sandbox.exec(command, args, options)
+        } catch (err) {
+          throw new Sandbox.ExecError({
+            message: `Failed to execute command: ${err instanceof Error ? err.message : String(err)}`,
+            command: `${command} ${args.join(" ")}`.trim(),
+          })
+        }
       }
     }
 
