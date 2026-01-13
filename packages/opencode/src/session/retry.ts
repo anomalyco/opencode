@@ -1,5 +1,6 @@
 import type { NamedError } from "@opencode-ai/util/error"
 import { MessageV2 } from "./message-v2"
+import { Log } from "../util/log"
 
 export namespace SessionRetry {
   export const RETRY_INITIAL_DELAY = 2000
@@ -82,7 +83,9 @@ export namespace SessionRetry {
         ) {
           return "Provider Server Error"
         }
-      } catch {}
+      } catch (err) {
+        Log.Default.debug("Failed to parse error response for retry logic", { error: err })
+      }
     }
 
     return undefined
