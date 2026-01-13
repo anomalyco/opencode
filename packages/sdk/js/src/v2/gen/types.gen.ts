@@ -694,6 +694,12 @@ export type EventCommandExecuted = {
   }
 }
 
+export type SessionSandboxStatus = {
+  provider: "local" | "modal" | "kubernetes"
+  status: "running" | "stopped" | "error" | "unknown"
+  sandboxId?: string
+}
+
 export type PermissionAction = "allow" | "deny" | "ask"
 
 export type PermissionRule = {
@@ -718,6 +724,7 @@ export type Session = {
   share?: {
     url: string
   }
+  sandbox?: SessionSandboxStatus
   title: string
   version: string
   time: {
@@ -1711,6 +1718,39 @@ export type Config = {
      * Enable pruning of old tool outputs (default: true)
      */
     prune?: boolean
+  }
+  /**
+   * Sandbox configuration for isolated code execution
+   */
+  sandbox?: {
+    /**
+     * Sandbox provider to use
+     */
+    provider?: "local" | "modal" | "kubernetes"
+    modal?: {
+      /**
+       * Modal app name for sandboxes
+       */
+      appName?: string
+      /**
+       * Default timeout in seconds
+       */
+      timeout?: number
+      /**
+       * Default image for Modal sandboxes
+       */
+      image?: string
+    }
+    kubernetes?: {
+      /**
+       * Kubernetes namespace for sandbox pods
+       */
+      namespace?: string
+      /**
+       * Default image for Kubernetes sandboxes
+       */
+      image?: string
+    }
   }
   experimental?: {
     hook?: {
@@ -2806,6 +2846,42 @@ export type SessionChildrenResponses = {
 }
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
+
+export type SessionSandboxData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/sandbox"
+}
+
+export type SessionSandboxErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSandboxError = SessionSandboxErrors[keyof SessionSandboxErrors]
+
+export type SessionSandboxResponses = {
+  /**
+   * Sandbox status
+   */
+  200: SessionSandboxStatus
+}
+
+export type SessionSandboxResponse = SessionSandboxResponses[keyof SessionSandboxResponses]
 
 export type SessionTodoData = {
   body?: never

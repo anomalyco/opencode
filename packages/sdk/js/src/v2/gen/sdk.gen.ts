@@ -118,6 +118,8 @@ import type {
   SessionPromptResponses,
   SessionRevertErrors,
   SessionRevertResponses,
+  SessionSandboxErrors,
+  SessionSandboxResponses,
   SessionShareErrors,
   SessionShareResponses,
   SessionShellErrors,
@@ -991,6 +993,36 @@ export class Session extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<SessionChildrenResponses, SessionChildrenErrors, ThrowOnError>({
       url: "/session/{sessionID}/children",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session sandbox status
+   *
+   * Retrieve the sandbox status for a specific session, including provider type and running state.
+   */
+  public sandbox<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionSandboxResponses, SessionSandboxErrors, ThrowOnError>({
+      url: "/session/{sessionID}/sandbox",
       ...options,
       ...params,
     })
