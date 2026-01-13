@@ -17,6 +17,7 @@ import {
   type VcsInfo,
   type PermissionRequest,
   type QuestionRequest,
+  type PlanReviewRequest,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
@@ -67,6 +68,9 @@ type State = {
   }
   question: {
     [sessionID: string]: QuestionRequest[]
+  }
+  plan_review: {
+    [sessionID: string]: PlanReviewRequest[]
   }
   mcp: {
     [name: string]: McpStatus
@@ -139,6 +143,7 @@ function createGlobalSync() {
           todo: {},
           permission: {},
           question: {},
+          plan_review: {},
           mcp: {},
           lsp: [],
           vcs: cache[0].value,
@@ -302,6 +307,39 @@ function createGlobalSync() {
                   reconcile(
                     questions
                       .filter((q) => !!q?.id)
+                      .slice()
+                      .sort((a, b) => a.id.localeCompare(b.id)),
+                    { key: "id" },
+                  ),
+                )
+              }
+            })
+          }),
+          // Load pending plan reviews
+          sdk.planReview.list().then((x) => {
+            const grouped: Record<string, PlanReviewRequest[]> = {}
+            for (const review of x.data ?? []) {
+              if (!review?.id || !review.sessionID) continue
+              const existing = grouped[review.sessionID]
+              if (existing) {
+                existing.push(review)
+                continue
+              }
+              grouped[review.sessionID] = [review]
+            }
+
+            batch(() => {
+              for (const sessionID of Object.keys(store.plan_review)) {
+                if (grouped[sessionID]) continue
+                setStore("plan_review", sessionID, [])
+              }
+              for (const [sessionID, reviews] of Object.entries(grouped)) {
+                setStore(
+                  "plan_review",
+                  sessionID,
+                  reconcile(
+                    reviews
+                      .filter((r) => !!r?.id)
                       .slice()
                       .sort((a, b) => a.id.localeCompare(b.id)),
                     { key: "id" },
@@ -549,6 +587,42 @@ function createGlobalSync() {
         if (!result.found) break
         setStore(
           "question",
+          event.properties.sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 1)
+          }),
+        )
+        break
+      }
+      case "plan_review.requested": {
+        const sessionID = event.properties.sessionID
+        const requests = store.plan_review[sessionID]
+        if (!requests) {
+          setStore("plan_review", sessionID, [event.properties])
+          break
+        }
+        const result = Binary.search(requests, event.properties.id, (r) => r.id)
+        if (result.found) {
+          setStore("plan_review", sessionID, result.index, reconcile(event.properties))
+          break
+        }
+        setStore(
+          "plan_review",
+          sessionID,
+          produce((draft) => {
+            draft.splice(result.index, 0, event.properties)
+          }),
+        )
+        break
+      }
+      case "plan_review.approved":
+      case "plan_review.rejected": {
+        const requests = store.plan_review[event.properties.sessionID]
+        if (!requests) break
+        const result = Binary.search(requests, event.properties.requestID, (r) => r.id)
+        if (!result.found) break
+        setStore(
+          "plan_review",
           event.properties.sessionID,
           produce((draft) => {
             draft.splice(result.index, 1)

@@ -32,6 +32,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
+import { PlanReviewInline } from "@/components/plan-review-inline"
 import { useCommand } from "@/context/command"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -210,6 +211,14 @@ export default function Page() {
       navMark({ dir: params.dir, to: id, name: "session:data-ready" })
     })
   }
+
+  // Get pending plan review for current session
+  const pendingPlanReview = createMemo(() => {
+    const id = params.id
+    if (!id) return undefined
+    const requests = sync.data.plan_review[id]
+    return requests?.[0]
+  })
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -1246,6 +1255,14 @@ export default function Page() {
                 "md:max-w-200": !showTabs(),
               }}
             >
+              {/* Plan review inline - shown when a plan is awaiting approval */}
+              <Show when={pendingPlanReview()}>
+                {(request) => (
+                  <div class="mb-4">
+                    <PlanReviewInline request={request()} />
+                  </div>
+                )}
+              </Show>
               <Show
                 when={prompt.ready()}
                 fallback={
