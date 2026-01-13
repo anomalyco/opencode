@@ -124,7 +124,7 @@ describe("tool.read external_directory permission", () => {
   })
 })
 
-describe("tool.read env file blocking", () => {
+describe("tool.read env file permissions", () => {
   const cases: [string, boolean][] = [
     [".env", true],
     [".env.local", true],
@@ -136,7 +136,7 @@ describe("tool.read env file blocking", () => {
   ]
 
   describe.each(["build", "plan"])("agent=%s", (agentName) => {
-    test.each(cases)("%s blocked=%s", async (filename, blocked) => {
+    test.each(cases)("%s asks=%s", async (filename, shouldAsk) => {
       await using tmp = await tmpdir({
         init: (dir) => Bun.write(path.join(dir, filename), "content"),
       })
@@ -144,11 +144,15 @@ describe("tool.read env file blocking", () => {
         directory: tmp.path,
         fn: async () => {
           const agent = await Agent.get(agentName)
+          let askedForEnv = false
           const ctxWithPermissions = {
             ...ctx,
             ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
               for (const pattern of req.patterns) {
                 const rule = PermissionNext.evaluate(req.permission, pattern, agent.permission)
+                if (rule.action === "ask" && req.permission === "read") {
+                  askedForEnv = true
+                }
                 if (rule.action === "deny") {
                   throw new PermissionNext.DeniedError(agent.permission)
                 }
@@ -156,12 +160,8 @@ describe("tool.read env file blocking", () => {
             },
           }
           const read = await ReadTool.init()
-          const promise = read.execute({ filePath: path.join(tmp.path, filename) }, ctxWithPermissions)
-          if (blocked) {
-            await expect(promise).rejects.toThrow(PermissionNext.DeniedError)
-          } else {
-            expect((await promise).output).toContain("content")
-          }
+          await read.execute({ filePath: path.join(tmp.path, filename) }, ctxWithPermissions)
+          expect(askedForEnv).toBe(shouldAsk)
         },
       })
     })
