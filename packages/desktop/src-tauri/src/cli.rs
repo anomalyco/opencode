@@ -158,7 +158,8 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         .args(args.split_whitespace())
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
         .env("OPENCODE_CLIENT", "desktop")
-        .env("XDG_STATE_HOME", &state_dir);
+        .env("XDG_STATE_HOME", &state_dir)
+        .args(args.split_whitespace());
 
     #[cfg(not(target_os = "windows"))]
     return {
