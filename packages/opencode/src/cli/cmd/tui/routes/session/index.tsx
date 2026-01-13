@@ -69,6 +69,8 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
+import { DialogSubagent } from "./dialog-subagent.tsx"
+import { DialogToolOutput } from "./dialog-tool-output.tsx"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -76,7 +78,7 @@ import { formatTranscript } from "../../util/transcript"
 
 addDefaultParsers(parsers.parsers)
 
-class CustomSpeedScroll implements ScrollAcceleration {
+export class CustomSpeedScroll implements ScrollAcceleration {
   constructor(private speed: number) {}
 
   tick(_now?: number): number {
@@ -85,6 +87,8 @@ class CustomSpeedScroll implements ScrollAcceleration {
 
   reset(): void {}
 }
+
+type ToolOutputPreview = { tool: string; output: string } | null
 
 const context = createContext<{
   width: number
@@ -95,6 +99,7 @@ const context = createContext<{
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
+  setToolOutputPreview: (preview: ToolOutputPreview) => void
 }>()
 
 function use() {
@@ -145,6 +150,7 @@ export function Session() {
   const [showAssistantMetadata, setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode, setDiffWrapMode] = createSignal<"word" | "none">("word")
+  const [toolOutputPreview, setToolOutputPreview] = createSignal<ToolOutputPreview>(null)
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
 
   const wide = createMemo(() => dimensions().width > 120)
@@ -882,6 +888,7 @@ export function Session() {
         showDetails,
         diffWrapMode,
         sync,
+        setToolOutputPreview,
       }}
     >
       <box flexDirection="row">
@@ -1052,6 +1059,15 @@ export function Session() {
           </Switch>
         </Show>
       </box>
+      <Show when={toolOutputPreview()} keyed>
+        {(preview) => (
+          <DialogToolOutput
+            tool={preview.tool}
+            output={preview.output}
+            onClose={() => setToolOutputPreview(null)}
+          />
+        )}
+      </Show>
     </context.Provider>
   )
 }
@@ -1303,6 +1319,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
+  const { theme } = useTheme()
   const ctx = use()
   const sync = useSync()
 
@@ -1428,6 +1445,7 @@ function InlineTool(props: {
   const { theme } = useTheme()
   const ctx = use()
   const sync = useSync()
+  const renderer = useRenderer()
 
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
@@ -1450,10 +1468,20 @@ function InlineTool(props: {
       error()?.includes("user dismissed"),
   )
 
+  const output = createMemo(() => (props.part.state.status === "completed" ? props.part.state.output : undefined))
+
+  const onMouseUp = (event: any) => {
+    if (!output()) return
+    if (event.modifiers?.ctrl || event.modifiers?.meta) return
+    if (renderer.getSelection()?.getSelectedText()) return
+    ctx.setToolOutputPreview({ tool: props.part.tool, output: output()! })
+  }
+
   return (
     <box
       marginTop={margin()}
       paddingLeft={3}
+      onMouseUp={onMouseUp}
       renderBefore={function () {
         const el = this as BoxRenderable
         const parent = el.parent
