@@ -1,0 +1,41 @@
+[data-component="shopos-logo"] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-strong);
+}
+
+[data-component="shopos-logo"][data-size="sm"] [data-slot="icon"] {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+[data-component="shopos-logo"][data-size="md"] [data-slot="icon"] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+[data-component="shopos-logo"][data-size="lg"] [data-slot="icon"] {
+  width: 2rem;
+  height: 2rem;
+}
+
+[data-component="shopos-logo"] [data-slot="icon"] svg {
+  width: 100%;
+  height: 100%;
+}
+
+[data-component="shopos-logo"] [data-slot="text"] {
+  font-weight: 600;
+  font-size: var(--font-size-base);
+  letter-spacing: -0.02em;
+}
+
+[data-component="shopos-logo"][data-size="lg"] [data-slot="text"] {
+  font-size: var(--font-size-large);
+}
+
+[data-component="shopos-mark"] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
