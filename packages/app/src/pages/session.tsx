@@ -305,6 +305,25 @@ export default function Page() {
     ),
   )
 
+  let lastSwitch: string | undefined
+  const unsubPlan = sdk.event.listen((e) => {
+    const event = e.details
+    if (event.type !== "message.part.updated") return
+    const part = event.properties.part
+    if (part.type !== "tool") return
+    if (part.sessionID !== params.id) return
+    if (part.state.status !== "completed") return
+    if (part.id === lastSwitch) return
+    if (part.tool === "plan_exit") {
+      local.agent.set("build")
+      lastSwitch = part.id
+    } else if (part.tool === "plan_enter") {
+      local.agent.set("plan")
+      lastSwitch = part.id
+    }
+  })
+  onCleanup(unsubPlan)
+
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,

@@ -110,7 +110,9 @@ export namespace ToolRegistry {
       SkillTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
-      ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
+      ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && ["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT)
+        ? [PlanExitTool, PlanEnterTool]
+        : []),
       ...custom,
     ]
   }

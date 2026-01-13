@@ -1134,6 +1134,7 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
   const options = createMemo(() => question()?.options ?? [])
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const multi = createMemo(() => question()?.multiple === true)
+  const custom = createMemo(() => question()?.custom !== false)
   const customPicked = createMemo(() => {
     const value = input()
     if (!value) return false
@@ -1273,40 +1274,42 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
                 )
               }}
             </For>
-            <button
-              data-slot="question-option"
-              data-picked={customPicked()}
-              onClick={() => selectOption(options().length)}
-            >
-              <span data-slot="option-label">Type your own answer</span>
-              <Show when={!store.editing && input()}>
-                <span data-slot="option-description">{input()}</span>
+            <Show when={custom()}>
+              <button
+                data-slot="question-option"
+                data-picked={customPicked()}
+                onClick={() => selectOption(options().length)}
+              >
+                <span data-slot="option-label">Type your own answer</span>
+                <Show when={!store.editing && input()}>
+                  <span data-slot="option-description">{input()}</span>
+                </Show>
+                <Show when={customPicked()}>
+                  <Icon name="check-small" size="normal" />
+                </Show>
+              </button>
+              <Show when={store.editing}>
+                <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
+                  <input
+                    ref={(el) => setTimeout(() => el.focus(), 0)}
+                    type="text"
+                    data-slot="custom-input"
+                    placeholder="Type your answer..."
+                    value={input()}
+                    onInput={(e) => {
+                      const inputs = [...store.custom]
+                      inputs[store.tab] = e.currentTarget.value
+                      setStore("custom", inputs)
+                    }}
+                  />
+                  <Button type="submit" variant="primary" size="small">
+                    {multi() ? "Add" : "Submit"}
+                  </Button>
+                  <Button type="button" variant="ghost" size="small" onClick={() => setStore("editing", false)}>
+                    Cancel
+                  </Button>
+                </form>
               </Show>
-              <Show when={customPicked()}>
-                <Icon name="check-small" size="normal" />
-              </Show>
-            </button>
-            <Show when={store.editing}>
-              <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                <input
-                  ref={(el) => setTimeout(() => el.focus(), 0)}
-                  type="text"
-                  data-slot="custom-input"
-                  placeholder="Type your answer..."
-                  value={input()}
-                  onInput={(e) => {
-                    const inputs = [...store.custom]
-                    inputs[store.tab] = e.currentTarget.value
-                    setStore("custom", inputs)
-                  }}
-                />
-                <Button type="submit" variant="primary" size="small">
-                  {multi() ? "Add" : "Submit"}
-                </Button>
-                <Button type="button" variant="ghost" size="small" onClick={() => setStore("editing", false)}>
-                  Cancel
-                </Button>
-              </form>
             </Show>
           </div>
         </div>
