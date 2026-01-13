@@ -33,6 +33,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
 
   const proc = spawn(`opencode`, args, {
     signal: options.signal,
+    shell: process.platform === "win32",
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
@@ -109,6 +110,7 @@ export function createOpencodeTui(options?: TuiOptions) {
   const proc = spawn(`opencode`, args, {
     signal: options?.signal,
     stdio: "inherit",
+    shell: process.platform === "win32",
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
