@@ -231,6 +231,8 @@ export const RunCommand = cmd({
       // Validate agent if specified
       const resolvedAgent = await (async () => {
         if (!args.agent) return undefined
+        // Skip local agent validation in attach mode - the remote server handles it
+        if (args.attach) return args.agent
         const agent = await Agent.get(args.agent)
         if (!agent) {
           UI.println(
