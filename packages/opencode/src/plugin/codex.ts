@@ -387,6 +387,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             headers: {},
             release_date: "2025-12-18",
             variants: {} as Record<string, Record<string, any>>,
+            family: "gpt-codex",
           }
           model.variants = ProviderTransform.variants(model)
           provider.models["gpt-5.2-codex"] = model
