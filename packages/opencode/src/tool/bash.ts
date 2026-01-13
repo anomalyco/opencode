@@ -77,7 +77,7 @@ export const BashTool = Tool.define("bash", async () => {
     }),
     formatValidationError(error) {
       if (error instanceof z.ZodError) {
-        return `Invalid parameters for tool 'bash':\n${error.errors
+        return `Invalid parameters for tool 'bash':\n${(error as z.ZodError).errors
           .map((e: z.ZodIssue) => `- ${e.path.join(".")}: ${e.message}`)
           .join("\n")}\n\nMake sure to provide 'command' and a concise 'description' of what the command does.`
       }

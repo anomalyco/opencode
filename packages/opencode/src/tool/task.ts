@@ -40,7 +40,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     formatValidationError(error) {
       if (error instanceof z.ZodError) {
-        return `Invalid parameters for tool 'task':\n${error.errors
+        return `Invalid parameters for tool 'task':\n${(error as z.ZodError).errors
           .map((e: z.ZodIssue) => `- ${e.path.join(".")}: ${e.message}`)
           .join("\n")}\n\nMake sure to provide 'prompt', 'subagent_type' and a concise 'description'.`
       }
