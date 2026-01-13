@@ -1873,12 +1873,17 @@ export type McpStatusNeedsClientRegistration = {
   error: string
 }
 
+export type McpStatusConnecting = {
+  status: "connecting"
+}
+
 export type McpStatus =
   | McpStatusConnected
   | McpStatusDisabled
   | McpStatusFailed
   | McpStatusNeedsAuth
   | McpStatusNeedsClientRegistration
+  | McpStatusConnecting
 
 export type Path = {
   home: string

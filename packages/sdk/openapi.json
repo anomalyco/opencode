@@ -11959,6 +11959,16 @@
         },
         "required": ["status", "error"]
       },
+      "MCPStatusConnecting": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "connecting"
+          }
+        },
+        "required": ["status"]
+      },
       "MCPStatus": {
         "anyOf": [
           {
@@ -11975,6 +11985,9 @@
           },
           {
             "$ref": "#/components/schemas/MCPStatusNeedsClientRegistration"
+          },
+          {
+            "$ref": "#/components/schemas/MCPStatusConnecting"
           }
         ]
       },
