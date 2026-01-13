@@ -616,8 +616,10 @@ export default function Layout(props: ParentProps) {
 
     commands.push({
       id: "theme.scheme.cycle",
-      title: "Cycle color scheme",
+      title: "Toggle appearance",
+      description: "Cycle through system, light, and dark color schemes",
       category: "Theme",
+      slash: "toggle-appearance",
       keybind: "mod+shift+s",
       onSelect: () => cycleColorScheme(1),
     })
