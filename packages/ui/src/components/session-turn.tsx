@@ -501,12 +501,10 @@ export function SessionTurn(
                           </Show>
                           <Show when={(msg() as UserMessage).model?.modelID}>
                             <span data-slot="session-turn-badge" class="inline-flex items-center gap-1">
-                              <Show when={(msg() as UserMessage).model?.providerID}>
-                                <ProviderIcon
-                                  id={(msg() as UserMessage).model!.providerID as IconName}
-                                  class="size-3.5 shrink-0"
-                                />
-                              </Show>
+                              <ProviderIcon
+                                id={(msg() as UserMessage).model!.providerID as IconName}
+                                class="size-3.5 shrink-0"
+                              />
                               {(msg() as UserMessage).model?.modelID}
                             </span>
                           </Show>
