@@ -1,9 +1,13 @@
 mod cli;
+#[cfg(windows)]
+mod job_object;
 mod window_customizer;
 
 use cli::{install_cli, sync_cli};
 use futures::FutureExt;
 use futures::future;
+#[cfg(windows)]
+use job_object::*;
 use std::{
     collections::VecDeque,
     net::TcpListener,
@@ -251,6 +255,9 @@ pub fn run() {
             // Initialize log state
             app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
 
+            #[cfg(windows)]
+            app.manage(JobObjectState::new());
+
             let primary_monitor = app.primary_monitor().ok().flatten();
             let size = primary_monitor
                 .map(|m| m.size().to_logical(m.scale_factor()))
@@ -303,7 +310,14 @@ pub fn run() {
 
                     let res = match setup_server_connection(&app, custom_url).await {
                         Ok((child, url)) => {
+                            #[cfg(windows)]
+                            if let Some(child) = &child {
+                                let job_state = app.state::<JobObjectState>();
+                                job_state.assign_pid(child.pid());
+                            }
+
                             app.state::<ServerState>().set_child(child);
+
                             Ok(url)
                         }
                         Err(e) => Err(e),
