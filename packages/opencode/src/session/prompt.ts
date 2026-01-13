@@ -274,13 +274,13 @@ export namespace SessionPrompt {
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
       let lastUser: MessageV2.User | undefined
-      let lastAssistant: MessageV2.Assistant | undefined
+      let lastAssistant: MessageV2.WithParts | undefined
       let lastFinished: MessageV2.Assistant | undefined
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
         const msg = msgs[i]
         if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
-        if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
+        if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg
         if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
           lastFinished = msg.info as MessageV2.Assistant
         if (lastUser && lastFinished) break
@@ -292,12 +292,33 @@ export namespace SessionPrompt {
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
       if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
+        lastAssistant?.info.role === "assistant" &&
+        lastAssistant.info.finish &&
+        !["tool-calls", "unknown"].includes(lastAssistant.info.finish) &&
+        lastUser.id < lastAssistant.info.id
       ) {
-        log.info("exiting loop", { sessionID })
-        break
+        // Only exit if the last assistant message actually has text content or no tool calls
+        const hasText = lastAssistant.parts.some((p) => p.type === "text" && !p.synthetic)
+        const hasToolCalls = lastAssistant.parts.some((p) => p.type === "tool")
+
+        if (hasText || !hasToolCalls) {
+          log.info("exiting loop", {
+            sessionID,
+            finish: lastAssistant.info.finish,
+            lastUserID: lastUser.id,
+            lastAssistantID: lastAssistant.info.id,
+            hasText,
+            hasToolCalls,
+          })
+          break
+        }
+
+        log.info("continuing loop despite finish reason", {
+          sessionID,
+          finish: lastAssistant.info.finish,
+          hasText,
+          hasToolCalls,
+        })
       }
 
       step++

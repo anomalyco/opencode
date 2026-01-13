@@ -13,7 +13,7 @@ import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 
 const parameters = z.object({
-  description: z.string().describe("A short (3-5 words) description of the task"),
+  description: z.string().describe("A short (3-5 words) description of the task").optional(),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
   session_id: z.string().describe("Existing Task session to continue").optional(),
@@ -38,8 +38,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
   return {
     description,
     parameters,
+    formatValidationError(error) {
+      return `Invalid parameters for tool 'task':\n${error.errors
+        .map((e) => `- ${e.path.join(".")}: ${e.message}`)
+        .join("\n")}\n\nMake sure to provide 'prompt', 'subagent_type' and a concise 'description'.`
+    },
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+      const taskDescription = params.description || "Task"
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -48,7 +54,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           patterns: [params.subagent_type],
           always: ["*"],
           metadata: {
-            description: params.description,
+            description: taskDescription,
             subagent_type: params.subagent_type,
           },
         })
@@ -67,7 +73,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
         return await Session.create({
           parentID: ctx.sessionID,
-          title: params.description + ` (@${agent.name} subagent)`,
+          title: taskDescription + ` (@${agent.name} subagent)`,
           permission: [
             {
               permission: "todowrite",
@@ -100,7 +106,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
       ctx.metadata({
-        title: params.description,
+        title: taskDescription,
         metadata: {
           sessionId: session.id,
         },
@@ -122,7 +128,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           },
         }
         ctx.metadata({
-          title: params.description,
+          title: taskDescription,
           metadata: {
             summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
             sessionId: session.id,
@@ -176,7 +182,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
 
       return {
-        title: params.description,
+        title: taskDescription,
         metadata: {
           summary,
           sessionId: session.id,

@@ -107,7 +107,8 @@ export const ListTool = Tool.define("list", {
       return output
     }
 
-    const output = `${searchPath}/\n` + renderDir(".", 0)
+    const output =
+      files.length > 0 ? `${searchPath}/\n` + renderDir(".", 0) : `(No files found in directory: ${searchPath})`
 
     return {
       title: path.relative(Instance.worktree, searchPath),
