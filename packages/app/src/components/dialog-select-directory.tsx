@@ -70,7 +70,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   const directories = async (filter: string) => {
-    const query = normalizeQuery(filter.trim())
+    const query = normalizeQuery((filter ?? "").trim())
     return fetchDirs(query)
   }
 

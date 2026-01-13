@@ -1962,20 +1962,56 @@ export namespace Server {
           validator(
             "query",
             z.object({
-              query: z.string(),
+              directory: z.string().optional(),
+              query: z.string().optional().default(""),
               dirs: z.enum(["true", "false"]).optional(),
               type: z.enum(["file", "directory"]).optional(),
               limit: z.coerce.number().int().min(1).max(200).optional(),
             }),
           ),
           async (c) => {
-            const query = c.req.valid("query").query
+            const directory = c.req.valid("query").directory
+            const query = c.req.valid("query").query ?? ""
             const dirs = c.req.valid("query").dirs
             const type = c.req.valid("query").type
-            const limit = c.req.valid("query").limit
+            const limit = c.req.valid("query").limit ?? 10
+
+            if (directory && type === "directory") {
+              const fs = await import("fs")
+              const path = await import("path")
+              const fuzzysort = await import("fuzzysort")
+
+              const scanDirs = async (base: string, depth: number = 0): Promise<string[]> => {
+                if (depth > 2) return []
+                const results: string[] = []
+                try {
+                  const entries = await fs.promises.readdir(base, { withFileTypes: true })
+                  for (const entry of entries) {
+                    if (!entry.isDirectory()) continue
+                    if (entry.name.startsWith(".")) continue
+                    if (["node_modules", "dist", "build", ".git"].includes(entry.name)) continue
+                    const rel = path.relative(directory, path.join(base, entry.name))
+                    results.push(rel + "/")
+                    if (depth < 1) {
+                      const children = await scanDirs(path.join(base, entry.name), depth + 1)
+                      results.push(...children)
+                    }
+                  }
+                } catch {}
+                return results
+              }
+
+              const allDirs = await scanDirs(directory)
+              if (!query) {
+                return c.json(allDirs.slice(0, limit))
+              }
+              const sorted = fuzzysort.go(query, allDirs, { limit }).map((r) => r.target)
+              return c.json(sorted)
+            }
+
             const results = await File.search({
               query,
-              limit: limit ?? 10,
+              limit,
               dirs: dirs !== "false",
               type,
             })
