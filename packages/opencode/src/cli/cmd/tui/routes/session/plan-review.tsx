@@ -159,7 +159,7 @@ export function PlanReviewPrompt(props: { request: PlanReviewRequest }) {
 
         <Show when={!loading()}>
           <box paddingLeft={1} flexDirection="column">
-            {visibleLines().map((line, _i) => (
+            {visibleLines().map((line) => (
               <text fg={theme.text}>{line || " "}</text>
             ))}
             <Show when={canScrollDown()}>

@@ -24,13 +24,13 @@ import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "./helper"
 import type { Snapshot } from "@/snapshot"
 import type { PlanReview } from "@/session/plan-review"
-
-type PlanReviewRequest = PlanReview.Request
 import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
+
+type PlanReviewRequest = PlanReview.Request
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",

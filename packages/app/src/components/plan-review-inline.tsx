@@ -87,6 +87,12 @@ export const PlanReviewInline: Component<{ request: PlanReviewRequest }> = (prop
               placeholder="Enter feedback for revision..."
               value={feedback()}
               onChange={setFeedback}
+              onKeyDown={(e: KeyboardEvent) => {
+                if (e.key === "Enter" && !submitting()) {
+                  e.preventDefault()
+                  handleReject()
+                }
+              }}
             />
           </div>
         </Show>
