@@ -628,9 +628,15 @@ export function Autocomplete(props: {
             return
           }
           if (name === "return") {
-            select()
-            e.preventDefault()
-            return
+            const selected = options()[store.selected]
+            if (selected) {
+              select()
+              e.preventDefault()
+              return
+            }
+            if (options().length === 0) {
+              hide()
+            }
           }
           if (name === "tab") {
             const selected = options()[store.selected]
