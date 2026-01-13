@@ -209,6 +209,19 @@ export namespace Config {
     await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 
+  function rel(item: string, patterns: string[]) {
+    for (const pattern of patterns) {
+      const index = item.indexOf(pattern)
+      if (index === -1) continue
+      return item.slice(index + pattern.length)
+    }
+  }
+
+  function trim(file: string) {
+    const ext = path.extname(file)
+    return ext.length ? file.slice(0, -ext.length) : file
+  }
+
   const COMMAND_GLOB = new Bun.Glob("{command,commands}/**/*.md")
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
@@ -221,16 +234,9 @@ export namespace Config {
       const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
-      const name = (() => {
-        const patterns = ["/.opencode/command/", "/command/"]
-        const pattern = patterns.find((p) => item.includes(p))
-
-        if (pattern) {
-          const index = item.indexOf(pattern)
-          return item.slice(index + pattern.length, -3)
-        }
-        return path.basename(item, ".md")
-      })()
+      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const name = trim(file)
 
       const config = {
         name,
@@ -260,20 +266,9 @@ export namespace Config {
       const md = await ConfigMarkdown.parse(item)
       if (!md.data) continue
 
-      // Extract relative path from agent folder for nested agents
-      let agentName = path.basename(item, ".md")
-      const agentFolderPath = item.includes("/.opencode/agent/")
-        ? item.split("/.opencode/agent/")[1]
-        : item.includes("/agent/")
-          ? item.split("/agent/")[1]
-          : agentName + ".md"
-
-      // If agent is in a subfolder, include folder path in name
-      if (agentFolderPath.includes("/")) {
-        const relativePath = agentFolderPath.replace(".md", "")
-        const pathParts = relativePath.split("/")
-        agentName = pathParts.slice(0, -1).join("/") + "/" + pathParts[pathParts.length - 1]
-      }
+      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+      const file = rel(item, patterns) ?? path.basename(item)
+      const agentName = trim(file)
 
       const config = {
         name: agentName,
