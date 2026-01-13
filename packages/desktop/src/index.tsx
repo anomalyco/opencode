@@ -304,9 +304,9 @@ render(() => {
         )}
         <ServerGate>
           {(data) => {
-            setServerPassword(data().password);
-            window.__OPENCODE__ ??= {};
-            window.__OPENCODE__.serverPassword = data().password ?? undefined;
+            setServerPassword(data().password)
+            window.__OPENCODE__ ??= {}
+            window.__OPENCODE__.serverPassword = data().password ?? undefined
 
             return <AppInterface defaultUrl={data().url} />
           }}
