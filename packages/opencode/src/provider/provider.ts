@@ -80,6 +80,29 @@ export namespace Provider {
             "anthropic-beta":
               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
+          fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.body && typeof init.body === "string") {
+              try {
+                const body = JSON.parse(init.body)
+                const sessionId = init.headers instanceof Headers
+                  ? init.headers.get("x-opencode-session")
+                  : (init.headers as Record<string, string>)?.["x-opencode-session"]
+                const projectId = Instance.project?.id ?? "unknown"
+                body.metadata = {
+                  user_id: `user_${projectId}_account__session_${sessionId ?? "unknown"}`,
+                }
+                init = { ...init, body: JSON.stringify(body) }
+                // Remove internal header before sending to Anthropic
+                if (init.headers instanceof Headers) {
+                  init.headers.delete("x-opencode-session")
+                } else if (init.headers) {
+                  const { "x-opencode-session": _, ...rest } = init.headers as Record<string, string>
+                  init.headers = rest
+                }
+              } catch {}
+            }
+            return fetch(url, init)
+          },
         },
       }
     },
