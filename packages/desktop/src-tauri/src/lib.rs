@@ -3,6 +3,7 @@ mod window_customizer;
 
 use cli::{install_cli, sync_cli};
 use futures::FutureExt;
+use futures::future;
 use std::{
     collections::VecDeque,
     net::TcpListener,
@@ -13,6 +14,7 @@ use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewUrl, Webvie
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
+use tokio::sync::oneshot;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
 
@@ -28,14 +30,13 @@ struct ServerReadyData {
 #[derive(Clone)]
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
-    status:
-        futures::future::Shared<tokio::sync::oneshot::Receiver<Result<ServerReadyData, String>>>,
+    status: future::Shared<oneshot::Receiver<Result<ServerReadyData, String>>>,
 }
 
 impl ServerState {
     pub fn new(
         child: Option<CommandChild>,
-        status: tokio::sync::oneshot::Receiver<Result<ServerReadyData, String>>,
+        status: oneshot::Receiver<Result<ServerReadyData, String>>,
     ) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
@@ -279,7 +280,7 @@ pub fn run() {
 
             window_builder.build().expect("Failed to create window");
 
-            let (tx, rx) = tokio::sync::oneshot::channel();
+            let (tx, rx) = oneshot::channel();
             app.manage(ServerState::new(None, rx));
 
             {
@@ -421,7 +422,7 @@ async fn spawn_local_server(
     port: u32,
     password: &str,
 ) -> Result<CommandChild, String> {
-    let child = spawn_sidecar(app, port, &password);
+    let child = spawn_sidecar(app, port, password);
     let url = format!("http://127.0.0.1:{port}");
 
     let timestamp = Instant::now();
