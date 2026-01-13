@@ -76,7 +76,9 @@ export namespace Pty {
       for (const session of sessions.values()) {
         try {
           session.process.kill()
-        } catch {}
+        } catch (err) {
+          log.debug("Failed to kill process during session cleanup", { error: err })
+        }
         for (const ws of session.subscribers) {
           ws.close()
         }
@@ -172,7 +174,9 @@ export namespace Pty {
     log.info("removing session", { id })
     try {
       session.process.kill()
-    } catch {}
+    } catch (err) {
+      log.debug("Failed to kill process during session removal", { error: err })
+    }
     for (const ws of session.subscribers) {
       ws.close()
     }
