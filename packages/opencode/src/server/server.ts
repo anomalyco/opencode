@@ -100,6 +100,8 @@ export namespace Server {
         .use((c, next) => {
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
+          // Skip auth for WebSocket (PTY ID is the token)
+          if (c.req.header("upgrade")?.toLowerCase() === "websocket") return next()
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
           return basicAuth({ username, password })(c, next)
         })
