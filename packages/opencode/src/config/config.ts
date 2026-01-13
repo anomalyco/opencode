@@ -154,6 +154,8 @@ export namespace Config {
 
       deps.push(
         iife(async () => {
+          const exists = existsSync(path.join(dir, "node_modules"))
+          if (exists) return
           const shouldInstall = await needsInstall(dir)
           if (shouldInstall) await installDependencies(dir)
         }),
