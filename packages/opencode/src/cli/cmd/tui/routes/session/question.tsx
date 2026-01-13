@@ -90,7 +90,63 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     setStore("selected", index)
   }
 
+  function commit() {
+    if (!store.editing || confirm()) return
+
+    const text = textarea?.plainText?.trim() ?? ""
+    const prev = store.custom[store.tab]
+
+    if (!text) {
+      if (prev) {
+        const inputs = [...store.custom]
+        inputs[store.tab] = ""
+        setStore("custom", inputs)
+      }
+
+      const answers = [...store.answers]
+      if (prev) {
+        answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
+      }
+      if (!prev) {
+        answers[store.tab] = []
+      }
+      setStore("answers", answers)
+      setStore("editing", false)
+      return
+    }
+
+    if (multi()) {
+      const inputs = [...store.custom]
+      inputs[store.tab] = text
+      setStore("custom", inputs)
+
+      const existing = store.answers[store.tab] ?? []
+      const next = [...existing]
+      if (prev) {
+        const index = next.indexOf(prev)
+        if (index !== -1) next.splice(index, 1)
+      }
+      if (!next.includes(text)) next.push(text)
+      const answers = [...store.answers]
+      answers[store.tab] = next
+      setStore("answers", answers)
+      setStore("editing", false)
+      return
+    }
+
+    const answers = [...store.answers]
+    answers[store.tab] = [text]
+    setStore("answers", answers)
+
+    const inputs = [...store.custom]
+    inputs[store.tab] = text
+    setStore("custom", inputs)
+
+    setStore("editing", false)
+  }
+
   function selectTab(index: number) {
+    commit()
     setStore("tab", index)
     setStore("selected", 0)
   }
@@ -310,7 +366,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 <Show when={store.editing}>
                   <box paddingLeft={3}>
                     <textarea
-                      ref={(val: TextareaRenderable) => (textarea = val)}
+                      ref={(val: TextareaRenderable) => {
+                        textarea = val
+                        setTimeout(() => {
+                          textarea?.focus()
+                          textarea?.gotoLineEnd()
+                        }, 1)
+                      }}
                       focused
                       initialValue={input()}
                       placeholder="Type your own answer"
