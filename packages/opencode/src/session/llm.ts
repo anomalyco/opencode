@@ -5,6 +5,8 @@ import { Log } from "@/util/log"
 import {
   streamText,
   wrapLanguageModel,
+  tool,
+  jsonSchema,
   type ModelMessage,
   type StreamTextResult,
   type Tool,
@@ -25,6 +27,20 @@ import { Auth } from "@/auth"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
+
+  /**
+   * Check if message history contains tool calls.
+   * Some providers (e.g., Anthropic via LiteLLM) reject requests that have
+   * tool call history in messages but no tools parameter specified.
+   * @see https://github.com/sst/opencode/issues/2915
+   */
+  function hasToolCallsInHistory(messages: ModelMessage[]): boolean {
+    return messages.some(
+      (msg) =>
+        Array.isArray(msg.content) &&
+        msg.content.some((part: any) => part.type === "tool-call" || part.type === "tool-result"),
+    )
+  }
 
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
@@ -134,6 +150,28 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
+    // When message history contains tool calls but no tools are provided,
+    // some providers (Anthropic via LiteLLM/proxies) reject the request.
+    // Add a dummy tool to satisfy the API requirement.
+    // @see https://github.com/sst/opencode/issues/2915
+    const hasToolHistory = hasToolCallsInHistory(input.messages)
+    const noToolsProvided = Object.keys(tools).length === 0
+
+    // Restrict workaround to LiteLLM proxies only.
+    const isLiteLLM =
+      input.model.providerID.toLowerCase().includes("litellm") ||
+      input.model.api.id.toLowerCase().includes("litellm")
+
+    const effectiveTools: Record<string, Tool> =
+      isLiteLLM && noToolsProvided && hasToolHistory
+        ? {
+            _dummy: tool({
+              description: "Placeholder tool for API compatibility",
+              inputSchema: jsonSchema({ type: "object", properties: {} }),
+            }),
+          }
+        : tools
+
     return streamText({
       onError(error) {
         l.error("stream error", {
@@ -165,8 +203,8 @@ export namespace LLM {
       topP: params.topP,
       topK: params.topK,
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
-      activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
-      tools,
+      activeTools: Object.keys(effectiveTools).filter((x) => x !== "invalid" && x !== "_dummy"),
+      tools: effectiveTools,
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
