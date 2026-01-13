@@ -16,6 +16,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -43,6 +44,7 @@ export const EditTool = Tool.define("edit", {
     const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filePath)
 
+    const isRemote = SandboxRuntime.isRemote()
     let diff = ""
     let contentOld = ""
     let contentNew = ""
@@ -59,7 +61,11 @@ export const EditTool = Tool.define("edit", {
             diff,
           },
         })
-        await Bun.write(filePath, params.newString)
+        if (isRemote) {
+          await SandboxRuntime.writeFile(filePath, params.newString)
+        } else {
+          await Bun.write(filePath, params.newString)
+        }
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -67,12 +73,11 @@ export const EditTool = Tool.define("edit", {
         return
       }
 
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => {})
+      const stats = isRemote ? await SandboxRuntime.stat(filePath) : await Bun.file(filePath).stat().catch(() => {})
       if (!stats) throw new Error(`File ${filePath} not found`)
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
-      contentOld = await file.text()
+      contentOld = isRemote ? await SandboxRuntime.readFile(filePath) : await Bun.file(filePath).text()
       contentNew = replace(contentOld, params.oldString, params.newString, params.replaceAll)
 
       diff = trimDiff(
@@ -88,11 +93,15 @@ export const EditTool = Tool.define("edit", {
         },
       })
 
-      await file.write(contentNew)
+      if (isRemote) {
+        await SandboxRuntime.writeFile(filePath, contentNew)
+      } else {
+        await Bun.file(filePath).write(contentNew)
+      }
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
-      contentNew = await file.text()
+      contentNew = isRemote ? await SandboxRuntime.readFile(filePath) : await Bun.file(filePath).text()
       diff = trimDiff(
         createTwoFilesPatch(filePath, filePath, normalizeLineEndings(contentOld), normalizeLineEndings(contentNew)),
       )

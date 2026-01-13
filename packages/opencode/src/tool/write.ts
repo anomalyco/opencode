@@ -11,6 +11,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -25,9 +26,9 @@ export const WriteTool = Tool.define("write", {
     const filepath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
     await assertExternalDirectory(ctx, filepath)
 
-    const file = Bun.file(filepath)
-    const exists = await file.exists()
-    const contentOld = exists ? await file.text() : ""
+    const isRemote = SandboxRuntime.isRemote()
+    const exists = isRemote ? await SandboxRuntime.exists(filepath) : await Bun.file(filepath).exists()
+    const contentOld = exists ? (isRemote ? await SandboxRuntime.readFile(filepath) : await Bun.file(filepath).text()) : ""
     if (exists) await FileTime.assert(ctx.sessionID, filepath)
 
     const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, params.content))
@@ -41,7 +42,11 @@ export const WriteTool = Tool.define("write", {
       },
     })
 
-    await Bun.write(filepath, params.content)
+    if (isRemote) {
+      await SandboxRuntime.writeFile(filepath, params.content)
+    } else {
+      await Bun.write(filepath, params.content)
+    }
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })

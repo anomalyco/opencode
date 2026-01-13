@@ -19,6 +19,7 @@ import { Snapshot } from "@/snapshot"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
+import { SandboxContext } from "@/sandbox/context"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -319,6 +320,7 @@ export namespace Session {
         await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})
+      await SandboxContext.terminateForSession(sessionID).catch(() => {})
       for (const msg of await Storage.list(["message", sessionID])) {
         for (const part of await Storage.list(["part", msg.at(-1)!])) {
           await Storage.remove(part)

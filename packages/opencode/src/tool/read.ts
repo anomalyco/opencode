@@ -8,6 +8,7 @@ import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -38,12 +39,17 @@ export const ReadTool = Tool.define("read", {
       metadata: {},
     })
 
-    const file = Bun.file(filepath)
-    if (!(await file.exists())) {
+    const isRemote = SandboxRuntime.isRemote()
+
+    const fileExists = isRemote ? await SandboxRuntime.exists(filepath) : await Bun.file(filepath).exists()
+    if (!fileExists) {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
-      const dirEntries = fs.readdirSync(dir)
+      let dirEntries: string[] = []
+      try {
+        dirEntries = isRemote ? await SandboxRuntime.readdir(dir) : fs.readdirSync(dir)
+      } catch {}
       const suggestions = dirEntries
         .filter(
           (entry) =>
@@ -59,11 +65,13 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const isImage = file.type.startsWith("image/") && file.type !== "image/svg+xml"
-    const isPdf = file.type === "application/pdf"
+    const file = Bun.file(filepath)
+    const isImage = !isRemote && file.type.startsWith("image/") && file.type !== "image/svg+xml"
+    const isPdf = !isRemote && file.type === "application/pdf"
     if (isImage || isPdf) {
       const mime = file.type
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
+      const fileBytes = isRemote ? await SandboxRuntime.readFileBuffer(filepath) : await file.bytes()
       return {
         title,
         output: msg,
@@ -78,18 +86,19 @@ export const ReadTool = Tool.define("read", {
             messageID: ctx.messageID,
             type: "file",
             mime,
-            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+            url: `data:${mime};base64,${Buffer.from(fileBytes).toString("base64")}`,
           },
         ],
       }
     }
 
-    const isBinary = await isBinaryFile(filepath, file)
+    const isBinary = isRemote ? false : await isBinaryFile(filepath, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const lines = await file.text().then((text) => text.split("\n"))
+    const fileText = isRemote ? await SandboxRuntime.readFile(filepath) : await file.text()
+    const lines = fileText.split("\n")
 
     const raw: string[] = []
     let bytes = 0

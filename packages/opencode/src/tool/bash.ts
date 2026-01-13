@@ -16,6 +16,7 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { SandboxRuntime } from "@/sandbox/runtime"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -154,6 +155,35 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      if (SandboxRuntime.isRemote()) {
+        ctx.metadata({
+          metadata: {
+            output: "",
+            description: params.description,
+          },
+        })
+
+        const result = await SandboxRuntime.exec(params.command, [], { cwd, timeout })
+        const output = result.stdout + (result.stderr ? "\n" + result.stderr : "")
+
+        ctx.metadata({
+          metadata: {
+            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            description: params.description,
+          },
+        })
+
+        return {
+          title: params.description,
+          metadata: {
+            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            exit: result.exitCode,
+            description: params.description,
+          },
+          output,
+        }
+      }
+
       const proc = spawn(params.command, {
         shell,
         cwd,
@@ -166,7 +196,6 @@ export const BashTool = Tool.define("bash", async () => {
 
       let output = ""
 
-      // Initialize metadata with empty output
       ctx.metadata({
         metadata: {
           output: "",
@@ -178,7 +207,6 @@ export const BashTool = Tool.define("bash", async () => {
         output += chunk.toString()
         ctx.metadata({
           metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
             output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
             description: params.description,
           },
