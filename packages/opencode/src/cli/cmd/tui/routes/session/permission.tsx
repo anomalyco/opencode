@@ -54,7 +54,7 @@ function EditBody(props: { request: PermissionRequest }) {
         <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
       </box>
       <Show when={diff()}>
-        <box maxHeight={Math.floor(dimensions().height / 4)} overflow="scroll">
+        <box maxHeight={Math.floor(dimensions().height / 2)} overflow="scroll">
           <diff
             diff={diff()}
             view={view()}
