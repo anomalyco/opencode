@@ -22,10 +22,18 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const empty: Group[] = []
 
   const [grouped, { refetch }] = createResource(
-    () => ({
-      filter: store.filter,
-      items: typeof props.items === "function" ? undefined : props.items,
-    }),
+    () => {
+      // When items is a function (not async filter function), call it to track changes
+      const itemsValue =
+        typeof props.items === "function"
+          ? (props.items as () => T[])() // Call synchronous function to track it
+          : props.items
+
+      return {
+        filter: store.filter,
+        items: itemsValue,
+      }
+    },
     async ({ filter, items }) => {
       const needle = filter?.toLowerCase()
       const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
