@@ -7,6 +7,8 @@ import { Button } from "@opencode-ai/ui/button"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 
@@ -35,6 +37,12 @@ const ModelList: Component<{
       filterKeys={["provider.name", "name", "id"]}
       sortBy={(a, b) => a.name.localeCompare(b.name)}
       groupBy={(x) => x.provider.name}
+      groupHeader={(group) => (
+        <div class="flex items-center gap-x-3">
+          <ProviderIcon data-slot="list-item-extra-icon" id={group.items[0].provider.id as IconName} />
+          <span>{group.category}</span>
+        </div>
+      )}
       sortGroupsBy={(a, b) => {
         if (a.category === "Recent" && b.category !== "Recent") return -1
         if (b.category === "Recent" && a.category !== "Recent") return 1
@@ -52,7 +60,8 @@ const ModelList: Component<{
       }}
     >
       {(i) => (
-        <div class="w-full flex items-center gap-x-2 text-13-regular">
+        <div class="w-full flex items-center gap-x-3 pl-1 text-13-regular">
+          <ProviderIcon data-slot="list-item-extra-icon" id={i.provider.id as IconName} />
           <span class="truncate">{i.name}</span>
           <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
             <Tag>Free</Tag>
