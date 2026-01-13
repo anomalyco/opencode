@@ -281,7 +281,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
         .invoke_handler(tauri::generate_handler![
-            // kill_sidecar,
+            kill_sidecar,
             install_cli,
             ensure_server_ready,
             get_default_server_url,
