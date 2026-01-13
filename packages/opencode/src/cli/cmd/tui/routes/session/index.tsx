@@ -69,6 +69,7 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
+import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -1525,6 +1526,7 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
 
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
+  const sync = useSync()
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
@@ -1534,11 +1536,36 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return [...lines().slice(0, 10), "…"].join("\n")
   })
 
+  const workdirDisplay = createMemo(() => {
+    const workdir = props.input.workdir
+    if (!workdir || workdir === ".") return undefined
+
+    const base = sync.data.path.directory
+    if (!base) return undefined
+
+    const absolute = path.resolve(base, workdir)
+    if (absolute === base) return undefined
+
+    const home = Global.Path.home
+    if (!home) return absolute
+
+    const match = absolute === home || absolute.startsWith(home + path.sep)
+    return match ? absolute.replace(home, "~") : absolute
+  })
+
+  const title = createMemo(() => {
+    const desc = props.input.description ?? "Shell"
+    const wd = workdirDisplay()
+    if (!wd) return `# ${desc}`
+    if (desc.includes(wd)) return `# ${desc}`
+    return `# ${desc} in ${wd}`
+  })
+
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
         <BlockTool
-          title={"# " + (props.input.description ?? "Shell")}
+          title={title()}
           part={props.part}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
