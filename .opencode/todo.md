@@ -5,6 +5,6 @@
 - [x] Create sandbox index export (index.ts)
 - [x] Create Modal sandbox provider (modal.ts)
 - [x] Add sandbox configuration to config schema
-- [ ] Modify Instance to use sandbox context
-- [ ] Update file tools to work through sandbox
-- [ ] Update bash tool to work through sandbox
+- [x] Modify Instance to use sandbox context
+- [x] Update file tools to work through sandbox (created SandboxFS abstraction)
+- [x] Update bash tool to work through sandbox (SandboxFS.exec)

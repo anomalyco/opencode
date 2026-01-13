@@ -1,3 +1,5 @@
 export { Sandbox } from "./provider"
 export { LocalSandboxProvider, createLocalProvider } from "./local"
 export { ModalSandboxProvider, createModalProvider } from "./modal"
+export { SandboxContext } from "./context"
+export { SandboxFS } from "./fs"
