@@ -149,6 +149,7 @@ if ($app.stage === "production" || $app.stage === "frank") {
   })
 }
 
+const ZEN_SESSION_SECRET = new sst.Secret("ZEN_SESSION_SECRET")
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "packages/console/app",
@@ -163,6 +164,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
     ZEN_BLACK,
+    ZEN_SESSION_SECRET,
     ...ZEN_MODELS,
     ...($dev
       ? [
