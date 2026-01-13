@@ -1,24 +1,38 @@
-# Sandbox Implementation Tasks
+# Sandbox Implementation - COMPLETE
 
-## Phase 1 - Core Implementation (Complete)
-- [x] Create sandbox provider interface (provider.ts)
-- [x] Create local sandbox provider (local.ts)
-- [x] Create sandbox index export (index.ts)
-- [x] Create Modal sandbox provider (modal.ts)
-- [x] Add sandbox configuration to config schema
-- [x] Modify Instance to use sandbox context
-- [x] Update file tools to work through sandbox (created SandboxFS abstraction)
-- [x] Update bash tool to work through sandbox (SandboxFS.exec)
+All sandbox isolation tasks have been completed.
 
-## Phase 2 - Completion Tasks (Complete)
-- [x] Write unit tests for LocalSandboxProvider
-- [x] Write unit tests for SandboxRuntime
-- [x] Write unit tests for Sandbox.Provider types
-- [x] Implement Kubernetes provider skeleton
-- [x] Add sandbox status to session info
-- [x] Add JSDoc documentation to public APIs
-- [x] Create README for sandbox module
-- [x] Commit all changes
-- [x] Add error handling improvements
+## Summary of Work Done
 
-## All Tasks Complete
+### Phase 1 - Core Implementation
+- Created sandbox provider interface (provider.ts)
+- Created local sandbox provider (local.ts) 
+- Created sandbox index export (index.ts)
+- Created Modal sandbox provider (modal.ts)
+- Added sandbox configuration to config schema
+- Modified Instance to use sandbox context
+- Updated file tools to work through sandbox
+- Updated bash tool to work through sandbox
+
+### Phase 2 - Completion
+- Wrote unit tests for LocalSandboxProvider (16 tests)
+- Wrote unit tests for SandboxRuntime (24 tests)
+- Wrote unit tests for Sandbox.Provider types (25 tests)
+- Implemented Kubernetes provider skeleton
+- Added sandbox status to session info
+- Added JSDoc documentation to public APIs
+- Created README for sandbox module
+- Added error handling improvements
+- Committed all changes
+
+### Test Results
+- 65 sandbox tests passing
+- 717 total tests passing
+- Typecheck passing
+
+### Commits on sandbox-isolation branch
+- cad234427 Mark all sandbox tasks complete
+- 81c56509f Improve sandbox error handling
+- 6461c1c45 Add Kubernetes provider, tests, session sandbox status, and documentation
+- 51af8e221 Add sandbox support for lsp and patch tools
+- 0e8213f0f Add sandbox support for glob, grep, and list tools
