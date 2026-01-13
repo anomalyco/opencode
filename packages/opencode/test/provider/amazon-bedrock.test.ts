@@ -9,7 +9,11 @@ import path from "path"
 
 mock.module("../../src/bun/index", () => ({
   BunProc: {
-    install: async (pkg: string) => pkg,
+    install: async (pkg: string, _version?: string) => {
+      // Return package name without version for mocking
+      const lastAtIndex = pkg.lastIndexOf("@")
+      return lastAtIndex > 0 ? pkg.substring(0, lastAtIndex) : pkg
+    },
     run: async () => {
       throw new Error("BunProc.run should not be called in tests")
     },
@@ -28,6 +32,7 @@ mock.module("@aws-sdk/credential-providers", () => ({
 const mockPlugin = () => ({})
 mock.module("opencode-copilot-auth", () => ({ default: mockPlugin }))
 mock.module("opencode-anthropic-auth", () => ({ default: mockPlugin }))
+mock.module("@gitlab/opencode-gitlab-auth", () => ({ default: mockPlugin }))
 
 // Import after mocks are set up
 const { tmpdir } = await import("../fixture/fixture")

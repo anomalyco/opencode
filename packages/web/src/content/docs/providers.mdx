@@ -557,6 +557,99 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
 
 ---
 
+### GitLab Duo
+
+GitLab Duo provides AI-powered agentic chat with native tool calling capabilities through GitLab's Anthropic proxy.
+
+1. Run the `/connect` command and select GitLab.
+
+   ```txt
+   /connect
+   ```
+
+2. Choose your authentication method:
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ OAuth (Recommended)
+   │ Personal Access Token
+   └
+   ```
+
+   #### Using OAuth (Recommended)
+
+   Select **OAuth** and your browser will open for authorization.
+
+   #### Using Personal Access Token
+   1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
+   2. Click **Add new token**
+   3. Name: `OpenCode`, Scopes: `api`
+   4. Copy the token (starts with `glpat-`)
+   5. Enter it in the terminal
+
+3. Run the `/models` command to see available models.
+
+   ```txt
+   /models
+   ```
+
+   Three Claude-based models are available:
+   - **duo-chat-haiku-4-5** (Default) - Fast responses for quick tasks
+   - **duo-chat-sonnet-4-5** - Balanced performance for most workflows
+   - **duo-chat-opus-4-5** - Most capable for complex analysis
+
+##### Self-Hosted GitLab
+
+For self-hosted GitLab instances:
+
+```bash
+GITLAB_INSTANCE_URL=https://gitlab.company.com GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx opencode
+```
+
+Or add to your bash profile:
+
+```bash title="~/.bash_profile"
+export GITLAB_INSTANCE_URL=https://gitlab.company.com
+export GITLAB_TOKEN=glpat-xxxxxxxxxxxxxxxxxxxx
+```
+
+##### Configuration
+
+Customize through `opencode.json`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "gitlab": {
+      "options": {
+        "instanceUrl": "https://gitlab.com",
+        "featureFlags": {
+          "duo_agent_platform_agentic_chat": true,
+          "duo_agent_platform": true
+        }
+      }
+    }
+  }
+}
+```
+
+##### GitLab API Tools (Optional)
+
+To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+}
+```
+
+This plugin provides comprehensive GitLab repository management capabilities including MR reviews, issue tracking, pipeline monitoring, and more.
+
+---
+
 ### GitHub Copilot
 
 To use your GitHub Copilot subscription with opencode:

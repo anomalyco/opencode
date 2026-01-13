@@ -14,7 +14,11 @@ import { NamedError } from "@opencode-ai/util/error"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.12", "opencode-anthropic-auth@0.0.8"]
+  const BUILTIN = [
+    "opencode-copilot-auth@0.0.12",
+    "opencode-anthropic-auth@0.0.8",
+    "@gitlab/opencode-gitlab-auth@1.3.0",
+  ]
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
@@ -46,6 +50,7 @@ export namespace Plugin {
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push(...BUILTIN)
     }
+
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
       if (plugin.includes("opencode-openai-codex-auth")) continue
