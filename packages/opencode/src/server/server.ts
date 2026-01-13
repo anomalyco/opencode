@@ -26,6 +26,7 @@ import { Project } from "../project/project"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
+import { AuthToken } from "../auth/token"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
@@ -141,6 +142,70 @@ export namespace Server {
             },
           }),
         )
+        .use(async (c, next) => {
+          // Token-based authentication middleware
+          // Use global config since we're before Instance.provide middleware
+          const config = await Config.global()
+          // Auth is enabled by default for security.
+          // WARNING: Disabling auth is not recommended and is a security risk.
+          const authEnabled = config.server?.auth?.enabled ?? true
+
+          if (!authEnabled) {
+            return next()
+          }
+
+          // Health endpoint is always accessible
+          if (c.req.path === "/global/health") {
+            return next()
+          }
+
+          const authHeader = c.req.header("Authorization")
+          if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return c.json(
+              {
+                name: "AuthenticationError",
+                message: "Missing or invalid Authorization header. Expected format: Bearer <token>",
+                properties: {},
+              },
+              { status: 401 },
+            )
+          }
+
+          const token = authHeader.substring(7) // Remove "Bearer " prefix
+
+          try {
+            // Determine required permissions based on HTTP method
+            const requiredPermissions: AuthToken.Permission[] = []
+            if (c.req.method === "GET" || c.req.method === "HEAD") {
+              requiredPermissions.push("read")
+            }
+            if (c.req.method === "POST" || c.req.method === "PUT" || c.req.method === "PATCH") {
+              requiredPermissions.push("write")
+            }
+            if (c.req.method === "DELETE") {
+              requiredPermissions.push("write")
+            }
+
+            // Execute permission is required for certain endpoints
+            if (c.req.path.includes("/pty") || c.req.path.includes("/session") || c.req.path.includes("/message")) {
+              requiredPermissions.push("execute")
+            }
+
+            await AuthToken.validate(token, requiredPermissions)
+            return next()
+          } catch (err) {
+            if (err instanceof NamedError) {
+              let status: ContentfulStatusCode = 401
+              if (err instanceof AuthToken.ExpiredTokenError) {
+                status = 401
+              } else if (err instanceof AuthToken.InsufficientPermissionsError) {
+                status = 403
+              }
+              return c.json(err.toObject(), { status })
+            }
+            throw err
+          }
+        })
         .get(
           "/global/health",
           describeRoute({
@@ -227,6 +292,33 @@ export namespace Server {
                 })
               })
             })
+          },
+        )
+        .get(
+          "/auth/token",
+          describeRoute({
+            summary: "List auth tokens",
+            description: "Get all authentication tokens (tokens are masked for security). Requires authentication.",
+            operationId: "auth.token.list",
+            responses: {
+              200: {
+                description: "List of tokens",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.array(AuthToken.Info).meta({ ref: "AuthTokens" })),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            const tokens = await AuthToken.all()
+            // Mask tokens for security (show only last 8 chars)
+            const maskedTokens = tokens.map((t) => ({
+              ...t,
+              token: "..." + t.token.slice(-8),
+            }))
+            return c.json(maskedTokens)
           },
         )
         .post(

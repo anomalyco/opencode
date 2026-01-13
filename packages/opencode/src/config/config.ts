@@ -773,6 +773,14 @@ export namespace Config {
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
+      auth: z
+        .object({
+          // WARNING: Disabling auth is not recommended and is a security risk.
+          // When auth is disabled, anyone with network access can control your server.
+          enabled: z.boolean().optional().default(true).describe("Enable token-based authentication (default: true)"),
+        })
+        .optional()
+        .describe("Authentication configuration for the server"),
     })
     .strict()
     .meta({
