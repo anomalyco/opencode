@@ -81,8 +81,8 @@ export namespace Plugin {
 
     if (shouldLoadGitLabPlugins && !Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       log.info("auto-loading GitLab plugins")
-      plugins.push("@gitlab/opencode-gitlab-auth@latest")
-      plugins.push("@gitlab/opencode-gitlab-plugin@latest")
+      plugins.push("@gitlab/opencode-gitlab-auth@1.3.0")
+      plugins.push("@gitlab/opencode-gitlab-plugin@1.1.0")
     }
 
     for (let plugin of plugins) {
