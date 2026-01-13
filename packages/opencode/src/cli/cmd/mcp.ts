@@ -21,7 +21,7 @@ function getAuthStatusIcon(status: MCP.AuthStatus): string {
     case "expired":
       return "⚠"
     case "not_authenticated":
-      return "○"
+      return "✗"
   }
 }
 
