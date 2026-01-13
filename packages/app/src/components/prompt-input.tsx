@@ -33,6 +33,8 @@ import { useSync } from "@/context/sync"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
@@ -1560,6 +1562,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   fallback={
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
                       <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
+                        <Show when={local.model.current()?.provider?.id}>
+                          <ProviderIcon
+                            id={local.model.current()!.provider.id as IconName}
+                            class="size-4 shrink-0"
+                          />
+                        </Show>
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />
                       </Button>
@@ -1569,6 +1577,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <ModelSelectorPopover>
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
                       <Button as="div" variant="ghost">
+                        <Show when={local.model.current()?.provider?.id}>
+                          <ProviderIcon
+                            id={local.model.current()!.provider.id as IconName}
+                            class="size-4 shrink-0"
+                          />
+                        </Show>
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />
                       </Button>
@@ -1583,10 +1597,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <Button
                       variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block"
+                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
                       onClick={() => local.model.variant.cycle()}
                     >
-                      <span class="capitalize text-12-regular">{local.model.variant.current() ?? "Default"}</span>
+                      {local.model.variant.current() ?? "Default"}
                     </Button>
                   </TooltipKeybind>
                 </Show>
