@@ -24,7 +24,7 @@ export async function GET({ params: { platform } }: APIEvent) {
   const resp = await fetch(`https://github.com/anomalyco/opencode/releases/latest/download/${assetName}`, {
     cf: {
       // in case gh releases has rate limits
-      cacheTtl: 60 * 60 * 24,
+      cacheTtl: 60 * 5,
       cacheEverything: true,
     },
   } as any)
