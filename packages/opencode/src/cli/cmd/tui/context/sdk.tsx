@@ -11,6 +11,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
   init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource }) => {
     const abort = new AbortController()
+
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,

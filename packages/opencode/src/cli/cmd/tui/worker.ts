@@ -49,7 +49,13 @@ const startEventStream = (directory: string) => {
   const signal = abort.signal
 
   const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init)
+    const request = new Request(input, {
+      ...init,
+      headers: {
+        ...Object.fromEntries(new Request(input, init).headers.entries()),
+        "x-opencode-internal": "true",
+      },
+    })
     return Server.App().fetch(request)
   }) as typeof globalThis.fetch
 
@@ -97,7 +103,10 @@ export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
     const request = new Request(input.url, {
       method: input.method,
-      headers: input.headers,
+      headers: {
+        ...input.headers,
+        "x-opencode-internal": "true",
+      },
       body: input.body,
     })
     const response = await Server.App().fetch(request)

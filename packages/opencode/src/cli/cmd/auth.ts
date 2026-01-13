@@ -1,4 +1,5 @@
 import { Auth } from "../../auth"
+import { AuthToken } from "../../auth/token"
 import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
@@ -163,7 +164,12 @@ export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
   builder: (yargs) =>
-    yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+    yargs
+      .command(AuthLoginCommand)
+      .command(AuthLogoutCommand)
+      .command(AuthListCommand)
+      .command(AuthTokenCommand)
+      .demandCommand(),
   async handler() {},
 })
 
@@ -396,5 +402,147 @@ export const AuthLogoutCommand = cmd({
     if (prompts.isCancel(providerID)) throw new UI.CancelledError()
     await Auth.remove(providerID)
     prompts.outro("Logout successful")
+  },
+})
+
+// Server token authentication commands
+export const AuthTokenCommand = cmd({
+  command: "token",
+  describe: "manage server authentication tokens",
+  builder: (yargs) =>
+    yargs
+      .command(AuthTokenCreateCommand)
+      .command(AuthTokenListCommand)
+      .command(AuthTokenDeleteCommand)
+      .demandCommand(),
+  async handler() {},
+})
+
+export const AuthTokenCreateCommand = cmd({
+  command: "create",
+  describe: "create a new server authentication token",
+  builder: (yargs) =>
+    yargs
+      .option("name", {
+        alias: "n",
+        type: "string",
+        describe: "optional name for the token",
+      })
+      .option("permissions", {
+        alias: "p",
+        type: "array",
+        choices: ["read", "write", "execute"],
+        default: ["read", "write", "execute"],
+        describe: "permissions for the token",
+      })
+      .option("expiry", {
+        alias: "e",
+        type: "string",
+        choices: ["30d", "90d", "180d", "1y", "never"],
+        default: "90d",
+        describe: "when the token expires",
+      }),
+  async handler(args) {
+    UI.empty()
+    prompts.intro("Create server token")
+
+    const permissions = args.permissions as AuthToken.Permission[]
+    const expiry = args.expiry as AuthToken.ExpiryDuration
+
+    const token = await AuthToken.create({
+      permissions,
+      expiry,
+      name: args.name,
+    })
+
+    prompts.log.success("Token created successfully")
+    prompts.log.message("")
+    prompts.log.message(UI.Style.TEXT_NORMAL_BOLD + "Token:" + UI.Style.TEXT_NORMAL)
+    prompts.log.message(token.token)
+    prompts.log.message("")
+    prompts.log.warn("Store this token securely - it will not be shown again!")
+    prompts.log.message("")
+    prompts.log.info(`Permissions: ${permissions.join(", ")}`)
+    prompts.log.info(`Expires: ${token.expiresAt ? new Date(token.expiresAt).toLocaleDateString() : "never"}`)
+    if (token.name) {
+      prompts.log.info(`Name: ${token.name}`)
+    }
+
+    prompts.outro("Done")
+  },
+})
+
+export const AuthTokenListCommand = cmd({
+  command: "list",
+  aliases: ["ls"],
+  describe: "list server authentication tokens",
+  async handler() {
+    UI.empty()
+    const tokenPath = path.join(Global.Path.config, "auth-tokens.json")
+    const homedir = os.homedir()
+    const displayPath = tokenPath.startsWith(homedir) ? tokenPath.replace(homedir, "~") : tokenPath
+    prompts.intro(`Server tokens ${UI.Style.TEXT_DIM}${displayPath}`)
+
+    const tokens = await AuthToken.all()
+
+    if (tokens.length === 0) {
+      prompts.log.warn("No tokens found")
+      prompts.log.info('Use "opencode auth token create" to create a token')
+      prompts.outro("0 tokens")
+      return
+    }
+
+    for (const token of tokens) {
+      const masked = "..." + token.token.slice(-8)
+      const expired = token.expiresAt && Date.now() > token.expiresAt
+      const expiryStr = token.expiresAt ? new Date(token.expiresAt).toLocaleDateString() : "never"
+      const status = expired ? UI.Style.TEXT_DANGER + "[EXPIRED]" + UI.Style.TEXT_NORMAL : ""
+
+      const name = token.name || "unnamed"
+      const permissions = token.permissions.join(",")
+
+      prompts.log.info(
+        `${name} ${UI.Style.TEXT_DIM}${masked} [${permissions}] expires: ${expiryStr}${UI.Style.TEXT_NORMAL} ${status}`,
+      )
+    }
+
+    prompts.outro(`${tokens.length} token${tokens.length === 1 ? "" : "s"}`)
+  },
+})
+
+export const AuthTokenDeleteCommand = cmd({
+  command: "delete",
+  aliases: ["rm"],
+  describe: "delete a server authentication token",
+  async handler() {
+    UI.empty()
+    prompts.intro("Delete server token")
+
+    const tokens = await AuthToken.all()
+
+    if (tokens.length === 0) {
+      prompts.log.error("No tokens found")
+      prompts.outro("Done")
+      return
+    }
+
+    const tokenToDelete = await prompts.select({
+      message: "Select token to delete",
+      options: tokens.map((t) => ({
+        label: (t.name || "unnamed") + UI.Style.TEXT_DIM + " (..." + t.token.slice(-8) + ")",
+        value: t.token,
+      })),
+    })
+
+    if (prompts.isCancel(tokenToDelete)) throw new UI.CancelledError()
+
+    const removed = await AuthToken.remove(tokenToDelete)
+    if (removed) {
+      prompts.log.success("Token deleted")
+    } else {
+      prompts.log.error("Failed to delete token")
+    }
+
+    prompts.outro("Done")
   },
 })

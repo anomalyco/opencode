@@ -1,12 +1,31 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, beforeAll, afterAll } from "bun:test"
 import path from "path"
 import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
+import { AuthToken } from "../../src/auth/token"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
+
+// Test auth token for authenticated requests
+let testToken: string
+
+beforeAll(async () => {
+  const tokenInfo = await AuthToken.create({
+    permissions: ["read", "write", "execute"],
+    expiry: "never",
+    name: "test-token",
+  })
+  testToken = tokenInfo.token
+})
+
+afterAll(async () => {
+  if (testToken) {
+    await AuthToken.remove(testToken)
+  }
+})
 
 describe("tui.selectSession endpoint", () => {
   test("should return 200 when called with valid session", async () => {
@@ -20,7 +39,10 @@ describe("tui.selectSession endpoint", () => {
         const app = Server.App()
         const response = await app.request("/tui/select-session", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${testToken}`,
+          },
           body: JSON.stringify({ sessionID: session.id }),
         })
 
@@ -45,7 +67,10 @@ describe("tui.selectSession endpoint", () => {
         const app = Server.App()
         const response = await app.request("/tui/select-session", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${testToken}`,
+          },
           body: JSON.stringify({ sessionID: nonExistentSessionID }),
         })
 
@@ -66,12 +91,33 @@ describe("tui.selectSession endpoint", () => {
         const app = Server.App()
         const response = await app.request("/tui/select-session", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${testToken}`,
+          },
           body: JSON.stringify({ sessionID: invalidSessionID }),
         })
 
         // #then
         expect(response.status).toBe(400)
+      },
+    })
+  })
+
+  test("should return 401 when no auth token provided", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        // #when
+        const app = Server.App()
+        const response = await app.request("/tui/select-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: "ses_test123" }),
+        })
+
+        // #then
+        expect(response.status).toBe(401)
       },
     })
   })
