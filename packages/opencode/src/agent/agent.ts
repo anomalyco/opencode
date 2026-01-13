@@ -50,6 +50,7 @@ export namespace Agent {
       external_directory: {
         "*": "ask",
         [Truncate.DIR]: "allow",
+        [Truncate.GLOB]: "allow",
       },
       question: "deny",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
@@ -124,6 +125,7 @@ export namespace Agent {
             read: "allow",
             external_directory: {
               [Truncate.DIR]: "allow",
+              [Truncate.GLOB]: "allow",
             },
           }),
           user,
@@ -213,14 +215,16 @@ export namespace Agent {
     // Ensure Truncate.DIR is allowed unless explicitly configured
     for (const name in result) {
       const agent = result[name]
-      const explicit = agent.permission.some(
-        (r) => r.permission === "external_directory" && r.pattern === Truncate.DIR && r.action === "deny",
-      )
+      const explicit = agent.permission.some((r) => {
+        if (r.permission !== "external_directory") return false
+        if (r.action !== "deny") return false
+        return r.pattern === Truncate.DIR || r.pattern === Truncate.GLOB
+      })
       if (explicit) continue
 
       result[name].permission = PermissionNext.merge(
         result[name].permission,
-        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow" } }),
+        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow", [Truncate.GLOB]: "allow" } }),
       )
     }
 
