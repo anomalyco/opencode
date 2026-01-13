@@ -1320,7 +1320,7 @@ function QuestionPrompt(props: { request: QuestionRequest; sessionID: string }) 
               const answered = () => Boolean(value())
               return (
                 <div data-slot="review-item">
-                  <span data-slot="review-label">{q.header}:</span>
+                  <span data-slot="review-label">{q.question}</span>
                   <span data-slot="review-value" data-answered={answered()}>
                     {answered() ? value() : "(not answered)"}
                   </span>

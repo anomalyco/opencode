@@ -624,28 +624,27 @@
   [data-slot="question-review"] {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
 
     [data-slot="review-title"] {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-base);
+      display: none;
     }
 
     [data-slot="review-item"] {
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 2px;
       font-size: 13px;
 
       [data-slot="review-label"] {
-        color: var(--text-muted);
+        color: var(--text-weak);
       }
 
       [data-slot="review-value"] {
-        color: var(--text-base);
+        color: var(--text-strong);
 
         &[data-answered="false"] {
-          color: var(--text-error-base);
+          color: var(--text-weak);
         }
       }
     }
@@ -665,21 +664,20 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 8px 0;
+  padding: 8px 12px;
 
   [data-slot="question-answer-item"] {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    font-size: 13px;
 
     [data-slot="question-text"] {
-      font-size: 13px;
-      color: var(--text-muted);
+      color: var(--text-weak);
     }
 
     [data-slot="answer-text"] {
-      font-size: 14px;
-      color: var(--text-base);
+      color: var(--text-strong);
     }
   }
 }
