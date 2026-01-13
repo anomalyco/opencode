@@ -173,7 +173,7 @@ from .types import (
     WorktreeCreateInput,
 )
 
-__version__ = "1.1.15"
+__version__ = "0.1.0"
 
 
 class Opencode:

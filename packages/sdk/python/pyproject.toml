@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opencode-sdk"
-version = "1.1.15"
+version = "0.1.0"
 description = "Python SDK for OpenCode API"
 readme = "README.md"
 license = "MIT"
