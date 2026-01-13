@@ -30,7 +30,6 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
-import { clone } from "remeda"
 
 export type PromptProps = {
   sessionID?: string
@@ -172,44 +171,111 @@ export function Prompt(props: PromptProps) {
     const extmarks = input.extmarks.getAllForTypeId(promptPartTypeId)
     if (!extmarks.length) return
 
-    const sortedExtmarks = extmarks.sort((a: { start: number }, b: { start: number }) => b.start - a.start)
+    const sortedExtmarks = extmarks.sort((a: { start: number }, b: { start: number }) => a.start - b.start)
     const result = sortedExtmarks.reduce(
       (state, extmark) => {
         const partIndex = store.extmarkToPartIndex.get(extmark.id)
         if (partIndex === undefined) return state
         const part = state.parts[partIndex]
-        if (!part || part.type !== "text" || !part.source?.text) return state
+        if (!part) return state
 
-        if (disabled) {
-          const replacement = part.text ?? ""
-          if (!replacement) return state
-          state.text = state.text.slice(0, extmark.start) + replacement + state.text.slice(extmark.end)
-          part.source.text.start = extmark.start
-          part.source.text.end = extmark.start + replacement.length
-          part.source.text.value = replacement
-          return state
+        const start = extmark.start + state.delta
+        const end = extmark.end + state.delta
+
+        const cursor = (() => {
+          if (state.cursor <= start) return state.cursor
+          if (state.cursor >= end) return state.cursor
+          return start + 1
+        })()
+
+        if (part.type === "text" && part.source?.text) {
+          const content = disabled ? (part.text ?? "") : state.text.slice(start, end)
+          const replacement = disabled ? content : createPastePlaceholder(content)
+          const nextText = state.text.slice(0, start) + replacement + state.text.slice(end)
+          const nextParts = state.parts.slice()
+          nextParts[partIndex] = {
+            ...part,
+            text: content,
+            source: {
+              ...part.source,
+              text: {
+                ...part.source.text,
+                start,
+                end: start + replacement.length,
+                value: replacement,
+              },
+            },
+          }
+          const diff = replacement.length - (end - start)
+          const nextCursor = (() => {
+            if (cursor <= start) return cursor
+            if (cursor >= end) return cursor + diff
+            return start + replacement.length
+          })()
+          return {
+            text: nextText,
+            delta: state.delta + diff,
+            cursor: nextCursor,
+            parts: nextParts,
+          }
         }
 
-        const current = state.text.slice(extmark.start, extmark.end)
-        const replacement = createPastePlaceholder(current)
-        state.text = state.text.slice(0, extmark.start) + replacement + state.text.slice(extmark.end)
-        part.text = current
-        part.source.text.start = extmark.start
-        part.source.text.end = extmark.start + replacement.length
-        part.source.text.value = replacement
+        if (part.type === "file" && part.source?.text) {
+          const nextParts = state.parts.slice()
+          nextParts[partIndex] = {
+            ...part,
+            source: {
+              ...part.source,
+              text: {
+                ...part.source.text,
+                start,
+                end,
+              },
+            },
+          }
+          return {
+            text: state.text,
+            delta: state.delta,
+            cursor,
+            parts: nextParts,
+          }
+        }
+
+        if (part.type === "agent" && part.source) {
+          const nextParts = state.parts.slice()
+          nextParts[partIndex] = {
+            ...part,
+            source: {
+              ...part.source,
+              start,
+              end,
+            },
+          }
+          return {
+            text: state.text,
+            delta: state.delta,
+            cursor,
+            parts: nextParts,
+          }
+        }
+
         return state
       },
-      { text: store.prompt.input, parts: clone(store.prompt.parts) },
+      {
+        text: store.prompt.input,
+        delta: 0,
+        cursor: input.cursorOffset,
+        parts: store.prompt.parts.slice(),
+      },
     )
 
-    const cursorOffset = input.cursorOffset
     input.setText(result.text)
     setStore("prompt", {
       input: result.text,
       parts: result.parts,
     })
     restoreExtmarksFromParts(result.parts)
-    input.cursorOffset = Math.min(cursorOffset, Bun.stringWidth(result.text))
+    input.cursorOffset = Math.min(result.cursor, Bun.stringWidth(result.text))
   }
 
   function togglePasteSummary() {
@@ -441,29 +507,33 @@ export function Prompt(props: PromptProps) {
       let end = 0
       let virtualText = ""
       let styleId: number | undefined
+      let virtual = true
 
       if (part.type === "file" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
         styleId = fileStyleId
-      } else if (part.type === "agent" && part.source) {
+      }
+      if (part.type === "agent" && part.source) {
         start = part.source.start
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
-      } else if (part.type === "text" && part.source?.text) {
+      }
+      if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
         virtualText = part.source.text.value
         styleId = pasteStyleId
+        virtual = part.text !== part.source.text.value
       }
 
       if (virtualText) {
         const extmarkId = input.extmarks.create({
           start,
           end,
-          virtual: true,
+          virtual,
           styleId,
           typeId: promptPartTypeId,
         })
@@ -699,13 +769,14 @@ export function Prompt(props: PromptProps) {
     const currentOffset = input.visualCursor.offset
     const extmarkStart = currentOffset
     const extmarkEnd = extmarkStart + virtualText.length
+    const virtual = virtualText !== text
 
     input.insertText(virtualText + " ")
 
     const extmarkId = input.extmarks.create({
       start: extmarkStart,
       end: extmarkEnd,
-      virtual: true,
+      virtual,
       styleId: pasteStyleId,
       typeId: promptPartTypeId,
     })
