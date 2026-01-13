@@ -441,7 +441,7 @@ async fn spawn_local_server(
 
     let timestamp = Instant::now();
     loop {
-        if timestamp.elapsed() > Duration::from_secs(7) {
+        if timestamp.elapsed() > Duration::from_secs(30) {
             break Err(format!(
                 "Failed to spawn OpenCode Server. Logs:\n{}",
                 get_logs(app.clone()).await.unwrap()
