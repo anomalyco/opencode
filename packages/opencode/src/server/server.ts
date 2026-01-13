@@ -708,7 +708,8 @@ export namespace Server {
           "/session",
           describeRoute({
             summary: "List sessions",
-            description: "Get a list of all OpenCode sessions, sorted by most recently updated.",
+            description:
+              "Get a list of OpenCode sessions. By default, returns sessions from the current directory. Use ?all=true to include every session in the project.",
             operationId: "session.list",
             responses: {
               200: {
@@ -729,6 +730,7 @@ export namespace Server {
                 .optional()
                 .meta({ description: "Filter sessions updated on or after this timestamp (milliseconds since epoch)" }),
               search: z.string().optional().meta({ description: "Filter sessions by title (case-insensitive)" }),
+              all: z.string().optional().meta({ description: "When 'true', returns all sessions regardless of directory" }),
               limit: z.coerce.number().optional().meta({ description: "Maximum number of sessions to return" }),
             }),
           ),
@@ -736,7 +738,7 @@ export namespace Server {
             const query = c.req.valid("query")
             const term = query.search?.toLowerCase()
             const sessions: Session.Info[] = []
-            for await (const session of Session.list()) {
+            for await (const session of Session.list({ all: query.all === "true" })) {
               if (query.start !== undefined && session.time.updated < query.start) continue
               if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
               sessions.push(session)
