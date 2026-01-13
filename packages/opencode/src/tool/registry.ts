@@ -93,7 +93,7 @@ export namespace ToolRegistry {
 
     return [
       InvalidTool,
-      ...(Flag.OPENCODE_CLIENT === "cli" ? [QuestionTool] : []),
+      ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
       BashTool,
       ReadTool,
       GlobTool,
