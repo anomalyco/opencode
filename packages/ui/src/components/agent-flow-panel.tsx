@@ -1,35 +1,23 @@
 import { Show, For, createMemo } from "solid-js"
-import { AgentFlowNode, type AgentNode } from "./agent-flow-node"
+import { AgentCard, type AgentCardNode } from "./agent-card"
 import { Icon } from "./icon"
 import { Spinner } from "./spinner"
 import "./agent-flow-panel.css"
 
 export interface AgentFlowPanelProps {
-  nodes: AgentNode[]
-  onSelectNode?: (node: AgentNode) => void
+  nodes: AgentCardNode[]
+  onSelectNode?: (node: AgentCardNode) => void
   class?: string
 }
 
 export function AgentFlowPanel(props: AgentFlowPanelProps) {
   const stats = createMemo(() => {
-    const countNodes = (nodes: AgentNode[]): { total: number; complete: number; failed: number; running: number } => {
-      let total = 0, complete = 0, failed = 0, running = 0
-      for (const node of nodes) {
-        total++
-        if (node.status === "complete") complete++
-        if (node.status === "failed") failed++
-        if (node.status === "running") running++
-        if (node.children) {
-          const child = countNodes(node.children)
-          total += child.total
-          complete += child.complete
-          failed += child.failed
-          running += child.running
-        }
-      }
-      return { total, complete, failed, running }
-    }
-    return countNodes(props.nodes)
+    const nodes = props.nodes
+    const total = nodes.length
+    const complete = nodes.filter((n) => n.status === "complete").length
+    const failed = nodes.filter((n) => n.status === "failed").length
+    const running = nodes.filter((n) => n.status === "running").length
+    return { total, complete, failed, running }
   })
 
   return (
@@ -65,14 +53,9 @@ export function AgentFlowPanel(props: AgentFlowPanelProps) {
           </div>
         </div>
 
-        <div data-slot="flow">
+        <div data-slot="grid">
           <For each={props.nodes}>
-            {(node) => (
-              <AgentFlowNode
-                node={node}
-                onSelect={props.onSelectNode}
-              />
-            )}
+            {(node) => <AgentCard node={node} onSelect={props.onSelectNode} />}
           </For>
         </div>
       </Show>
