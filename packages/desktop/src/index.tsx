@@ -283,6 +283,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   setDefaultServerUrl: async (url: string | null) => {
     await invoke("set_default_server_url", { url })
   },
+
+  killServerByPort: async (port: number) => {
+    await invoke("kill_server_by_port", { port }).catch(() => undefined)
+  },
 })
 
 createMenu()

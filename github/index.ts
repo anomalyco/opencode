@@ -112,7 +112,8 @@ type IssueQueryResponse = {
   }
 }
 
-const { client, server } = createOpencode()
+let client: ReturnType<typeof createOpencodeClient> | undefined
+let server: { url: string; close: () => void } | undefined
 let accessToken: string
 let octoRest: Octokit
 let octoGraph: typeof graphql
@@ -124,6 +125,10 @@ let exitCode = 0
 type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
 
 try {
+  const opencode = await createOpencode()
+  client = opencode.client
+  server = opencode.server
+  
   assertContextEvent("issue_comment", "pull_request_review_comment")
   assertPayloadKeyword()
   await assertOpencodeConnected()
@@ -221,14 +226,95 @@ try {
   // Also output the clean error message for the action to capture
   //core.setOutput("prepare_error", e.message);
 } finally {
-  server.close()
+  if (server) {
+    server.close()
+  }
   await restoreGitConfig()
   await revokeAppToken()
 }
 process.exit(exitCode)
 
-function createOpencode() {
+async function discoverOpencodeServer(): Promise<string | null> {
+  const envUrl = process.env["OPENCODE_SERVER_URL"]
+  if (envUrl) {
+    try {
+      const response = await fetch(`${envUrl}/global/health`, {
+        signal: AbortSignal.timeout(1000),
+      })
+      if (response.ok) {
+        const health = await response.json()
+        if (health?.healthy === true) {
+          console.log(`Found opencode server from OPENCODE_SERVER_URL: ${envUrl}`)
+          return envUrl
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to connect to OPENCODE_SERVER_URL: ${envUrl}`, e)
+    }
+  }
+
+  const envPort = process.env["OPENCODE_PORT"]
+  if (envPort) {
+    const port = parseInt(envPort, 10)
+    if (!isNaN(port) && port > 0 && port <= 65535) {
+      const url = `http://127.0.0.1:${port}`
+      try {
+        const response = await fetch(`${url}/global/health`, {
+          signal: AbortSignal.timeout(1000),
+        })
+        if (response.ok) {
+          const health = await response.json()
+          if (health?.healthy === true) {
+            console.log(`Found opencode server from OPENCODE_PORT: ${url}`)
+            return url
+          }
+        }
+      } catch (e) {
+      }
+    }
+  }
+
   const host = "127.0.0.1"
+  const portsToTry = [
+    4096,
+    59008,
+    8080,
+    3000,
+    5000,
+    56457,
+  ]
+
+  for (const port of portsToTry) {
+    try {
+      const url = `http://${host}:${port}`
+      const response = await fetch(`${url}/global/health`, {
+        signal: AbortSignal.timeout(1000),
+      })
+      if (response.ok) {
+        const health = await response.json()
+        if (health?.healthy === true) {
+          console.log(`Found existing opencode server at ${url}`)
+          return url
+        }
+      }
+    } catch (e) {
+    }
+  }
+  return null
+}
+
+async function createOpencode() {
+  const host = "127.0.0.1"
+  const existingServerUrl = await discoverOpencodeServer()
+  
+  if (existingServerUrl) {
+    const client = createOpencodeClient({ baseUrl: existingServerUrl })
+    return {
+      server: { url: existingServerUrl, close: () => {} },
+      client,
+    }
+  }
+
   const port = 4096
   const url = `http://${host}:${port}`
   const proc = spawn(`opencode`, [`serve`, `--hostname=${host}`, `--port=${port}`])

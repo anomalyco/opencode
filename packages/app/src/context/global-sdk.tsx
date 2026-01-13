@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 
@@ -94,13 +94,23 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       abort.abort()
       stop()
     })
-
-    const sdk = createOpencodeClient({
-      baseUrl: server.url,
-      fetch: platform.fetch,
-      throwOnError: true,
+    
+    const sdk = createMemo(() => {
+      const currentUrl = server.url
+      console.log("[GlobalSDK] Creating SDK client with URL:", currentUrl)
+      return createOpencodeClient({
+        baseUrl: currentUrl,
+        fetch: platform.fetch,
+        throwOnError: true,
+      })
     })
 
-    return { url: server.url, client: sdk, event: emitter }
+    return { 
+      url: server.url, 
+      get client() {
+        return sdk()
+      },
+      event: emitter 
+    }
   },
 })

@@ -14,6 +14,7 @@ import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
 import { ServerProvider, useServer } from "@/context/server"
+import { SshProvider } from "@/context/ssh"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
@@ -78,21 +79,22 @@ export function AppInterface(props: { defaultUrl?: string }) {
   return (
     <ServerProvider defaultUrl={defaultServerUrl()}>
       <ServerKey>
-        <GlobalSDKProvider>
-          <GlobalSyncProvider>
-            <Router
-              root={(props) => (
-                <PermissionProvider>
-                  <LayoutProvider>
-                    <NotificationProvider>
-                      <CommandProvider>
-                        <Layout>{props.children}</Layout>
-                      </CommandProvider>
-                    </NotificationProvider>
-                  </LayoutProvider>
-                </PermissionProvider>
-              )}
-            >
+        <SshProvider>
+          <GlobalSDKProvider>
+            <GlobalSyncProvider>
+              <Router
+                root={(props) => (
+                  <PermissionProvider>
+                    <LayoutProvider>
+                      <NotificationProvider>
+                        <CommandProvider>
+                          <Layout>{props.children}</Layout>
+                        </CommandProvider>
+                      </NotificationProvider>
+                    </LayoutProvider>
+                  </PermissionProvider>
+                )}
+              >
               <Route
                 path="/"
                 component={() => (
@@ -121,6 +123,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
             </Router>
           </GlobalSyncProvider>
         </GlobalSDKProvider>
+      </SshProvider>
       </ServerKey>
     </ServerProvider>
   )

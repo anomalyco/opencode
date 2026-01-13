@@ -3,6 +3,7 @@ import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 import { useServer } from "@/context/server"
+import { useSsh } from "@/context/ssh"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -28,6 +29,7 @@ export function SessionHeader() {
   const params = useParams()
   const navigate = useNavigate()
   const command = useCommand()
+  const ssh = useSsh()
   const server = useServer()
   const dialog = useDialog()
   const sync = useSync()
@@ -45,6 +47,10 @@ export function SessionHeader() {
   const worktrees = createMemo(() => layout.projects.list().map((p) => p.worktree), [], { equals: same })
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
+  const serverDisplayName = createMemo(() => {
+    const sshAddress = ssh.getProfileAddressForUrl(server.url)
+    return sshAddress || server.name
+  })
 
   function navigateToProject(directory: string) {
     navigate(`/${base64Encode(directory)}`)
@@ -161,7 +167,7 @@ export function SessionHeader() {
                 }}
               />
               <Icon name="server" size="small" class="text-icon-weak" />
-              <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span>
+              <span class="text-12-regular text-text-weak truncate max-w-[200px]">{serverDisplayName()}</span>
             </Button>
             <SessionLspIndicator />
             <SessionMcpIndicator />

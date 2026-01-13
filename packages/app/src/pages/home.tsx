@@ -12,6 +12,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { useServer } from "@/context/server"
+import { useSsh } from "@/context/ssh"
 
 export default function Home() {
   const sync = useGlobalSync()
@@ -20,7 +21,12 @@ export default function Home() {
   const dialog = useDialog()
   const navigate = useNavigate()
   const server = useServer()
+  const ssh = useSsh()
   const homedir = createMemo(() => sync.data.path.home)
+  const serverDisplayName = createMemo(() => {
+    const sshAddress = ssh.getProfileAddressForUrl(server.url)
+    return sshAddress || server.name
+  })
 
   function openProject(directory: string) {
     layout.projects.open(directory)
@@ -38,7 +44,8 @@ export default function Home() {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    const isActuallyLocal = server.isLocal() && !ssh.getProfileAddressForUrl(server.url)
+    if (platform.openDirectoryPickerDialog && isActuallyLocal) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: "Open project",
         multiple: true,
@@ -69,7 +76,7 @@ export default function Home() {
             "bg-border-weak-base": server.healthy() === undefined,
           }}
         />
-        {server.name}
+        {serverDisplayName()}
       </Button>
       <Switch>
         <Match when={sync.data.project.length > 0}>

@@ -24,7 +24,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { useGlobalSDK } from "./global-sdk"
 import { ErrorPage, type InitError } from "../pages/error"
-import { batch, createContext, useContext, onCleanup, onMount, type ParentProps, Switch, Match } from "solid-js"
+import { batch, createContext, createEffect, useContext, onCleanup, onMount, type ParentProps, Switch, Match } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
 import { usePlatform } from "./platform"
@@ -70,6 +70,7 @@ type State = {
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
+  let lastUrl: string | undefined = undefined
   const [globalStore, setGlobalStore] = createStore<{
     ready: boolean
     error?: InitError
@@ -486,11 +487,19 @@ function createGlobalSync() {
   onCleanup(unsub)
 
   async function bootstrap() {
+    console.log("[GlobalSync] Starting bootstrap for URL:", globalSDK.url)
     const health = await globalSDK.client.global
       .health()
-      .then((x) => x.data)
-      .catch(() => undefined)
+      .then((x) => {
+        console.log("[GlobalSync] Health check result:", x.data)
+        return x.data
+      })
+      .catch((e) => {
+        console.error("[GlobalSync] Health check failed:", e)
+        return undefined
+      })
     if (!health?.healthy) {
+      console.error("[GlobalSync] Server not healthy, setting error")
       setGlobalStore(
         "error",
         new Error(`Could not connect to server. Is there a server running at \`${globalSDK.url}\`?`),
@@ -498,25 +507,32 @@ function createGlobalSync() {
       return
     }
 
+    console.log("[GlobalSync] Health check passed, fetching data...")
     return Promise.all([
-      retry(() =>
-        globalSDK.client.path.get().then((x) => {
+      retry(() => {
+        console.log("[GlobalSync] Fetching path...")
+        return globalSDK.client.path.get().then((x) => {
+          console.log("[GlobalSync] Path fetched:", x.data)
           setGlobalStore("path", x.data!)
-        }),
-      ),
-      retry(() =>
-        globalSDK.client.project.list().then(async (x) => {
+        })
+      }),
+      retry(() => {
+        console.log("[GlobalSync] Fetching projects...")
+        return globalSDK.client.project.list().then(async (x) => {
           const projects = (x.data ?? [])
             .filter((p) => !!p?.id)
             .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
             .slice()
             .sort((a, b) => a.id.localeCompare(b.id))
+          console.log("[GlobalSync] Projects fetched:", projects.length)
           setGlobalStore("project", projects)
-        }),
-      ),
-      retry(() =>
-        globalSDK.client.provider.list().then((x) => {
+        })
+      }),
+      retry(() => {
+        console.log("[GlobalSync] Fetching providers...")
+        return globalSDK.client.provider.list().then((x) => {
           const data = x.data!
+          console.log("[GlobalSync] Providers fetched:", data.all.length)
           setGlobalStore("provider", {
             ...data,
             all: data.all.map((provider) => ({
@@ -526,20 +542,40 @@ function createGlobalSync() {
               ),
             })),
           })
-        }),
-      ),
-      retry(() =>
-        globalSDK.client.provider.auth().then((x) => {
+        })
+      }),
+      retry(() => {
+        console.log("[GlobalSync] Fetching provider auth...")
+        return globalSDK.client.provider.auth().then((x) => {
+          console.log("[GlobalSync] Provider auth fetched")
           setGlobalStore("provider_auth", x.data ?? {})
-        }),
-      ),
+        })
+      }),
     ])
-      .then(() => setGlobalStore("ready", true))
-      .catch((e) => setGlobalStore("error", e))
+      .then(() => {
+        console.log("[GlobalSync] Bootstrap complete, setting ready")
+        setGlobalStore("ready", true)
+      })
+      .catch((e) => {
+        console.error("[GlobalSync] Bootstrap failed:", e)
+        setGlobalStore("error", e)
+      })
   }
 
   onMount(() => {
     bootstrap()
+  })
+
+  createEffect(() => {
+    const currentUrl = globalSDK.url
+    if (currentUrl && currentUrl !== lastUrl) {
+      lastUrl = currentUrl
+      if (globalStore.ready) {
+        console.log("[GlobalSync] Server URL changed to:", currentUrl, "re-bootstrapping to get remote paths")
+        setGlobalStore("ready", false)
+        bootstrap()
+      }
+    }
   })
 
   return {

@@ -1,6 +1,4 @@
 import z from "zod"
-import path from "path"
-import os from "os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"

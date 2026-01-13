@@ -44,24 +44,42 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     function setActive(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
+      const previousUrl = active()
+      if (previousUrl !== url) {
+        console.log("[Server Context] Switching active server from:", previousUrl, "to:", url)
+      }
       setActiveRaw(url)
     }
 
     function add(input: string) {
       const url = normalizeServerUrl(input)
-      if (!url) return
+      console.log("[Server Context] add() called with input:", input, "normalized URL:", url)
+      if (!url) {
+        console.warn("[Server Context] add() early return: URL is empty after normalization")
+        return
+      }
 
       const fallback = normalizeServerUrl(props.defaultUrl)
       if (fallback && url === fallback) {
+        console.log("[Server Context] add() early return: URL matches defaultUrl, just setting active")
         setActiveRaw(url)
         return
       }
 
       batch(() => {
-        if (!store.list.includes(url)) {
+        const wasInList = store.list.includes(url)
+        if (!wasInList) {
+          console.log("[Server Context] add() - URL not in list, adding to list. Current list:", store.list, "new URL:", url)
           setStore("list", store.list.length, url)
+        } else {
+          console.log("[Server Context] add() - URL already in list, skipping add")
+        }
+        const previousUrl = active()
+        if (previousUrl !== url) {
+          console.log("[Server Context] Adding and switching to server:", url, "previous:", previousUrl)
         }
         setActiveRaw(url)
+        console.log("[Server Context] add() completed. New list:", store.list, "new active:", active())
       })
     }
 

@@ -364,12 +364,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!isFocused()) setStore("popover", null)
   })
 
-  // Safety: reset composing state on focus change to prevent stuck state
-  // This handles edge cases where compositionend event may not fire
-  createEffect(() => {
-    if (!isFocused()) setComposing(false)
-  })
-
   type AtOption = { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string }
 
   const agentList = createMemo(() =>
@@ -887,14 +881,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
-    // and should always insert a newline regardless of composition state
-    if (event.key === "Enter" && event.shiftKey) {
-      addPart({ type: "text", content: "\n", start: 0, end: 0 })
-      event.preventDefault()
-      return
-    }
-
     if (event.key === "Enter" && isImeComposing(event)) {
       return
     }
@@ -958,7 +944,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // Note: Shift+Enter is handled earlier, before IME check
+    if (event.key === "Enter" && event.shiftKey) {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
+      return
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       handleSubmit(event)
     }
@@ -1573,7 +1563,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
                       <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
                         <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                          <ProviderIcon
+                            id={local.model.current()!.provider.id as IconName}
+                            class="size-4 shrink-0"
+                          />
                         </Show>
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />
@@ -1585,7 +1578,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <TooltipKeybind placement="top" title="Choose model" keybind={command.keybind("model.choose")}>
                       <Button as="div" variant="ghost">
                         <Show when={local.model.current()?.provider?.id}>
-                          <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
+                          <ProviderIcon
+                            id={local.model.current()!.provider.id as IconName}
+                            class="size-4 shrink-0"
+                          />
                         </Show>
                         {local.model.current()?.name ?? "Select model"}
                         <Icon name="chevron-down" size="small" />

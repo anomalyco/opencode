@@ -43,6 +43,9 @@ export type Platform = {
 
   /** Set the default server URL to use on app startup (desktop only) */
   setDefaultServerUrl?(url: string | null): Promise<void>
+
+  /** Kill a server process by port (desktop only) */
+  killServerByPort?(port: number): Promise<void>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

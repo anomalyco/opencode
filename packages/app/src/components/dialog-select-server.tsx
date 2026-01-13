@@ -8,8 +8,13 @@ import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
+import { useSsh, ConnectionState, type ConnectionProfile, type SshConfigHost } from "@/context/ssh"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
+import { SshProfileList } from "./ssh-profile-list"
+import { DialogSshProfile } from "./dialog-ssh-profile"
+import { DialogSshPassword } from "./dialog-ssh-password"
+import { showToast, toaster } from "@opencode-ai/ui/toast"
 
 type ServerStatus = { healthy: boolean; version?: string }
 
@@ -30,6 +35,7 @@ export function DialogSelectServer() {
   const dialog = useDialog()
   const server = useServer()
   const platform = usePlatform()
+  const ssh = useSsh()
   const [store, setStore] = createStore({
     url: "",
     adding: false,
@@ -76,6 +82,32 @@ export function DialogSelectServer() {
       }),
     )
     setStore("status", reconcile(results))
+    
+    if (isDesktop) {
+      const ssh = useSsh()
+      const activeConnectionUrls = new Set<string>()
+      for (const conn of ssh.connections()) {
+        if (conn.state === "connected" && conn.localEndpoint) {
+          const connUrl = `http://${conn.localEndpoint.host}:${conn.localEndpoint.port}`
+          activeConnectionUrls.add(connUrl)
+        }
+      }
+      
+      const serversToRemove: string[] = []
+      for (const url of items()) {
+        if (url.startsWith("http://127.0.0.1:") && 
+            !activeConnectionUrls.has(url) && 
+            results[url]?.healthy === false &&
+            url !== server.url) {
+          serversToRemove.push(url)
+        }
+      }
+      
+      for (const url of serversToRemove) {
+        console.log("[Server Dialog] Removing unreachable orphaned server:", url)
+        server.remove(url)
+      }
+    }
   }
 
   createEffect(() => {
@@ -97,13 +129,188 @@ export function DialogSelectServer() {
     navigate("/")
   }
 
+  function isSshConnection(input: string): boolean {
+    const trimmed = input.trim()
+    if (!trimmed) return false
+    
+    if (/^https?:\/\//.test(trimmed)) return false
+    
+    const sshPattern = /^([a-zA-Z0-9._-]+@)?[a-zA-Z0-9._-]+(:\d+)?$/
+    return sshPattern.test(trimmed)
+  }
+
+  function parseSshConnection(input: string): { user?: string; host: string; port?: number } | null {
+    const trimmed = input.trim()
+    if (!isSshConnection(trimmed)) return null
+
+    const match = trimmed.match(/^([a-zA-Z0-9._-]+@)?([a-zA-Z0-9._-]+)(:(\d+))?$/)
+    if (!match) return null
+
+    const user = match[1] ? match[1].slice(0, -1) : undefined
+    const host = match[2]
+    const port = match[4] ? parseInt(match[4], 10) : undefined
+
+    return { user, host, port }
+  }
+
+  async function tauriInvoke<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+    if (typeof window === "undefined" || !("__TAURI__" in window)) {
+      throw new Error("Tauri API not available")
+    }
+    const { invoke } = await import("@tauri-apps/api/core")
+    return invoke<T>(cmd, args)
+  }
+
+  async function handleSshConnection(input: string) {
+    const parsed = parseSshConnection(input)
+    if (!parsed) {
+      throw new Error("Invalid SSH connection string")
+    }
+
+    const configHosts = ssh.configHosts()
+    const profiles = ssh.profiles()
+
+    const matchingConfigHost = configHosts.find(
+      (h) => h.host === parsed.host && (!parsed.user || h.user === parsed.user) && (!parsed.port || h.port === parsed.port)
+    )
+
+    if (matchingConfigHost) {
+      const existingProfile = profiles.find(
+        (p) => p.host === matchingConfigHost.host && p.name === matchingConfigHost.name
+      )
+
+      if (existingProfile) {
+        await connectToProfile(existingProfile)
+        return
+      }
+
+      const profile: ConnectionProfile = {
+        id: `ssh-config-${matchingConfigHost.name}`,
+        name: matchingConfigHost.name,
+        host: matchingConfigHost.host,
+        user: matchingConfigHost.user,
+        port: matchingConfigHost.port,
+        identityFile: matchingConfigHost.identity_file,
+        proxyJump: matchingConfigHost.proxy_jump,
+        sshConfigMode: "pass-through",
+        remoteServerPorts: [],
+        remoteHost: "127.0.0.1",
+        bootstrapEnabled: true,
+        autoReconnect: true,
+        createdAt: new Date().toISOString(),
+      }
+
+      await ssh.saveProfile(profile)
+      await connectToProfile(profile)
+      return
+    }
+
+    const existingProfile = profiles.find(
+      (p) => p.host === parsed.host && (!parsed.user || p.user === parsed.user) && (!parsed.port || p.port === parsed.port)
+    )
+
+    if (existingProfile) {
+      await connectToProfile(existingProfile)
+      return
+    }
+
+    const profileName = parsed.user ? `${parsed.user}@${parsed.host}` : parsed.host
+    const profile: ConnectionProfile = {
+      id: `profile-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: profileName,
+      host: parsed.host,
+      user: parsed.user,
+      port: parsed.port,
+      sshConfigMode: "pass-through",
+      remoteServerPorts: [],
+      remoteHost: "127.0.0.1",
+      bootstrapEnabled: true,
+      autoReconnect: true,
+      createdAt: new Date().toISOString(),
+    }
+
+    await ssh.saveProfile(profile)
+    await connectToProfile(profile)
+  }
+
+  async function connectToProfile(profile: ConnectionProfile, password?: string) {
+    const connectingToast = showToast({
+      title: "Connecting",
+      description: `Connecting to ${profile.name}...`,
+      persistent: true,
+    })
+
+    try {
+      const connection = await ssh.connect(profile.id, password)
+
+      if (connection.state === ConnectionState.Connected) {
+        toaster.dismiss(connectingToast)
+        showToast({
+          title: "Connected",
+          description: `Successfully connected to ${profile.name}`,
+          variant: "success",
+        })
+        setStore("url", "")
+        dialog.close()
+      } else {
+        toaster.dismiss(connectingToast)
+      }
+    } catch (error) {
+      toaster.dismiss(connectingToast)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+
+      if (errorMessage.includes("SSH_PASSWORD_REQUIRED:")) {
+        const sshpassAvailable = await tauriInvoke<boolean>("ssh_check_sshpass_available").catch(() => false)
+
+        if (!sshpassAvailable) {
+          setStore("error", "Password authentication requires sshpass. Install sshpass or set up SSH key-based authentication.")
+          throw error
+        }
+
+        dialog.show(() => (
+          <DialogSshPassword
+            host={profile.host}
+            user={profile.user}
+            onConfirm={(pwd) => {
+              connectToProfile(profile, pwd)
+            }}
+            onCancel={() => {
+              setStore("adding", false)
+            }}
+          />
+        ))
+      } else {
+        throw error
+      }
+    }
+  }
+
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
-    const value = normalizeServerUrl(store.url)
-    if (!value) return
+    const input = store.url.trim()
+    if (!input) return
 
     setStore("adding", true)
     setStore("error", "")
+
+    if (isSshConnection(input) && isDesktop) {
+      try {
+        await handleSshConnection(input)
+        setStore("adding", false)
+        return
+      } catch (error) {
+        setStore("error", error instanceof Error ? error.message : String(error))
+        setStore("adding", false)
+        return
+      }
+    }
+
+    const value = normalizeServerUrl(input)
+    if (!value) {
+      setStore("error", "Invalid server URL")
+      setStore("adding", false)
+      return
+    }
 
     const result = await checkHealth(value, platform.fetch)
     setStore("adding", false)
@@ -148,7 +355,12 @@ export function DialogSelectServer() {
                     "bg-border-weak-base": store.status[i] === undefined,
                   }}
                 />
-                <span class="truncate">{serverDisplayName(i)}</span>
+                <span class="truncate">
+                  {(() => {
+                    const sshAddress = ssh.getProfileAddressForUrl(i)
+                    return sshAddress || serverDisplayName(i)
+                  })()}
+                </span>
                 <span class="text-text-weak">{store.status[i]?.version}</span>
               </div>
               <Show when={current() !== i && server.list.includes(i)}>
@@ -169,15 +381,20 @@ export function DialogSelectServer() {
         <div class="mt-6 px-3 flex flex-col gap-1.5">
           <div class="px-3">
             <h3 class="text-14-regular text-text-weak">Add a server</h3>
+            <Show when={isDesktop}>
+              <p class="text-12-regular text-text-weak mt-1">
+                Enter an SSH connection (e.g., user@host) or server URL (e.g., http://localhost:4096)
+              </p>
+            </Show>
           </div>
           <form onSubmit={handleSubmit}>
             <div class="flex items-start gap-2">
               <div class="flex-1 min-w-0 h-auto">
                 <TextField
                   type="text"
-                  label="Server URL"
+                  label="Server URL or SSH connection"
                   hideLabel
-                  placeholder="http://localhost:4096"
+                  placeholder={isDesktop ? "user@host or http://localhost:4096" : "http://localhost:4096"}
                   value={store.url}
                   onChange={(v) => {
                     setStore("url", v)
@@ -188,11 +405,20 @@ export function DialogSelectServer() {
                 />
               </div>
               <Button type="submit" variant="secondary" icon="plus-small" size="large" disabled={store.adding}>
-                {store.adding ? "Checking..." : "Add"}
+                {store.adding ? "Connecting..." : "Add"}
               </Button>
             </div>
           </form>
         </div>
+
+        <Show when={isDesktop}>
+          <div class="mt-6 px-3 flex flex-col gap-1.5">
+            <div class="px-3">
+              <h3 class="text-14-regular text-text-weak">SSH Connections</h3>
+            </div>
+            <SshProfileList />
+          </div>
+        </Show>
 
         <Show when={isDesktop}>
           <div class="mt-6 px-3 flex flex-col gap-1.5">
@@ -224,7 +450,12 @@ export function DialogSelectServer() {
                 }
               >
                 <div class="flex items-center gap-2 flex-1 min-w-0">
-                  <span class="truncate text-14-regular">{serverDisplayName(defaultUrl()!)}</span>
+                  <span class="truncate text-14-regular">
+                    {(() => {
+                      const sshAddress = ssh.getProfileAddressForUrl(defaultUrl()!)
+                      return sshAddress || serverDisplayName(defaultUrl()!)
+                    })()}
+                  </span>
                 </div>
                 <Button
                   variant="ghost"

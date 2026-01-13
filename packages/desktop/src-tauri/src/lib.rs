@@ -1,6 +1,7 @@
 mod cli;
 #[cfg(windows)]
 mod job_object;
+mod ssh;
 mod window_customizer;
 
 use cli::{install_cli, sync_cli};
@@ -78,6 +79,77 @@ fn kill_sidecar(app: AppHandle) {
     let _ = server_state.kill();
 
     println!("Killed server");
+}
+
+#[tauri::command]
+async fn kill_server_by_port(port: u16) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        
+        let output = Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
+            .output()
+            .map_err(|e| format!("Failed to run lsof: {}", e))?;
+        
+        if output.stdout.is_empty() {
+            return Ok(());
+        }
+        
+        let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if pid_str.is_empty() {
+            return Ok(());
+        }
+        
+        let _ = Command::new("kill")
+            .args(["-9", &pid_str])
+            .output()
+            .map_err(|e| format!("Failed to kill process: {}", e))?;
+        
+        Ok(())
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        use std::process::Command;
+        
+        let output = Command::new("fuser")
+            .args(["-k", &format!("{}/tcp", port)])
+            .output()
+            .map_err(|e| format!("Failed to run fuser: {}", e))?;
+        
+        Ok(())
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        
+        let output = Command::new("netstat")
+            .args(["-ano"])
+            .output()
+            .map_err(|e| format!("Failed to run netstat: {}", e))?;
+        
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        for line in output_str.lines() {
+            if line.contains(&format!(":{}", port)) && line.contains("LISTENING") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if let Some(pid) = parts.last() {
+                    let _ = Command::new("taskkill")
+                        .args(["/F", "/PID", pid])
+                        .output()
+                        .map_err(|e| format!("Failed to kill process: {}", e))?;
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Err("Unsupported platform".to_string())
+    }
 }
 
 async fn get_logs(app: AppHandle) -> Result<String, String> {
@@ -249,16 +321,32 @@ pub fn run() {
         .plugin(PinchZoomDisablePlugin)
         .invoke_handler(tauri::generate_handler![
             kill_sidecar,
+            kill_server_by_port,
             install_cli,
             ensure_server_ready,
             get_default_server_url,
-            set_default_server_url
+            set_default_server_url,
+            ssh::ssh_list_profiles,
+            ssh::ssh_get_profile,
+            ssh::ssh_save_profile,
+            ssh::ssh_delete_profile,
+            ssh::ssh_get_profiles_dir,
+            ssh::ssh_connect_profile,
+            ssh::ssh_check_sshpass_available,
+            ssh::ssh_disconnect_profile,
+            ssh::ssh_get_connection_state,
+            ssh::ssh_get_connection,
+            ssh::ssh_list_connections,
+            ssh::ssh_list_config_hosts,
         ])
         .setup(move |app| {
             let app = app.handle().clone();
 
             // Initialize log state
             app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
+            
+            // Initialize SSH connection state
+            app.manage(ssh::SshConnectionState::new());
 
             #[cfg(windows)]
             app.manage(JobObjectState::new());
@@ -305,12 +393,13 @@ pub fn run() {
                         custom_url = Some(url);
                     }
 
-                    if custom_url.is_none()
-                        && let Some(cli_config) = cli::get_config(&app).await
-                        && let Some(url) = get_server_url_from_config(&cli_config)
-                    {
-                        println!("Using custom server URL from config: {url}");
-                        custom_url = Some(url);
+                    if custom_url.is_none() {
+                        if let Some(cli_config) = cli::get_config(&app).await {
+                            if let Some(url) = get_server_url_from_config(&cli_config) {
+                                println!("Using custom server URL from config: {url}");
+                                custom_url = Some(url);
+                            }
+                        }
                     }
 
                     let res = match setup_server_connection(&app, custom_url).await {
@@ -356,6 +445,13 @@ pub fn run() {
                 println!("Received Exit");
 
                 kill_sidecar(app.clone());
+                
+                let app_clone = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = ssh::ssh_cleanup_all_connections(app_clone).await {
+                        eprintln!("Failed to cleanup SSH connections: {}", e);
+                    }
+                });
             }
         });
 }

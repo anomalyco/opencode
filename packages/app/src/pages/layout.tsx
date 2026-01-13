@@ -60,6 +60,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { useServer } from "@/context/server"
+import { useSsh } from "@/context/ssh"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore] = createStore({
@@ -87,6 +88,7 @@ export default function Layout(props: ParentProps) {
   const layout = useLayout()
   const platform = usePlatform()
   const server = useServer()
+  const ssh = useSsh()
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
@@ -684,7 +686,8 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    const isActuallyLocal = server.isLocal() && !ssh.getProfileAddressForUrl(server.url)
+    if (platform.openDirectoryPickerDialog && isActuallyLocal) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: "Open project",
         multiple: true,

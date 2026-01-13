@@ -1,5 +1,5 @@
 import { Popover as Kobalte } from "@kobalte/core/popover"
-import { Component, createMemo, createSignal, JSX, Show } from "solid-js"
+import { Component, createMemo, createSignal, JSX, Show, onMount } from "solid-js"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
@@ -33,6 +33,7 @@ const ModelList: Component<{
       items={models}
       current={local.model.current()}
       filterKeys={["provider.name", "name", "id"]}
+      filter=""
       sortBy={(a, b) => a.name.localeCompare(b.name)}
       groupBy={(x) => x.provider.name}
       sortGroupsBy={(a, b) => {
