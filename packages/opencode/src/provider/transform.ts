@@ -364,6 +364,25 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
+        // For Anthropic models on Bedrock, use reasoningConfig with budgetTokens
+        if (model.api.id.includes("anthropic")) {
+          return {
+            high: {
+              reasoningConfig: {
+                type: "enabled",
+                budgetTokens: 16000,
+              },
+            },
+            max: {
+              reasoningConfig: {
+                type: "enabled",
+                budgetTokens: 31999,
+              },
+            },
+          }
+        }
+
+        // For Amazon Nova models, use reasoningConfig with maxReasoningEffort
         return Object.fromEntries(
           WIDELY_SUPPORTED_EFFORTS.map((effort) => [
             effort,

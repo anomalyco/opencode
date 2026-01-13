@@ -358,7 +358,7 @@ Start a headless OpenCode server for API access. Check out the [server docs](/do
 opencode serve
 ```
 
-This starts an HTTP server that provides API access to opencode functionality without the TUI interface.
+This starts an HTTP server that provides API access to opencode functionality without the TUI interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
 
 #### Flags
 
@@ -454,7 +454,7 @@ Start a headless OpenCode server with a web interface.
 opencode web
 ```
 
-This starts an HTTP server and opens a web browser to access OpenCode through a web interface.
+This starts an HTTP server and opens a web browser to access OpenCode through a web interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
 
 #### Flags
 
@@ -551,26 +551,28 @@ The opencode CLI takes the following global flags.
 
 OpenCode can be configured using environment variables.
 
-| Variable                              | Type    | Description                                      |
-| ------------------------------------- | ------- | ------------------------------------------------ |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Automatically share sessions                     |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Path to Git Bash executable on Windows           |
-| `OPENCODE_CONFIG`                     | string  | Path to config file                              |
-| `OPENCODE_CONFIG_DIR`                 | string  | Path to config directory                         |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                       |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                  |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                      |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates         |
-| `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                  |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disable default plugins                          |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disable automatic LSP server downloads           |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                       |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills) |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`            |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                 |
-| `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)            |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                      |
+| Variable                              | Type    | Description                                       |
+| ------------------------------------- | ------- | ------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | Automatically share sessions                      |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Path to Git Bash executable on Windows            |
+| `OPENCODE_CONFIG`                     | string  | Path to config file                               |
+| `OPENCODE_CONFIG_DIR`                 | string  | Path to config directory                          |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                        |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                   |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                       |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates          |
+| `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                   |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disable default plugins                           |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disable automatic LSP server downloads            |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Enable experimental models                        |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Disable automatic context compaction              |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills)  |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`             |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                  |
+| `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
+| `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
+| `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
 
 ---
 
