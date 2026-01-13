@@ -76,9 +76,12 @@ export const BashTool = Tool.define("bash", async () => {
         .optional(),
     }),
     formatValidationError(error) {
-      return `Invalid parameters for tool 'bash':\n${error.errors
-        .map((e) => `- ${e.path.join(".")}: ${e.message}`)
-        .join("\n")}\n\nMake sure to provide 'command' and a concise 'description' of what the command does.`
+      if (error instanceof z.ZodError) {
+        return `Invalid parameters for tool 'bash':\n${error.errors
+          .map((e: z.ZodIssue) => `- ${e.path.join(".")}: ${e.message}`)
+          .join("\n")}\n\nMake sure to provide 'command' and a concise 'description' of what the command does.`
+      }
+      return `Invalid parameters for tool 'bash': ${error}`
     },
     async execute(params, ctx) {
       const cwd = params.workdir || Instance.directory
