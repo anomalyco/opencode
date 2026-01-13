@@ -1159,7 +1159,7 @@ export namespace Config {
     if (parsed.success) {
       if (!parsed.data.$schema) {
         parsed.data.$schema = "https://opencode.ai/config.json"
-        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2))
+        await Bun.write(configFilepath, JSON.stringify(parsed.data, null, 2)).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin) {
