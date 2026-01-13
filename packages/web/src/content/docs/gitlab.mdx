@@ -3,9 +3,7 @@ title: GitLab
 description: Use OpenCode in GitLab issues and merge requests.
 ---
 
-OpenCode integrates with your GitLab workflow through your GitLab CI/CD pipeline or with GitLab Duo.
-
-In both cases, OpenCode will run on your GitLab runners.
+OpenCode integrates with your GitLab workflow through CI/CD pipelines. OpenCode runs on your GitLab runners and uses GitLab Duo for AI-powered assistance.
 
 ---
 
@@ -62,51 +60,74 @@ Mention `@opencode` in a comment, and OpenCode will execute tasks within your Gi
 
 ### Setup
 
-OpenCode runs in your GitLab CI/CD pipeline, here's what you'll need to set it up:
+OpenCode runs in your GitLab CI/CD pipeline using the GitLab Duo provider for AI models.
 
 :::tip
 Check out the [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) for up to date instructions.
 :::
 
-1.  Configure your GitLab environment
-2.  Set up CI/CD
-3.  Get an AI model provider API key
+#### GitLab Duo Provider
+
+OpenCode uses GitLab Duo's agentic chat models powered by Anthropic Claude:
+
+- **duo-chat-haiku-4-5** - Fast responses for quick tasks
+- **duo-chat-sonnet-4-5** - Balanced performance (recommended)
+- **duo-chat-opus-4-5** - Most capable for complex analysis
+
+No separate API key needed - OpenCode uses your GitLab token to access GitLab Duo.
+
+The configuration includes the **GitLab plugin** which provides comprehensive repository management tools:
+
+- Merge request operations (create, review, approve, merge)
+- Issue management (create, update, comment, close)
+- Pipeline and CI/CD operations (view jobs, retry, artifacts)
+- Repository operations (commits, branches, files)
+
+---
+
+#### Setup Steps
+
+1.  Ensure your project has access to [GitLab Duo](https://docs.gitlab.com/ee/user/ai_features/)
+2.  Configure your GitLab environment
+3.  Set up CI/CD
 4.  Create a service account
-5.  Configure CI/CD variables
-6.  Create a flow config file, here's an example:
+5.  Create a flow config file using the example below
 
-        <details>
+:::note
+OpenCode uses GitLab's predefined CI/CD variables (`CI_JOB_TOKEN`, `CI_SERVER_HOST`, `CI_PROJECT_PATH`) - no additional configuration or API keys are required.
+:::
 
-    <summary>Flow configuration</summary>
+    <details>
+    <summary>Flow configuration example</summary>
 
     ```yaml
     image: node:22-slim
     commands:
       - echo "Installing opencode"
       - npm install --global opencode-ai
-      - echo "Installing glab"
-      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
-      - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
-      - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
-      - apt-get install --yes glab
-      - echo "Configuring glab"
-      - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Installing git"
+      - apt-get update --quiet && apt-get install --yes git && rm --recursive --force /var/lib/apt/lists/*
+      - echo "Creating OpenCode configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
         {
-          "anthropic": {
+          "gitlab": {
             "type": "api",
-            "key": "$ANTHROPIC_API_KEY"
+            "key": "$CI_JOB_TOKEN"
           }
+        }
+        EOF
+      - |
+        cat > opencode.json << EOF
+        {
+          "model": "gitlab/duo-chat-sonnet-4-5",
+          "plugin": ["@gitlab/opencode-gitlab-plugin"]
         }
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
       - git config --global user.name "OpenCode"
-      - echo "Testing glab"
-      - glab issue list
       - echo "Running OpenCode"
       - |
         opencode run "
@@ -120,9 +141,8 @@ Check out the [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/
         Be thorough in your analysis and provide clear explanations.
 
         <important>
-        Please use the glab CLI to access data from GitLab. The glab CLI has already been authenticated. You can run the corresponding commands.
-
-        If you are asked to summarize an MR or issue or asked to provide more information then please post back a note to the MR/Issue so that the user can see it.
+        Use the built-in GitLab tools to interact with the repository (merge requests, issues, pipelines, etc.).
+        If you are asked to summarize an MR or issue, add a comment with your findings directly to it.
         You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
         </important>
         "
@@ -138,21 +158,43 @@ Check out the [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/
             echo "Committing changes to branch: $CI_WORKLOAD_REF"
             git commit --message "Codex changes"
             echo "Pushing changes up to $CI_WORKLOAD_REF"
-            git push https://gitlab-ci-token:$GITLAB_TOKEN@$GITLAB_HOST/gl-demo-ultimate-dev-ai-epic-17570/test-java-project.git $CI_WORKLOAD_REF
+            git push https://gitlab-ci-token:$CI_JOB_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git $CI_WORKLOAD_REF
             echo "Changes successfully pushed"
           fi
         else
           echo "No git changes detected, skipping push"
         fi
-    variables:
-      - ANTHROPIC_API_KEY
-      - GITLAB_TOKEN_OPENCODE
-      - GITLAB_HOST
     ```
 
         </details>
 
-You can refer to the [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) for detailed instructions.
+For more information about the GitLab plugin and available tools, see the [opencode-gitlab-plugin documentation](https://gitlab.com/gitlab-org/editor-extensions/opencode-gitlab-plugin).
+
+---
+
+#### Using GitLab Tools
+
+With the GitLab plugin enabled, OpenCode can directly interact with your GitLab instance using built-in tools. You don't need to use the `glab` CLI - OpenCode will automatically use the appropriate GitLab API tools.
+
+Here are some examples of what you can ask OpenCode to do:
+
+- **Work with merge requests**: "Get the details of merge request !123", "List all open merge requests", "Approve this merge request"
+- **Manage issues**: "Create an issue for the bug in authentication.js", "List all open issues with label 'bug'", "Add a comment to issue #456"
+- **Check pipelines**: "Show me the latest pipeline status", "Get the failed jobs from pipeline 789", "Retry the failed jobs"
+- **Repository operations**: "Get the content of src/config.js", "List all branches", "Show me the last 10 commits"
+
+**Example prompt:**
+
+```
+Review merge request !42 and check if:
+1. All tests are passing in the pipeline
+2. There are any security concerns
+3. The code follows our style guidelines
+
+Then add a comment with your findings.
+```
+
+OpenCode will automatically use the appropriate tools (`gitlab_get_merge_request`, `gitlab_get_mr_pipelines`, `gitlab_create_mr_note`) to complete this task.
 
 ---
 
