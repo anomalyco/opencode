@@ -30,6 +30,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { release } from "os"
 
 export type PromptProps = {
   sessionID?: string
@@ -185,7 +186,7 @@ export function Prompt(props: PromptProps) {
           const content = await Clipboard.read()
           if (content?.mime.startsWith("image/")) {
             await pasteImage({
-              filename: "clipboard",
+              filename: content.filename ?? "clipboard",
               mime: content.mime,
               content: content.data,
             })
@@ -784,13 +785,12 @@ export function Prompt(props: PromptProps) {
                   if (content?.mime.startsWith("image/")) {
                     e.preventDefault()
                     await pasteImage({
-                      filename: "clipboard",
+                      filename: content.filename ?? "clipboard",
                       mime: content.mime,
                       content: content.data,
                     })
                     return
                   }
-                  // If no image, let the default paste behavior continue
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
@@ -850,8 +850,9 @@ export function Prompt(props: PromptProps) {
               }}
               onSubmit={submit}
               onPaste={async (event: PasteEvent) => {
+                event.preventDefault()
+
                 if (props.disabled) {
-                  event.preventDefault()
                   return
                 }
 
@@ -860,6 +861,20 @@ export function Prompt(props: PromptProps) {
                 // Replace CRLF first, then any remaining CR
                 const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
                 const pastedContent = normalizedText.trim()
+
+                // Check clipboard for copied image files FIRST (Windows only)
+                if (!pastedContent || pastedContent.length < 500) {
+                  const clipboardContent = await Clipboard.read()
+                  if (clipboardContent?.mime.startsWith("image/")) {
+                    await pasteImage({
+                      filename: clipboardContent.filename ?? "clipboard",
+                      mime: clipboardContent.mime,
+                      content: clipboardContent.data,
+                    })
+                    return
+                  }
+                }
+
                 if (!pastedContent) {
                   command.trigger("prompt.paste")
                   return
@@ -867,14 +882,20 @@ export function Prompt(props: PromptProps) {
 
                 // trim ' from the beginning and end of the pasted content. just
                 // ' and nothing else
-                const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                let filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+
+                // Convert Windows path to WSL path if running in WSL
+                if (release().includes("WSL") && /^[A-Z]:\\/.test(filepath)) {
+                  const drive = filepath[0].toLowerCase()
+                  filepath = filepath.replace(/^[A-Z]:\\/, `/mnt/${drive}/`).replace(/\\/g, "/")
+                }
+
                 const isUrl = /^(https?):\/\//.test(filepath)
                 if (!isUrl) {
                   try {
                     const file = Bun.file(filepath)
                     // Handle SVG as raw text content, not as base64 image
                     if (file.type === "image/svg+xml") {
-                      event.preventDefault()
                       const content = await file.text().catch(() => {})
                       if (content) {
                         pasteText(content, `[SVG: ${file.name ?? "image"}]`)
@@ -882,7 +903,6 @@ export function Prompt(props: PromptProps) {
                       }
                     }
                     if (file.type.startsWith("image/")) {
-                      event.preventDefault()
                       const content = await file
                         .arrayBuffer()
                         .then((buffer) => Buffer.from(buffer).toString("base64"))
@@ -904,10 +924,12 @@ export function Prompt(props: PromptProps) {
                   (lineCount >= 3 || pastedContent.length > 150) &&
                   !sync.data.config.experimental?.disable_paste_summary
                 ) {
-                  event.preventDefault()
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
                   return
                 }
+
+                // Since we called preventDefault(), manually insert the text
+                input.insertText(pastedContent)
 
                 // Force layout update and render for the pasted content
                 setTimeout(() => {

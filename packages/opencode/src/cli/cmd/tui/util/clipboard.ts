@@ -9,6 +9,7 @@ export namespace Clipboard {
   export interface Content {
     data: string
     mime: string
+    filename?: string
   }
 
   export async function read(): Promise<Content | undefined> {
@@ -30,13 +31,59 @@ export namespace Clipboard {
     }
 
     if (os === "win32" || release().includes("WSL")) {
-      const script =
-        "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-      const base64 = await $`powershell.exe -NonInteractive -NoProfile -command "${script}"`.nothrow().text()
-      if (base64) {
-        const imageBuffer = Buffer.from(base64.trim(), "base64")
+      const script = [
+        "Add-Type -AssemblyName System.Windows.Forms;",
+        "Add-Type -AssemblyName System.Drawing;",
+        "if ([System.Windows.Forms.Clipboard]::ContainsFileDropList()) {",
+        "  $files = [System.Windows.Forms.Clipboard]::GetFileDropList();",
+        "  if ($files.Count -gt 0) {",
+        "    $filePath = $files[0];",
+        "    try {",
+        "      $img = [System.Drawing.Image]::FromFile($filePath);",
+        "      $ms = New-Object System.IO.MemoryStream;",
+        "      $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png);",
+        "      $img.Dispose();",
+        '      Write-Output "FILEPATH:$filePath";',
+        "      [System.Convert]::ToBase64String($ms.ToArray())",
+        "    } catch {}",
+        "  }",
+        "} elseif ([System.Windows.Forms.Clipboard]::ContainsImage()) {",
+        "  $img = [System.Windows.Forms.Clipboard]::GetImage();",
+        "  if ($img) {",
+        "    $ms = New-Object System.IO.MemoryStream;",
+        "    $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png);",
+        "    [System.Convert]::ToBase64String($ms.ToArray())",
+        "  }",
+        "}",
+      ].join(" ")
+      const output = await $`powershell.exe -Sta -NonInteractive -NoProfile -command "${script}"`.nothrow().text()
+      if (output) {
+        const lines = output.trim().split("\n")
+        let filepath: string | undefined
+        let base64: string
+
+        if (lines[0]?.startsWith("FILEPATH:")) {
+          filepath = lines[0].substring(9).trim()
+          base64 = lines.slice(1).join("")
+
+          console.log("[DEBUG clipboard.ts] Original filepath:", filepath)
+          if (release().includes("WSL") && /^[A-Z]:\\/.test(filepath)) {
+            const drive = filepath[0].toLowerCase()
+            filepath = filepath.replace(/^[A-Z]:\\/, `/mnt/${drive}/`).replace(/\\/g, "/")
+            console.log("[DEBUG clipboard.ts] Converted to WSL path:", filepath)
+          }
+          console.log("[DEBUG clipboard.ts] Extracted filename:", filepath ? path.basename(filepath) : "(none)")
+        } else {
+          base64 = output.trim()
+        }
+
+        const imageBuffer = Buffer.from(base64, "base64")
         if (imageBuffer.length > 0) {
-          return { data: imageBuffer.toString("base64"), mime: "image/png" }
+          return {
+            data: imageBuffer.toString("base64"),
+            mime: "image/png",
+            filename: filepath ? path.basename(filepath) : undefined,
+          }
         }
       }
     }
