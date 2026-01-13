@@ -11,11 +11,13 @@
 //! - The RunEvent::Exit handler fails to run
 
 use std::io::{Error, Result};
+#[cfg(windows)]
+use std::sync::Mutex;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+    SetInformationJobObject,
 };
 use windows::Win32::System::Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE};
 
@@ -87,6 +89,46 @@ impl Drop for JobObject {
             // When this handle is closed and it's the last handle to the job,
             // Windows will terminate all processes in the job due to KILL_ON_JOB_CLOSE
             let _ = CloseHandle(self.0);
+        }
+    }
+}
+
+/// Holds the Windows Job Object that ensures child processes are killed when the app exits.
+/// On Windows, when the job object handle is closed (including on crash), all assigned
+/// processes are automatically terminated by the OS.
+#[cfg(windows)]
+pub struct JobObjectState {
+    job: Mutex<Option<JobObject>>,
+    error: Mutex<Option<String>>,
+}
+
+#[cfg(windows)]
+impl JobObjectState {
+    pub fn new() -> Self {
+        match JobObject::new() {
+            Ok(job) => Self {
+                job: Mutex::new(Some(job)),
+                error: Mutex::new(None),
+            },
+            Err(e) => {
+                eprintln!("Failed to create job object: {e}");
+                Self {
+                    job: Mutex::new(None),
+                    error: Mutex::new(Some(format!("Failed to create job object: {e}"))),
+                }
+            }
+        }
+    }
+
+    pub fn assign_pid(&self, pid: u32) {
+        if let Some(job) = self.job.lock().unwrap().as_ref() {
+            if let Err(e) = job.assign_pid(pid) {
+                eprintln!("Failed to assign process {pid} to job object: {e}");
+                *self.error.lock().unwrap() =
+                    Some(format!("Failed to assign process to job object: {e}"));
+            } else {
+                println!("Assigned process {pid} to job object for automatic cleanup");
+            }
         }
     }
 }

@@ -6,6 +6,8 @@ mod window_customizer;
 use cli::{install_cli, sync_cli};
 use futures::FutureExt;
 use futures::future;
+#[cfg(windows)]
+use job_object::*;
 use std::{
     collections::VecDeque,
     net::TcpListener,
@@ -53,46 +55,6 @@ impl ServerState {
 
 #[derive(Clone)]
 struct LogState(Arc<Mutex<VecDeque<String>>>);
-
-/// Holds the Windows Job Object that ensures child processes are killed when the app exits.
-/// On Windows, when the job object handle is closed (including on crash), all assigned
-/// processes are automatically terminated by the OS.
-#[cfg(windows)]
-struct JobObjectState {
-    job: Mutex<Option<job_object::JobObject>>,
-    error: Mutex<Option<String>>,
-}
-
-#[cfg(windows)]
-impl JobObjectState {
-    fn new() -> Self {
-        match job_object::JobObject::new() {
-            Ok(job) => Self {
-                job: Mutex::new(Some(job)),
-                error: Mutex::new(None),
-            },
-            Err(e) => {
-                eprintln!("Failed to create job object: {e}");
-                Self {
-                    job: Mutex::new(None),
-                    error: Mutex::new(Some(format!("Failed to create job object: {e}"))),
-                }
-            }
-        }
-    }
-
-    fn assign_pid(&self, pid: u32) {
-        if let Some(job) = self.job.lock().unwrap().as_ref() {
-            if let Err(e) = job.assign_pid(pid) {
-                eprintln!("Failed to assign process {pid} to job object: {e}");
-                *self.error.lock().unwrap() =
-                    Some(format!("Failed to assign process to job object: {e}"));
-            } else {
-                println!("Assigned process {pid} to job object for automatic cleanup");
-            }
-        }
-    }
-}
 
 const MAX_LOG_ENTRIES: usize = 200;
 
@@ -293,8 +255,6 @@ pub fn run() {
             // Initialize log state
             app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
 
-            // On Windows, create a job object that will automatically kill child processes
-            // when the app exits (even on crash). This is more reliable than manual cleanup.
             #[cfg(windows)]
             app.manage(JobObjectState::new());
 
@@ -350,8 +310,6 @@ pub fn run() {
 
                     let res = match setup_server_connection(&app, custom_url).await {
                         Ok((child, url)) => {
-                            // On Windows, assign the child process to the job object for automatic
-                            // cleanup when the app exits (even on crash)
                             #[cfg(windows)]
                             if let Some(child) = &child {
                                 let job_state = app.state::<JobObjectState>();
@@ -392,8 +350,6 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 println!("Received Exit");
 
-                // On Windows, the job object handles cleanup automatically (even on crash).
-                // We still call kill_sidecar as a belt-and-suspenders approach for graceful shutdown.
                 kill_sidecar(app.clone());
             }
         });
