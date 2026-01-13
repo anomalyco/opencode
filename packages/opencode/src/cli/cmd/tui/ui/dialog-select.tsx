@@ -158,7 +158,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (evt.name === "return") {
       const option = selected()
       if (option) {
-        // evt.preventDefault()
+        evt.preventDefault()
+        evt.stopPropagation()
         if (option.onSelect) option.onSelect(dialog)
         props.onSelect?.(option)
       }
