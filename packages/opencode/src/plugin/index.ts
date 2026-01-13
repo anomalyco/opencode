@@ -10,9 +10,24 @@ import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
+import path from "path"
+import { Global } from "../global"
+import z from "zod"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+
+  export const Status = z
+    .object({
+      name: z.string(),
+      configuredVersion: z.string().optional(),
+      installedVersion: z.string().optional(),
+      path: z.string().optional(),
+    })
+    .meta({
+      ref: "PluginStatus",
+    })
+  export type Status = z.infer<typeof Status>
 
   const BUILTIN = ["opencode-copilot-auth@0.0.12", "opencode-anthropic-auth@0.0.8"]
 
@@ -129,5 +144,32 @@ export namespace Plugin {
         })
       }
     })
+  }
+
+  export async function status(): Promise<Status[]> {
+    const config = await Config.get()
+    const plugins = config.plugin ?? []
+    const result: Status[] = []
+
+    for (const plugin of plugins) {
+      if (plugin.startsWith("file://")) {
+        const name = Config.getPluginName(plugin)
+        result.push({ name, path: plugin })
+      } else {
+        const lastAtIndex = plugin.lastIndexOf("@")
+        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+        const configuredVersion = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : undefined
+
+        const pkgPath = path.join(Global.Path.cache, "node_modules", pkg, "package.json")
+        const pkgJson = await Bun.file(pkgPath)
+          .json()
+          .catch(() => null)
+        const installedVersion = pkgJson?.version
+
+        result.push({ name: pkg, configuredVersion, installedVersion })
+      }
+    }
+
+    return result.toSorted((a, b) => a.name.localeCompare(b.name))
   }
 }

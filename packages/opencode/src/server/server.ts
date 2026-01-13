@@ -19,6 +19,7 @@ import { Config } from "../config/config"
 import { File } from "../file"
 import { LSP } from "../lsp"
 import { Format } from "../format"
+import { Plugin } from "../plugin"
 import { MessageV2 } from "../session/message-v2"
 import { TuiRoute } from "./tui"
 import { Instance } from "../project/instance"
@@ -2443,6 +2444,27 @@ export namespace Server {
           }),
           async (c) => {
             return c.json(await Format.status())
+          },
+        )
+        .get(
+          "/plugin",
+          describeRoute({
+            summary: "Get plugin status",
+            description: "Get plugin status",
+            operationId: "plugin.status",
+            responses: {
+              200: {
+                description: "Plugin status",
+                content: {
+                  "application/json": {
+                    schema: resolver(Plugin.Status.array()),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            return c.json(await Plugin.status())
           },
         )
         .post(

@@ -2057,6 +2057,13 @@ export type FormatterStatus = {
   enabled: boolean
 }
 
+export type PluginStatus = {
+  name: string
+  configuredVersion?: string
+  installedVersion?: string
+  path?: string
+}
+
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -4412,6 +4419,24 @@ export type FormatterStatusResponses = {
 }
 
 export type FormatterStatusResponse = FormatterStatusResponses[keyof FormatterStatusResponses]
+
+export type PluginStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/plugin"
+}
+
+export type PluginStatusResponses = {
+  /**
+   * Plugin status
+   */
+  200: Array<PluginStatus>
+}
+
+export type PluginStatusResponse = PluginStatusResponses[keyof PluginStatusResponses]
 
 export type TuiAppendPromptData = {
   body?: {

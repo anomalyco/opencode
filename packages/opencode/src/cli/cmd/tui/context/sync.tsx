@@ -13,6 +13,7 @@ import type {
   McpStatus,
   McpResource,
   FormatterStatus,
+  PluginStatus,
   SessionStatus,
   ProviderListResponse,
   ProviderAuthMethod,
@@ -71,6 +72,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         [key: string]: McpResource
       }
       formatter: FormatterStatus[]
+      plugin: PluginStatus[]
       vcs: VcsInfo | undefined
       path: Path
     }>({
@@ -98,6 +100,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       mcp: {},
       mcp_resource: {},
       formatter: [],
+      plugin: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
     })
@@ -346,6 +349,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
             sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
+            sdk.client.plugin.status().then((x) => setStore("plugin", reconcile(x.data!))),
             sdk.client.session.status().then((x) => {
               setStore("session_status", reconcile(x.data!))
             }),

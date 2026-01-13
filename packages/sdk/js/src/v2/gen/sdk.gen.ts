@@ -63,6 +63,7 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PluginStatusResponses,
   ProjectCurrentResponses,
   ProjectListResponses,
   ProjectUpdateErrors,
@@ -2618,6 +2619,27 @@ export class Formatter extends HeyApiClient {
   }
 }
 
+export class Plugin extends HeyApiClient {
+  /**
+   * Get plugin status
+   *
+   * Get plugin status
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<PluginStatusResponses, unknown, ThrowOnError>({
+      url: "/plugin",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Control extends HeyApiClient {
   /**
    * Get next TUI request
@@ -3025,6 +3047,8 @@ export class OpencodeClient extends HeyApiClient {
   lsp = new Lsp({ client: this.client })
 
   formatter = new Formatter({ client: this.client })
+
+  plugin = new Plugin({ client: this.client })
 
   tui = new Tui({ client: this.client })
 

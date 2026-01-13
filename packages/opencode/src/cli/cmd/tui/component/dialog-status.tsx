@@ -11,30 +11,7 @@ export function DialogStatus() {
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
-  const plugins = createMemo(() => {
-    const list = sync.data.config.plugin ?? []
-    const result = list.map((value) => {
-      if (value.startsWith("file://")) {
-        const path = value.substring("file://".length)
-        const parts = path.split("/")
-        const filename = parts.pop() || path
-        if (!filename.includes(".")) return { name: filename }
-        const basename = filename.split(".")[0]
-        if (basename === "index") {
-          const dirname = parts.pop()
-          const name = dirname || basename
-          return { name }
-        }
-        return { name: basename }
-      }
-      const index = value.lastIndexOf("@")
-      if (index <= 0) return { name: value, version: "latest" }
-      const name = value.substring(0, index)
-      const version = value.substring(index + 1)
-      return { name, version }
-    })
-    return result.toSorted((a, b) => a.name.localeCompare(b.name))
-  })
+  const plugins = createMemo(() => sync.data.plugin)
 
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
@@ -150,7 +127,8 @@ export function DialogStatus() {
                 </text>
                 <text wrapMode="word" fg={theme.text}>
                   <b>{item.name}</b>
-                  {item.version && <span style={{ fg: theme.textMuted }}> @{item.version}</span>}
+                  {item.configuredVersion && <span style={{ fg: theme.textMuted }}>@{item.configuredVersion}</span>}
+                  {item.installedVersion && <span style={{ fg: theme.textMuted }}> v{item.installedVersion}</span>}
                 </text>
               </box>
             )}
