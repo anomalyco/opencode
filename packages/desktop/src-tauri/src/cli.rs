@@ -155,6 +155,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         .shell()
         .sidecar("opencode-cli")
         .unwrap()
+        .args(args.split_whitespace())
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
         .env("OPENCODE_CLIENT", "desktop")
         .env("XDG_STATE_HOME", &state_dir);
