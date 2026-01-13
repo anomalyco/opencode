@@ -9,6 +9,7 @@ import { Instance } from "../project/instance"
 import { Patch } from "../patch"
 import { createTwoFilesPatch } from "diff"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 const PatchParams = z.object({
   patchText: z.string().describe("The full patch text that describes all changes to be made"),
@@ -70,15 +71,14 @@ export const PatchTool = Tool.define("patch", {
           break
 
         case "update":
-          // Check if file exists for update
-          const stats = await fs.stat(filePath).catch(() => null)
+          const isRemote = SandboxRuntime.isRemote()
+          const stats = isRemote ? await SandboxRuntime.stat(filePath) : await fs.stat(filePath).catch(() => null)
           if (!stats || stats.isDirectory()) {
             throw new Error(`File not found or is directory: ${filePath}`)
           }
 
-          // Read file and update time tracking (like edit tool does)
           await FileTime.assert(ctx.sessionID, filePath)
-          const oldContent = await fs.readFile(filePath, "utf-8")
+          const oldContent = isRemote ? await SandboxRuntime.readFile(filePath) : await fs.readFile(filePath, "utf-8")
           let newContent = oldContent
 
           // Apply the update chunks to get new content
@@ -106,9 +106,10 @@ export const PatchTool = Tool.define("patch", {
           break
 
         case "delete":
-          // Check if file exists for deletion
           await FileTime.assert(ctx.sessionID, filePath)
-          const contentToDelete = await fs.readFile(filePath, "utf-8")
+          const contentToDelete = SandboxRuntime.isRemote() 
+            ? await SandboxRuntime.readFile(filePath) 
+            : await fs.readFile(filePath, "utf-8")
           const deleteDiff = createTwoFilesPatch(filePath, filePath, contentToDelete, "")
 
           fileChanges.push({
@@ -133,43 +134,64 @@ export const PatchTool = Tool.define("patch", {
       },
     })
 
-    // Apply the changes
     const changedFiles: string[] = []
+    const isRemoteApply = SandboxRuntime.isRemote()
 
     for (const change of fileChanges) {
       switch (change.type) {
         case "add":
-          // Create parent directories
           const addDir = path.dirname(change.filePath)
           if (addDir !== "." && addDir !== "/") {
-            await fs.mkdir(addDir, { recursive: true })
+            if (isRemoteApply) {
+              await SandboxRuntime.mkdir(addDir, { recursive: true })
+            } else {
+              await fs.mkdir(addDir, { recursive: true })
+            }
           }
-          await fs.writeFile(change.filePath, change.newContent, "utf-8")
+          if (isRemoteApply) {
+            await SandboxRuntime.writeFile(change.filePath, change.newContent)
+          } else {
+            await fs.writeFile(change.filePath, change.newContent, "utf-8")
+          }
           changedFiles.push(change.filePath)
           break
 
         case "update":
-          await fs.writeFile(change.filePath, change.newContent, "utf-8")
+          if (isRemoteApply) {
+            await SandboxRuntime.writeFile(change.filePath, change.newContent)
+          } else {
+            await fs.writeFile(change.filePath, change.newContent, "utf-8")
+          }
           changedFiles.push(change.filePath)
           break
 
         case "move":
           if (change.movePath) {
-            // Create parent directories for destination
             const moveDir = path.dirname(change.movePath)
             if (moveDir !== "." && moveDir !== "/") {
-              await fs.mkdir(moveDir, { recursive: true })
+              if (isRemoteApply) {
+                await SandboxRuntime.mkdir(moveDir, { recursive: true })
+              } else {
+                await fs.mkdir(moveDir, { recursive: true })
+              }
             }
-            // Write to new location
-            await fs.writeFile(change.movePath, change.newContent, "utf-8")
-            // Remove original
-            await fs.unlink(change.filePath)
+            if (isRemoteApply) {
+              await SandboxRuntime.writeFile(change.movePath, change.newContent)
+              await SandboxRuntime.rm(change.filePath)
+            } else {
+              await fs.writeFile(change.movePath, change.newContent, "utf-8")
+              await fs.unlink(change.filePath)
+            }
             changedFiles.push(change.movePath)
           }
           break
 
         case "delete":
-          await fs.unlink(change.filePath)
+          if (isRemoteApply) {
+            await SandboxRuntime.rm(change.filePath)
+          } else {
+            await fs.unlink(change.filePath)
+          }
           changedFiles.push(change.filePath)
           break
       }

@@ -6,6 +6,7 @@ import DESCRIPTION from "./lsp.txt"
 import { Instance } from "../project/instance"
 import { pathToFileURL } from "url"
 import { assertExternalDirectory } from "./external-directory"
+import { SandboxRuntime } from "../sandbox/runtime"
 
 const operations = [
   "goToDefinition",
@@ -47,7 +48,7 @@ export const LspTool = Tool.define("lsp", {
     const relPath = path.relative(Instance.worktree, file)
     const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
 
-    const exists = await Bun.file(file).exists()
+    const exists = SandboxRuntime.isRemote() ? await SandboxRuntime.exists(file) : await Bun.file(file).exists()
     if (!exists) {
       throw new Error(`File not found: ${file}`)
     }
