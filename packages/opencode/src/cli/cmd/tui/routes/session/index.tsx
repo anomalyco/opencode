@@ -71,6 +71,7 @@ import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
 import { iife } from "@/util/iife"
+import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -194,6 +195,23 @@ export function Session() {
   createEffect(() => {
     if (route.initialPrompt && prompt) {
       prompt.set(route.initialPrompt)
+    }
+  })
+
+  let lastSwitch: string | undefined = undefined
+  sdk.event.on("message.part.updated", (evt) => {
+    const part = evt.properties.part
+    if (part.type !== "tool") return
+    if (part.sessionID !== route.sessionID) return
+    if (part.state.status !== "completed") return
+    if (part.id === lastSwitch) return
+
+    if (part.tool === "plan_exit") {
+      local.agent.set("build")
+      lastSwitch = part.id
+    } else if (part.tool === "plan_enter") {
+      local.agent.set("plan")
+      lastSwitch = part.id
     }
   })
 
@@ -1570,6 +1588,7 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
 
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
+  const sync = useSync()
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
@@ -1579,11 +1598,36 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return [...lines().slice(0, 10), "…"].join("\n")
   })
 
+  const workdirDisplay = createMemo(() => {
+    const workdir = props.input.workdir
+    if (!workdir || workdir === ".") return undefined
+
+    const base = sync.data.path.directory
+    if (!base) return undefined
+
+    const absolute = path.resolve(base, workdir)
+    if (absolute === base) return undefined
+
+    const home = Global.Path.home
+    if (!home) return absolute
+
+    const match = absolute === home || absolute.startsWith(home + path.sep)
+    return match ? absolute.replace(home, "~") : absolute
+  })
+
+  const title = createMemo(() => {
+    const desc = props.input.description ?? "Shell"
+    const wd = workdirDisplay()
+    if (!wd) return `# ${desc}`
+    if (desc.includes(wd)) return `# ${desc}`
+    return `# ${desc} in ${wd}`
+  })
+
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
         <BlockTool
-          title={"# " + (props.input.description ?? "Shell")}
+          title={title()}
           part={props.part}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >

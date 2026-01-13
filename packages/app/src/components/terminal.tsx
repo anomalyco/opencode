@@ -100,9 +100,12 @@ export const Terminal = (props: TerminalProps) => {
     const mod = await import("ghostty-web")
     ghostty = await mod.Ghostty.load()
 
-    const socket = new WebSocket(
-      sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`,
-    )
+    const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+    if (window.__OPENCODE__?.serverPassword) {
+      url.username = "opencode"
+      url.password = window.__OPENCODE__?.serverPassword
+    }
+    const socket = new WebSocket(url)
     ws = socket
 
     const t = new mod.Terminal({
