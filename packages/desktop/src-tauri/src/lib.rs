@@ -198,7 +198,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
 }
 
 async fn check_server_health(url: &str, password: Option<&str>) -> bool {
-    let health_url = format!("{}/health", url.trim_end_matches('/'));
+    let health_url = format!("{}/global/health", url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
         .build();
