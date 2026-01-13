@@ -2,9 +2,9 @@
   "$schema": "https://opencode.ai/config.json",
   "instructions": ["STYLE_GUIDE.md"],
   // Ralph Wiggum plugin for iterative development loops
-  // Uses relative path from this config file - works on any OS
+  // Relative path from this config file - works on any OS
   "plugin": [
-    "./packages/opencode/.opencode/plugins/ralph-wiggum.ts",
+    "../packages/opencode/.opencode/plugins/ralph-wiggum.ts",
   ],
   "permission": {
     "bash": {
