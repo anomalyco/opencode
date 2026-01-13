@@ -1,12 +1,95 @@
+/**
+ * ============================================================================
+ * 文件名：github.ts
+ * 所属包：packages/opencode/src/cli/cmd
+ * ============================================================================
+ *
+ * 文件作用：
+ * GitHub Agent 命令模块。提供在 GitHub 上运行 OpenCode Agent 的集成功能。
+ *
+ * 主要功能：
+ * - GithubInstallCommand：安装 GitHub Agent（配置 workflow 文件）
+ * - GithubRunCommand：运行 GitHub Agent（处理 GitHub webhooks）
+ * - GithubCommand：GitHub 命令组
+ *
+ * 依赖关系：
+ * - path：路径处理
+ * - child_process：执行系统命令
+ * - @clack/prompts：交互式提示
+ * - remeda：数据处理工具
+ * - @octokit/rest：GitHub REST API 客户端
+ * - @octokit/graphql：GitHub GraphQL API 客户端
+ * - @actions/core：GitHub Actions 核心
+ * - @actions/github：GitHub Actions 上下文
+ * - @octokit/webhooks-types：GitHub Webhook 类型
+ * - ../ui：UI 工具
+ * - ./cmd：命令包装
+ * - ../../provider/models：模型数据库
+ * - ../../project/instance：实例管理
+ * - ../bootstrap：实例引导
+ * - ../../session：会话管理
+ * - ../../id/id：标识符生成
+ * - ../../provider/provider：提供商管理
+ * - ../../bus：事件总线
+ * - ../../session/message-v2：消息 V2
+ * - ../../session/prompt：会话提示
+ * - bun：Shell 命令执行
+ *
+ * 导出内容：
+ * - GithubCommand：GitHub 命令组
+ * - GithubInstallCommand：安装命令
+ * - GithubRunCommand：运行命令
+ * - parseGitHubRemote()：解析 GitHub 远程 URL
+ * - extractResponseText()：提取响应文本
+ *
+ * 支持的 GitHub 事件：
+ * USER_EVENTS：
+ * - issue_comment：Issue 评论
+ * - pull_request_review_comment：PR 审查评论
+ * - issues：Issue 事件
+ * - pull_request：PR 事件
+ *
+ * REPO_EVENTS：
+ * - schedule：定时触发
+ * - workflow_dispatch：手动触发
+ *
+ * Agent 配置：
+ * - 用户名：opencode-agent[bot]
+ * - 表情反应：eyes
+ * - Workflow 文件：.github/workflows/opencode.yml
+ *
+ * @package opencode
+ * @module cli/cmd/github
+ */
+
+// 导入路径处理
 import path from "path"
+
+// 导入子进程执行
 import { exec } from "child_process"
+
+// 导入交互式提示库
 import * as prompts from "@clack/prompts"
+
+// 导入数据处理工具
 import { map, pipe, sortBy, values } from "remeda"
+
+// 导入 GitHub REST API 客户端
 import { Octokit } from "@octokit/rest"
+
+// 导入 GitHub GraphQL 客户端
 import { graphql } from "@octokit/graphql"
+
+// 导入 GitHub Actions 核心
 import * as core from "@actions/core"
+
+// 导入 GitHub Actions 上下文
 import * as github from "@actions/github"
+
+// 导入 GitHub Actions 上下文类型
 import type { Context } from "@actions/github/lib/context"
+
+// 导入 GitHub Webhook 事件类型
 import type {
   IssueCommentEvent,
   IssuesEvent,
@@ -15,24 +98,54 @@ import type {
   WorkflowRunEvent,
   PullRequestEvent,
 } from "@octokit/webhooks-types"
+
+// 导入 UI 工具
 import { UI } from "../ui"
+
+// 导入命令包装
 import { cmd } from "./cmd"
+
+// 导入模型数据库
 import { ModelsDev } from "../../provider/models"
+
+// 导入实例管理
 import { Instance } from "@/project/instance"
+
+// 导入实例引导
 import { bootstrap } from "../bootstrap"
+
+// 导入会话管理
 import { Session } from "../../session"
+
+// 导入标识符生成
 import { Identifier } from "../../id/id"
+
+// 导入提供商管理
 import { Provider } from "../../provider/provider"
+
+// 导入事件总线
 import { Bus } from "../../bus"
+
+// 导入消息 V2
 import { MessageV2 } from "../../session/message-v2"
+
+// 导入会话提示
 import { SessionPrompt } from "@/session/prompt"
+
+// 导入 Bun Shell 命令
 import { $ } from "bun"
 
+/**
+ * GitHub 作者类型
+ */
 type GitHubAuthor = {
   login: string
   name?: string
 }
 
+/**
+ * GitHub 评论类型
+ */
 type GitHubComment = {
   id: string
   databaseId: string
@@ -41,11 +154,17 @@ type GitHubComment = {
   createdAt: string
 }
 
+/**
+ * GitHub 审查评论类型
+ */
 type GitHubReviewComment = GitHubComment & {
   path: string
   line: number | null
 }
 
+/**
+ * GitHub 提交类型
+ */
 type GitHubCommit = {
   oid: string
   message: string
@@ -55,6 +174,9 @@ type GitHubCommit = {
   }
 }
 
+/**
+ * GitHub 文件类型
+ */
 type GitHubFile = {
   path: string
   additions: number
@@ -62,6 +184,9 @@ type GitHubFile = {
   changeType: string
 }
 
+/**
+ * GitHub 审查类型
+ */
 type GitHubReview = {
   id: string
   databaseId: string
@@ -74,6 +199,9 @@ type GitHubReview = {
   }
 }
 
+/**
+ * GitHub Pull Request 类型
+ */
 type GitHubPullRequest = {
   title: string
   body: string
@@ -108,6 +236,9 @@ type GitHubPullRequest = {
   }
 }
 
+/**
+ * GitHub Issue 类型
+ */
 type GitHubIssue = {
   title: string
   body: string
@@ -119,25 +250,36 @@ type GitHubIssue = {
   }
 }
 
+/**
+ * Pull Request 查询响应类型
+ */
 type PullRequestQueryResponse = {
   repository: {
     pullRequest: GitHubPullRequest
   }
 }
 
+/**
+ * Issue 查询响应类型
+ */
 type IssueQueryResponse = {
   repository: {
     issue: GitHubIssue
   }
 }
 
+// Agent 用户名
 const AGENT_USERNAME = "opencode-agent[bot]"
+// Agent 表情反应
 const AGENT_REACTION = "eyes"
+// Workflow 文件路径
 const WORKFLOW_FILE = ".github/workflows/opencode.yml"
 
-// Event categories for routing
-// USER_EVENTS: triggered by user actions, have actor/issueId, support reactions/comments
-// REPO_EVENTS: triggered by automation, no actor/issueId, output to logs/PR only
+/**
+ * 事件分类
+ * USER_EVENTS：用户触发的事件，有 actor/issueId，支持反应/评论
+ * REPO_EVENTS：自动化触发的事件，无 actor/issueId，仅输出到日志/PR
+ */
 const USER_EVENTS = ["issue_comment", "pull_request_review_comment", "issues", "pull_request"] as const
 const REPO_EVENTS = ["schedule", "workflow_dispatch"] as const
 const SUPPORTED_EVENTS = [...USER_EVENTS, ...REPO_EVENTS] as const
@@ -145,42 +287,63 @@ const SUPPORTED_EVENTS = [...USER_EVENTS, ...REPO_EVENTS] as const
 type UserEvent = (typeof USER_EVENTS)[number]
 type RepoEvent = (typeof REPO_EVENTS)[number]
 
-// Parses GitHub remote URLs in various formats:
-// - https://github.com/owner/repo.git
-// - https://github.com/owner/repo
-// - git@github.com:owner/repo.git
-// - git@github.com:owner/repo
-// - ssh://git@github.com/owner/repo.git
-// - ssh://git@github.com/owner/repo
+/**
+ * 解析 GitHub 远程 URL
+ *
+ * 支持多种格式：
+ * - https://github.com/owner/repo.git
+ * - https://github.com/owner/repo
+ * - git@github.com:owner/repo.git
+ * - git@github.com:owner/repo
+ * - ssh://git@github.com/owner/repo.git
+ * - ssh://git@github.com/owner/repo
+ *
+ * @param url - Git 远程 URL
+ * @returns 所有者和仓库，或 null（如果不是 GitHub URL）
+ */
 export function parseGitHubRemote(url: string): { owner: string; repo: string } | null {
+  // 匹配各种 GitHub URL 格式
   const match = url.match(/^(?:(?:https?|ssh):\/\/)?(?:git@)?github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/)
   if (!match) return null
   return { owner: match[1], repo: match[2] }
 }
 
 /**
- * Extracts displayable text from assistant response parts.
- * Returns null for tool-only or reasoning-only responses (signals summary needed).
- * Throws for truly unusable responses (empty, step-start only, etc.).
+ * 从助手响应部分提取可显示文本
+ *
+ * 优先级：
+ * 1. 文本部分（text）
+ * 2. 推理部分（reasoning）- 返回 null 表示需要摘要
+ * 3. 仅工具调用（tool）- 返回 null 表示需要摘要
+ * 4. 否则抛出错误
+ *
+ * @param parts - 消息部分数组
+ * @returns 文本内容，null 表示需要摘要
+ * @throws 如果没有可用的部分
  */
 export function extractResponseText(parts: MessageV2.Part[]): string | null {
-  // Priority 1: Look for text parts
+  // 优先级 1：查找文本部分
   const textPart = parts.findLast((p) => p.type === "text")
   if (textPart) return textPart.text
 
-  // Priority 2: Reasoning-only - return null to signal summary needed
+  // 优先级 2：仅推理 - 返回 null 表示需要摘要
   const reasoningPart = parts.findLast((p) => p.type === "reasoning")
   if (reasoningPart) return null
 
-  // Priority 3: Tool-only - return null to signal summary needed
+  // 优先级 3：仅工具 - 返回 null 表示需要摘要
   const toolParts = parts.filter((p) => p.type === "tool" && p.state.status === "completed")
   if (toolParts.length > 0) return null
 
-  // No usable parts - throw with debug info
+  // 没有可用的部分 - 抛出错误并包含调试信息
   const partTypes = parts.map((p) => p.type).join(", ") || "none"
   throw new Error(`Failed to parse response. Part types found: [${partTypes}]`)
 }
 
+/**
+ * GitHub 命令组
+ *
+ * 管理 GitHub Agent 的父命令。
+ */
 export const GithubCommand = cmd({
   command: "github",
   describe: "manage GitHub agent",
@@ -188,6 +351,14 @@ export const GithubCommand = cmd({
   async handler() {},
 })
 
+/**
+ * GitHub 安装命令
+ *
+ * 安装 GitHub Agent，包括：
+ * 1. 安装 GitHub App
+ * 2. 选择提供商和模型
+ * 3. 生成 workflow 文件
+ */
 export const GithubInstallCommand = cmd({
   command: "install",
   describe: "install the GitHub agent",
@@ -202,14 +373,13 @@ export const GithubInstallCommand = cmd({
           await installGitHubApp()
 
           const providers = await ModelsDev.get().then((p) => {
-            // TODO: add guide for copilot, for now just hide it
+            // TODO: 为 copilot 添加指南，目前先隐藏
             delete p["github-copilot"]
             return p
           })
 
           const provider = await promptProvider()
           const model = await promptModel()
-          //const key = await promptKey()
 
           await addWorkflowFiles()
           printNextSteps()
@@ -248,7 +418,7 @@ export const GithubInstallCommand = cmd({
               throw new UI.CancelledError()
             }
 
-            // Get repo info
+            // 获取仓库信息
             const info = (await $`git remote get-url origin`.quiet().nothrow().text()).trim()
             const parsed = parseGitHubRemote(info)
             if (!parsed) {
@@ -313,11 +483,11 @@ export const GithubInstallCommand = cmd({
             const s = prompts.spinner()
             s.start("Installing GitHub app")
 
-            // Get installation
+            // 获取安装状态
             const installation = await getInstallation()
             if (installation) return s.stop("GitHub app already installed")
 
-            // Open browser
+            // 打开浏览器
             const url = "https://github.com/apps/opencode-agent"
             const command =
               process.platform === "darwin"
@@ -332,7 +502,7 @@ export const GithubInstallCommand = cmd({
               }
             })
 
-            // Wait for installation
+            // 等待安装完成
             s.message("Waiting for GitHub app to be installed")
             const MAX_RETRIES = 120
             let retries = 0
@@ -409,6 +579,19 @@ jobs:
   },
 })
 
+/**
+ * GitHub 运行命令
+ *
+ * 运行 GitHub Agent，处理 GitHub webhook 事件。
+ *
+ * 支持的事件类型：
+ * - issue_comment：Issue 评论
+ * - pull_request_review_comment：PR 审查评论
+ * - issues：Issue 事件
+ * - pull_request：PR 事件
+ * - schedule：定时触发
+ * - workflow_dispatch：手动触发
+ */
 export const GithubRunCommand = cmd({
   command: "run",
   describe: "run the GitHub agent",
@@ -424,17 +607,20 @@ export const GithubRunCommand = cmd({
       }),
   async handler(args) {
     await bootstrap(process.cwd(), async () => {
+      // 检查是否为模拟模式
       const isMock = args.token || args.event
 
+      // 获取 GitHub 上下文
       const context = isMock ? (JSON.parse(args.event!) as Context) : github.context
+      // 检查是否为支持的事件类型
       if (!SUPPORTED_EVENTS.includes(context.eventName as (typeof SUPPORTED_EVENTS)[number])) {
         core.setFailed(`Unsupported event type: ${context.eventName}`)
         process.exit(1)
       }
 
-      // Determine event category for routing
-      // USER_EVENTS: have actor, issueId, support reactions/comments
-      // REPO_EVENTS: no actor/issueId, output to logs/PR only
+      // 确定事件类别用于路由
+      // USER_EVENTS：有 actor、issueId，支持反应/评论
+      // REPO_EVENTS：无 actor/issueId，仅输出到日志/PR
       const isUserEvent = USER_EVENTS.includes(context.eventName as UserEvent)
       const isRepoEvent = REPO_EVENTS.includes(context.eventName as RepoEvent)
       const isCommentEvent = ["issue_comment", "pull_request_review_comment"].includes(context.eventName)
@@ -442,12 +628,13 @@ export const GithubRunCommand = cmd({
       const isScheduleEvent = context.eventName === "schedule"
       const isWorkflowDispatchEvent = context.eventName === "workflow_dispatch"
 
+      // 解析环境变量
       const { providerID, modelID } = normalizeModel()
       const runId = normalizeRunId()
       const share = normalizeShare()
       const oidcBaseUrl = normalizeOidcBaseUrl()
       const { owner, repo } = context.repo
-      // For repo events (schedule, workflow_dispatch), payload has no issue/comment data
+      // 对于仓库事件（schedule、workflow_dispatch），payload 没有 issue/comment 数据
       const payload = context.payload as
         | IssueCommentEvent
         | IssuesEvent
@@ -456,9 +643,10 @@ export const GithubRunCommand = cmd({
         | WorkflowRunEvent
         | PullRequestEvent
       const issueEvent = isIssueCommentEvent(payload) ? payload : undefined
-      // workflow_dispatch has an actor (the user who triggered it), schedule does not
+      // workflow_dispatch 有 actor（触发用户），schedule 没有
       const actor = isScheduleEvent ? undefined : context.actor
 
+      // 确定 issue ID（对于 PR 事件，使用 PR 编号）
       const issueId = isRepoEvent
         ? undefined
         : context.eventName === "issue_comment" || context.eventName === "issues"
@@ -467,6 +655,7 @@ export const GithubRunCommand = cmd({
       const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
       const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
+      // 声明变量
       let appToken: string
       let octoRest: Octokit
       let octoGraph: typeof graphql
@@ -486,6 +675,7 @@ export const GithubRunCommand = cmd({
         : undefined
 
       try {
+        // 获取应用令牌
         if (useGithubToken) {
           const githubToken = process.env["GITHUB_TOKEN"]
           if (!githubToken) {
@@ -498,22 +688,25 @@ export const GithubRunCommand = cmd({
           const actionToken = isMock ? args.token! : await getOidcToken()
           appToken = await exchangeForAppToken(actionToken)
         }
+        // 初始化 Octokit 客户端
         octoRest = new Octokit({ auth: appToken })
         octoGraph = graphql.defaults({
           headers: { authorization: `token ${appToken}` },
         })
 
+        // 获取用户提示
         const { userPrompt, promptFiles } = await getUserPrompt()
         if (!useGithubToken) {
           await configureGit(appToken)
         }
-        // Skip permission check and reactions for repo events (no actor to check, no issue to react to)
+        // 对于用户事件，检查权限并添加反应
+        // 对于仓库事件，跳过权限检查和反应（没有 actor 可以检查，没有 issue 可以反应）
         if (isUserEvent) {
           await assertPermissions()
           await addReaction(commentType)
         }
 
-        // Setup opencode session
+        // 设置 opencode 会话
         const repoData = await fetchRepo()
         session = await Session.create({
           permission: [
@@ -533,12 +726,12 @@ export const GithubRunCommand = cmd({
         })()
         console.log("opencode session", session.id)
 
-        // Handle event types:
-        // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
-        // USER_EVENTS on PR (pull_request, pull_request_review_comment, issue_comment on PR): work on PR branch
-        // USER_EVENTS on Issue (issue_comment on issue, issues): create new branch, may create PR
+        // 处理事件类型：
+        // REPO_EVENTS（schedule、workflow_dispatch）：无 issue/PR 上下文，输出到日志
+        // USER_EVENTS 在 PR 上（pull_request、pull_request_review_comment、PR 上的 issue_comment）：在 PR 分支上工作
+        // USER_EVENTS 在 Issue 上（Issue 上的 issue_comment、issues）：创建新分支，可能创建 PR
         if (isRepoEvent) {
-          // Repo event - no issue/PR context, output goes to logs
+          // 仓库事件 - 无 issue/PR 上下文，输出到日志
           if (isWorkflowDispatchEvent && actor) {
             console.log(`Triggered by: ${actor}`)
           }
@@ -549,7 +742,7 @@ export const GithubRunCommand = cmd({
           const { dirty, uncommittedChanges } = await branchIsDirty(head)
           if (dirty) {
             const summary = await summarize(response)
-            // workflow_dispatch has an actor for co-author attribution, schedule does not
+            // workflow_dispatch 有 actor 用于 co-author attribution，schedule 没有
             await pushToNewBranch(summary, branch, uncommittedChanges, isScheduleEvent)
             const triggerType = isWorkflowDispatchEvent ? "workflow_dispatch" : "scheduled workflow"
             const pr = await createPR(
@@ -567,7 +760,7 @@ export const GithubRunCommand = cmd({
           issueEvent?.issue.pull_request
         ) {
           const prData = await fetchPR()
-          // Local PR
+          // 本地 PR
           if (prData.headRepository.nameWithOwner === prData.baseRepository.nameWithOwner) {
             await checkoutLocalBranch(prData)
             const head = (await $`git rev-parse HEAD`).stdout.toString().trim()
@@ -636,8 +829,6 @@ export const GithubRunCommand = cmd({
           await removeReaction(commentType)
         }
         core.setFailed(msg)
-        // Also output the clean error message for the action to capture
-        //core.setOutput("prepare_error", e.message);
       } finally {
         if (!useGithubToken) {
           await restoreGitConfig()
@@ -716,7 +907,7 @@ export const GithubRunCommand = cmd({
 
       async function getUserPrompt() {
         const customPrompt = process.env["PROMPT"]
-        // For repo events and issues events, PROMPT is required since there's no comment to extract from
+        // 对于仓库事件和 issues 事件，PROMPT 是必需的（因为没有评论可以提取）
         if (isRepoEvent || isIssuesEvent) {
           if (!customPrompt) {
             const eventType = isRepoEvent ? "scheduled and workflow_dispatch" : "issues"
@@ -755,7 +946,7 @@ export const GithubRunCommand = cmd({
           throw new Error(`Comments must mention ${mentions.map((m) => "`" + m + "`").join(" or ")}`)
         })()
 
-        // Handle images
+        // 处理图片
         const imgData: {
           filename: string
           mime: string
@@ -765,10 +956,10 @@ export const GithubRunCommand = cmd({
           replacement: string
         }[] = []
 
-        // Search for files
-        // ie. <img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
-        // ie. [api.json](https://github.com/user-attachments/files/21433810/api.json)
-        // ie. ![Image](https://github.com/user-attachments/assets/xxxx)
+        // 搜索文件
+        // 例如：<img alt="Image" src="https://github.com/user-attachments/assets/xxxx" />
+        // 例如：[api.json](https://github.com/user-attachments/files/21433810/api.json)
+        // 例如：![Image](https://github.com/user-attachments/assets/xxxx)
         const mdMatches = prompt.matchAll(/!?\[.*?\]\((https:\/\/github\.com\/user-attachments\/[^)]+)\)/gi)
         const tagMatches = prompt.matchAll(/<img .*?src="(https:\/\/github\.com\/user-attachments\/[^"]+)" \/>/gi)
         const matches = [...mdMatches, ...tagMatches].sort((a, b) => a.index - b.index)
@@ -781,7 +972,7 @@ export const GithubRunCommand = cmd({
           const start = m.index
           const filename = path.basename(url)
 
-          // Download image
+          // 下载图片
           const res = await fetch(url, {
             headers: {
               Authorization: `Bearer ${appToken}`,
@@ -793,7 +984,7 @@ export const GithubRunCommand = cmd({
             continue
           }
 
-          // Replace img tag with file path, ie. @image.png
+          // 将 img 标签替换为文件路径，例如 @image.png
           const replacement = `@${filename}`
           prompt = prompt.slice(0, start + offset) + replacement + prompt.slice(start + offset + tag.length)
           offset += replacement.length - tag.length
@@ -837,7 +1028,6 @@ export const GithubRunCommand = cmd({
         let text = ""
         Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
           if (evt.properties.part.sessionID !== session.id) return
-          //if (evt.properties.part.messageID === messageID) return
           const part = evt.properties.part
 
           if (part.type === "tool" && part.state.status === "completed") {
@@ -885,7 +1075,7 @@ export const GithubRunCommand = cmd({
             providerID,
             modelID,
           },
-          // agent is omitted - server will use default_agent from config or fall back to "build"
+          // agent 被省略 - 服务器将使用配置中的 default_agent 或回退到 "build"
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -913,7 +1103,7 @@ export const GithubRunCommand = cmd({
           ],
         })
 
-        // result should always be assistant just satisfying type checker
+        // result 应该总是 assistant，仅为了满足类型检查器
         if (result.info.role === "assistant" && result.info.error) {
           console.error("Agent error:", result.info.error)
           throw new Error(
@@ -924,7 +1114,7 @@ export const GithubRunCommand = cmd({
         const text = extractResponseText(result.parts)
         if (text) return text
 
-        // No text part (tool-only or reasoning-only) - ask agent to summarize
+        // 没有文本部分（仅工具或仅推理）- 请求 agent 摘要
         console.log("Requesting summary from agent...")
         const summary = await SessionPrompt.prompt({
           sessionID: session.id,
@@ -933,7 +1123,7 @@ export const GithubRunCommand = cmd({
             providerID,
             modelID,
           },
-          tools: { "*": false }, // Disable all tools to force text response
+          tools: { "*": false }, // 禁用所有工具以强制文本响应
           parts: [
             {
               id: Identifier.ascending("part"),
@@ -997,13 +1187,13 @@ export const GithubRunCommand = cmd({
       }
 
       async function configureGit(appToken: string) {
-        // Do not change git config when running locally
+        // 本地运行时不要更改 git 配置
         if (isMock) return
 
         console.log("Configuring git...")
         const config = "http.https://github.com/.extraheader"
-        // actions/checkout@v6 no longer stores credentials in .git/config,
-        // so this may not exist - use nothrow() to handle gracefully
+        // actions/checkout@v6 不再在 .git/config 中存储凭证，
+        // 所以可能不存在 - 使用 nothrow() 优雅处理
         const ret = await $`git config --local --get ${config}`.nothrow()
         if (ret.exitCode === 0) {
           gitConfig = ret.stdout.toString().trim()
@@ -1071,7 +1261,7 @@ export const GithubRunCommand = cmd({
         if (commit) {
           await $`git add .`
           if (isSchedule) {
-            // No co-author for scheduled events - the schedule is operating as the repo
+            // 定时事件没有 co-author - schedule 作为仓库运行
             await $`git commit -m "${summary}"`
           } else {
             await $`git commit -m "${summary}
@@ -1089,6 +1279,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           await $`git commit -m "${summary}
 
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+          )
         }
         await $`git push`
       }
@@ -1103,6 +1294,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
           await $`git commit -m "${summary}
 
 Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
+          )
         }
         await $`git push fork HEAD:${remoteBranch}`
       }
@@ -1125,7 +1317,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       }
 
       async function assertPermissions() {
-        // Only called for non-schedule events, so actor is defined
+        // 仅对非 schedule 事件调用，所以 actor 已定义
         console.log(`Asserting permissions for user ${actor}...`)
 
         let permission
@@ -1147,7 +1339,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       }
 
       async function addReaction(commentType?: "issue" | "pr_review") {
-        // Only called for non-schedule events, so triggerCommentId is defined
+        // 仅对非 schedule 事件调用，所以 triggerCommentId 已定义
         console.log("Adding reaction...")
         if (triggerCommentId) {
           if (commentType === "pr_review") {
@@ -1174,7 +1366,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       }
 
       async function removeReaction(commentType?: "issue" | "pr_review") {
-        // Only called for non-schedule events, so triggerCommentId is defined
+        // 仅对非 schedule 事件调用，所以 triggerCommentId 已定义
         console.log("Removing reaction...")
         if (triggerCommentId) {
           if (commentType === "pr_review") {
@@ -1233,7 +1425,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       }
 
       async function createComment(body: string) {
-        // Only called for non-schedule events, so issueId is defined
+        // 仅对非 schedule 事件调用，所以 issueId 已定义
         console.log("Creating comment...")
         return await octoRest.rest.issues.createComment({
           owner,
@@ -1246,8 +1438,8 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       async function createPR(base: string, branch: string, title: string, body: string) {
         console.log("Creating pull request...")
 
-        // Check if an open PR already exists for this head→base combination
-        // This handles the case where the agent created a PR via gh pr create during its run
+        // 检查是否已存在此 head→base 组合的开放 PR
+        // 这处理了 agent 在运行期间通过 gh pr create 创建 PR 的情况
         try {
           const existing = await withRetry(() =>
             octoRest.rest.pulls.list({
@@ -1264,7 +1456,7 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
             return existing.data[0].number
           }
         } catch (e) {
-          // If the check fails, proceed to create - we'll get a clear error if a PR already exists
+          // 如果检查失败，继续创建 - 如果 PR 已存在，我们会得到清晰的错误
           console.log(`Failed to check for existing PR: ${e}`)
         }
 
@@ -1354,7 +1546,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
 
       function buildPromptDataForIssue(issue: GitHubIssue) {
-        // Only called for non-schedule events, so payload is defined
+        // 仅对非 schedule 事件调用，所以 payload 已定义
         const comments = (issue.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)
@@ -1482,7 +1674,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
 
       function buildPromptDataForPR(pr: GitHubPullRequest) {
-        // Only called for non-schedule events, so payload is defined
+        // 仅对非 schedule 事件调用，所以 payload 已定义
         const comments = (pr.comments?.nodes || [])
           .filter((c) => {
             const id = parseInt(c.databaseId)

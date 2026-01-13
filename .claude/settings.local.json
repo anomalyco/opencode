@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(done:*)",
+      "Bash(for:*)"
+    ]
+  }
+}
