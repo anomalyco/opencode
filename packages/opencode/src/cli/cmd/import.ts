@@ -39,7 +39,21 @@ export const ImportCommand = cmd({
         }
 
         const slug = urlMatch[1]
-        const response = await fetch(`https://opncd.ai/api/share/${slug}`)
+
+        // Add timeout to prevent hanging in closed networks
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+
+        let response
+        try {
+          response = await fetch(`https://opncd.ai/api/share/${slug}`, { signal: controller.signal })
+          clearTimeout(timeoutId)
+        } catch (err) {
+          clearTimeout(timeoutId)
+          process.stdout.write(`Failed to fetch share data: ${err}`)
+          process.stdout.write(EOL)
+          return
+        }
 
         if (!response.ok) {
           process.stdout.write(`Failed to fetch share data: ${response.statusText}`)

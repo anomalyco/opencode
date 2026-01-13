@@ -166,40 +166,64 @@ export namespace Installation {
   export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
 
   export async function latest(installMethod?: Method) {
+    // Offline mode: return current version
+    if (process.env.OPENCODE_OFFLINE_MODE === "1") {
+      return VERSION
+    }
+
     const detectedMethod = installMethod || (await method())
 
-    if (detectedMethod === "brew") {
-      const formula = await getBrewFormula()
-      if (formula === "opencode") {
-        return fetch("https://formulae.brew.sh/api/formula/opencode.json")
+    // Helper function to fetch with timeout
+    const fetchWithTimeout = async (url: string, timeoutMs = 3000) => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const res = await fetch(url, { signal: controller.signal })
+        clearTimeout(timeoutId)
+        return res
+      } catch (err) {
+        clearTimeout(timeoutId)
+        throw err
+      }
+    }
+
+    try {
+      if (detectedMethod === "brew") {
+        const formula = await getBrewFormula()
+        if (formula === "opencode") {
+          return fetchWithTimeout("https://formulae.brew.sh/api/formula/opencode.json")
+            .then((res) => {
+              if (!res.ok) throw new Error(res.statusText)
+              return res.json()
+            })
+            .then((data: any) => data.versions.stable)
+        }
+      }
+
+      if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
+        const registry = await iife(async () => {
+          const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
+          const reg = r || "https://registry.npmjs.org"
+          return reg.endsWith("/") ? reg.slice(0, -1) : reg
+        })
+        const channel = CHANNEL
+        return fetchWithTimeout(`${registry}/opencode-ai/${channel}`)
           .then((res) => {
             if (!res.ok) throw new Error(res.statusText)
             return res.json()
           })
-          .then((data: any) => data.versions.stable)
+          .then((data: any) => data.version)
       }
-    }
 
-    if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
-      const registry = await iife(async () => {
-        const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
-        const reg = r || "https://registry.npmjs.org"
-        return reg.endsWith("/") ? reg.slice(0, -1) : reg
-      })
-      const channel = CHANNEL
-      return fetch(`${registry}/opencode-ai/${channel}`)
+      return fetchWithTimeout("https://api.github.com/repos/anomalyco/opencode/releases/latest")
         .then((res) => {
           if (!res.ok) throw new Error(res.statusText)
           return res.json()
         })
-        .then((data: any) => data.version)
+        .then((data: any) => data.tag_name.replace(/^v/, ""))
+    } catch (err) {
+      log.debug("failed to fetch latest version, using current version", { error: err })
+      return VERSION
     }
-
-    return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
-      .then((res) => {
-        if (!res.ok) throw new Error(res.statusText)
-        return res.json()
-      })
-      .then((data: any) => data.tag_name.replace(/^v/, ""))
   }
 }

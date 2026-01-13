@@ -16,6 +16,12 @@ export namespace ShareNext {
   }
 
   export async function init() {
+    // Skip share sync in offline mode
+    if (process.env.OPENCODE_OFFLINE_MODE === "1") {
+      log.debug("skipping share-next init in offline mode")
+      return
+    }
+
     Bus.subscribe(Session.Event.Updated, async (evt) => {
       await sync(evt.properties.info.id, [
         {

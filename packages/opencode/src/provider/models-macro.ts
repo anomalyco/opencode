@@ -6,6 +6,23 @@ export async function data() {
       return await file.text()
     }
   }
-  const json = await fetch("https://models.dev/api.json").then((x) => x.text())
-  return json
+
+  // Offline mode: skip network request
+  if (Bun.env.OPENCODE_OFFLINE_MODE === "1") {
+    return "{}"
+  }
+
+  // Add timeout to prevent hanging in closed networks
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
+
+  try {
+    const json = await fetch("https://models.dev/api.json", { signal: controller.signal }).then((x) => x.text())
+    clearTimeout(timeoutId)
+    return json
+  } catch (err) {
+    clearTimeout(timeoutId)
+    console.warn("Failed to fetch models from models.dev, using fallback", err)
+    return "{}"
+  }
 }

@@ -43,21 +43,39 @@ export namespace Config {
     let result: Info = {}
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
+        // Skip in offline mode
+        if (process.env.OPENCODE_OFFLINE_MODE === "1") {
+          log.debug("skipping remote config fetch in offline mode", { url: key })
+          continue
+        }
+
         process.env[value.key] = value.token
         log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
-        const response = await fetch(`${key}/.well-known/opencode`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+
+        // Add timeout to prevent hanging
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
+
+        try {
+          const response = await fetch(`${key}/.well-known/opencode`, { signal: controller.signal })
+          clearTimeout(timeoutId)
+
+          if (!response.ok) {
+            throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+          }
+          const wellknown = (await response.json()) as any
+          const remoteConfig = wellknown.config ?? {}
+          // Add $schema to prevent load() from trying to write back to a non-existent file
+          if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+          result = mergeConfigConcatArrays(
+            result,
+            await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
+          )
+          log.debug("loaded remote config from well-known", { url: key })
+        } catch (err) {
+          clearTimeout(timeoutId)
+          log.warn("failed to fetch remote config, skipping", { url: key, error: err })
         }
-        const wellknown = (await response.json()) as any
-        const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
-        )
-        log.debug("loaded remote config from well-known", { url: key })
       }
     }
 
