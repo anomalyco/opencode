@@ -2,7 +2,7 @@
   "name": "opencode",
   "displayName": "opencode",
   "description": "opencode for VS Code",
-  "version": "1.1.15",
+  "version": "1.1.16",
   "publisher": "sst-dev",
   "repository": {
     "type": "git",
