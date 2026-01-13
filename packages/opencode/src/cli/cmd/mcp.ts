@@ -117,6 +117,9 @@ export const McpListCommand = cmd({
             statusIcon = "✗"
             statusText = "needs client registration"
             hint = "\n    " + status.error
+          } else if (status.status === "connecting") {
+            statusIcon = "⋯"
+            statusText = "connecting"
           } else {
             statusIcon = "✗"
             statusText = "failed"

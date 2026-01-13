@@ -102,6 +102,13 @@ export namespace MCP {
         .meta({
           ref: "MCPStatusNeedsClientRegistration",
         }),
+      z
+        .object({
+          status: z.literal("connecting"),
+        })
+        .meta({
+          ref: "MCPStatusConnecting",
+        }),
     ])
     .meta({
       ref: "MCPStatus",
@@ -167,7 +174,7 @@ export namespace MCP {
       const clients: Record<string, MCPClient> = {}
       const status: Record<string, Status> = {}
 
-      await Promise.all(
+      Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {
           if (!isMcpConfigured(mcp)) {
             log.error("Ignoring MCP config entry without type", { key })
@@ -180,6 +187,9 @@ export namespace MCP {
             return
           }
 
+          status[key] = { status: "connecting" }
+          Bus.publish(ToolsChanged, { server: key })
+
           const result = await create(key, mcp).catch(() => undefined)
           if (!result) return
 
@@ -187,9 +197,12 @@ export namespace MCP {
 
           if (result.mcpClient) {
             clients[key] = result.mcpClient
+            Bus.publish(ToolsChanged, { server: key })
           }
         }),
-      )
+      ).catch((error) => {
+        log.error("Unexpected error in MCP background connection", { error })
+      })
       return {
         status,
         clients,
