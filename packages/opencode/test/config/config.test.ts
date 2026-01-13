@@ -334,6 +334,147 @@ Test agent prompt`,
   })
 })
 
+test("loads agents from .opencode/agents (plural)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const agentsDir = path.join(opencodeDir, "agents")
+      await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(agentsDir, "helper.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Helper agent prompt`,
+      )
+
+      await Bun.write(
+        path.join(agentsDir, "nested", "child.md"),
+        `---
+model: test/model
+mode: subagent
+---
+Nested agent prompt`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.["helper"]).toMatchObject({
+        name: "helper",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Helper agent prompt",
+      })
+
+      expect(config.agent?.["nested/child"]).toMatchObject({
+        name: "nested/child",
+        model: "test/model",
+        mode: "subagent",
+        prompt: "Nested agent prompt",
+      })
+    },
+  })
+})
+
+test("loads commands from .opencode/command (singular)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const commandDir = path.join(opencodeDir, "command")
+      await fs.mkdir(path.join(commandDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(commandDir, "hello.md"),
+        `---
+description: Test command
+---
+Hello from singular command`,
+      )
+
+      await Bun.write(
+        path.join(commandDir, "nested", "child.md"),
+        `---
+description: Nested command
+---
+Nested command template`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.command?.["hello"]).toEqual({
+        description: "Test command",
+        template: "Hello from singular command",
+      })
+
+      expect(config.command?.["nested/child"]).toEqual({
+        description: "Nested command",
+        template: "Nested command template",
+      })
+    },
+  })
+})
+
+test("loads commands from .opencode/commands (plural)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const opencodeDir = path.join(dir, ".opencode")
+      await fs.mkdir(opencodeDir, { recursive: true })
+
+      const commandsDir = path.join(opencodeDir, "commands")
+      await fs.mkdir(path.join(commandsDir, "nested"), { recursive: true })
+
+      await Bun.write(
+        path.join(commandsDir, "hello.md"),
+        `---
+description: Test command
+---
+Hello from plural commands`,
+      )
+
+      await Bun.write(
+        path.join(commandsDir, "nested", "child.md"),
+        `---
+description: Nested command
+---
+Nested command template`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.command?.["hello"]).toEqual({
+        description: "Test command",
+        template: "Hello from plural commands",
+      })
+
+      expect(config.command?.["nested/child"]).toEqual({
+        description: "Nested command",
+        template: "Nested command template",
+      })
+    },
+  })
+})
+
 test("updates config and writes to file", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

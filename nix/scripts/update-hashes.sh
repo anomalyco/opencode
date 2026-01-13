@@ -10,7 +10,7 @@ HASH_FILE=${HASH_FILE:-$DEFAULT_HASH_FILE}
 if [ ! -f "$HASH_FILE" ]; then
   cat >"$HASH_FILE" <<EOF
 {
-  "nodeModules": "$DUMMY"
+  "nodeModules": {}
 }
 EOF
 fi
@@ -33,9 +33,16 @@ trap cleanup EXIT
 
 write_node_modules_hash() {
   local value="$1"
+  local system="${2:-$SYSTEM}"
   local temp
   temp=$(mktemp)
-  jq --arg value "$value" '.nodeModules = $value' "$HASH_FILE" >"$temp"
+  
+  if jq -e '.nodeModules | type == "object"' "$HASH_FILE" >/dev/null 2>&1; then
+    jq --arg system "$system" --arg value "$value" '.nodeModules[$system] = $value' "$HASH_FILE" >"$temp"
+  else
+    jq --arg system "$system" --arg value "$value" '.nodeModules = {($system): $value}' "$HASH_FILE" >"$temp"
+  fi
+  
   mv "$temp" "$HASH_FILE"
 }
 
@@ -104,7 +111,7 @@ fi
 
 write_node_modules_hash "$CORRECT_HASH"
 
-jq -e --arg hash "$CORRECT_HASH" '.nodeModules == $hash' "$HASH_FILE" >/dev/null
+jq -e --arg system "$SYSTEM" --arg hash "$CORRECT_HASH" '.nodeModules[$system] == $hash' "$HASH_FILE" >/dev/null
 
 echo "node_modules hash updated for ${SYSTEM}: $CORRECT_HASH"
 
