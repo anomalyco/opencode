@@ -5,8 +5,6 @@ import { useAuthSession } from "~/context/auth"
 
 export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
-  console.log("=C=", input.request.url)
-  throw new Error("Not implemented")
   try {
     const code = url.searchParams.get("code")
     if (!code) throw new Error("No code found")
