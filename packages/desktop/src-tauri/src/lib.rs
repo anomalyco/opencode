@@ -59,8 +59,8 @@ struct LogState(Arc<Mutex<VecDeque<String>>>);
 /// processes are automatically terminated by the OS.
 #[cfg(windows)]
 struct JobObjectState {
-    job: std::sync::Mutex<Option<job_object::JobObject>>,
-    error: std::sync::Mutex<Option<String>>,
+    job: Mutex<Option<job_object::JobObject>>,
+    error: Mutex<Option<String>>,
 }
 
 #[cfg(windows)]
@@ -68,14 +68,14 @@ impl JobObjectState {
     fn new() -> Self {
         match job_object::JobObject::new() {
             Ok(job) => Self {
-                job: std::sync::Mutex::new(Some(job)),
-                error: std::sync::Mutex::new(None),
+                job: Mutex::new(Some(job)),
+                error: Mutex::new(None),
             },
             Err(e) => {
                 eprintln!("Failed to create job object: {e}");
                 Self {
-                    job: std::sync::Mutex::new(None),
-                    error: std::sync::Mutex::new(Some(format!("Failed to create job object: {e}"))),
+                    job: Mutex::new(None),
+                    error: Mutex::new(Some(format!("Failed to create job object: {e}"))),
                 }
             }
         }
