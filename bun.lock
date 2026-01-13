@@ -276,9 +276,9 @@
         "@ai-sdk/vercel": "1.0.31",
         "@ai-sdk/xai": "2.0.51",
         "@clack/prompts": "1.0.0-alpha.1",
-        "@gitlab/gitlab-ai-provider": "3.0.9",
-        "@gitlab/opencode-gitlab-auth": "1.2.1",
-        "@gitlab/opencode-gitlab-plugin": "1.0.6",
+        "@gitlab/gitlab-ai-provider": "3.1.0",
+        "@gitlab/opencode-gitlab-auth": "1.3.0",
+        "@gitlab/opencode-gitlab-plugin": "1.1.0",
         "@hono/standard-validator": "0.1.5",
         "@hono/zod-validator": "catalog:",
         "@modelcontextprotocol/sdk": "1.25.2",
@@ -927,11 +927,11 @@
 
     "@fontsource/inter": ["@fontsource/inter@5.2.8", "", {}, "sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg=="],
 
-    "@gitlab/gitlab-ai-provider": ["@gitlab/gitlab-ai-provider@3.0.9", "", { "dependencies": { "@anthropic-ai/sdk": "^0.71.0", "@anycable/core": "^0.9.2", "graphql-request": "^6.1.0", "isomorphic-ws": "^5.0.0", "socket.io-client": "^4.8.1", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "peerDependencies": { "@ai-sdk/provider": ">=2.0.0", "@ai-sdk/provider-utils": ">=3.0.0" } }, "sha512-SMFaaj0DtdyJ8NpVrA4N8dMGeJmDP4mO00iWFjd9CtEO+2rx61YR0rQTDw3RW4x1kaBHJ+NU0U9JIzv9h6zkow=="],
+    "@gitlab/gitlab-ai-provider": ["@gitlab/gitlab-ai-provider@3.1.0", "", { "dependencies": { "@anthropic-ai/sdk": "^0.71.0", "@anycable/core": "^0.9.2", "graphql-request": "^6.1.0", "isomorphic-ws": "^5.0.0", "socket.io-client": "^4.8.1", "vscode-jsonrpc": "^8.2.1", "zod": "^3.25.76" }, "peerDependencies": { "@ai-sdk/provider": ">=2.0.0", "@ai-sdk/provider-utils": ">=3.0.0" } }, "sha512-S0MVXsogrwbOboA/8L0CY5sBXg2HrrO8gdeUeHd9yLZDPsggFD0FzcSuzO5vBO6geUOpruRa8Hqrbb6WWu7Frw=="],
 
-    "@gitlab/opencode-gitlab-auth": ["@gitlab/opencode-gitlab-auth@1.2.1", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "^1.0.127", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-/3tnlu0k22MRwlUVkmT7SYOOckrk+hZkcXY6l43K6H4KwuIBs2Tkn2eWDF1ReNWaTXxjJG7OlQtRhGu6yXzIqQ=="],
+    "@gitlab/opencode-gitlab-auth": ["@gitlab/opencode-gitlab-auth@1.3.0", "", { "dependencies": { "@fastify/rate-limit": "^10.2.0", "@opencode-ai/plugin": "^1.0.127", "fastify": "^5.2.0", "open": "^10.0.0" } }, "sha512-Jd0jXYip0FoKuPLIIHh5vIt3FtRbYLZm9um7nG/Nbv34YbLcaoFRnoiqoD5t/xKWc/lae+lj3f3c/lyKhjnIpQ=="],
 
-    "@gitlab/opencode-gitlab-plugin": ["@gitlab/opencode-gitlab-plugin@1.0.6", "", { "dependencies": { "@opencode-ai/plugin": "^1.0.127", "zod": "4.1.8" } }, "sha512-M3gcGUryCG3sbhge8EJXsNxSO/AMEOt0TnoAu33QzaCIVlu+lojWn8T8X6UVzEVizoGRv/OwN66mOU7NAgT1sw=="],
+    "@gitlab/opencode-gitlab-plugin": ["@gitlab/opencode-gitlab-plugin@1.1.0", "", { "dependencies": { "@opencode-ai/plugin": "^1.0.127", "zod": "4.1.8" } }, "sha512-seEAtmE3xLhXgb+6+EPk2Jn4e4BWWXAMUD1EIXlJhSVXXXkibxmEG0hBbq1W97WZAis0PUJl5D2X912xXaBTdg=="],
 
     "@graphql-typed-document-node/core": ["@graphql-typed-document-node/core@3.2.0", "", { "peerDependencies": { "graphql": "^0.8.0 || ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0 || ^17.0.0" } }, "sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ=="],
 
