@@ -397,73 +397,21 @@ export namespace Provider {
     async gitlab(input) {
       const instanceUrl = Env.get("GITLAB_INSTANCE_URL") || "https://gitlab.com"
 
-      const loadOpenCodeAuth = async () => {
-        const homeDir = os.homedir()
-        const xdgDataHome = process.env.XDG_DATA_HOME
-        const authPath = xdgDataHome
-          ? path.join(xdgDataHome, "opencode", "auth.json")
-          : process.platform !== "win32"
-            ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
-            : path.join(homeDir, ".opencode", "auth.json")
-
-        const file = Bun.file(authPath)
-        if (!(await file.exists())) return undefined
-
-        const authData = await file.json().catch((err) => {
-          log.debug("failed to parse auth.json", { err })
-          return undefined
-        })
-        if (!authData) return undefined
-
-        const gitlabAuth = authData.gitlab
-        if (!gitlabAuth) return undefined
-
-        if (gitlabAuth.type === "oauth") {
-          const authUrl = gitlabAuth.enterpriseUrl || "https://gitlab.com"
-          if (authUrl !== instanceUrl && authUrl !== instanceUrl.replace(/\/$/, "")) {
-            return undefined
-          }
-          return {
-            access: gitlabAuth.access,
-            refresh: gitlabAuth.refresh,
-            expires: gitlabAuth.expires,
-          }
-        }
-
-        if (gitlabAuth.type === "api") {
-          return { access: gitlabAuth.key }
-        }
-
-        return undefined
-      }
-
       const auth = await Auth.get(input.id)
-      const creds = await (async () => {
-        if (auth?.type === "oauth") {
-          return { access: auth.access, refresh: auth.refresh, expires: auth.expires }
-        }
-        if (auth?.type === "api") {
-          return { access: auth.key }
-        }
-
-        const stored = await loadOpenCodeAuth()
-        if (stored) return stored
-
-        const envToken = Env.get("GITLAB_TOKEN")
-        if (envToken) return { access: envToken }
-
-        return undefined
+      const apiKey = await (async () => {
+        if (auth?.type === "oauth") return auth.access
+        if (auth?.type === "api") return auth.key
+        return Env.get("GITLAB_TOKEN")
       })()
 
       const config = await Config.get()
       const providerConfig = config.provider?.["gitlab"]
 
       return {
-        autoload: !!creds,
+        autoload: !!apiKey,
         options: {
           instanceUrl,
-          apiKey: creds?.access,
-          refreshToken: creds?.refresh,
+          apiKey,
           featureFlags: {
             duo_agent_platform_agentic_chat: true,
             duo_agent_platform: true,

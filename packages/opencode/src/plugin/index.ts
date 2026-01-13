@@ -7,10 +7,6 @@ import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
-import { Auth } from "../auth"
-import { Env } from "../env"
-import path from "path"
-import os from "os"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
@@ -18,7 +14,11 @@ import { NamedError } from "@opencode-ai/util/error"
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-copilot-auth@0.0.12", "opencode-anthropic-auth@0.0.8"]
+  const BUILTIN = [
+    "opencode-copilot-auth@0.0.12",
+    "opencode-anthropic-auth@0.0.8",
+    "@gitlab/opencode-gitlab-auth@1.3.0",
+  ]
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
@@ -49,40 +49,6 @@ export namespace Plugin {
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push(...BUILTIN)
-    }
-
-    const shouldLoadGitLabPlugins = await (async () => {
-      if (config.provider?.["gitlab"]) return true
-
-      const auth = await Auth.get("gitlab")
-      if (auth) return true
-
-      const homeDir = os.homedir()
-      const xdgDataHome = process.env.XDG_DATA_HOME
-      const authPath = xdgDataHome
-        ? path.join(xdgDataHome, "opencode", "auth.json")
-        : process.platform !== "win32"
-          ? path.join(homeDir, ".local", "share", "opencode", "auth.json")
-          : path.join(homeDir, ".opencode", "auth.json")
-
-      const file = Bun.file(authPath)
-      if (await file.exists()) {
-        const authData = await file.json().catch((err) => {
-          log.debug("failed to parse auth.json for gitlab plugin check", { err })
-          return undefined
-        })
-        if (authData?.gitlab) return true
-      }
-
-      if (Env.get("GITLAB_TOKEN")) return true
-
-      return false
-    })()
-
-    if (shouldLoadGitLabPlugins && !Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      log.info("auto-loading GitLab plugins")
-      plugins.push("@gitlab/opencode-gitlab-auth@1.3.0")
-      plugins.push("@gitlab/opencode-gitlab-plugin@1.1.0")
     }
 
     for (let plugin of plugins) {

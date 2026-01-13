@@ -635,6 +635,19 @@ Customize through `opencode.json`:
 }
 ```
 
+##### GitLab API Tools (Optional)
+
+To access 104 GitLab API tools (merge requests, issues, pipelines, CI/CD, etc.):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@gitlab/opencode-gitlab-plugin"]
+}
+```
+
+This plugin provides comprehensive GitLab repository management capabilities including MR reviews, issue tracking, pipeline monitoring, and more.
+
 ---
 
 ### GitHub Copilot
