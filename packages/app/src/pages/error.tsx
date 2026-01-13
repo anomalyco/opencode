@@ -2,6 +2,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
 import { Component, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Icon } from "@opencode-ai/ui/icon"
 
@@ -20,11 +21,51 @@ function isInitError(error: unknown): error is InitError {
   )
 }
 
+function safeJson(value: unknown): string {
+  const seen = new WeakSet<object>()
+  const json = JSON.stringify(
+    value,
+    (_key, val) => {
+      if (typeof val === "bigint") return val.toString()
+      if (typeof val === "object" && val) {
+        if (seen.has(val)) return "[Circular]"
+        seen.add(val)
+      }
+      return val
+    },
+    2,
+  )
+  return json ?? String(value)
+}
+
 function formatInitError(error: InitError): string {
   const data = error.data
   switch (error.name) {
     case "MCPFailed":
       return `MCP server "${data.name}" failed. Note, opencode does not support MCP authentication yet.`
+    case "ProviderAuthError": {
+      const providerID = typeof data.providerID === "string" ? data.providerID : "unknown"
+      const message = typeof data.message === "string" ? data.message : safeJson(data.message)
+      return `Provider authentication failed (${providerID}): ${message}`
+    }
+    case "APIError": {
+      const message = typeof data.message === "string" ? data.message : "API error"
+      const lines: string[] = [message]
+
+      if (typeof data.statusCode === "number") {
+        lines.push(`Status: ${data.statusCode}`)
+      }
+
+      if (typeof data.isRetryable === "boolean") {
+        lines.push(`Retryable: ${data.isRetryable}`)
+      }
+
+      if (typeof data.responseBody === "string" && data.responseBody) {
+        lines.push(`Response body:\n${data.responseBody}`)
+      }
+
+      return lines.join("\n")
+    }
     case "ProviderModelNotFoundError": {
       const { providerID, modelID, suggestions } = data as {
         providerID: string
@@ -37,10 +78,14 @@ function formatInitError(error: InitError): string {
         `Check your config (opencode.json) provider/model names`,
       ].join("\n")
     }
-    case "ProviderInitError":
-      return `Failed to initialize provider "${data.providerID}". Check credentials and configuration.`
-    case "ConfigJsonError":
-      return `Config file at ${data.path} is not valid JSON(C)` + (data.message ? `: ${data.message}` : "")
+    case "ProviderInitError": {
+      const providerID = typeof data.providerID === "string" ? data.providerID : "unknown"
+      return `Failed to initialize provider "${providerID}". Check credentials and configuration.`
+    }
+    case "ConfigJsonError": {
+      const message = typeof data.message === "string" ? data.message : ""
+      return `Config file at ${data.path} is not valid JSON(C)` + (message ? `: ${message}` : "")
+    }
     case "ConfigDirectoryTypoError":
       return `Directory "${data.dir}" in ${data.path} is not valid. Rename the directory to "${data.suggestion}" or remove it. This is a common typo.`
     case "ConfigFrontmatterError":
@@ -51,14 +96,14 @@ function formatInitError(error: InitError): string {
             (issue: { message: string; path: string[] }) => "↳ " + issue.message + " " + issue.path.join("."),
           )
         : []
-      return [`Config file at ${data.path} is invalid` + (data.message ? `: ${data.message}` : ""), ...issues].join(
-        "\n",
-      )
+      const message = typeof data.message === "string" ? data.message : ""
+      return [`Config file at ${data.path} is invalid` + (message ? `: ${message}` : ""), ...issues].join("\n")
     }
     case "UnknownError":
-      return String(data.message)
+      return typeof data.message === "string" ? data.message : safeJson(data)
     default:
-      return data.message ? String(data.message) : JSON.stringify(data, null, 2)
+      if (typeof data.message === "string") return data.message
+      return safeJson(data)
   }
 }
 
@@ -69,7 +114,7 @@ function formatErrorChain(error: unknown, depth = 0, parentMessage?: string): st
     const message = formatInitError(error)
     if (depth > 0 && parentMessage === message) return ""
     const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
-    return indent + message
+    return indent + `${error.name}\n${message}`
   }
 
   if (error instanceof Error) {
@@ -77,15 +122,34 @@ function formatErrorChain(error: unknown, depth = 0, parentMessage?: string): st
     const parts: string[] = []
     const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
 
-    if (!isDuplicate) {
-      // Stack already includes error name and message, so prefer it
-      parts.push(indent + (error.stack ?? `${error.name}: ${error.message}`))
-    } else if (error.stack) {
-      // Duplicate message - only show the stack trace lines (skip message)
-      const trace = error.stack.split("\n").slice(1).join("\n").trim()
-      if (trace) {
-        parts.push(trace)
+    const header = `${error.name}${error.message ? `: ${error.message}` : ""}`
+    const stack = error.stack?.trim()
+
+    if (stack) {
+      const startsWithHeader = stack.startsWith(header)
+
+      if (isDuplicate && startsWithHeader) {
+        const trace = stack.split("\n").slice(1).join("\n").trim()
+        if (trace) {
+          parts.push(indent + trace)
+        }
       }
+
+      if (isDuplicate && !startsWithHeader) {
+        parts.push(indent + stack)
+      }
+
+      if (!isDuplicate && startsWithHeader) {
+        parts.push(indent + stack)
+      }
+
+      if (!isDuplicate && !startsWithHeader) {
+        parts.push(indent + `${header}\n${stack}`)
+      }
+    }
+
+    if (!stack && !isDuplicate) {
+      parts.push(indent + header)
     }
 
     if (error.cause) {
@@ -105,7 +169,7 @@ function formatErrorChain(error: unknown, depth = 0, parentMessage?: string): st
   }
 
   const indent = depth > 0 ? `\n${"─".repeat(40)}\nCaused by:\n` : ""
-  return indent + JSON.stringify(error, null, 2)
+  return indent + safeJson(error)
 }
 
 function formatError(error: unknown): string {
@@ -118,6 +182,25 @@ interface ErrorPageProps {
 
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
+  const [store, setStore] = createStore({
+    checking: false,
+    version: undefined as string | undefined,
+  })
+
+  async function checkForUpdates() {
+    if (!platform.checkUpdate) return
+    setStore("checking", true)
+    const result = await platform.checkUpdate()
+    setStore("checking", false)
+    if (result.updateAvailable && result.version) setStore("version", result.version)
+  }
+
+  async function installUpdate() {
+    if (!platform.update || !platform.restart) return
+    await platform.update()
+    await platform.restart()
+  }
+
   return (
     <div class="relative flex-1 h-screen w-screen min-h-0 flex flex-col items-center justify-center bg-background-base font-sans">
       <div class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
@@ -131,13 +214,29 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           readOnly
           copyable
           multiline
-          class="max-h-96 w-full font-mono text-xs no-scrollbar whitespace-pre"
+          class="max-h-96 w-full font-mono text-xs no-scrollbar"
           label="Error Details"
           hideLabel
         />
-        <Button size="large" onClick={platform.restart}>
-          Restart
-        </Button>
+        <div class="flex items-center gap-3">
+          <Button size="large" onClick={platform.restart}>
+            Restart
+          </Button>
+          <Show when={platform.checkUpdate}>
+            <Show
+              when={store.version}
+              fallback={
+                <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
+                  {store.checking ? "Checking..." : "Check for updates"}
+                </Button>
+              }
+            >
+              <Button size="large" onClick={installUpdate}>
+                Update to {store.version}
+              </Button>
+            </Show>
+          </Show>
+        </div>
         <div class="flex flex-col items-center gap-2">
           <div class="flex items-center justify-center gap-1">
             Please report this error to the OpenCode team

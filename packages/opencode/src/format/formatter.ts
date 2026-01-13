@@ -96,7 +96,7 @@ export const oxfmt: Info = {
 
 export const biome: Info = {
   name: "biome",
-  command: [BunProc.which(), "x", "@biomejs/biome", "format", "--write", "$FILE"],
+  command: [BunProc.which(), "x", "@biomejs/biome", "check", "--write", "$FILE"],
   environment: {
     BUN_BE_BUN: "1",
   },
@@ -320,5 +320,40 @@ export const shfmt: Info = {
   extensions: [".sh", ".bash"],
   async enabled() {
     return Bun.which("shfmt") !== null
+  },
+}
+
+export const nixfmt: Info = {
+  name: "nixfmt",
+  command: ["nixfmt", "$FILE"],
+  extensions: [".nix"],
+  async enabled() {
+    return Bun.which("nixfmt") !== null
+  },
+}
+
+export const rustfmt: Info = {
+  name: "rustfmt",
+  command: ["rustfmt", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    if (!Bun.which("rustfmt")) return false
+    const configs = ["rustfmt.toml", ".rustfmt.toml"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, Instance.directory, Instance.worktree)
+      if (found.length > 0) return true
+    }
+    return false
+  },
+}
+
+export const cargofmt: Info = {
+  name: "cargofmt",
+  command: ["cargo", "fmt", "--", "$FILE"],
+  extensions: [".rs"],
+  async enabled() {
+    if (!Bun.which("cargo")) return false
+    const found = await Filesystem.findUp("Cargo.toml", Instance.directory, Instance.worktree)
+    return found.length > 0
   },
 }

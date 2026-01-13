@@ -1,8 +1,6 @@
 import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./websearch.txt"
-import { Config } from "../config/config"
-import { Permission } from "../permission"
 
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
@@ -59,22 +57,18 @@ export const WebSearchTool = Tool.define("websearch", {
       .describe("Maximum characters for context string optimized for LLMs (default: 10000)"),
   }),
   async execute(params, ctx) {
-    const cfg = await Config.get()
-    if (cfg.permission?.webfetch === "ask")
-      await Permission.ask({
-        type: "websearch",
-        sessionID: ctx.sessionID,
-        messageID: ctx.messageID,
-        callID: ctx.callID,
-        title: "Search web for: " + params.query,
-        metadata: {
-          query: params.query,
-          numResults: params.numResults,
-          livecrawl: params.livecrawl,
-          type: params.type,
-          contextMaxCharacters: params.contextMaxCharacters,
-        },
-      })
+    await ctx.ask({
+      permission: "websearch",
+      patterns: [params.query],
+      always: ["*"],
+      metadata: {
+        query: params.query,
+        numResults: params.numResults,
+        livecrawl: params.livecrawl,
+        type: params.type,
+        contextMaxCharacters: params.contextMaxCharacters,
+      },
+    })
 
     const searchRequest: McpSearchRequest = {
       jsonrpc: "2.0",

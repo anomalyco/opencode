@@ -1,5 +1,6 @@
 ---
 description: ALWAYS use this when writing docs
+color: "#38A3EE"
 ---
 
 You are an expert technical documentation writer

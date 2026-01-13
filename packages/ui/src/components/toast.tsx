@@ -128,7 +128,12 @@ export function showToast(options: ToastOptions | string) {
             {opts.actions!.map((action) => (
               <button
                 data-slot="toast-action"
-                onClick={typeof action.onClick === "function" ? action.onClick : () => toaster.dismiss(props.toastId)}
+                onClick={() => {
+                  if (typeof action.onClick === "function") {
+                    action.onClick()
+                  }
+                  toaster.dismiss(props.toastId)
+                }}
               >
                 {action.label}
               </button>

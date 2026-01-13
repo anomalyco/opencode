@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg, type KeyBinding } from "@opentui/core"
+import { BoxRenderable, TextareaRenderable, MouseEvent, PasteEvent, t, dim, fg } from "@opentui/core"
 import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, Show, Switch, Match } from "solid-js"
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
@@ -10,7 +10,6 @@ import { useSync } from "@tui/context/sync"
 import { Identifier } from "@/id/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
-import { Keybind } from "@/util/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
@@ -30,9 +29,11 @@ import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
+import { useTextareaKeybindings } from "../textarea-keybindings"
 
 export type PromptProps = {
   sessionID?: string
+  visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
   ref?: (ref: PromptRef) => void
@@ -51,61 +52,6 @@ export type PromptRef = {
 }
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
-
-const TEXTAREA_ACTIONS = [
-  "submit",
-  "newline",
-  "move-left",
-  "move-right",
-  "move-up",
-  "move-down",
-  "select-left",
-  "select-right",
-  "select-up",
-  "select-down",
-  "line-home",
-  "line-end",
-  "select-line-home",
-  "select-line-end",
-  "visual-line-home",
-  "visual-line-end",
-  "select-visual-line-home",
-  "select-visual-line-end",
-  "buffer-home",
-  "buffer-end",
-  "select-buffer-home",
-  "select-buffer-end",
-  "delete-line",
-  "delete-to-line-end",
-  "delete-to-line-start",
-  "backspace",
-  "delete",
-  "undo",
-  "redo",
-  "word-forward",
-  "word-backward",
-  "select-word-forward",
-  "select-word-backward",
-  "delete-word-forward",
-  "delete-word-backward",
-] as const
-
-function mapTextareaKeybindings(
-  keybinds: Record<string, Keybind.Info[]>,
-  action: (typeof TEXTAREA_ACTIONS)[number],
-): KeyBinding[] {
-  const configKey = `input_${action.replace(/-/g, "_")}`
-  const bindings = keybinds[configKey]
-  if (!bindings) return []
-  return bindings.map((binding) => ({
-    name: binding.name,
-    ctrl: binding.ctrl || undefined,
-    meta: binding.meta || undefined,
-    shift: binding.shift || undefined,
-    super: binding.super || undefined,
-    action,
-  }))
-}
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -138,20 +84,12 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  const textareaKeybindings = createMemo(() => {
-    const keybinds = keybind.all
-
-    return [
-      { name: "return", action: "submit" },
-      { name: "return", meta: true, action: "newline" },
-      ...TEXTAREA_ACTIONS.flatMap((action) => mapTextareaKeybindings(keybinds, action)),
-    ] satisfies KeyBinding[]
-  })
+  const textareaKeybindings = useTextareaKeybindings()
 
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
-  let promptPartTypeId: number
+  let promptPartTypeId = 0
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
     input.insertText(evt.properties.text)
@@ -165,6 +103,13 @@ export function Prompt(props: PromptProps) {
   createEffect(() => {
     if (props.disabled) input.cursorColor = theme.backgroundElement
     if (!props.disabled) input.cursorColor = theme.text
+  })
+
+  const lastUserMessage = createMemo(() => {
+    if (!props.sessionID) return undefined
+    const messages = sync.data.message[props.sessionID]
+    if (!messages) return undefined
+    return messages.findLast((m) => m.role === "user")
   })
 
   const [store, setStore] = createStore<{
@@ -182,6 +127,27 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+  })
+
+  // Initialize agent/model/variant from last user message when session changes
+  let syncedSessionID: string | undefined
+  createEffect(() => {
+    const sessionID = props.sessionID
+    const msg = lastUserMessage()
+
+    if (sessionID !== syncedSessionID) {
+      if (!sessionID || !msg) return
+
+      syncedSessionID = sessionID
+
+      // Only set agent if it's a primary agent (not a subagent)
+      const isPrimaryAgent = local.agent.list().some((x) => x.name === msg.agent)
+      if (msg.agent && isPrimaryAgent) {
+        local.agent.set(msg.agent)
+      }
+      if (msg.model) local.model.set(msg.model)
+      if (msg.variant) local.model.variant.set(msg.variant)
+    }
   })
 
   command.register(() => {
@@ -344,12 +310,42 @@ export function Prompt(props: PromptProps) {
     ]
   })
 
-  createEffect(() => {
-    input.focus()
-  })
+  const ref: PromptRef = {
+    get focused() {
+      return input.focused
+    },
+    get current() {
+      return store.prompt
+    },
+    focus() {
+      input.focus()
+    },
+    blur() {
+      input.blur()
+    },
+    set(prompt) {
+      input.setText(prompt.input)
+      setStore("prompt", prompt)
+      restoreExtmarksFromParts(prompt.parts)
+      input.gotoBufferEnd()
+    },
+    reset() {
+      input.clear()
+      input.extmarks.clear()
+      setStore("prompt", {
+        input: "",
+        parts: [],
+      })
+      setStore("extmarkToPartIndex", new Map())
+    },
+    submit() {
+      submit()
+    },
+  }
 
-  onMount(() => {
-    promptPartTypeId = input.extmarks.registerType("prompt-part")
+  createEffect(() => {
+    if (props.visible !== false) input?.focus()
+    if (props.visible === false) input?.blur()
   })
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
@@ -485,39 +481,6 @@ export function Prompt(props: PromptProps) {
     },
   ])
 
-  props.ref?.({
-    get focused() {
-      return input.focused
-    },
-    get current() {
-      return store.prompt
-    },
-    focus() {
-      input.focus()
-    },
-    blur() {
-      input.blur()
-    },
-    set(prompt) {
-      input.setText(prompt.input)
-      setStore("prompt", prompt)
-      restoreExtmarksFromParts(prompt.parts)
-      input.gotoBufferEnd()
-    },
-    reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
-      setStore("extmarkToPartIndex", new Map())
-    },
-    submit() {
-      submit()
-    },
-  })
-
   async function submit() {
     if (props.disabled) return
     if (autocomplete?.visible) return
@@ -562,6 +525,7 @@ export function Prompt(props: PromptProps) {
 
     // Capture mode before it gets reset
     const currentMode = store.mode
+    const variant = local.model.variant.current()
 
     if (store.mode === "shell") {
       sdk.client.session.shell({
@@ -590,6 +554,13 @@ export function Prompt(props: PromptProps) {
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
+        variant,
+        parts: nonTextParts
+          .filter((x) => x.type === "file")
+          .map((x) => ({
+            id: Identifier.ascending("part"),
+            ...x,
+          })),
       })
     } else {
       sdk.client.session.prompt({
@@ -598,6 +569,7 @@ export function Prompt(props: PromptProps) {
         messageID,
         agent: local.agent.current().name,
         model: selectedModel,
+        variant,
         parts: [
           {
             id: Identifier.ascending("part"),
@@ -718,6 +690,13 @@ export function Prompt(props: PromptProps) {
     return local.agent.color(local.agent.current().name)
   })
 
+  const showVariant = createMemo(() => {
+    const variants = local.model.variant.list()
+    if (variants.length === 0) return false
+    const current = local.model.variant.current()
+    return !!current
+  })
+
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -760,7 +739,7 @@ export function Prompt(props: PromptProps) {
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
-      <box ref={(r) => (anchor = r)}>
+      <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
           border={["left"]}
           borderColor={highlight()}
@@ -772,7 +751,7 @@ export function Prompt(props: PromptProps) {
         >
           <box
             paddingLeft={2}
-            paddingRight={1}
+            paddingRight={2}
             paddingTop={1}
             flexShrink={0}
             backgroundColor={theme.backgroundElement}
@@ -933,12 +912,15 @@ export function Prompt(props: PromptProps) {
                 // Force layout update and render for the pasted content
                 setTimeout(() => {
                   input.getLayoutNode().markDirty()
-                  input.gotoBufferEnd()
                   renderer.requestRender()
                 }, 0)
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
+                if (promptPartTypeId === 0) {
+                  promptPartTypeId = input.extmarks.registerType("prompt-part")
+                }
+                props.ref?.(ref)
                 setTimeout(() => {
                   input.cursorColor = theme.text
                 }, 0)
@@ -958,6 +940,12 @@ export function Prompt(props: PromptProps) {
                     {local.model.parsed().model}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <Show when={showVariant()}>
+                    <text fg={theme.textMuted}>·</text>
+                    <text>
+                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                    </text>
+                  </Show>
                 </box>
               </Show>
             </box>
@@ -1074,7 +1062,10 @@ export function Prompt(props: PromptProps) {
               <Switch>
                 <Match when={store.mode === "normal"}>
                   <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>switch agent</span>
+                    {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
+                  </text>
+                  <text fg={theme.text}>
+                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
                   </text>
                   <text fg={theme.text}>
                     {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>

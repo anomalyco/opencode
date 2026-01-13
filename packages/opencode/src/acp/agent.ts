@@ -30,17 +30,14 @@ import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { applyPatch } from "diff"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
-  export async function init({ sdk }: { sdk: OpencodeClient }) {
-    const model = await defaultModel({ sdk })
+  export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
       create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
-        if (!fullConfig.defaultModel) {
-          fullConfig.defaultModel = model
-        }
         return new Agent(connection, fullConfig)
       },
     }
@@ -71,19 +68,19 @@ export namespace ACP {
       this.config.sdk.event.subscribe({ directory }).then(async (events) => {
         for await (const event of events.stream) {
           switch (event.type) {
-            case "permission.updated":
+            case "permission.asked":
               try {
                 const permission = event.properties
                 const res = await this.connection
                   .requestPermission({
                     sessionId,
                     toolCall: {
-                      toolCallId: permission.callID ?? permission.id,
+                      toolCallId: permission.tool?.callID ?? permission.id,
                       status: "pending",
-                      title: permission.title,
+                      title: permission.permission,
                       rawInput: permission.metadata,
-                      kind: toToolKind(permission.type),
-                      locations: toLocations(permission.type, permission.metadata),
+                      kind: toToolKind(permission.permission),
+                      locations: toLocations(permission.permission, permission.metadata),
                     },
                     options,
                   })
@@ -93,28 +90,41 @@ export namespace ACP {
                       permissionID: permission.id,
                       sessionID: permission.sessionID,
                     })
-                    await this.config.sdk.permission.respond({
-                      sessionID: permission.sessionID,
-                      permissionID: permission.id,
-                      response: "reject",
+                    await this.config.sdk.permission.reply({
+                      requestID: permission.id,
+                      reply: "reject",
                       directory,
                     })
                     return
                   })
                 if (!res) return
                 if (res.outcome.outcome !== "selected") {
-                  await this.config.sdk.permission.respond({
-                    sessionID: permission.sessionID,
-                    permissionID: permission.id,
-                    response: "reject",
+                  await this.config.sdk.permission.reply({
+                    requestID: permission.id,
+                    reply: "reject",
                     directory,
                   })
                   return
                 }
-                await this.config.sdk.permission.respond({
-                  sessionID: permission.sessionID,
-                  permissionID: permission.id,
-                  response: res.outcome.optionId as "once" | "always" | "reject",
+                if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+                  const metadata = permission.metadata || {}
+                  const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
+                  const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+
+                  const content = await Bun.file(filepath).text()
+                  const newContent = getNewContent(content, diff)
+
+                  if (newContent) {
+                    this.connection.writeTextFile({
+                      sessionId: sessionId,
+                      path: filepath,
+                      content: newContent,
+                    })
+                  }
+                }
+                await this.config.sdk.permission.reply({
+                  requestID: permission.id,
+                  reply: res.outcome.optionId as "once" | "always" | "reject",
                   directory,
                 })
               } catch (err) {
@@ -174,6 +184,8 @@ export namespace ACP {
                             sessionUpdate: "tool_call_update",
                             toolCallId: part.callID,
                             status: "in_progress",
+                            kind: toToolKind(part.tool),
+                            title: part.tool,
                             locations: toLocations(part.tool, part.state.input),
                             rawInput: part.state.input,
                           },
@@ -249,6 +261,7 @@ export namespace ACP {
                             kind,
                             content,
                             title: part.state.title,
+                            rawInput: part.state.input,
                             rawOutput: {
                               output: part.state.output,
                               metadata: part.state.metadata,
@@ -267,6 +280,9 @@ export namespace ACP {
                             sessionUpdate: "tool_call_update",
                             toolCallId: part.callID,
                             status: "failed",
+                            kind: toToolKind(part.tool),
+                            title: part.tool,
+                            rawInput: part.state.input,
                             content: [
                               {
                                 type: "content",
@@ -498,6 +514,8 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "in_progress",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
                   },
@@ -573,6 +591,7 @@ export namespace ACP {
                     kind,
                     content,
                     title: part.state.title,
+                    rawInput: part.state.input,
                     rawOutput: {
                       output: part.state.output,
                       metadata: part.state.metadata,
@@ -591,6 +610,9 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "failed",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
+                    rawInput: part.state.input,
                     content: [
                       {
                         type: "content",
@@ -991,8 +1013,10 @@ export namespace ACP {
     const configured = config.defaultModel
     if (configured) return configured
 
-    const model = await sdk.config
-      .get({ directory: cwd }, { throwOnError: true })
+    const directory = cwd ?? process.cwd()
+
+    const specified = await sdk.config
+      .get({ directory }, { throwOnError: true })
       .then((resp) => {
         const cfg = resp.data
         if (!cfg || !cfg.model) return undefined
@@ -1007,7 +1031,47 @@ export namespace ACP {
         return undefined
       })
 
-    return model ?? { providerID: "opencode", modelID: "big-pickle" }
+    const providers = await sdk.config
+      .providers({ directory }, { throwOnError: true })
+      .then((x) => x.data?.providers ?? [])
+      .catch((error) => {
+        log.error("failed to list providers for default model", { error })
+        return []
+      })
+
+    if (specified && providers.length) {
+      const provider = providers.find((p) => p.id === specified.providerID)
+      if (provider && provider.models[specified.modelID]) return specified
+    }
+
+    if (specified && !providers.length) return specified
+
+    const opencodeProvider = providers.find((p) => p.id === "opencode")
+    if (opencodeProvider) {
+      if (opencodeProvider.models["big-pickle"]) {
+        return { providerID: "opencode", modelID: "big-pickle" }
+      }
+      const [best] = Provider.sort(Object.values(opencodeProvider.models))
+      if (best) {
+        return {
+          providerID: best.providerID,
+          modelID: best.id,
+        }
+      }
+    }
+
+    const models = providers.flatMap((p) => Object.values(p.models))
+    const [best] = Provider.sort(models)
+    if (best) {
+      return {
+        providerID: best.providerID,
+        modelID: best.id,
+      }
+    }
+
+    if (specified) return specified
+
+    return { providerID: "opencode", modelID: "big-pickle" }
   }
 
   function parseUri(
@@ -1047,5 +1111,14 @@ export namespace ACP {
         text: uri,
       }
     }
+  }
+
+  function getNewContent(fileOriginal: string, unifiedDiff: string): string | undefined {
+    const result = applyPatch(fileOriginal, unifiedDiff)
+    if (result === false) {
+      log.error("Failed to apply unified diff (context mismatch)")
+      return undefined
+    }
+    return result
   }
 }

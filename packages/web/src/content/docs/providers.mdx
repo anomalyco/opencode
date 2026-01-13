@@ -6,7 +6,7 @@ description: Using any LLM provider in OpenCode.
 import config from "../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support for **75+ LLM providers** and it supports running local models.
+OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
@@ -80,8 +80,7 @@ If you are new, we recommend starting with OpenCode Zen.
    /models
    ```
 
-It works like any other provider in OpenCode. And is completely optional to use
-it.
+It works like any other provider in OpenCode and is completely optional to use.
 
 ---
 
@@ -107,27 +106,96 @@ To use Amazon Bedrock with OpenCode:
    You need to have access to the model you want in Amazon Bedrock.
    :::
 
-1. You'll need either to set one of the following environment variables:
-   - `AWS_ACCESS_KEY_ID`: You can get this by creating an IAM user and generating
-     an access key for it.
-   - `AWS_PROFILE`: First login through AWS IAM Identity Center (or AWS SSO) using
-     `aws sso login`. Then get the name of the profile you want to use.
-   - `AWS_BEARER_TOKEN_BEDROCK`: You can generate a long-term API key from the
-     Amazon Bedrock console.
+2. **Configure authentication** using one of the following methods:
 
-   Once you have one of the above, set it while running opencode.
+   #### Environment Variables (Quick Start)
+
+   Set one of these environment variables while running opencode:
 
    ```bash
-   AWS_ACCESS_KEY_ID=XXX opencode
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
+
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
    ```
 
-   Or add it to your bash profile.
+   Or add them to your bash profile:
 
    ```bash title="~/.bash_profile"
-   export AWS_ACCESS_KEY_ID=XXX
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
    ```
 
-1. Run the `/models` command to select the model you want.
+   #### Configuration File (Recommended)
+
+   For project-specific or persistent configuration, use `opencode.json`:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
+
+   **Available options:**
+   - `region` - AWS region (e.g., `us-east-1`, `eu-west-1`)
+   - `profile` - AWS named profile from `~/.aws/credentials`
+   - `endpoint` - Custom endpoint URL for VPC endpoints (alias for generic `baseURL` option)
+
+   :::tip
+   Configuration file options take precedence over environment variables.
+   :::
+
+   #### Advanced: VPC Endpoints
+
+   If you're using VPC endpoints for Bedrock:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
+
+   :::note
+   The `endpoint` option is an alias for the generic `baseURL` option, using AWS-specific terminology. If both `endpoint` and `baseURL` are specified, `endpoint` takes precedence.
+   :::
+
+   #### Authentication Methods
+   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Create an IAM user and generate access keys in the AWS Console
+   - **`AWS_PROFILE`**: Use named profiles from `~/.aws/credentials`. First configure with `aws configure --profile my-profile` or `aws sso login`
+   - **`AWS_BEARER_TOKEN_BEDROCK`**: Generate long-term API keys from the Amazon Bedrock console
+
+   #### Authentication Precedence
+
+   Amazon Bedrock uses the following authentication priority:
+   1. **Bearer Token** - `AWS_BEARER_TOKEN_BEDROCK` environment variable or token from `/connect` command
+   2. **AWS Credential Chain** - Profile, access keys, shared credentials, IAM roles, instance metadata
+
+   :::note
+   When a bearer token is set (via `/connect` or `AWS_BEARER_TOKEN_BEDROCK`), it takes precedence over all AWS credential methods including configured profiles.
+   :::
+
+3. Run the `/models` command to select the model you want.
 
    ```txt
    /models
@@ -157,7 +225,7 @@ We recommend signing up for [Claude Pro](https://www.anthropic.com/news/claude-p
    └
    ```
 
-3. Now all the the Anthropic models should be available when you use the `/models` command.
+3. Now all the Anthropic models should be available when you use the `/models` command.
 
    ```txt
    /models
@@ -869,6 +937,33 @@ To use Kimi K2 from Moonshot AI:
 
 ---
 
+### MiniMax
+
+1. Head over to the [MiniMax API Console](https://platform.minimax.io/login), create an account, and generate an API key.
+
+2. Run the `/connect` command and search for **MiniMax**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your MiniMax API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _M2.1_.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Nebius Token Factory
 
 1. Head over to the [Nebius Token Factory console](https://tokenfactory.nebius.com/), create an account, and click **Add Key**.
@@ -975,28 +1070,34 @@ To use Ollama Cloud with OpenCode:
 
 ### OpenAI
 
-1. Head over to the [OpenAI Platform console](https://platform.openai.com/api-keys), click **Create new secret key**, and copy the key.
+We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
-2. Run the `/connect` command and search for OpenAI.
+1. Once you've signed up, run the `/connect` command and select OpenAI.
 
    ```txt
    /connect
    ```
 
-3. Enter the API key for the provider.
+2. Here you can select the **ChatGPT Plus/Pro** option and it'll open your browser
+   and ask you to authenticate.
 
    ```txt
-   ┌ API key
+   ┌ Select auth method
    │
-   │
-   └ enter
+   │ ChatGPT Plus/Pro
+   │ Manually enter API Key
+   └
    ```
 
-4. Run the `/models` command to select the one you want.
+3. Now all the OpenAI models should be available when you use the `/models` command.
 
    ```txt
    /models
    ```
+
+##### Using API keys
+
+If you already have an API key, you can select **Manually enter API Key** and paste it in your terminal.
 
 ---
 
@@ -1175,6 +1276,35 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
 
 ---
 
+### Scaleway
+
+To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) with Opencode:
+
+1. Head over to the [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) to generate a new API key.
+
+2. Run the `/connect` command and search for **Scaleway**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Scaleway API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model like _devstral-2-123b-instruct-2512_ or _gpt-oss-120b_.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### Together AI
 
 1. Head over to the [Together AI console](https://api.together.ai), create an account, and click **Add Key**.
@@ -1229,6 +1359,62 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
 
 ---
 
+### Vercel AI Gateway
+
+Vercel AI Gateway lets you access models from OpenAI, Anthropic, Google, xAI, and more through a unified endpoint. Models are offered at list price with no markup.
+
+1. Head over to the [Vercel dashboard](https://vercel.com/), navigate to the **AI Gateway** tab, and click **API keys** to create a new API key.
+
+2. Run the `/connect` command and search for **Vercel AI Gateway**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter your Vercel AI Gateway API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+4. Run the `/models` command to select a model.
+
+   ```txt
+   /models
+   ```
+
+You can also customize models through your opencode config. Here's an example of specifying provider routing order.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "anthropic/claude-sonnet-4": {
+          "options": {
+            "order": ["anthropic", "vertex"]
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Some useful routing options:
+
+| Option              | Description                                          |
+| ------------------- | ---------------------------------------------------- |
+| `order`             | Provider sequence to try                             |
+| `only`              | Restrict to specific providers                       |
+| `zeroDataRetention` | Only use providers with zero data retention policies |
+
+---
+
 ### xAI
 
 1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
@@ -1277,7 +1463,7 @@ SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon
    └ enter
    ```
 
-4. Run the `/models` command to select a model like _GLM-4.5_.
+4. Run the `/models` command to select a model like _GLM-4.7_.
 
    ```txt
    /models

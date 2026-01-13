@@ -1,6 +1,16 @@
+import os from "os"
+import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
-import { streamText, wrapLanguageModel, type ModelMessage, type StreamTextResult, type Tool, type ToolSet } from "ai"
+import {
+  streamText,
+  wrapLanguageModel,
+  type ModelMessage,
+  type StreamTextResult,
+  type Tool,
+  type ToolSet,
+  extractReasoningMiddleware,
+} from "ai"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { Config } from "@/config/config"
@@ -9,8 +19,9 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { SystemPrompt } from "./system"
-import { ToolRegistry } from "@/tool/registry"
 import { Flag } from "@/flag/flag"
+import { PermissionNext } from "@/permission/next"
+import { Auth } from "@/auth"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -62,7 +73,7 @@ export namespace LLM {
 
     const header = system[0]
     const original = clone(system)
-    await Plugin.trigger("experimental.chat.system.transform", {}, { system })
+    await Plugin.trigger("experimental.chat.system.transform", { sessionID: input.sessionID }, { system })
     if (system.length === 0) {
       system.push(...original)
     }
@@ -74,6 +85,24 @@ export namespace LLM {
     }
 
     const provider = await Provider.getProvider(input.model.providerID)
+    const auth = await Auth.get(input.model.providerID)
+    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+
+    const variant =
+      !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
+    const base = input.small
+      ? ProviderTransform.smallOptions(input.model)
+      : ProviderTransform.options(input.model, input.sessionID, provider.options)
+    const options: Record<string, any> = pipe(
+      base,
+      mergeDeep(input.model.options),
+      mergeDeep(input.agent.options),
+      mergeDeep(variant),
+    )
+    if (isCodex) {
+      options.instructions = SystemPrompt.instructions()
+      options.store = false
+    }
 
     const params = await Plugin.trigger(
       "chat.params",
@@ -90,26 +119,18 @@ export namespace LLM {
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
-        options: pipe(
-          {},
-          mergeDeep(ProviderTransform.options(input.model, input.sessionID, provider.options)),
-          input.small ? mergeDeep(ProviderTransform.smallOptions(input.model)) : mergeDeep({}),
-          mergeDeep(input.model.options),
-          mergeDeep(input.agent.options),
-        ),
+        options,
       },
     )
 
-    l.info("params", {
-      params,
-    })
-
-    const maxOutputTokens = ProviderTransform.maxOutputTokens(
-      input.model.api.npm,
-      params.options,
-      input.model.limit.output,
-      OUTPUT_TOKEN_MAX,
-    )
+    const maxOutputTokens = isCodex
+      ? undefined
+      : ProviderTransform.maxOutputTokens(
+          input.model.api.npm,
+          params.options,
+          input.model.limit.output,
+          OUTPUT_TOKEN_MAX,
+        )
 
     const tools = await resolveTools(input)
 
@@ -149,6 +170,13 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
+        ...(isCodex
+          ? {
+              originator: "opencode",
+              "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+              session_id: input.sessionID,
+            }
+          : undefined),
         ...(input.model.providerID.startsWith("opencode")
           ? {
               "x-opencode-project": Instance.project.id,
@@ -161,12 +189,19 @@ export namespace LLM {
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...system.map(
-          (x): ModelMessage => ({
-            role: "system",
-            content: x,
-          }),
-        ),
+        ...(isCodex
+          ? [
+              {
+                role: "user",
+                content: system.join("\n\n"),
+              } as ModelMessage,
+            ]
+          : system.map(
+              (x): ModelMessage => ({
+                role: "system",
+                content: x,
+              }),
+            )),
         ...input.messages,
       ],
       model: wrapLanguageModel({
@@ -181,6 +216,7 @@ export namespace LLM {
               return args.params
             },
           },
+          extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
         ],
       }),
       experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
@@ -188,13 +224,11 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    const enabled = pipe(
-      input.agent.tools,
-      mergeDeep(await ToolRegistry.enabled(input.agent)),
-      mergeDeep(input.user.tools ?? {}),
-    )
-    for (const [key, value] of Object.entries(enabled)) {
-      if (value === false) delete input.tools[key]
+    const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+    for (const tool of Object.keys(input.tools)) {
+      if (input.user.tools?.[tool] === false || disabled.has(tool)) {
+        delete input.tools[tool]
+      }
     }
     return input.tools
   }

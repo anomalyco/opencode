@@ -43,14 +43,15 @@
 
       /* padding: 8px; */
       /* padding: 8px 8px 0 8px; */
-      border: 1px solid hsl(from var(--border-base) h s l / 0.2);
+      border: 1px solid
+        light-dark(
+          color-mix(in oklch, var(--border-base) 30%, transparent),
+          color-mix(in oklch, var(--border-base) 50%, transparent)
+        );
       border-radius: var(--radius-xl);
       background: var(--surface-raised-stronger-non-alpha);
       background-clip: padding-box;
-      box-shadow:
-        0 15px 45px 0 rgba(19, 16, 16, 0.35),
-        0 3.35px 10.051px 0 rgba(19, 16, 16, 0.25),
-        0 0.998px 2.993px 0 rgba(19, 16, 16, 0.2);
+      box-shadow: var(--shadow-lg);
 
       /* animation: contentHide 300ms ease-in forwards; */
       /**/
@@ -83,7 +84,7 @@
       [data-slot="dialog-description"] {
         display: flex;
         padding: 16px;
-        padding-left: 20px;
+        padding-left: 24px;
         padding-top: 0;
         margin-top: -8px;
         justify-content: space-between;

@@ -62,30 +62,32 @@ You are charged per request and you can add credits to your account.
 
 You can also access our models through the following API endpoints.
 
-| Model             | Model ID          | Endpoint                                           | AI SDK Package              |
-| ----------------- | ----------------- | -------------------------------------------------- | --------------------------- |
-| GPT 5.2           | gpt-5.2           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1           | gpt-5.1           | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex     | gpt-5.1-codex     | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex Max | gpt-5.1-codex-max | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5             | gpt-5             | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Codex       | gpt-5-codex       | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Nano        | gpt-5-nano        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| Claude Sonnet 4.5 | claude-sonnet-4-5 | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4   | claude-sonnet-4   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 4.5  | claude-haiku-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Haiku 3.5  | claude-3-5-haiku  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.5   | claude-opus-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Opus 4.1   | claude-opus-4-1   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| GLM 4.7           | glm-4.7-free      | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Gemini 3 Pro      | gemini-3-pro      | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
-| Gemini 3 Flash    | gemini-3-flash    | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
-| GLM 4.6           | glm-4.6           | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2           | kimi-k2           | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2 Thinking  | kimi-k2-thinking  | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3 Coder 480B  | qwen3-coder       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Grok Code Fast 1  | grok-code         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Big Pickle        | big-pickle        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Model              | Model ID           | Endpoint                                           | AI SDK Package              |
+| ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
+| GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1            | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex      | gpt-5.1-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Max  | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex Mini | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5              | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex        | gpt-5-codex        | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Nano         | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| Claude Sonnet 4.5  | claude-sonnet-4-5  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4    | claude-sonnet-4    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 4.5   | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Haiku 3.5   | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.5    | claude-opus-4-5    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| MiniMax M2.1       | minimax-m2.1-free  | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
+| Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7            | glm-4.7-free       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Grok Code Fast 1   | grok-code          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 The [model id](/docs/config/#models) in your OpenCode config
 uses the format `opencode/<model-id>`. For example, for GPT 5.1 Codex, you would
@@ -111,6 +113,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | --------------------------------- | ------ | ------ | ----------- | ------------ |
 | Big Pickle                        | Free   | Free   | Free        | -            |
 | Grok Code Fast 1                  | Free   | Free   | Free        | -            |
+| MiniMax M2.1                      | Free   | Free   | Free        | -            |
 | GLM 4.7                           | Free   | Free   | Free        | -            |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10       | -            |
 | Kimi K2                           | $0.40  | $2.50  | -           | -            |
@@ -131,6 +134,7 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | GPT 5.1                           | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5.1 Codex                     | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5.1 Codex Max                 | $1.25  | $10.00 | $0.125      | -            |
+| GPT 5.1 Codex Mini                | $0.25  | $2.00  | $0.025      | -            |
 | GPT 5                             | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5 Codex                       | $1.07  | $8.50  | $0.107      | -            |
 | GPT 5 Nano                        | Free   | Free   | Free        | -            |
@@ -138,16 +142,36 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 You might notice _Claude Haiku 3.5_ in your usage history. This is a [low cost model](/docs/config/#models) that's used to generate the titles of your sessions.
 
 :::note
-Credit card fees are passed along at cost; we don't charge anything beyond that.
+Credit card fees are passed along at cost (4.4% + $0.30 per transaction); we don't charge anything beyond that.
 :::
 
 The free models:
 
 - Grok Code Fast 1 is currently free on OpenCode for a limited time. The xAI team is using this time to collect feedback and improve Grok Code.
 - GLM 4.7 is currently free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- MiniMax M2.1 is currently free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 
 <a href={email}>Contact us</a> if you have any questions.
+
+---
+
+### Auto-reload
+
+If your balance goes below $5, Zen will automatically reload $20.
+
+You can change the auto-reload amount. You can also disable auto-reload entirely.
+
+---
+
+### Monthly limits
+
+You can also set a monthly usage limit for the entire workspace and for each
+member of your team.
+
+For example, let's say you set a monthly usage limit to $20, Zen will not use
+more than $20 in a month. But if you have auto-reload enabled, Zen might end up
+charging you more than $20 if your balance goes below $5.
 
 ---
 
@@ -157,6 +181,7 @@ All our models are hosted in the US. Our providers follow a zero-retention polic
 
 - Grok Code Fast 1: During its free period, collected data may be used to improve Grok Code.
 - GLM 4.7: During its free period, collected data may be used to improve the model.
+- MiniMax M2.1: During its free period, collected data may be used to improve the model.
 - Big Pickle: During its free period, collected data may be used to improve the model.
 - OpenAI APIs: Requests are retained for 30 days in accordance with [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

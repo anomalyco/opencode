@@ -111,8 +111,8 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
-    const tapFormula = await $`brew list --formula sst/tap/opencode`.throws(false).quiet().text()
-    if (tapFormula.includes("opencode")) return "sst/tap/opencode"
+    const tapFormula = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
+    if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
     const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
     return "opencode"
@@ -158,6 +158,7 @@ export namespace Installation {
       throw new UpgradeFailedError({
         stderr: result.stderr.toString("utf8"),
       })
+    await $`${process.execPath} --version`.nothrow().quiet().text()
   }
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
@@ -194,7 +195,7 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return fetch("https://api.github.com/repos/sst/opencode/releases/latest")
+    return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()

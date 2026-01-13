@@ -1,6 +1,6 @@
 import fuzzysort from "fuzzysort"
 import { entries, flatMap, groupBy, map, pipe } from "remeda"
-import { createMemo, createResource } from "solid-js"
+import { createEffect, createMemo, createResource, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createList } from "solid-list"
 
@@ -18,11 +18,22 @@ export interface FilteredListProps<T> {
 export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
 
+  type Group = { category: string; items: [T, ...T[]] }
+  const empty: Group[] = []
+
   const [grouped, { refetch }] = createResource(
-    () => ({
-      filter: store.filter,
-      items: typeof props.items === "function" ? undefined : props.items,
-    }),
+    () => {
+      // When items is a function (not async filter function), call it to track changes
+      const itemsValue =
+        typeof props.items === "function"
+          ? (props.items as () => T[])() // Call synchronous function to track it
+          : props.items
+
+      return {
+        filter: store.filter,
+        items: itemsValue,
+      }
+    },
     async ({ filter, items }) => {
       const needle = filter?.toLowerCase()
       const all = (items ?? (await (props.items as (filter: string) => T[] | Promise<T[]>)(needle))) || []
@@ -42,18 +53,27 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       )
       return result
     },
+    { initialValue: empty },
   )
 
   const flat = createMemo(() => {
     return pipe(
-      grouped() || [],
+      grouped.latest || [],
       flatMap((x) => x.items),
     )
   })
 
+  function initialActive() {
+    if (props.current) return props.key(props.current)
+
+    const items = flat()
+    if (items.length === 0) return ""
+    return props.key(items[0])
+  }
+
   const list = createList({
     items: () => flat().map(props.key),
-    initialActive: props.current ? props.key(props.current) : props.key(flat()[0]),
+    initialActive: initialActive(),
     loop: true,
   })
 
@@ -70,13 +90,20 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       const selected = flat()[selectedIndex]
       if (selected) props.onSelect?.(selected, selectedIndex)
     } else {
+      // Skip list navigation for text editing shortcuts (e.g., Option+Arrow, Option+Backspace on macOS)
+      if (event.altKey || event.metaKey) return
       list.onKeyDown(event)
     }
   }
 
+  createEffect(
+    on(grouped, () => {
+      reset()
+    }),
+  )
+
   const onInput = (value: string) => {
     setStore("filter", value)
-    reset()
   }
 
   return {

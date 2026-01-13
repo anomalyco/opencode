@@ -15,12 +15,19 @@
       "nsis": {
         "installerIcon": "icons/prod/icon.ico"
       }
+    },
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/ai.opencode.opencode.metainfo.xml": "release/appstream.metainfo.xml"
+        }
+      }
     }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwMDM5Nzg5OUMzOUExMDQKUldRRW9UbWNpWmNEOENYT01CV0lhOXR1UFhpaXJsK1Z3aU9lZnNtNzE0TDROWVMwVW9XQnFOelkK",
-      "endpoints": ["https://github.com/sst/opencode/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/anomalyco/opencode/releases/latest/download/latest.json"]
     }
   }
 }
