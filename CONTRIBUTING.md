@@ -192,11 +192,19 @@ PR titles should follow conventional commit standards:
 - `refactor:` code refactoring without changing behavior
 - `test:` adding or updating tests
 
+You can optionally include a scope to indicate which package is affected:
+
+- `feat(app):` feature in the app package
+- `fix(desktop):` bug fix in the desktop package
+- `chore(opencode):` maintenance in the opencode package
+
 Examples:
 
 - `docs: update contributing guidelines`
 - `fix: resolve crash on startup`
 - `feat: add dark mode support`
+- `feat(app): add dark mode support`
+- `fix(desktop): resolve crash on startup`
 - `chore: bump dependency versions`
 
 ### Style Preferences

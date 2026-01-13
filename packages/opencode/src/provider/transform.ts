@@ -318,7 +318,10 @@ export namespace ProviderTransform {
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/openai
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
-          if (id.includes("codex")) return WIDELY_SUPPORTED_EFFORTS
+          if (id.includes("codex")) {
+            if (id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+            return WIDELY_SUPPORTED_EFFORTS
+          }
           const arr = [...WIDELY_SUPPORTED_EFFORTS]
           if (id.includes("gpt-5-") || id === "gpt-5") {
             arr.unshift("minimal")
@@ -361,6 +364,25 @@ export namespace ProviderTransform {
 
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
+        // For Anthropic models on Bedrock, use reasoningConfig with budgetTokens
+        if (model.api.id.includes("anthropic")) {
+          return {
+            high: {
+              reasoningConfig: {
+                type: "enabled",
+                budgetTokens: 16000,
+              },
+            },
+            max: {
+              reasoningConfig: {
+                type: "enabled",
+                budgetTokens: 31999,
+              },
+            },
+          }
+        }
+
+        // For Amazon Nova models, use reasoningConfig with maxReasoningEffort
         return Object.fromEntries(
           WIDELY_SUPPORTED_EFFORTS.map((effort) => [
             effort,
@@ -452,6 +474,13 @@ export namespace ProviderTransform {
       (model.providerID === "opencode" && ["kimi-k2-thinking", "glm-4.6"].includes(model.api.id))
     ) {
       result["chat_template_args"] = { enable_thinking: true }
+    }
+
+    if (["zai", "zhipuai"].includes(model.providerID) && model.api.npm === "@ai-sdk/openai-compatible") {
+      result["thinking"] = {
+        type: "enabled",
+        clear_thinking: false,
+      }
     }
 
     if (model.providerID === "openai" || providerOptions?.setCacheKey) {

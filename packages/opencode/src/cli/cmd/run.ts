@@ -345,14 +345,13 @@ export const RunCommand = cmd({
       return await execute(sdk, sessionID)
     }
 
-    await bootstrap(cwd, async () => {
+    await bootstrap(process.cwd(), async () => {
       const server = Server.listen({ port: args.port ?? 0, hostname: "127.0.0.1" })
-      const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}`, directory: cwd })
+      const sdk = createOpencodeClient({ baseUrl: `http://${server.hostname}:${server.port}` })
 
       if (args.command) {
         const exists = await Command.get(args.command)
         if (!exists) {
-          server.stop()
           UI.error(`Command "${args.command}" not found`)
           process.exit(1)
         }
@@ -377,7 +376,6 @@ export const RunCommand = cmd({
       })()
 
       if (!sessionID) {
-        server.stop()
         UI.error("Session not found")
         process.exit(1)
       }
@@ -396,7 +394,6 @@ export const RunCommand = cmd({
       }
 
       await execute(sdk, sessionID)
-      server.stop()
     })
   },
 })

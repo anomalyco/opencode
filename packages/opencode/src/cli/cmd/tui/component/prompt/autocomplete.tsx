@@ -1,7 +1,7 @@
 import type { BoxRenderable, TextareaRenderable, KeyEvent, ScrollBoxRenderable } from "@opentui/core"
 import fuzzysort from "fuzzysort"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, onCleanup, For, Show, createSignal } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
@@ -53,6 +53,7 @@ export type AutocompleteRef = {
 
 export type AutocompleteOption = {
   display: string
+  value?: string
   aliases?: string[]
   disabled?: boolean
   description?: string
@@ -221,6 +222,7 @@ export function Autocomplete(props: {
             const isDir = item.endsWith("/")
             return {
               display: Locale.truncateMiddle(filename, width),
+              value: filename,
               isDirectory: isDir,
               path: item,
               onSelect: () => {
@@ -259,8 +261,10 @@ export function Autocomplete(props: {
     const width = props.anchor().width - 4
 
     for (const res of Object.values(sync.data.mcp_resource)) {
+      const text = `${res.name} (${res.uri})`
       options.push({
-        display: Locale.truncateMiddle(`${res.name} (${res.uri})`, width),
+        display: Locale.truncateMiddle(text, width),
+        value: text,
         description: res.description,
         onSelect: () => {
           insertPart(res.name, {
@@ -485,7 +489,11 @@ export function Autocomplete(props: {
     }
 
     const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
-      keys: [(obj) => removeLineRange(obj.display.trimEnd()), "description", (obj) => obj.aliases?.join(" ") ?? ""],
+      keys: [
+        (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
+        "description",
+        (obj) => obj.aliases?.join(" ") ?? "",
+      ],
       limit: 10,
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
@@ -593,8 +601,31 @@ export function Autocomplete(props: {
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
             hide()
-            return
           }
+          return
+        }
+
+        // Check if autocomplete should reopen (e.g., after backspace deleted a space)
+        const offset = props.input().cursorOffset
+        if (offset === 0) return
+
+        // Check for "/" at position 0 - reopen slash commands
+        if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
+          show("/")
+          setStore("index", 0)
+          return
+        }
+
+        // Check for "@" trigger - find the nearest "@" before cursor with no whitespace between
+        const text = value.slice(0, offset)
+        const idx = text.lastIndexOf("@")
+        if (idx === -1) return
+
+        const between = text.slice(idx)
+        const before = idx === 0 ? undefined : value[idx - 1]
+        if ((before === undefined || /\s/.test(before)) && !between.match(/\s/)) {
+          show("@")
+          setStore("index", idx)
         }
       },
       onKeyDown(e: KeyEvent) {
@@ -678,7 +709,7 @@ export function Autocomplete(props: {
         height={height()}
         scrollbarOptions={{ visible: false }}
       >
-        <For
+        <Index
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
@@ -690,20 +721,22 @@ export function Autocomplete(props: {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={index() === store.selected ? theme.primary : undefined}
+              backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
+              onMouseOver={() => moveTo(index)}
+              onMouseUp={() => select()}
             >
-              <text fg={index() === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
-                {option.display}
+              <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>
+                {option().display}
               </text>
-              <Show when={option.description}>
-                <text fg={index() === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
-                  {option.description}
+              <Show when={option().description}>
+                <text fg={index === store.selected ? selectedForeground(theme) : theme.textMuted} wrapMode="none">
+                  {option().description}
                 </text>
               </Show>
             </box>
           )}
-        </For>
+        </Index>
       </scrollbox>
     </box>
   )

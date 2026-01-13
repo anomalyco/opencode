@@ -1,5 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import path from "path"
+import fs from "fs/promises"
 import { Filesystem } from "../../src/util/filesystem"
 import { File } from "../../src/file"
 import { Instance } from "../../src/project/instance"
@@ -109,6 +110,88 @@ describe("File.list path traversal protection", () => {
       fn: async () => {
         const result = await File.list("subdir")
         expect(Array.isArray(result)).toBe(true)
+      },
+    })
+  })
+})
+
+describe("Instance.containsPath", () => {
+  test("returns true for path inside directory", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        expect(Instance.containsPath(path.join(tmp.path, "foo.txt"))).toBe(true)
+        expect(Instance.containsPath(path.join(tmp.path, "src", "file.ts"))).toBe(true)
+      },
+    })
+  })
+
+  test("returns true for path inside worktree but outside directory (monorepo subdirectory scenario)", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const subdir = path.join(tmp.path, "packages", "lib")
+    await fs.mkdir(subdir, { recursive: true })
+
+    await Instance.provide({
+      directory: subdir,
+      fn: () => {
+        // .opencode at worktree root, but we're running from packages/lib
+        expect(Instance.containsPath(path.join(tmp.path, ".opencode", "state"))).toBe(true)
+        // sibling package should also be accessible
+        expect(Instance.containsPath(path.join(tmp.path, "packages", "other", "file.ts"))).toBe(true)
+        // worktree root itself
+        expect(Instance.containsPath(tmp.path)).toBe(true)
+      },
+    })
+  })
+
+  test("returns false for path outside both directory and worktree", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        expect(Instance.containsPath("/etc/passwd")).toBe(false)
+        expect(Instance.containsPath("/tmp/other-project")).toBe(false)
+      },
+    })
+  })
+
+  test("returns false for path with .. escaping worktree", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        expect(Instance.containsPath(path.join(tmp.path, "..", "escape.txt"))).toBe(false)
+      },
+    })
+  })
+
+  test("handles directory === worktree (running from repo root)", async () => {
+    await using tmp = await tmpdir({ git: true })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        expect(Instance.directory).toBe(Instance.worktree)
+        expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)
+        expect(Instance.containsPath("/etc/passwd")).toBe(false)
+      },
+    })
+  })
+
+  test("non-git project does not allow arbitrary paths via worktree='/'", async () => {
+    await using tmp = await tmpdir() // no git: true
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: () => {
+        // worktree is "/" for non-git projects, but containsPath should NOT allow all paths
+        expect(Instance.containsPath(path.join(tmp.path, "file.txt"))).toBe(true)
+        expect(Instance.containsPath("/etc/passwd")).toBe(false)
+        expect(Instance.containsPath("/tmp/other")).toBe(false)
       },
     })
   })

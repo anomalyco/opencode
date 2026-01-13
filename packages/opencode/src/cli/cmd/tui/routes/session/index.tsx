@@ -69,6 +69,7 @@ import { Footer } from "./footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
 import { Filesystem } from "@/util/filesystem"
+import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -192,6 +193,23 @@ export function Session() {
   createEffect(() => {
     if (route.initialPrompt && prompt) {
       prompt.set(route.initialPrompt)
+    }
+  })
+
+  let lastSwitch: string | undefined = undefined
+  sdk.event.on("message.part.updated", (evt) => {
+    const part = evt.properties.part
+    if (part.type !== "tool") return
+    if (part.sessionID !== route.sessionID) return
+    if (part.state.status !== "completed") return
+    if (part.id === lastSwitch) return
+
+    if (part.tool === "plan_exit") {
+      local.agent.set("build")
+      lastSwitch = part.id
+    } else if (part.tool === "plan_enter") {
+      local.agent.set("plan")
+      lastSwitch = part.id
     }
   })
 
@@ -1303,7 +1321,15 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 // Pending messages moved to individual tool pending functions
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
+  const ctx = use()
   const sync = useSync()
+
+  // Hide tool if showDetails is false and tool completed successfully
+  const shouldHide = createMemo(() => {
+    if (ctx.showDetails()) return false
+    if (props.part.state.status !== "completed") return false
+    return true
+  })
 
   const toolprops = {
     get metadata() {
@@ -1329,53 +1355,55 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   }
 
   return (
-    <Switch>
-      <Match when={props.part.tool === "bash"}>
-        <Bash {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "glob"}>
-        <Glob {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "read"}>
-        <Read {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "grep"}>
-        <Grep {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "list"}>
-        <List {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "webfetch"}>
-        <WebFetch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "codesearch"}>
-        <CodeSearch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "websearch"}>
-        <WebSearch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "write"}>
-        <Write {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "edit"}>
-        <Edit {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "task"}>
-        <Task {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "patch"}>
-        <Patch {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "todowrite"}>
-        <TodoWrite {...toolprops} />
-      </Match>
-      <Match when={props.part.tool === "question"}>
-        <Question {...toolprops} />
-      </Match>
-      <Match when={true}>
-        <GenericTool {...toolprops} />
-      </Match>
-    </Switch>
+    <Show when={!shouldHide()}>
+      <Switch>
+        <Match when={props.part.tool === "bash"}>
+          <Bash {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "glob"}>
+          <Glob {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "read"}>
+          <Read {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "grep"}>
+          <Grep {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "list"}>
+          <List {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "webfetch"}>
+          <WebFetch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "codesearch"}>
+          <CodeSearch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "websearch"}>
+          <WebSearch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "write"}>
+          <Write {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "edit"}>
+          <Edit {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "task"}>
+          <Task {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "patch"}>
+          <Patch {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "todowrite"}>
+          <TodoWrite {...toolprops} />
+        </Match>
+        <Match when={props.part.tool === "question"}>
+          <Question {...toolprops} />
+        </Match>
+        <Match when={true}>
+          <GenericTool {...toolprops} />
+        </Match>
+      </Switch>
+    </Show>
   )
 }
 
@@ -1515,6 +1543,7 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
 
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
+  const sync = useSync()
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
@@ -1524,11 +1553,36 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return [...lines().slice(0, 10), "…"].join("\n")
   })
 
+  const workdirDisplay = createMemo(() => {
+    const workdir = props.input.workdir
+    if (!workdir || workdir === ".") return undefined
+
+    const base = sync.data.path.directory
+    if (!base) return undefined
+
+    const absolute = path.resolve(base, workdir)
+    if (absolute === base) return undefined
+
+    const home = Global.Path.home
+    if (!home) return absolute
+
+    const match = absolute === home || absolute.startsWith(home + path.sep)
+    return match ? absolute.replace(home, "~") : absolute
+  })
+
+  const title = createMemo(() => {
+    const desc = props.input.description ?? "Shell"
+    const wd = workdirDisplay()
+    if (!wd) return `# ${desc}`
+    if (desc.includes(wd)) return `# ${desc}`
+    return `# ${desc} in ${wd}`
+  })
+
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
         <BlockTool
-          title={"# " + (props.input.description ?? "Shell")}
+          title={title()}
           part={props.part}
           onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
@@ -1830,6 +1884,12 @@ function TodoWrite(props: ToolProps<typeof TodoWriteTool>) {
 function Question(props: ToolProps<typeof QuestionTool>) {
   const { theme } = useTheme()
   const count = createMemo(() => props.input.questions?.length ?? 0)
+
+  function format(answer?: string[]) {
+    if (!answer?.length) return "(no answer)"
+    return answer.join(", ")
+  }
+
   return (
     <Switch>
       <Match when={props.metadata.answers}>
@@ -1839,7 +1899,7 @@ function Question(props: ToolProps<typeof QuestionTool>) {
               {(q, i) => (
                 <box flexDirection="row" gap={1}>
                   <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{props.metadata.answers?.[i()] || "(no answer)"}</text>
+                  <text fg={theme.text}>{format(props.metadata.answers?.[i()])}</text>
                 </box>
               )}
             </For>
