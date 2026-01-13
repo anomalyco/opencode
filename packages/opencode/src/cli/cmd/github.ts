@@ -394,6 +394,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Run opencode
         uses: anomalyco/opencode/github@latest${envStr}

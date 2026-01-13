@@ -57,12 +57,13 @@ Or you can set it up manually.
        permissions:
          id-token: write
        steps:
-         - name: Checkout repository
-           uses: actions/checkout@v6
-           with:
-             fetch-depth: 1
+          - name: Checkout repository
+            uses: actions/checkout@v6
+            with:
+              fetch-depth: 1
+              persist-credentials: false
 
-         - name: Run OpenCode
+          - name: Run OpenCode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -135,6 +136,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
@@ -172,6 +175,8 @@ jobs:
       issues: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -223,6 +228,8 @@ jobs:
 
       - uses: actions/checkout@v6
         if: steps.check.outputs.result == 'true'
+        with:
+          persist-credentials: false
 
       - uses: anomalyco/opencode/github@latest
         if: steps.check.outputs.result == 'true'
