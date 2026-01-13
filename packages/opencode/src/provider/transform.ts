@@ -365,7 +365,7 @@ export namespace ProviderTransform {
       case "@ai-sdk/amazon-bedrock":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/amazon-bedrock
         // For Anthropic models on Bedrock, use reasoningConfig with budgetTokens
-        if (/^(us\.|global\.)?anthropic\./.test(model.api.id)) {
+        if (model.api.id.includes("anthropic")) {
           return {
             high: {
               reasoningConfig: {
