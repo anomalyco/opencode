@@ -6,8 +6,8 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
-import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
+import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 
 await Log.init({
@@ -38,6 +38,61 @@ GlobalBus.on("event", (event) => {
 
 let server: Bun.Server<BunWebSocketData> | undefined
 
+const eventStream = {
+  abort: undefined as AbortController | undefined,
+}
+
+const startEventStream = (directory: string) => {
+  if (eventStream.abort) eventStream.abort.abort()
+  const abort = new AbortController()
+  eventStream.abort = abort
+  const signal = abort.signal
+
+  const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init)
+    return Server.App().fetch(request)
+  }) as typeof globalThis.fetch
+
+  const sdk = createOpencodeClient({
+    baseUrl: "http://opencode.internal",
+    directory,
+    fetch: fetchFn,
+    signal,
+  })
+
+  ;(async () => {
+    while (!signal.aborted) {
+      const events = await Promise.resolve(
+        sdk.event.subscribe(
+          {},
+          {
+            signal,
+          },
+        ),
+      ).catch(() => undefined)
+
+      if (!events) {
+        await Bun.sleep(250)
+        continue
+      }
+
+      for await (const event of events.stream) {
+        Rpc.emit("event", event as Event)
+      }
+
+      if (!signal.aborted) {
+        await Bun.sleep(250)
+      }
+    }
+  })().catch((error) => {
+    Log.Default.error("event stream error", {
+      error: error instanceof Error ? error.message : error,
+    })
+  })
+}
+
+startEventStream(process.cwd())
+
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
     const request = new Request(input.url, {
@@ -58,20 +113,6 @@ export const rpc = {
     server = Server.listen(input)
     return { url: server.url.toString() }
   },
-  async subscribe(input: { directory: string }) {
-    return Instance.provide({
-      directory: input.directory,
-      init: InstanceBootstrap,
-      fn: async () => {
-        Bus.subscribeAll((event) => {
-          Rpc.emit("event", event)
-        })
-        // Emit connected event
-        Rpc.emit("event", { type: "server.connected", properties: {} })
-        return { subscribed: true }
-      },
-    })
-  },
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({
       directory: input.directory,
@@ -87,6 +128,7 @@ export const rpc = {
   },
   async shutdown() {
     Log.Default.info("worker shutting down")
+    if (eventStream.abort) eventStream.abort.abort()
     await Instance.disposeAll()
     if (server) server.stop(true)
   },
