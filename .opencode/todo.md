@@ -21,11 +21,16 @@
 - [x] Push branch to fork
 - [x] Create PR to merge sandbox-isolation into dev
 
+## Phase 4 - Integration Tests (COMPLETE)
+- [x] Add Modal integration test stubs
+- [x] Add Kubernetes integration test stubs
+- [x] Add example configuration file
+
 ## Status: ALL COMPLETE
 
 **PR:** https://github.com/anomalyco/opencode/pull/8238
 
-- **Branch:** `sandbox-isolation` (13 commits ahead of `dev`)
+- **Branch:** `sandbox-isolation` (15 commits ahead of `dev`)
 - **Typecheck:** Passing
-- **Tests:** 717/717 passing (65 sandbox-specific)
+- **Tests:** 79 sandbox tests (65 pass, 14 skip for integration)
 - **SDK:** Regenerated with sandbox types and endpoint
