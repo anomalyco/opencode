@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import { spawnSync } from "child_process"
+import fs from "fs"
+import path from "path"
+import os from "os"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 function run(target) {
-  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+  const result = spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
   })
   if (result.error) {
@@ -149,6 +153,12 @@ const names = (() => {
 })()
 
 function findBinary(startDir) {
+  // Check dist folder for local development
+  const distCandidate = path.join(startDir, "..", "dist", base, "bin", binary)
+  if (fs.existsSync(distCandidate)) {
+    return distCandidate
+  }
+
   let current = startDir
   for (;;) {
     const modules = path.join(current, "node_modules")
