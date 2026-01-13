@@ -20,6 +20,56 @@ export namespace Plugin {
     "@gitlab/opencode-gitlab-auth@1.3.0",
   ]
 
+  /**
+   * Maps plugin package names to human-readable descriptions of what
+   * authentication methods they provide. Used for user-facing error messages.
+   */
+  const PLUGIN_AUTH_DESCRIPTIONS: Record<string, string> = {
+    "opencode-copilot-auth": "GitHub Copilot OAuth",
+    "opencode-anthropic-auth": "Anthropic OAuth (Claude Max/Pro)",
+    "@gitlab/opencode-gitlab-auth": "GitLab Duo OAuth",
+  }
+
+  /**
+   * Tracks plugins that failed to install, including the package name,
+   * version, error message, and the affected authentication method.
+   */
+  export interface FailedPlugin {
+    pkg: string
+    version: string
+    error: string
+    authMethod: string
+  }
+
+  const failedPlugins: FailedPlugin[] = []
+
+  /**
+   * Returns the list of plugins that failed to install.
+   * Useful for diagnostic purposes and showing users which
+   * authentication methods are unavailable.
+   */
+  export function getFailedPlugins(): readonly FailedPlugin[] {
+    return [...failedPlugins]
+  }
+
+  /**
+   * Returns the human-readable auth method description for a plugin package.
+   * Falls back to the package name if no description is defined.
+   */
+  export function getAuthDescription(pkg: string): string {
+    return PLUGIN_AUTH_DESCRIPTIONS[pkg] ?? pkg
+  }
+
+  /** @internal For testing purposes only */
+  export const _test = {
+    trackFailure(failure: FailedPlugin) {
+      failedPlugins.push(failure)
+    },
+    clearFailures() {
+      failedPlugins.length = 0
+    },
+  }
+
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin]
 
@@ -64,14 +114,46 @@ export namespace Plugin {
           if (!builtin) throw err
 
           const message = err instanceof Error ? err.message : String(err)
-          log.error("failed to install builtin plugin", {
+          const authMethod = PLUGIN_AUTH_DESCRIPTIONS[pkg] ?? pkg
+
+          // Track the failed plugin for diagnostic access
+          failedPlugins.push({
             pkg,
             version,
             error: message,
+            authMethod,
           })
+
+          log.error("failed to install builtin plugin", {
+            pkg,
+            version,
+            authMethod,
+            error: message,
+          })
+
+          // Build a user-friendly error message with troubleshooting steps
+          const troubleshootingSteps = [
+            `The "${authMethod}" authentication option will not be available.`,
+            "",
+            "Troubleshooting steps:",
+            "  1. Check your network connection",
+            "  2. If using a corporate npm proxy (JFrog, Artifactory, Nexus), verify your .npmrc configuration",
+            "  3. Try running: npm config list",
+            "  4. Check if the registry is accessible: npm ping",
+            "  5. Review proxy settings: HTTP_PROXY, HTTPS_PROXY environment variables",
+          ].join("\n")
+
+          const detailedMessage = [
+            `Failed to install authentication plugin: ${pkg}@${version}`,
+            "",
+            troubleshootingSteps,
+            "",
+            `Error details: ${message}`,
+          ].join("\n")
+
           Bus.publish(Session.Event.Error, {
             error: new NamedError.Unknown({
-              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
+              message: detailedMessage,
             }).toObject(),
           })
 

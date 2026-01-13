@@ -1939,6 +1939,25 @@ export type ProviderAuthMethod = {
   label: string
 }
 
+export type FailedPlugins = Array<{
+  /**
+   * The npm package name
+   */
+  pkg: string
+  /**
+   * The requested version
+   */
+  version: string
+  /**
+   * The error message from the installation failure
+   */
+  error: string
+  /**
+   * The authentication method that is now unavailable
+   */
+  authMethod: string
+}>
+
 export type ProviderAuthAuthorization = {
   url: string
   method: "auto" | "code"
@@ -3854,6 +3873,24 @@ export type ProviderAuthResponses = {
 }
 
 export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+
+export type PluginFailedData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/plugin/failed"
+}
+
+export type PluginFailedResponses = {
+  /**
+   * List of failed plugins with diagnostic information
+   */
+  200: FailedPlugins
+}
+
+export type PluginFailedResponse = PluginFailedResponses[keyof PluginFailedResponses]
 
 export type ProviderOauthAuthorizeData = {
   body?: {

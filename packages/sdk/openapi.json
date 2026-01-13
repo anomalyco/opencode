@@ -3725,6 +3725,40 @@
         ]
       }
     },
+    "/plugin/failed": {
+      "get": {
+        "operationId": "plugin.failed",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get failed plugins",
+        "description": "Retrieve diagnostic information about authentication plugins that failed to install. Useful for troubleshooting missing OAuth options.",
+        "responses": {
+          "200": {
+            "description": "List of failed plugins with diagnostic information",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FailedPlugins"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.plugin.failed({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/provider/{providerID}/oauth/authorize": {
       "post": {
         "operationId": "provider.oauth.authorize",
@@ -10087,6 +10121,31 @@
           }
         },
         "required": ["type", "label"]
+      },
+      "FailedPlugins": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "pkg": {
+              "description": "The npm package name",
+              "type": "string"
+            },
+            "version": {
+              "description": "The requested version",
+              "type": "string"
+            },
+            "error": {
+              "description": "The error message from the installation failure",
+              "type": "string"
+            },
+            "authMethod": {
+              "description": "The authentication method that is now unavailable",
+              "type": "string"
+            }
+          },
+          "required": ["pkg", "version", "error", "authMethod"]
+        }
       },
       "ProviderAuthAuthorization": {
         "type": "object",

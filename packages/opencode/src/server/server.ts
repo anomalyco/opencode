@@ -53,6 +53,7 @@ import { Pty } from "@/pty"
 import { PermissionNext } from "@/permission/next"
 import { QuestionRoute } from "./question"
 import { Installation } from "@/installation"
+import { Plugin } from "@/plugin"
 import { MDNS } from "./mdns"
 import { Worktree } from "../worktree"
 
@@ -1825,6 +1826,39 @@ export namespace Server {
           }),
           async (c) => {
             return c.json(await ProviderAuth.methods())
+          },
+        )
+        .get(
+          "/plugin/failed",
+          describeRoute({
+            summary: "Get failed plugins",
+            description:
+              "Retrieve diagnostic information about authentication plugins that failed to install. Useful for troubleshooting missing OAuth options.",
+            operationId: "plugin.failed",
+            responses: {
+              200: {
+                description: "List of failed plugins with diagnostic information",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z
+                        .array(
+                          z.object({
+                            pkg: z.string().describe("The npm package name"),
+                            version: z.string().describe("The requested version"),
+                            error: z.string().describe("The error message from the installation failure"),
+                            authMethod: z.string().describe("The authentication method that is now unavailable"),
+                          }),
+                        )
+                        .meta({ ref: "FailedPlugins" }),
+                    ),
+                  },
+                },
+              },
+            },
+          }),
+          async (c) => {
+            return c.json(Plugin.getFailedPlugins())
           },
         )
         .post(
