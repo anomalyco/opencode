@@ -154,6 +154,12 @@ export namespace Server {
             return next()
           }
 
+          // Internal requests (from worker RPC) bypass auth
+          // These are same-process calls that don't go through HTTP
+          if (c.req.header("x-opencode-internal") === "true") {
+            return next()
+          }
+
           // Health endpoint is always accessible
           if (c.req.path === "/global/health") {
             return next()
