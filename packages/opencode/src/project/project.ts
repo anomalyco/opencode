@@ -12,6 +12,7 @@ import { fn } from "@opencode-ai/util/fn"
 import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
+import { existsSync } from "fs"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -53,11 +54,22 @@ export namespace Project {
       if (git) {
         let sandbox = path.dirname(git)
 
+        const gitBinary = Bun.which("git")
+
         // cached id calculation
         let id = await Bun.file(path.join(git, "opencode"))
           .text()
           .then((x) => x.trim())
-          .catch(() => {})
+          .catch(() => undefined)
+
+        if (!gitBinary) {
+          return {
+            id: id ?? "global",
+            worktree: sandbox,
+            sandbox: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
 
         // generate id from root commit
         if (!id) {
@@ -73,24 +85,53 @@ export namespace Project {
                 .map((x) => x.trim())
                 .toSorted(),
             )
+            .catch(() => undefined)
+
+          if (!roots) {
+            return {
+              id: "global",
+              worktree: sandbox,
+              sandbox: sandbox,
+              vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+            }
+          }
+
           id = roots[0]
-          if (id) Bun.file(path.join(git, "opencode")).write(id)
+          if (id) {
+            void Bun.file(path.join(git, "opencode"))
+              .write(id)
+              .catch(() => undefined)
+          }
         }
 
-        if (!id)
+        if (!id) {
           return {
             id: "global",
             worktree: sandbox,
             sandbox: sandbox,
             vcs: "git",
           }
+        }
 
-        sandbox = await $`git rev-parse --show-toplevel`
+        const top = await $`git rev-parse --show-toplevel`
           .quiet()
           .nothrow()
           .cwd(sandbox)
           .text()
           .then((x) => path.resolve(sandbox, x.trim()))
+          .catch(() => undefined)
+
+        if (!top) {
+          return {
+            id,
+            sandbox,
+            worktree: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
+
+        sandbox = top
+
         const worktree = await $`git rev-parse --git-common-dir`
           .quiet()
           .nothrow()
@@ -101,6 +142,17 @@ export namespace Project {
             if (dirname === ".") return sandbox
             return dirname
           })
+          .catch(() => undefined)
+
+        if (!worktree) {
+          return {
+            id,
+            sandbox,
+            worktree: sandbox,
+            vcs: Info.shape.vcs.parse(Flag.OPENCODE_FAKE_VCS),
+          }
+        }
+
         return {
           id,
           sandbox,
@@ -148,6 +200,7 @@ export namespace Project {
       },
     }
     if (sandbox !== result.worktree && !result.sandboxes.includes(sandbox)) result.sandboxes.push(sandbox)
+    result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
     await Storage.write<Info>(["project", id], result)
     GlobalBus.emit("event", {
       payload: {

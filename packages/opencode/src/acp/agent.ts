@@ -30,6 +30,7 @@ import { Todo } from "@/session/todo"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import { applyPatch } from "diff"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -105,6 +106,22 @@ export namespace ACP {
                   })
                   return
                 }
+                if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
+                  const metadata = permission.metadata || {}
+                  const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
+                  const diff = typeof metadata["diff"] === "string" ? metadata["diff"] : ""
+
+                  const content = await Bun.file(filepath).text()
+                  const newContent = getNewContent(content, diff)
+
+                  if (newContent) {
+                    this.connection.writeTextFile({
+                      sessionId: sessionId,
+                      path: filepath,
+                      content: newContent,
+                    })
+                  }
+                }
                 await this.config.sdk.permission.reply({
                   requestID: permission.id,
                   reply: res.outcome.optionId as "once" | "always" | "reject",
@@ -167,6 +184,8 @@ export namespace ACP {
                             sessionUpdate: "tool_call_update",
                             toolCallId: part.callID,
                             status: "in_progress",
+                            kind: toToolKind(part.tool),
+                            title: part.tool,
                             locations: toLocations(part.tool, part.state.input),
                             rawInput: part.state.input,
                           },
@@ -242,6 +261,7 @@ export namespace ACP {
                             kind,
                             content,
                             title: part.state.title,
+                            rawInput: part.state.input,
                             rawOutput: {
                               output: part.state.output,
                               metadata: part.state.metadata,
@@ -260,6 +280,9 @@ export namespace ACP {
                             sessionUpdate: "tool_call_update",
                             toolCallId: part.callID,
                             status: "failed",
+                            kind: toToolKind(part.tool),
+                            title: part.tool,
+                            rawInput: part.state.input,
                             content: [
                               {
                                 type: "content",
@@ -491,6 +514,8 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "in_progress",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
                     locations: toLocations(part.tool, part.state.input),
                     rawInput: part.state.input,
                   },
@@ -566,6 +591,7 @@ export namespace ACP {
                     kind,
                     content,
                     title: part.state.title,
+                    rawInput: part.state.input,
                     rawOutput: {
                       output: part.state.output,
                       metadata: part.state.metadata,
@@ -584,6 +610,9 @@ export namespace ACP {
                     sessionUpdate: "tool_call_update",
                     toolCallId: part.callID,
                     status: "failed",
+                    kind: toToolKind(part.tool),
+                    title: part.tool,
+                    rawInput: part.state.input,
                     content: [
                       {
                         type: "content",
@@ -1082,5 +1111,14 @@ export namespace ACP {
         text: uri,
       }
     }
+  }
+
+  function getNewContent(fileOriginal: string, unifiedDiff: string): string | undefined {
+    const result = applyPatch(fileOriginal, unifiedDiff)
+    if (result === false) {
+      log.error("Failed to apply unified diff (context mismatch)")
+      return undefined
+    }
+    return result
   }
 }
