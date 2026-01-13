@@ -374,7 +374,6 @@ export function SessionTurn(
     diffLimit: diffInit,
     status: rawStatus(),
     duration: duration(),
-    userMessageHovered: false,
   })
 
   createEffect(
@@ -475,8 +474,6 @@ export function SessionTurn(
                 data-slot="session-turn-message-container"
                 class={props.classes?.container}
                 style={{ "--sticky-header-height": `${store.stickyHeaderHeight}px` }}
-                onMouseEnter={() => setStore("userMessageHovered", true)}
-                onMouseLeave={() => setStore("userMessageHovered", false)}
               >
                 <Switch>
                   <Match when={isShellMode()}>
@@ -496,7 +493,7 @@ export function SessionTurn(
                             </Match>
                           </Switch>
                         </div>
-                        <div data-slot="session-turn-user-badges" data-visible={store.userMessageHovered}>
+                        <div data-slot="session-turn-user-badges">
                           <Show when={(msg() as UserMessage).agent}>
                             <span data-slot="session-turn-badge">{(msg() as UserMessage).agent}</span>
                           </Show>
