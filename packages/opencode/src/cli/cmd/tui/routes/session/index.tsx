@@ -196,6 +196,23 @@ export function Session() {
     }
   })
 
+  let lastSwitch: string | undefined = undefined
+  sdk.event.on("message.part.updated", (evt) => {
+    const part = evt.properties.part
+    if (part.type !== "tool") return
+    if (part.sessionID !== route.sessionID) return
+    if (part.state.status !== "completed") return
+    if (part.id === lastSwitch) return
+
+    if (part.tool === "plan_exit") {
+      local.agent.set("build")
+      lastSwitch = part.id
+    } else if (part.tool === "plan_enter") {
+      local.agent.set("plan")
+      lastSwitch = part.id
+    }
+  })
+
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   const keybind = useKeybind()
