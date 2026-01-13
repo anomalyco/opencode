@@ -26,7 +26,7 @@ import { Project } from "../project/project"
 import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Auth } from "../auth"
-import { AuthToken } from "../auth/token"
+import { AuthToken, SessionToken } from "../auth/token"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { ProviderAuth } from "../provider/auth"
@@ -173,6 +173,14 @@ export namespace Server {
 
           const token = authHeader.substring(7) // Remove "Bearer " prefix
 
+          // First, check if this is a valid session token (for same-machine TUI connections)
+          // Session tokens have full permissions since they represent local machine access
+          const isSessionToken = await SessionToken.validate(token)
+          if (isSessionToken) {
+            return next()
+          }
+
+          // Otherwise, validate as a persistent token with permission checks
           try {
             // Determine required permissions based on HTTP method
             const requiredPermissions: AuthToken.Permission[] = []
@@ -2952,6 +2960,9 @@ export namespace Server {
     return result
   }
 
+  // Store the current session token for this server instance
+  let _sessionToken: SessionToken.Info | null = null
+
   export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     _corsWhitelist = opts.cors ?? []
 
@@ -2973,6 +2984,17 @@ export namespace Server {
 
     _url = server.url
 
+    // Create session token for same-machine TUI connections
+    // This runs asynchronously after server starts
+    SessionToken.create({ port: server.port!, hostname: opts.hostname })
+      .then((token) => {
+        _sessionToken = token
+        log.info("session token created", { port: server.port })
+      })
+      .catch((err) => {
+        log.error("failed to create session token", { error: err })
+      })
+
     const shouldPublishMDNS =
       opts.mdns &&
       server.port &&
@@ -2987,10 +3009,24 @@ export namespace Server {
 
     const originalStop = server.stop.bind(server)
     server.stop = async (closeActiveConnections?: boolean) => {
+      // Clean up session token on server stop
+      await SessionToken.remove().catch((err) => {
+        log.error("failed to remove session token", { error: err })
+      })
+      _sessionToken = null
+
       if (shouldPublishMDNS) MDNS.unpublish()
       return originalStop(closeActiveConnections)
     }
 
     return server
+  }
+
+  /**
+   * Get the current session token for this server instance.
+   * Used by the TUI when it needs to connect to its own server.
+   */
+  export function getSessionToken(): SessionToken.Info | null {
+    return _sessionToken
   }
 }

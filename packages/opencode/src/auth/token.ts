@@ -174,3 +174,128 @@ export namespace AuthToken {
     return newToken
   }
 }
+
+/**
+ * Session tokens are ephemeral tokens generated when the server starts.
+ * They are stored in a file that the TUI can read to authenticate automatically.
+ * This provides seamless local authentication without manual token management.
+ *
+ * Security model:
+ * - Session token file has 0600 permissions (only owner can read)
+ * - Token is only valid while the server is running
+ * - File is deleted when server stops
+ * - Trust boundary is the filesystem - if someone can read your files, they own your machine
+ */
+export namespace SessionToken {
+  export const Info = z
+    .object({
+      token: z.string().min(128, "Token must be at least 128 characters"),
+      port: z.number(),
+      hostname: z.string(),
+      pid: z.number(),
+      createdAt: z.number(),
+    })
+    .meta({ ref: "SessionToken" })
+  export type Info = z.infer<typeof Info>
+
+  // Session token file location
+  function getFilepath(): string {
+    return path.join(Global.Path.config, "server-session.json")
+  }
+
+  function generateToken(): string {
+    // Generate 768-bit (96 bytes) cryptographically secure random token
+    return crypto.randomBytes(96).toString("base64url")
+  }
+
+  /**
+   * Create and write a session token when the server starts.
+   * Returns the generated token for use by the server.
+   */
+  export async function create(opts: { port: number; hostname: string }): Promise<Info> {
+    const info: Info = {
+      token: generateToken(),
+      port: opts.port,
+      hostname: opts.hostname,
+      pid: process.pid,
+      createdAt: Date.now(),
+    }
+
+    const filepath = getFilepath()
+    const dir = path.dirname(filepath)
+
+    // Ensure directory exists
+    await fs.mkdir(dir, { recursive: true })
+
+    // Write session file with secure permissions
+    const file = Bun.file(filepath)
+    await Bun.write(file, JSON.stringify(info, null, 2))
+    await fs.chmod(filepath, 0o600)
+
+    return info
+  }
+
+  /**
+   * Read the current session token if it exists.
+   * Used by the TUI to authenticate with the server.
+   */
+  export async function read(): Promise<Info | null> {
+    const filepath = getFilepath()
+    const file = Bun.file(filepath)
+
+    const exists = await file.exists()
+    if (!exists) return null
+
+    try {
+      const data = await file.json()
+      const parsed = Info.safeParse(data)
+      if (!parsed.success) return null
+
+      // Verify the server process is still running
+      if (!isProcessRunning(parsed.data.pid)) {
+        // Stale session file - clean it up
+        await remove()
+        return null
+      }
+
+      return parsed.data
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Remove the session token file when the server stops.
+   */
+  export async function remove(): Promise<void> {
+    const filepath = getFilepath()
+    try {
+      await fs.unlink(filepath)
+    } catch {
+      // Ignore errors if file doesn't exist
+    }
+  }
+
+  /**
+   * Validate a token against the session token.
+   * Returns true if the token matches the current session.
+   */
+  export async function validate(token: string): Promise<boolean> {
+    const session = await read()
+    if (!session) return false
+    return session.token === token
+  }
+
+  /**
+   * Check if a process is still running.
+   */
+  function isProcessRunning(pid: number): boolean {
+    try {
+      // Sending signal 0 checks if process exists without actually signaling it
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+}

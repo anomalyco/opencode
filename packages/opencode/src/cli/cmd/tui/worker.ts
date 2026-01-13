@@ -1,5 +1,6 @@
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
+import { SessionToken } from "@/auth/token"
 import { Log } from "@/util/log"
 import { Instance } from "@/project/instance"
 import { InstanceBootstrap } from "@/project/bootstrap"
@@ -111,7 +112,19 @@ export const rpc = {
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     if (server) await server.stop(true)
     server = Server.listen(input)
-    return { url: server.url.toString() }
+
+    // Wait for session token to be available (created asynchronously by listen())
+    let token: string | undefined
+    for (let i = 0; i < 50; i++) {
+      const session = await SessionToken.read()
+      if (session) {
+        token = session.token
+        break
+      }
+      await Bun.sleep(100)
+    }
+
+    return { url: server.url.toString(), token }
   },
   async checkUpgrade(input: { directory: string }) {
     await Instance.provide({

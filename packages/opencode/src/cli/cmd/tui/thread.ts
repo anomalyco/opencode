@@ -128,11 +128,13 @@ export const TuiThreadCommand = cmd({
     let url: string
     let customFetch: typeof fetch | undefined
     let events: EventSource | undefined
+    let token: string | undefined
 
     if (shouldStartServer) {
       // Start HTTP server for external access
       const server = await client.call("server", networkOpts)
       url = server.url
+      token = server.token
     } else {
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
@@ -144,6 +146,7 @@ export const TuiThreadCommand = cmd({
       url,
       fetch: customFetch,
       events,
+      token,
       args: {
         continue: args.continue,
         sessionID: args.session,

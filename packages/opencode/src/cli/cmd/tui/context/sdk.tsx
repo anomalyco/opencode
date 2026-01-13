@@ -9,13 +9,21 @@ export type EventSource = {
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource }) => {
+  init: (props: { url: string; directory?: string; fetch?: typeof fetch; events?: EventSource; token?: string }) => {
     const abort = new AbortController()
+
+    // If a token is provided, add it to the Authorization header
+    const headers: Record<string, string> = {}
+    if (props.token) {
+      headers["Authorization"] = `Bearer ${props.token}`
+    }
+
     const sdk = createOpencodeClient({
       baseUrl: props.url,
       signal: abort.signal,
       directory: props.directory,
       fetch: props.fetch,
+      headers,
     })
 
     const emitter = createGlobalEmitter<{
