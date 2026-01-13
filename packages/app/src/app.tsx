@@ -33,7 +33,7 @@ const Loading = () => <div class="size-full flex items-center justify-center tex
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean }
+    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string }
   }
 }
 
