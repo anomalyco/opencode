@@ -19,16 +19,23 @@ use crate::window_customizer::PinchZoomDisablePlugin;
 const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
+#[derive(Clone, serde::Serialize)]
+struct ServerReadyData {
+    url: String,
+    password: Option<String>,
+}
+
 #[derive(Clone)]
 struct ServerState {
     child: Arc<Mutex<Option<CommandChild>>>,
-    status: futures::future::Shared<tokio::sync::oneshot::Receiver<Result<String, String>>>,
+    status:
+        futures::future::Shared<tokio::sync::oneshot::Receiver<Result<ServerReadyData, String>>>,
 }
 
 impl ServerState {
     pub fn new(
         child: Option<CommandChild>,
-        status: tokio::sync::oneshot::Receiver<Result<String, String>>,
+        status: tokio::sync::oneshot::Receiver<Result<ServerReadyData, String>>,
     ) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
@@ -80,7 +87,7 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<String, String> {
+async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<ServerReadyData, String> {
     state
         .status
         .clone()
@@ -137,13 +144,14 @@ fn get_sidecar_port() -> u32 {
         }) as u32
 }
 
-fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
+fn spawn_sidecar(app: &AppHandle, port: u32, password: &str) -> CommandChild {
     let log_state = app.state::<LogState>();
     let log_state_clone = log_state.inner().clone();
 
     println!("spawning sidecar on port {port}");
 
     let (mut rx, child) = cli::create_command(app, format!("serve --port {port}").as_str())
+        .env("OPENCODE_SERVER_PASSWORD", password)
         .spawn()
         .expect("Failed to spawn opencode");
 
@@ -184,7 +192,7 @@ fn spawn_sidecar(app: &AppHandle, port: u32) -> CommandChild {
     child
 }
 
-async fn check_server_health(url: &str) -> bool {
+async fn check_server_health(url: &str, password: Option<&str>) -> bool {
     let health_url = format!("{}/health", url.trim_end_matches('/'));
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(3))
@@ -194,9 +202,13 @@ async fn check_server_health(url: &str) -> bool {
         return false;
     };
 
-    client
-        .get(&health_url)
-        .send()
+    let mut req = client.get(&health_url);
+
+    if let Some(password) = password {
+        req = req.basic_auth("opencode", Some(password));
+    }
+
+    req.send()
         .await
         .map(|r| r.status().is_success())
         .unwrap_or(false)
@@ -344,12 +356,18 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 async fn setup_server_connection(
     app: &AppHandle,
     custom_url: Option<String>,
-) -> Result<(Option<CommandChild>, String), String> {
+) -> Result<(Option<CommandChild>, ServerReadyData), String> {
     if let Some(url) = custom_url {
         loop {
-            if check_server_health(&url).await {
+            if check_server_health(&url, None).await {
                 println!("Connected to custom server: {}", url);
-                return Ok((None, url.clone()));
+                return Ok((
+                    None,
+                    ServerReadyData {
+                        url: url.clone(),
+                        password: None,
+                    },
+                ));
             }
 
             const RETRY: &str = "Retry";
@@ -374,19 +392,36 @@ async fn setup_server_connection(
     let local_port = get_sidecar_port();
     let local_url = format!("http://127.0.0.1:{local_port}");
 
-    if !check_server_health(&local_url).await {
-        match spawn_local_server(app, local_port).await {
-            Ok(child) => Ok(Some(child)),
+    if !check_server_health(&local_url, None).await {
+        let password = uuid::Uuid::new_v4().to_string();
+
+        match spawn_local_server(app, local_port, &password).await {
+            Ok(child) => Ok((
+                Some(child),
+                ServerReadyData {
+                    url: local_url,
+                    password: Some(password),
+                },
+            )),
             Err(err) => Err(err),
         }
     } else {
-        Ok(None)
+        Ok((
+            None,
+            ServerReadyData {
+                url: local_url,
+                password: None,
+            },
+        ))
     }
-    .map(|child| (child, local_url))
 }
 
-async fn spawn_local_server(app: &AppHandle, port: u32) -> Result<CommandChild, String> {
-    let child = spawn_sidecar(app, port);
+async fn spawn_local_server(
+    app: &AppHandle,
+    port: u32,
+    password: &str,
+) -> Result<CommandChild, String> {
+    let child = spawn_sidecar(app, port, &password);
     let url = format!("http://127.0.0.1:{port}");
 
     let timestamp = Instant::now();
@@ -400,7 +435,7 @@ async fn spawn_local_server(app: &AppHandle, port: u32) -> Result<CommandChild, 
 
         tokio::time::sleep(Duration::from_millis(10)).await;
 
-        if check_server_health(&url).await {
+        if check_server_health(&url, Some(password)).await {
             println!("Server ready after {:?}", timestamp.elapsed());
             break Ok(child);
         }
