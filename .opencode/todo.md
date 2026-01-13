@@ -18,12 +18,14 @@
 
 ## Phase 3 - Release Prep (COMPLETE)
 - [x] SDK regeneration for new sandbox endpoint
+- [x] Push branch to fork
+- [x] Create PR to merge sandbox-isolation into dev
 
-## Status
-- **Branch:** `sandbox-isolation` (12 commits ahead of `dev`)
+## Status: ALL COMPLETE
+
+**PR:** https://github.com/anomalyco/opencode/pull/8238
+
+- **Branch:** `sandbox-isolation` (13 commits ahead of `dev`)
 - **Typecheck:** Passing
 - **Tests:** 717/717 passing (65 sandbox-specific)
 - **SDK:** Regenerated with sandbox types and endpoint
-
-## Ready for Review
-The implementation is complete and ready for PR review to merge into `dev`.
