@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -49,7 +49,11 @@ import {
   FileVisual,
   SortableTerminalTab,
   NewSessionView,
+  SessionViewTabs,
+  type SessionView,
 } from "@/components/session"
+import { AgentFlowPanel } from "@opencode-ai/ui/agent-flow-panel"
+import { useAgentFlow } from "@/context/agent-flow"
 import { usePlatform } from "@/context/platform"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
@@ -167,6 +171,8 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const permission = usePermission()
+  const [currentView, setCurrentView] = createSignal<SessionView>("chat")
+  const agentFlow = useAgentFlow()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
@@ -1021,6 +1027,14 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
+      <Show when={params.id}>
+        <div class="px-4 md:px-6 py-2 border-b border-border-weak-base bg-background-stronger">
+          <SessionViewTabs
+            value={currentView()}
+            onChange={setCurrentView}
+          />
+        </div>
+      </Show>
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         {/* Mobile tab bar - only shown on mobile when there are diffs */}
         <Show when={!isDesktop() && hasReview()}>
@@ -1060,10 +1074,12 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={params.id}>
-                <Show when={activeMessage()}>
-                  <Show
-                    when={!mobileReview()}
-                    fallback={
+                <Switch>
+                  <Match when={currentView() === "chat"}>
+                    <Show when={activeMessage()}>
+                      <Show
+                        when={!mobileReview()}
+                        fallback={
                       <div class="relative h-full overflow-hidden">
                         <Show
                           when={diffsReady()}
@@ -1199,6 +1215,17 @@ export default function Page() {
                     </div>
                   </Show>
                 </Show>
+                </Match>
+                <Match when={currentView() === "flow"}>
+                  <div class="relative w-full h-full min-w-0 overflow-y-auto">
+                    <AgentFlowPanel
+                      nodes={agentFlow.nodes()}
+                      onSelectNode={(node) => agentFlow.selectNode(node.id)}
+                      class="px-4 md:px-6 py-4"
+                    />
+                  </div>
+                </Match>
+              </Switch>
               </Match>
               <Match when={true}>
                 <NewSessionView
