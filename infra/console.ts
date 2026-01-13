@@ -53,6 +53,7 @@ new sst.x.DevCommand("Studio", {
 // AUTH
 ////////////////
 
+const ZEN_SESSION_SECRET = new sst.Secret("ZEN_SESSION_SECRET")
 const GITHUB_CLIENT_ID_CONSOLE = new sst.Secret("GITHUB_CLIENT_ID_CONSOLE")
 const GITHUB_CLIENT_SECRET_CONSOLE = new sst.Secret("GITHUB_CLIENT_SECRET_CONSOLE")
 const GOOGLE_CLIENT_ID = new sst.Secret("GOOGLE_CLIENT_ID")
@@ -61,7 +62,14 @@ export const auth = new sst.cloudflare.Worker("AuthApi", {
   domain: `auth.${domain}`,
   handler: "packages/console/function/src/auth.ts",
   url: true,
-  link: [database, authStorage, GITHUB_CLIENT_ID_CONSOLE, GITHUB_CLIENT_SECRET_CONSOLE, GOOGLE_CLIENT_ID],
+  link: [
+    database,
+    authStorage,
+    GITHUB_CLIENT_ID_CONSOLE,
+    GITHUB_CLIENT_SECRET_CONSOLE,
+    GOOGLE_CLIENT_ID,
+    ZEN_SESSION_SECRET,
+  ],
 })
 
 ////////////////
@@ -149,7 +157,6 @@ if ($app.stage === "production" || $app.stage === "frank") {
   })
 }
 
-const ZEN_SESSION_SECRET = new sst.Secret("ZEN_SESSION_SECRET")
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
   path: "packages/console/app",
