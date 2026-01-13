@@ -382,6 +382,7 @@
       "name": "@sureshsankaran/ralph-wiggum",
       "version": "0.3.0",
       "devDependencies": {
+        "@types/bun": "1.3.4",
         "@types/node": "^20.0.0",
         "typescript": "^5.8.3",
       },
