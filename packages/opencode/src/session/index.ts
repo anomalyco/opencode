@@ -72,6 +72,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      mcpLoadedTools: z.record(z.string(), z.array(z.string())).optional(),
     })
     .meta({
       ref: "Session",

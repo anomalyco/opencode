@@ -2,6 +2,7 @@ import { Ripgrep } from "../file/ripgrep"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
+import { MCP } from "../mcp"
 
 import { Instance } from "../project/instance"
 import path from "path"
@@ -134,5 +135,39 @@ export namespace SystemPrompt {
         .then((x) => (x ? "Instructions from: " + url + "\n" + x : "")),
     )
     return Promise.all([...foundFiles, ...foundUrls]).then((result) => result.filter(Boolean))
+  }
+
+  export async function mcpIndex(): Promise<string[]> {
+    const config = await Config.get()
+    const isLazy = config.experimental?.mcp_lazy_load ?? false
+
+    if (!isLazy) {
+      return []
+    }
+
+    const index = await MCP.index()
+    const servers = Object.entries(index)
+
+    if (servers.length === 0) {
+      return []
+    }
+
+    const lines = [
+      "## Available MCP Servers",
+      "",
+      "Use mcp_load_tools(server_name) to load tools from these servers:",
+      "",
+    ]
+
+    for (const [name, info] of servers) {
+      lines.push(`- **${name}** (${info.toolCount} tools): ${info.tools.join(", ")}`)
+    }
+
+    lines.push("")
+    lines.push(
+      'To use these tools, first load them with mcp_load_tools("server") or mcp_load_tools("server", ["tool1", "tool2"]).',
+    )
+
+    return [lines.join("\n")]
   }
 }

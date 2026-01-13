@@ -446,6 +446,18 @@ export namespace MCP {
       }
     }
 
+    // Skip listTools validation for lazy loading - we'll fetch tools on-demand
+    const config = await Config.get()
+    const isLazy = config.experimental?.mcp_lazy_load ?? false
+
+    if (isLazy) {
+      log.info("create() skipping listTools for lazy server", { key })
+      return {
+        mcpClient,
+        status,
+      }
+    }
+
     const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
@@ -539,10 +551,12 @@ export namespace MCP {
     s.status[name] = { status: "disabled" }
   }
 
-  export async function tools() {
+  export async function tools(sessionLoadedTools?: Record<string, string[]>) {
     const result: Record<string, Tool> = {}
     const s = await state()
     const clientsSnapshot = await clients()
+    const config = await Config.get()
+    const isLazy = config.experimental?.mcp_lazy_load ?? false
 
     for (const [clientName, client] of Object.entries(clientsSnapshot)) {
       // Only include tools from connected MCPs (skip disabled ones)
@@ -563,13 +577,85 @@ export namespace MCP {
       if (!toolsResult) {
         continue
       }
+
+      // Get the list of loaded tools for this server (if lazy loading)
+      const loadedToolsForServer = sessionLoadedTools?.[clientName] ?? []
+
       for (const mcpTool of toolsResult.tools) {
+        // If lazy loading is enabled, only include tools that are explicitly loaded
+        if (isLazy && !loadedToolsForServer.includes(mcpTool.name)) {
+          continue
+        }
+
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
         result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client)
       }
     }
     return result
+  }
+
+  export interface McpServerIndex {
+    toolCount: number
+    tools: string[]
+  }
+
+  export async function index(): Promise<Record<string, McpServerIndex>> {
+    const s = await state()
+    const clientsSnapshot = await clients()
+    const result: Record<string, McpServerIndex> = {}
+
+    for (const [clientName, client] of Object.entries(clientsSnapshot)) {
+      if (s.status[clientName]?.status !== "connected") {
+        continue
+      }
+
+      const toolsResult = await client.listTools().catch((e) => {
+        log.error("failed to get tools for index", { clientName, error: e.message })
+        return undefined
+      })
+
+      if (toolsResult) {
+        result[clientName] = {
+          toolCount: toolsResult.tools.length,
+          tools: toolsResult.tools.map((t) => t.name),
+        }
+      }
+    }
+
+    return result
+  }
+
+  export async function loadToolsForSession(
+    serverName: string,
+    toolNames?: string[],
+  ): Promise<{ tools: string[]; error?: string }> {
+    const s = await state()
+    const client = s.clients[serverName]
+
+    if (!client) {
+      return { tools: [], error: `Server "${serverName}" not found` }
+    }
+
+    const serverStatus = s.status[serverName]
+    if (serverStatus?.status !== "connected") {
+      return { tools: [], error: `Server "${serverName}" not connected` }
+    }
+
+    const toolsResult = await client.listTools().catch((e) => {
+      log.error("loadToolsForSession failed", { serverName, error: e.message })
+      return undefined
+    })
+
+    if (!toolsResult) {
+      return { tools: [], error: "Failed to list tools" }
+    }
+
+    const tools = toolNames
+      ? toolsResult.tools.filter((t) => toolNames.includes(t.name)).map((t) => t.name)
+      : toolsResult.tools.map((t) => t.name)
+
+    return { tools }
   }
 
   export async function prompts() {

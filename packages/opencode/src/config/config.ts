@@ -1041,6 +1041,10 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          mcp_lazy_load: z
+            .boolean()
+            .optional()
+            .describe("Enable lazy loading of MCP tools (load on-demand instead of at startup)"),
         })
         .optional(),
     })

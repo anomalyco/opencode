@@ -593,7 +593,11 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system: [
+          ...(await SystemPrompt.environment()),
+          ...(await SystemPrompt.custom()),
+          ...(await SystemPrompt.mcpIndex()),
+        ],
         messages: [
           ...MessageV2.toModelMessage(sessionMessages),
           ...(isLastStep
@@ -723,7 +727,7 @@ export namespace SessionPrompt {
       })
     }
 
-    for (const [key, item] of Object.entries(await MCP.tools())) {
+    for (const [key, item] of Object.entries(await MCP.tools(input.session.mcpLoadedTools))) {
       const execute = item.execute
       if (!execute) continue
 
