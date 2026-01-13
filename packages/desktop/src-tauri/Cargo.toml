@@ -39,6 +39,7 @@ tauri-plugin-os = "2"
 futures = "0.3.31"
 semver = "1.0.27"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+uuid = { version = "1.19.0", features = ["v4"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"

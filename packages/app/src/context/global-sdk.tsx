@@ -9,11 +9,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
   name: "GlobalSDK",
   init: () => {
     const server = useServer()
+    const platform = usePlatform()
     const abort = new AbortController()
 
     const eventSdk = createOpencodeClient({
       baseUrl: server.url,
       signal: abort.signal,
+      fetch: platform.fetch,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event
@@ -93,7 +95,6 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       stop()
     })
 
-    const platform = usePlatform()
     const sdk = createOpencodeClient({
       baseUrl: server.url,
       fetch: platform.fetch,
