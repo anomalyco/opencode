@@ -164,7 +164,83 @@ export function Prompt(props: PromptProps) {
     return `[Pasted ~${lineCount} lines]`
   }
 
-  function applyPasteSummaryMode(disabled: boolean) {
+  function shiftRange(extmark: { start: number; end: number }, delta: number) {
+    return {
+      start: extmark.start + delta,
+      end: extmark.end + delta,
+    }
+  }
+
+  function rewriteRange(text: string, start: number, end: number, replacement: string) {
+    const nextText = text.slice(0, start) + replacement + text.slice(end)
+    const diff = replacement.length - (end - start)
+    return { nextText, diff }
+  }
+
+  function cursorAfterNonText(cursor: number, start: number, end: number) {
+    if (cursor <= start) return cursor
+    if (cursor >= end) return cursor
+    return start + 1
+  }
+
+  function cursorAfterReplacement(cursor: number, start: number, end: number, diff: number, replacementLength: number) {
+    if (cursor <= start) return cursor
+    if (cursor >= end) return cursor + diff
+    return start + replacementLength
+  }
+
+  function updateTextPart(part: PromptInfo["parts"][number], content: string, start: number, replacement: string) {
+    if (part.type !== "text" || !part.source?.text) return part
+    return {
+      ...part,
+      text: content,
+      source: {
+        ...part.source,
+        text: {
+          ...part.source.text,
+          start,
+          end: start + replacement.length,
+          value: replacement,
+        },
+      },
+    }
+  }
+
+  function shiftFilePart(part: PromptInfo["parts"][number], start: number, end: number) {
+    if (part.type !== "file" || !part.source?.text) return part
+    return {
+      ...part,
+      source: {
+        ...part.source,
+        text: {
+          ...part.source.text,
+          start,
+          end,
+        },
+      },
+    }
+  }
+
+  function shiftAgentPart(part: PromptInfo["parts"][number], start: number, end: number) {
+    if (part.type !== "agent" || !part.source) return part
+    return {
+      ...part,
+      source: {
+        ...part.source,
+        start,
+        end,
+      },
+    }
+  }
+
+  function replacePart(parts: PromptInfo["parts"], index: number, nextPart: PromptInfo["parts"][number]) {
+    if (parts[index] === nextPart) return parts
+    const nextParts = parts.slice()
+    nextParts[index] = nextPart
+    return nextParts
+  }
+
+  function applyPasteSummaryMode(summaryDisabled: boolean) {
     if (!store.prompt.parts.length) return
     if (promptPartTypeId === 0) return
 
@@ -179,60 +255,26 @@ export function Prompt(props: PromptProps) {
         const part = state.parts[partIndex]
         if (!part) return state
 
-        const start = extmark.start + state.delta
-        const end = extmark.end + state.delta
-
-        const cursor = (() => {
-          if (state.cursor <= start) return state.cursor
-          if (state.cursor >= end) return state.cursor
-          return start + 1
-        })()
+        const range = shiftRange(extmark, state.delta)
+        const cursor = cursorAfterNonText(state.cursor, range.start, range.end)
 
         if (part.type === "text" && part.source?.text) {
-          const content = disabled ? (part.text ?? "") : state.text.slice(start, end)
-          const replacement = disabled ? content : createPastePlaceholder(content)
-          const nextText = state.text.slice(0, start) + replacement + state.text.slice(end)
-          const nextParts = state.parts.slice()
-          nextParts[partIndex] = {
-            ...part,
-            text: content,
-            source: {
-              ...part.source,
-              text: {
-                ...part.source.text,
-                start,
-                end: start + replacement.length,
-                value: replacement,
-              },
-            },
-          }
-          const diff = replacement.length - (end - start)
-          const nextCursor = (() => {
-            if (cursor <= start) return cursor
-            if (cursor >= end) return cursor + diff
-            return start + replacement.length
-          })()
+          const content = summaryDisabled ? (part.text ?? "") : state.text.slice(range.start, range.end)
+          const replacement = summaryDisabled ? content : createPastePlaceholder(content)
+          const update = rewriteRange(state.text, range.start, range.end, replacement)
+          const nextPart = updateTextPart(part, content, range.start, replacement)
+          const nextParts = replacePart(state.parts, partIndex, nextPart)
+          const nextCursor = cursorAfterReplacement(cursor, range.start, range.end, update.diff, replacement.length)
           return {
-            text: nextText,
-            delta: state.delta + diff,
+            text: update.nextText,
+            delta: state.delta + update.diff,
             cursor: nextCursor,
             parts: nextParts,
           }
         }
 
         if (part.type === "file" && part.source?.text) {
-          const nextParts = state.parts.slice()
-          nextParts[partIndex] = {
-            ...part,
-            source: {
-              ...part.source,
-              text: {
-                ...part.source.text,
-                start,
-                end,
-              },
-            },
-          }
+          const nextParts = replacePart(state.parts, partIndex, shiftFilePart(part, range.start, range.end))
           return {
             text: state.text,
             delta: state.delta,
@@ -242,15 +284,7 @@ export function Prompt(props: PromptProps) {
         }
 
         if (part.type === "agent" && part.source) {
-          const nextParts = state.parts.slice()
-          nextParts[partIndex] = {
-            ...part,
-            source: {
-              ...part.source,
-              start,
-              end,
-            },
-          }
+          const nextParts = replacePart(state.parts, partIndex, shiftAgentPart(part, range.start, range.end))
           return {
             text: state.text,
             delta: state.delta,
