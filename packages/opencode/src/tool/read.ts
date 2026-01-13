@@ -25,7 +25,16 @@ export const ReadTool = Tool.define("read", {
     if (!path.isAbsolute(filepath)) {
       filepath = path.join(process.cwd(), filepath)
     }
-    const title = path.relative(Instance.worktree, filepath)
+
+    // Instance context may not be available in certain execution paths (e.g., MCP, plugins)
+    // Gracefully handle missing context to avoid cryptic native binding errors
+    let worktree: string | undefined
+    try {
+      worktree = Instance.worktree
+    } catch {
+      // Instance context not available - fall back to basename for title
+    }
+    const title = worktree ? path.relative(worktree, filepath) : path.basename(filepath)
 
     await assertExternalDirectory(ctx, filepath, {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),

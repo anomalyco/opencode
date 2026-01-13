@@ -14,7 +14,13 @@ export async function assertExternalDirectory(ctx: Tool.Context, target?: string
 
   if (options?.bypass) return
 
-  if (Instance.containsPath(target)) return
+  // Instance context may not be available in certain execution paths (e.g., MCP, plugins)
+  // Skip the containsPath check if context is missing - permission will still be requested
+  try {
+    if (Instance.containsPath(target)) return
+  } catch {
+    // Instance context not available - proceed to ask for permission
+  }
 
   const kind = options?.kind ?? "file"
   const parentDir = kind === "directory" ? target : path.dirname(target)
