@@ -405,7 +405,8 @@
 [data-component="tool-part-wrapper"] {
   width: 100%;
 
-  &[data-permission="true"] {
+  &[data-permission="true"],
+  &[data-question="true"] {
     position: sticky;
     top: calc(2px + var(--sticky-header-height, 40px));
     bottom: 0px;
@@ -488,5 +489,195 @@
     align-items: center;
     gap: 8px;
     justify-content: flex-end;
+  }
+}
+
+[data-component="question-prompt"] {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background-color: var(--surface-inset-base);
+  border-radius: 0 0 6px 6px;
+  gap: 12px;
+
+  [data-slot="question-tabs"] {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+
+    [data-slot="question-tab"] {
+      padding: 4px 12px;
+      font-size: 13px;
+      border-radius: 4px;
+      background-color: var(--surface-base);
+      color: var(--text-base);
+      border: none;
+      cursor: pointer;
+      transition:
+        color 0.15s,
+        background-color 0.15s;
+
+      &:hover {
+        background-color: var(--surface-base-hover);
+      }
+
+      &[data-active="true"] {
+        background-color: var(--surface-raised-base);
+      }
+
+      &[data-answered="true"] {
+        color: var(--text-strong);
+      }
+    }
+  }
+
+  [data-slot="question-content"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    [data-slot="question-text"] {
+      font-size: 14px;
+      color: var(--text-base);
+      line-height: 1.5;
+    }
+  }
+
+  [data-slot="question-options"] {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    [data-slot="question-option"] {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      padding: 8px 12px;
+      background-color: var(--surface-base);
+      border: 1px solid var(--border-weaker-base);
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition:
+        background-color 0.15s,
+        border-color 0.15s;
+      position: relative;
+
+      &:hover {
+        background-color: var(--surface-base-hover);
+        border-color: var(--border-default);
+      }
+
+      &[data-picked="true"] {
+        [data-component="icon"] {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--text-strong);
+        }
+      }
+
+      [data-slot="option-label"] {
+        font-size: 14px;
+        color: var(--text-base);
+        font-weight: 500;
+      }
+
+      [data-slot="option-description"] {
+        font-size: 12px;
+        color: var(--text-weak);
+      }
+    }
+
+    [data-slot="custom-input-form"] {
+      display: flex;
+      gap: 8px;
+      padding: 8px 0;
+      align-items: stretch;
+
+      [data-slot="custom-input"] {
+        flex: 1;
+        padding: 8px 12px;
+        font-size: 14px;
+        border: 1px solid var(--border-default);
+        border-radius: 6px;
+        background-color: var(--surface-base);
+        color: var(--text-base);
+        outline: none;
+
+        &:focus {
+          border-color: var(--border-focus);
+        }
+
+        &::placeholder {
+          color: var(--text-weak);
+        }
+      }
+
+      [data-component="button"] {
+        height: auto;
+      }
+    }
+  }
+
+  [data-slot="question-review"] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    [data-slot="review-title"] {
+      display: none;
+    }
+
+    [data-slot="review-item"] {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 13px;
+
+      [data-slot="review-label"] {
+        color: var(--text-weak);
+      }
+
+      [data-slot="review-value"] {
+        color: var(--text-strong);
+
+        &[data-answered="false"] {
+          color: var(--text-weak);
+        }
+      }
+    }
+  }
+
+  [data-slot="question-actions"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+}
+
+[data-component="question-answers"] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 12px;
+
+  [data-slot="question-answer-item"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+
+    [data-slot="question-text"] {
+      color: var(--text-weak);
+    }
+
+    [data-slot="answer-text"] {
+      color: var(--text-strong);
+    }
   }
 }
