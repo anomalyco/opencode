@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { FilePathLink } from "../../ui/link"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -240,7 +241,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
                           <text fg={theme.textMuted} wrapMode="none">
-                            {item.file}
+                            <FilePathLink path={item.file} fg={theme.textMuted}>
+                              {item.file}
+                            </FilePathLink>
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>
                             <Show when={item.additions}>
