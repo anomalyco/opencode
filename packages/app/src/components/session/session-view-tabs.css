@@ -1,0 +1,60 @@
+[data-component="session-view-tabs"] {
+  flex-shrink: 0;
+  width: auto;
+  height: auto;
+  background: transparent;
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-list"] {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  height: auto;
+  background: var(--surface-raised-base);
+  border-radius: var(--radius-md);
+  border: none;
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-list"]::after {
+  display: none;
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-trigger-wrapper"] {
+  border: none;
+  background: transparent;
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-trigger"] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-weak);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-trigger"]:hover {
+  color: var(--text-base);
+  background: var(--surface-raised-base-hover);
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-trigger-wrapper"]:has([data-selected]) {
+  background: transparent;
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-trigger"][data-selected] {
+  color: var(--text-strong);
+  background: var(--background-base);
+  box-shadow: var(--shadow-xs);
+}
+
+[data-component="session-view-tabs"] [data-slot="tabs-trigger"] [data-component="icon"] {
+  width: 1rem;
+  height: 1rem;
+}
