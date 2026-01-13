@@ -68,10 +68,10 @@ Since this isn't committed to Git or shared with your team, we recommend using t
 
 ### Claude Code Compatibility
 
-For users migrating from or using both Claude Code and OpenCode, OpenCode supports Claude Code's file conventions:
+For users migrating from Claude Code, OpenCode supports Claude Code's file conventions as fallbacks:
 
-- **Project rules**: `CLAUDE.md` in your project directory (works the same as `AGENTS.md`)
-- **Global rules**: `~/.claude/CLAUDE.md`
+- **Project rules**: `CLAUDE.md` in your project directory (used if no `AGENTS.md` exists)
+- **Global rules**: `~/.claude/CLAUDE.md` (used if no `~/.config/opencode/AGENTS.md` exists)
 - **Skills**: `~/.claude/skills/` — see [Agent Skills](/docs/skills/) for details
 
 To disable Claude Code compatibility, set one of these environment variables:
@@ -92,7 +92,7 @@ When opencode starts, it looks for rule files in this order:
 2. **Global file** at `~/.config/opencode/AGENTS.md`
 3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
 
-The first matching local file wins (checked in the order listed above). Global and Claude Code files are combined with local rules.
+The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
 
 ---
 
