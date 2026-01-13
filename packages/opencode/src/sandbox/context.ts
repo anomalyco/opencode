@@ -2,6 +2,7 @@ import { Context } from "../util/context"
 import { Sandbox } from "./provider"
 import { createLocalProvider } from "./local"
 import { createModalProvider } from "./modal"
+import { createKubernetesProvider } from "./kubernetes"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
@@ -29,10 +30,11 @@ async function getProvider(): Promise<Sandbox.Provider> {
       defaultProvider = createModalProvider(config.sandbox?.modal?.appName)
       break
     case "kubernetes":
-      throw new Sandbox.ProviderError({
-        message: "Kubernetes provider not yet implemented",
-        provider: "kubernetes",
+      defaultProvider = createKubernetesProvider({
+        namespace: config.sandbox?.kubernetes?.namespace,
+        defaultImage: config.sandbox?.kubernetes?.image,
       })
+      break
     case "local":
     default:
       defaultProvider = createLocalProvider()

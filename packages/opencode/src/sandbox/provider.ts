@@ -1,6 +1,32 @@
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 
+/**
+ * Sandbox namespace provides types and interfaces for running isolated
+ * execution environments for OpenCode sessions.
+ *
+ * Supports multiple providers:
+ * - `local`: Uses git worktrees for local isolation
+ * - `modal`: Uses Modal.com cloud VMs
+ * - `kubernetes`: Uses Kubernetes pods
+ *
+ * @example
+ * ```ts
+ * import { Sandbox } from "@/sandbox"
+ *
+ * // Get a provider
+ * const provider = Sandbox.getProvider("local")
+ *
+ * // Create a sandbox
+ * const instance = await provider.create({
+ *   sessionId: "session_123",
+ *   workdir: "/path/to/project",
+ * })
+ *
+ * // Execute commands
+ * const result = await instance.exec("npm", ["test"])
+ * ```
+ */
 export namespace Sandbox {
   export const Status = z.enum(["creating", "running", "stopped", "terminated", "error"]).meta({
     ref: "SandboxStatus",
@@ -158,9 +184,14 @@ export namespace Sandbox {
     }),
   )
 
+  /**
+   * A running sandbox instance that can execute commands and perform file operations.
+   */
   export interface Instance {
+    /** Sandbox metadata including id, provider type, and status */
     readonly info: Info
 
+    /** Execute a command in the sandbox */
     exec(
       command: string,
       args?: string[],
@@ -185,9 +216,15 @@ export namespace Sandbox {
     waitForStatus(status: Status, timeoutMs?: number): Promise<void>
   }
 
+  /**
+   * Sandbox provider interface for creating and managing sandboxes.
+   * Implementations include LocalSandboxProvider, ModalSandboxProvider, and KubernetesSandboxProvider.
+   */
   export interface Provider {
+    /** The provider type identifier */
     readonly type: ProviderType
 
+    /** Create a new sandbox with the given configuration */
     create(config: Config): Promise<Instance>
     get(id: string): Promise<Instance | undefined>
     list(filter?: { projectId?: string; sessionId?: string; status?: Status }): Promise<Info[]>
@@ -201,18 +238,22 @@ export namespace Sandbox {
 
   const providers = new Map<ProviderType, Provider>()
 
+  /** Register a sandbox provider for use by the system */
   export function registerProvider(provider: Provider): void {
     providers.set(provider.type, provider)
   }
 
+  /** Get a registered provider by type */
   export function getProvider(type: ProviderType): Provider | undefined {
     return providers.get(type)
   }
 
+  /** Get the default (local) provider */
   export function getDefaultProvider(): Provider | undefined {
     return providers.get("local")
   }
 
+  /** List all registered provider types */
   export function listProviders(): ProviderType[] {
     return Array.from(providers.keys())
   }

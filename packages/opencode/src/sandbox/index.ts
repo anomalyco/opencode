@@ -1,6 +1,7 @@
 export { Sandbox } from "./provider"
 export { LocalSandboxProvider, createLocalProvider } from "./local"
 export { ModalSandboxProvider, createModalProvider } from "./modal"
+export { KubernetesSandboxProvider, createKubernetesProvider } from "./kubernetes"
 export { SandboxContext } from "./context"
 export { SandboxFS } from "./fs"
 export { SandboxRuntime } from "./runtime"

@@ -10,6 +10,12 @@ interface SessionContext {
 
 const sessionContext = Context.create<SessionContext>("sandbox-session")
 
+/**
+ * SandboxRuntime provides file and command execution operations that automatically
+ * route to either the local filesystem or a remote sandbox based on the current session context.
+ *
+ * All tool operations should use these methods instead of direct filesystem calls.
+ */
 export const SandboxRuntime = {
   withSession<R>(sessionId: string, fn: () => R): R {
     return sessionContext.provide({ sessionId }, fn)

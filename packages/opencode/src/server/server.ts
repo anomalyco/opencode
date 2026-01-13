@@ -78,6 +78,7 @@ export namespace Server {
   export const App: () => Hono = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
+      // @ts-expect-error TS2589: Type instantiation is excessively deep - known issue with Hono's chained routes
       app
         .onError((err, c) => {
           log.error("failed", {
@@ -829,6 +830,37 @@ export namespace Server {
             const sessionID = c.req.valid("param").sessionID
             const session = await Session.children(sessionID)
             return c.json(session)
+          },
+        )
+        .get(
+          "/session/:sessionID/sandbox",
+          describeRoute({
+            summary: "Get session sandbox status",
+            tags: ["Session"],
+            description: "Retrieve the sandbox status for a specific session, including provider type and running state.",
+            operationId: "session.sandbox",
+            responses: {
+              200: {
+                description: "Sandbox status",
+                content: {
+                  "application/json": {
+                    schema: resolver(Session.SandboxStatus.optional()),
+                  },
+                },
+              },
+              ...errors(400, 404),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              sessionID: z.string().meta({ description: "Session ID" }),
+            }),
+          ),
+          async (c) => {
+            const sessionID = c.req.valid("param").sessionID
+            const status = await Session.getSandboxStatus(sessionID)
+            return c.json(status)
           },
         )
         .get(

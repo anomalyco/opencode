@@ -37,6 +37,17 @@ export namespace Session {
     ).test(title)
   }
 
+  export const SandboxStatus = z
+    .object({
+      provider: z.enum(["local", "modal", "kubernetes"]),
+      status: z.enum(["running", "stopped", "error", "unknown"]),
+      sandboxId: z.string().optional(),
+    })
+    .meta({
+      ref: "SessionSandboxStatus",
+    })
+  export type SandboxStatus = z.output<typeof SandboxStatus>
+
   export const Info = z
     .object({
       id: Identifier.schema("session"),
@@ -56,6 +67,7 @@ export namespace Session {
           url: z.string(),
         })
         .optional(),
+      sandbox: SandboxStatus.optional(),
       title: z.string(),
       version: z.string(),
       time: z.object({
@@ -397,6 +409,25 @@ export namespace Session {
       delta,
     })
     return part
+  })
+
+  export const getSandboxStatus = fn(Identifier.schema("session"), async (sessionID): Promise<SandboxStatus | undefined> => {
+    const instance = await SandboxContext.getForSession(sessionID)
+    if (!instance) {
+      return undefined
+    }
+    try {
+      const status = await instance.getStatus()
+      const info = instance.info
+      return {
+        provider: info.provider as "local" | "modal" | "kubernetes",
+        status: status as "running" | "stopped" | "error" | "unknown",
+        sandboxId: info.id,
+      }
+    } catch (err) {
+      log.error("failed to get sandbox status", { sessionID, error: err })
+      return undefined
+    }
   })
 
   export const getUsage = fn(
