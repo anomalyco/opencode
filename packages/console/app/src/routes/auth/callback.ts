@@ -1,7 +1,7 @@
 import { redirect } from "@solidjs/router"
 import type { APIEvent } from "@solidjs/start/server"
 import { AuthClient } from "~/context/auth"
-import { useAuthSession } from "~/context/auth.session"
+import { useAuthSession } from "~/context/auth"
 
 export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
