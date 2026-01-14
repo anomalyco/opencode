@@ -345,28 +345,22 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     const renderer = useRenderer()
+    const [transparent] = kv.signal("transparent_background", false)
     process.on("SIGUSR2", async () => {
       renderer.clearPaletteCache()
       init()
     })
 
-    const transparentBackground = () => {
-      const tui = sync.data.config.tui as (typeof sync.data.config.tui & {
-        transparent_background?: boolean
-      }) | undefined
-      return tui?.transparent_background ?? false
-    }
-
     const values = createMemo(() => {
       const resolved = resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
-      if (!transparentBackground()) return resolved
-      const transparent = RGBA.fromInts(0, 0, 0, 0)
+      if (!transparent()) return resolved
+      const clear = RGBA.fromInts(0, 0, 0, 0)
       return {
         ...resolved,
-        background: transparent,
-        backgroundPanel: transparent,
-        backgroundElement: transparent,
-        backgroundMenu: transparent,
+        background: clear,
+        backgroundPanel: clear,
+        backgroundElement: clear,
+        backgroundMenu: clear,
       }
     })
 
