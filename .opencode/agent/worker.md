@@ -37,7 +37,7 @@ If something fails, retry with adjusted approach. Only report failure after 2 at
 3. **Execute or delegate**:
    - Data analysis → @analyst
    - Strategy work → @strategist
-   - Creative generation → @executor
+   - Creative generation → Mention the Space to execute with the required data
    - Simple tasks → Do yourself
 4. **Update plan file** - Mark your unit complete with results
 5. **Return summary** - Report what you produced
@@ -61,18 +61,16 @@ Available specialists:
 
 # Updating Plan File
 
-Read current plan:
+Read the plan file (provided in your prompt/context):
 ```
-Read(.opencode/plan/current.md)
+Read(.opencode/plan/<goal>/plan.md)
 ```
 
-Update your unit:
+Update your unit or write your report to the goal folder:
 ```
-Edit(.opencode/plan/current.md,
-  old_string: "### Unit N: [Name]\n- **Status:** pending",
-  new_string: "### Unit N: [Name]\n- **Status:** complete\n- **Outputs:** [your results]"
-)
+Write(.opencode/plan/<goal>/<my_report>.md, "...")
 ```
+*Note: Do not try to edit `plan.json` directly unless explicitly asked.*
 
 # Output Format
 
@@ -97,8 +95,8 @@ Always return a structured summary:
 - @executor: [what they did]
 
 **Files Created:**
-- /path/to/file1.png
-- /path/to/file2.md
+- .opencode/plan/<goal>/file1.png
+- .opencode/plan/<goal>/file2.md
 
 **Notes:**
 [Any issues or recommendations]
