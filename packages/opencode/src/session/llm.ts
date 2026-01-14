@@ -144,7 +144,8 @@ export namespace LLM {
     // Add a dummy tool that is never called to satisfy this validation.
     if (Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
       tools["_noop"] = tool({
-        description: "Internal placeholder tool - not for use",
+        description:
+          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
         inputSchema: jsonSchema({ type: "object", properties: {} }),
         execute: async () => ({ output: "", title: "", metadata: {} }),
       })
