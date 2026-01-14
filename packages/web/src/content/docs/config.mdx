@@ -164,7 +164,11 @@ You can configure TUI-specific settings through the `tui` option.
     "scroll_acceleration": {
       "enabled": true
     },
-    "diff_style": "auto"
+    "diff_style": "auto",
+    "accessibility": {
+      "numbered_menus": true,
+      "ascii": true
+    }
   }
 }
 ```
@@ -174,6 +178,8 @@ Available options:
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
 - `scroll_speed` - Custom scroll speed multiplier (default: `3`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
 - `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
+- `accessibility.numbered_menus` - Enable numbered selection and `/` to focus search in TUI dialogs.
+- `accessibility.ascii` - Use ASCII-only TUI rendering (no Unicode icons/box drawing, and no spinner animations).
 
 [Learn more about using the TUI here](/docs/tui).
 
