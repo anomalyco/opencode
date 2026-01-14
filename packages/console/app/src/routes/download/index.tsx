@@ -442,7 +442,7 @@ export default function Download() {
             <li>
               <Faq question="Can I only use OpenCode in the terminal?">
                 Not anymore! OpenCode is now available as an app for your <a href="/download">desktop</a> and{" "}
-                <a href="/docs/web">web</a>!
+                <a href="/docs/cli/#web">web</a>!
               </Faq>
             </li>
             <li>
