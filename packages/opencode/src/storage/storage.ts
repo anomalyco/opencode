@@ -170,7 +170,11 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
+      const content = await Bun.file(target).text()
+      if (!content.trim()) {
+        throw new NotFoundError({ message: `Empty file: ${target}` })
+      }
+      const result = JSON.parse(content)
       return result as T
     })
   }
@@ -180,10 +184,14 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      const content = await Bun.file(target).json()
-      fn(content)
-      await Bun.write(target, JSON.stringify(content, null, 2))
-      return content as T
+      const content = await Bun.file(target).text()
+      if (!content.trim()) {
+        throw new NotFoundError({ message: `Empty file: ${target}` })
+      }
+      const parsed = JSON.parse(content)
+      fn(parsed)
+      await Bun.write(target, JSON.stringify(parsed, null, 2))
+      return parsed as T
     })
   }
 
