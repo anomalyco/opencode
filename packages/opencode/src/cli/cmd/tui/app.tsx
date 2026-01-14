@@ -27,7 +27,7 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider, useExit } from "./context/exit"
+import { ExitProvider, useExit, destroyRenderer } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
@@ -110,7 +110,15 @@ export function tui(input: {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
+
+    const sigintHandler = () => {
+      destroyRenderer()
+      process.exit(0)
+    }
+    process.on("SIGINT", sigintHandler)
+
     const onExit = async () => {
+      process.off("SIGINT", sigintHandler)
       await input.onExit?.()
       resolve()
     }
@@ -606,6 +614,15 @@ function App() {
     })
   })
 
+  sdk.event.on(Installation.Event.Updated.type, (evt) => {
+    toast.show({
+      variant: "success",
+      title: "Update Complete",
+      message: `OpenCode updated to v${evt.properties.version}`,
+      duration: 5000,
+    })
+  })
+
   sdk.event.on(Installation.Event.UpdateAvailable.type, (evt) => {
     toast.show({
       variant: "info",
@@ -658,18 +675,9 @@ function ErrorComponent(props: {
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
-  const renderer = useRenderer()
-
-  const handleExit = async () => {
-    renderer.setTerminalTitle("")
-    renderer.destroy()
-    props.onExit()
-  }
 
   useKeyboard((evt) => {
-    if (evt.ctrl && evt.name === "c") {
-      handleExit()
-    }
+    if (evt.ctrl && evt.name === "c") props.onExit()
   })
   const [copied, setCopied] = createSignal(false)
 
@@ -721,7 +729,7 @@ function ErrorComponent(props: {
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={() => props.onExit()} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>
