@@ -106,6 +106,7 @@ export function tui(input: {
   fetch?: typeof fetch
   events?: EventSource
   onExit?: () => Promise<void>
+  onStartServer?: () => Promise<string>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -131,6 +132,7 @@ export function tui(input: {
                         directory={input.directory}
                         fetch={input.fetch}
                         events={input.events}
+                        onStartServer={input.onStartServer}
                       >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
@@ -464,8 +466,12 @@ function App() {
     {
       title: "Open WebUI",
       value: "webui.open",
-      onSelect: () => {
-        open(sdk.url).catch(() => {})
+      onSelect: async () => {
+        let url = sdk.url
+        if (sdk.url.includes("opencode.internal") && sdk.onStartServer) {
+          url = await sdk.onStartServer()
+        }
+        open(url).catch(() => {})
         dialog.clear()
       },
       category: "System",

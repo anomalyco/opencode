@@ -154,6 +154,12 @@ export const TuiThreadCommand = cmd({
       onExit: async () => {
         await client.call("shutdown", undefined)
       },
+      onStartServer: !shouldStartServer
+        ? async () => {
+            const server = await client.call("server", networkOpts)
+            return server.url
+          }
+        : undefined,
     })
 
     setTimeout(() => {
