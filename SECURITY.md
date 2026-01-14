@@ -12,6 +12,10 @@ OpenCode does **not** sandbox the agent. The permission system exists as a UX fe
 
 If you need true isolation, run OpenCode inside a Docker container or VM.
 
+### Server Mode
+
+Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to require HTTP Basic Auth. Without this, the server runs unauthenticated (with a warning). It is the end user's responsibility to secure the server - any functionality it provides is not a vulnerability.
+
 ### Out of Scope
 
 | Category                        | Rationale                                                               |
@@ -20,49 +24,6 @@ If you need true isolation, run OpenCode inside a Docker container or VM.
 | **Sandbox escapes**             | The permission system is not a sandbox (see above)                      |
 | **LLM provider data handling**  | Data sent to your configured LLM provider is governed by their policies |
 | **MCP server behavior**         | External MCP servers you configure are outside our trust boundary       |
-
-### Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         User's Machine                          │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                    OpenCode Process                       │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐   │  │
-│  │  │   Agent     │  │ Permission  │  │    Storage      │   │  │
-│  │  │  (LLM +     │  │   System    │  │ (~/.local/share │   │  │
-│  │  │   Tools)    │  │             │  │   /opencode)    │   │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────────┘   │  │
-│  │         │                                                 │  │
-│  │         ▼                                                 │  │
-│  │  ┌─────────────────────────────────────────────────────┐ │  │
-│  │  │              Project Directory (cwd)                │ │  │
-│  │  └─────────────────────────────────────────────────────┘ │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                              │                                   │
-│           ┌──────────────────┼──────────────────┐               │
-│           ▼                  ▼                  ▼               │
-│    ┌────────────┐    ┌─────────────┐    ┌─────────────┐        │
-│    │ External   │    │    LLM      │    │    MCP      │        │
-│    │ Filesystem │    │  Providers  │    │  Servers    │        │
-│    └────────────┘    └─────────────┘    └─────────────┘        │
-└─────────────────────────────────────────────────────────────────┘
-
-Optional (user must opt-in):
-┌─────────────────────────────────────────────────────────────────┐
-│                      HTTP Server Mode                           │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Server (localhost:port)                                │   │
-│  │  - REST API endpoints                                   │   │
-│  │  - WebSocket PTY                                        │   │
-│  │  - SSE event stream                                     │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Server Mode
-
-Server mode is opt-in only. When enabled, set `OPENCODE_SERVER_PASSWORD` to require HTTP Basic Auth. Without this, the server runs unauthenticated (with a warning).
 
 ---
 
