@@ -50,18 +50,40 @@ export const UpgradeCommand = {
       return
     }
 
+    // Validate version exists before attempting upgrade
+    if (args.target) {
+      const spinner = prompts.spinner()
+      spinner.start("Checking version availability...")
+      const exists = await Installation.versionExists(target, method)
+      if (!exists) {
+        spinner.stop("Version not found", 1)
+        if (method === "brew") {
+          prompts.log.error(`Version ${target} is not available via brew. Only the latest version can be installed.`)
+          const latestVersion = await Installation.latest(method).catch(() => null)
+          if (latestVersion) {
+            prompts.log.info(`Available version: ${latestVersion}`)
+          }
+        } else {
+          prompts.log.error(`Version ${target} was not found. Please check the version number and try again.`)
+        }
+        prompts.outro("Done")
+        return
+      }
+      spinner.stop("Version available")
+    }
+
     prompts.log.info(`From ${Installation.VERSION} → ${target}`)
-    const spinner = prompts.spinner()
-    spinner.start("Upgrading...")
+    const upgradeSpinner = prompts.spinner()
+    upgradeSpinner.start("Upgrading...")
     const err = await Installation.upgrade(method, target).catch((err) => err)
     if (err) {
-      spinner.stop("Upgrade failed", 1)
+      upgradeSpinner.stop("Upgrade failed", 1)
       if (err instanceof Installation.UpgradeFailedError) prompts.log.error(err.data.stderr)
       else if (err instanceof Error) prompts.log.error(err.message)
       prompts.outro("Done")
       return
     }
-    spinner.stop("Upgrade complete")
+    upgradeSpinner.stop("Upgrade complete")
     prompts.outro("Done")
   },
 }

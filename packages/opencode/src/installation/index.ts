@@ -202,4 +202,38 @@ export namespace Installation {
       })
       .then((data: any) => data.tag_name.replace(/^v/, ""))
   }
+
+  export const VersionNotFoundError = NamedError.create(
+    "VersionNotFoundError",
+    z.object({
+      version: z.string(),
+      method: z.string(),
+    }),
+  )
+
+  export async function versionExists(version: string, installMethod?: Method): Promise<boolean> {
+    const detectedMethod = installMethod || (await method())
+
+    if (detectedMethod === "brew") {
+      // Brew doesn't support installing specific versions easily
+      // Only the current formula version is available
+      const latestVersion = await latest(detectedMethod).catch(() => null)
+      return version === latestVersion
+    }
+
+    if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
+      const registry = await iife(async () => {
+        const r = (await $`npm config get registry`.quiet().nothrow().text()).trim()
+        const reg = r || "https://registry.npmjs.org"
+        return reg.endsWith("/") ? reg.slice(0, -1) : reg
+      })
+      // Check if the specific version exists
+      const res = await fetch(`${registry}/opencode-ai/${version}`)
+      return res.ok
+    }
+
+    // For curl method, check GitHub releases
+    const res = await fetch(`https://api.github.com/repos/anomalyco/opencode/releases/tags/v${version}`)
+    return res.ok
+  }
 }
