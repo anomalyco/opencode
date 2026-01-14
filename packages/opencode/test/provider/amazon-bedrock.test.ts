@@ -1,5 +1,6 @@
 import { test, expect, mock } from "bun:test"
 import path from "path"
+import { unlink } from "fs/promises"
 
 // === Mocks ===
 // These mocks are required because Provider.list() triggers:
@@ -153,7 +154,7 @@ test("Bedrock: loads when bearer token from auth.json is present", async () => {
       await Bun.write(authPath, originalAuth)
     } else {
       try {
-        await Bun.file(authPath).remove()
+        await unlink(authPath)
       } catch {
         // Ignore errors if file doesn't exist
       }
