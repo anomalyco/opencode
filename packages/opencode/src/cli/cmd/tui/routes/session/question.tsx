@@ -132,6 +132,16 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         setStore("editing", false)
         return
       }
+      if (keybind.match("input_clear", evt)) {
+        evt.preventDefault()
+        const text = textarea?.plainText ?? ""
+        if (!text) {
+          setStore("editing", false)
+          return
+        }
+        textarea?.setText("")
+        return
+      }
       if (evt.name === "return") {
         evt.preventDefault()
         const text = textarea?.plainText?.trim() ?? ""
@@ -142,16 +152,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             const inputs = [...store.custom]
             inputs[store.tab] = ""
             setStore("custom", inputs)
-          }
 
-          const answers = [...store.answers]
-          if (prev) {
+            const answers = [...store.answers]
             answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
+            setStore("answers", answers)
           }
-          if (!prev) {
-            answers[store.tab] = []
-          }
-          setStore("answers", answers)
           setStore("editing", false)
           return
         }
@@ -205,6 +210,16 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     } else {
       const opts = options()
       const total = opts.length + (custom() ? 1 : 0)
+      const max = Math.min(total, 9)
+      const digit = Number(evt.name)
+
+      if (!Number.isNaN(digit) && digit >= 1 && digit <= max) {
+        evt.preventDefault()
+        const index = digit - 1
+        moveTo(index)
+        selectOption()
+        return
+      }
 
       if (evt.name === "up" || evt.name === "k") {
         evt.preventDefault()
@@ -287,11 +302,16 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                       <box flexDirection="row" gap={1}>
                         <box backgroundColor={active() ? theme.backgroundElement : undefined}>
                           <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {i() + 1}. {opt.label}
+                            {multi()
+                              ? `${i() + 1}. [${picked() ? "✓" : " "}] ${opt.label}`
+                              : `${i() + 1}. ${opt.label}`}
                           </text>
                         </box>
-                        <text fg={theme.success}>{picked() ? "✓" : ""}</text>
+                        <Show when={!multi()}>
+                          <text fg={theme.success}>{picked() ? "✓" : ""}</text>
+                        </Show>
                       </box>
+
                       <box paddingLeft={3}>
                         <text fg={theme.textMuted}>{opt.description}</text>
                       </box>
@@ -304,16 +324,25 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   <box flexDirection="row" gap={1}>
                     <box backgroundColor={other() ? theme.backgroundElement : undefined}>
                       <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {options().length + 1}. Type your own answer
+                        {multi()
+                          ? `${options().length + 1}. [${customPicked() ? "✓" : " "}] Type your own answer`
+                          : `${options().length + 1}. Type your own answer`}
                       </text>
                     </box>
-                    <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
+                    <Show when={!multi()}>
+                      <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
+                    </Show>
                   </box>
                   <Show when={store.editing}>
                     <box paddingLeft={3}>
                       <textarea
-                        ref={(val: TextareaRenderable) => (textarea = val)}
-                        focused
+                        ref={(val: TextareaRenderable) => {
+                          textarea = val
+                          queueMicrotask(() => {
+                            val.focus()
+                            val.gotoLineEnd()
+                          })
+                        }}
                         initialValue={input()}
                         placeholder="Type your own answer"
                         textColor={theme.text}
@@ -343,9 +372,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               const value = () => store.answers[index()]?.join(", ") ?? ""
               const answered = () => Boolean(value())
               return (
-                <box flexDirection="row" gap={1} paddingLeft={1}>
-                  <text fg={theme.textMuted}>{q.header}:</text>
-                  <text fg={answered() ? theme.text : theme.error}>{answered() ? value() : "(not answered)"}</text>
+                <box paddingLeft={1}>
+                  <text>
+                    <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
+                    <span style={{ fg: answered() ? theme.text : theme.error }}>
+                      {answered() ? value() : "(not answered)"}
+                    </span>
+                  </text>
                 </box>
               )
             }}

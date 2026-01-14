@@ -60,7 +60,7 @@ export default defineConfig({
         "1-0",
         {
           label: "Usage",
-          items: ["tui", "cli", "ide", "zen", "share", "github", "gitlab"],
+          items: ["tui", "cli", "web", "ide", "zen", "share", "github", "gitlab"],
         },
 
         {
