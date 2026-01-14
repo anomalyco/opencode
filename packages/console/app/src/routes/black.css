@@ -354,7 +354,6 @@
           line-height: 1.2;
           padding-left: 16px;
           position: relative;
-          white-space: nowrap;
 
           &::before {
             content: "▪";
