@@ -1,0 +1,78 @@
+---
+title: Web
+description: Using OpenCode in your browser.
+---
+
+OpenCode can run as a web application in your browser, providing the same powerful AI coding experience without needing a terminal.
+
+## Getting Started
+
+Start the web interface by running:
+
+```bash
+opencode web
+```
+
+This starts a local server and automatically opens OpenCode in your default browser.
+
+---
+
+## Configuration
+
+### Port
+
+By default, OpenCode picks an available port. You can specify a port:
+
+```bash
+opencode web --port 4096
+```
+
+### Hostname
+
+To make OpenCode accessible on your network:
+
+```bash
+opencode web --hostname 0.0.0.0
+```
+
+### Authentication
+
+To protect access, set a password using the `OPENCODE_SERVER_PASSWORD` environment variable:
+
+```bash
+OPENCODE_SERVER_PASSWORD=secret opencode web
+```
+
+The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
+
+---
+
+## Remote Access
+
+You can access OpenCode from another device on your network. Start the server with:
+
+```bash
+opencode web --hostname 0.0.0.0 --port 4096
+```
+
+Then open `http://<your-ip>:4096` in a browser on another device.
+
+:::tip
+Use `--mdns` to enable mDNS discovery, making it easier to find your OpenCode server on the local network.
+:::
+
+---
+
+## Attaching a Terminal
+
+You can attach a terminal TUI to a running web server:
+
+```bash
+# Start the web server
+opencode web --port 4096
+
+# In another terminal, attach the TUI
+opencode attach http://localhost:4096
+```
+
+This allows you to use both the web interface and terminal simultaneously.
